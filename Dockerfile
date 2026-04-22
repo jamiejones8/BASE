@@ -1,6 +1,10 @@
 FROM rocker/r-base:latest
 WORKDIR /code
 
+RUN apt-get update && apt-get install -y \
+    libuv1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN install2.r --error \
     shiny \
     htmltools \
