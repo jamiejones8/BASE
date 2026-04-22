@@ -1,24 +1,27 @@
 library(shiny)
 library(htmltools)
 
-
 apps <- list(
   list(
-  title  = "Catcher Reports",
-  url    = "#",
-  status = "live"
-),
+    id     = "catcher",
+    title  = "Catcher Reports",
+    url    = "#",
+    status = "live"
+  ),
   list(
+    id     = "hitter",
     title  = "Postgame Hitter Reports",
     url    = "#",
     status = "live"
   ),
   list(
+    id     = "pitcher",
     title  = "Postgame Pitcher Reports",
     url    = "#",
     status = "live"
   ),
   list(
+    id     = "umpire",
     title  = "Umpire Reports",
     desc   = "Zone tendency and called-strike rate profiles for upcoming umpire assignments.",
     url    = "#",
@@ -43,6 +46,10 @@ make_card <- function(app) {
     href   = app$url,
     target = "_blank",
     class  = card_class,
+
+    tags$img(src = paste0(app$id, ".png"), class = "card-img"),  # ← ADD THIS LINE
+
+    tags$div(class = "card-icon", app$icon),
     tags$div(class = "card-title", app$title),
     tags$div(class = "card-desc",  app$desc),
 
