@@ -91,6 +91,20 @@ ui <- fluidPage(
     )
   ),
 
+  tags$div(
+    class = "section-label",
+    style = "margin-top: 40px;",
+    "2025 Cape Cod League Standings"
+  ),
+  tags$iframe(
+    src    = "https://www.capecodleague.com/standings/",
+    width  = "100%",
+    height = "600px",
+    style  = "border: none; border-radius: 10px;"
+  )
+
+), 
+
   # ── Footer
   tags$div(
     class = "hub-footer",
