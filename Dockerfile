@@ -11,7 +11,8 @@ RUN install2.r --error \
     dplyr \
     ggplot2 \
     readr \
-    rvest
+    httr \
+    xml2
 
 COPY . .
 CMD ["R", "--quiet", "-e", "shiny::runApp(host='0.0.0.0', port=7860)"]
