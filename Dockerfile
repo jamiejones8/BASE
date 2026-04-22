@@ -1,5 +1,4 @@
 FROM rocker/r-base:latest
-
 WORKDIR /code
 
 RUN install2.r --error \
@@ -7,9 +6,9 @@ RUN install2.r --error \
     htmltools \
     dplyr \
     ggplot2 \
-    readr \
-    ggExtra
-    
-COPY . .
+    readr
 
+RUN install2.r --error ggExtra
+
+COPY . .
 CMD ["R", "--quiet", "-e", "shiny::runApp(host='0.0.0.0', port=7860)"]
