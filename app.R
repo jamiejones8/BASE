@@ -43,22 +43,24 @@ make_card <- function(app) {
   badge_label <- if (is_coming_soon) "Coming Soon" else "Live"
 
   tags$a(
-    href   = app$url,
-    target = "_blank",
-    class  = card_class,
+  href   = app$url,
+  target = "_blank",
+  class  = card_class,
 
-    tags$img(src = paste0(app$id, ".png"), class = "card-img"),  # ← ADD THIS LINE
+  tags$img(src = paste0(app$id, ".png"), class = "card-img"),
 
+  tags$div(
+    class = "card-body",
     tags$div(class = "card-icon", app$icon),
     tags$div(class = "card-title", app$title),
     tags$div(class = "card-desc",  app$desc),
-
     tags$div(
       class = "card-footer",
       tags$span(class = badge_class, badge_label),
       tags$span(class = "card-arrow", "→")
     )
   )
+)
 }
 
 # ── UI ─────────────────────────────────────────────────────────────────────────
