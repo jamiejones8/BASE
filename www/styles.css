@@ -223,3 +223,43 @@ body {
   color: var(--text-muted);
   border-top: 1px solid #dde2ec;
 }
+
+/* ── Standings ──────────────────────────────────────── */
+.standings-wrapper {
+  margin-top: 16px;
+}
+
+.standings-division-label {
+  font-family: var(--font-head);
+  font-size: 0.85rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin: 20px 0 8px;
+}
+
+table.shiny-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  font-family: var(--font-body);
+}
+
+table.shiny-table th {
+  background: var(--navy);
+  color: var(--white);
+  padding: 8px 12px;
+  text-align: left;
+  font-family: var(--font-head);
+  letter-spacing: 0.06em;
+  font-size: 0.78rem;
+}
+
+table.shiny-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #dde2ec;
+}
+
+table.shiny-table tr:hover td {
+  background: #f0f9f9;
+}
