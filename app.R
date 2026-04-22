@@ -1,6 +1,16 @@
 library(shiny)
 library(htmltools)
+library(rvest)
 
+fetch_standings <- function() {
+  url <- "https://baseball.pointstreak.com/standings.html?leagueid=166&seasonid=33239"
+  page <- read_html(url)
+  tables <- page %>% html_nodes("table") %>% html_table()
+  tables
+}
+
+standings <- tryCatch(fetch_standings(), error = function(e) NULL)
+                      
 apps <- list(
   list(
     id     = "catcher",
@@ -83,7 +93,7 @@ ui <- fluidPage(
     tags$img(src = "logo.png", class = "team-logo")
   ),
 
-  # ── Main
+ # ── Main
   tags$div(
     class = "hub-main",
 
@@ -94,28 +104,45 @@ ui <- fluidPage(
       lapply(apps, make_card)
     ),
 
-    # ── Standings
     tags$div(
       class = "section-label",
       style = "margin-top: 40px;",
       "2025 Cape Cod League Standings"
     ),
-    tags$iframe(
-      src    = "https://www.capecodleague.com/standings/",
-      width  = "100%",
-      height = "600px",
-      style  = "border: none; border-radius: 10px;"
+
+    tags$div(
+      class = "standings-wrapper",
+      if (!is.null(standings)) {
+        tagList(
+          tags$div(class = "standings-division-label", "East Division"),
+          tableOutput("east_standings"),
+          tags$div(class = "standings-division-label", "West Division"),
+          tableOutput("west_standings")
+        )
+      } else {
+        tags$p("Standings unavailable.", style = "color: var(--text-muted);")
+      }
     )
-  ),
+
+  ), # ← closes hub-main
 
   # ── Footer
   tags$div(
     class = "hub-footer",
     paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y"))
   )
-)
+
+) # ← closes fluidPage
 
 # ── Server ─────────────────────────────────────────────────────────────────────
-server <- function(input, output, session) {}
+server <- function(input, output, session) {
+  output$east_standings <- renderTable({
+    standings[[1]]
+  }, striped = TRUE, hover = TRUE, bordered = FALSE)
+
+  output$west_standings <- renderTable({
+    standings[[2]]
+  }, striped = TRUE, hover = TRUE, bordered = FALSE)
+}
 
 shinyApp(ui = ui, server = server)
