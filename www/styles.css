@@ -1,19 +1,18 @@
-/* ── Variables ─────────────────────────────────────── */
 :root {
-  --navy:       #0a1f44;
-  --navy-mid:   #122654;
-  --navy-light: #1a3470;
-  --white:      #ffffff;
-  --off-white:  #f4f6fa;
-  --sand:       #e8e0d0;
-  --accent:     #c8a951;        /* Cape Cod gold accent */
-  --text-main:  #0a1f44;
-  --text-muted: #5a6a85;
-  --radius:     10px;
-  --shadow:     0 4px 20px rgba(10, 31, 68, 0.10);
+  --navy:         #0a1f44;
+  --navy-mid:     #122654;
+  --navy-light:   #1a3470;
+  --teal:         #0a9396;
+  --teal-light:   #94d2bd;
+  --white:        #ffffff;
+  --off-white:    #f4f6fa;
+  --text-main:    #0a1f44;
+  --text-muted:   #5a6a85;
+  --radius:       10px;
+  --shadow:       0 4px 20px rgba(10, 31, 68, 0.10);
   --shadow-hover: 0 8px 32px rgba(10, 31, 68, 0.18);
-  --font-head:  'Oswald', sans-serif;
-  --font-body:  'Source Sans 3', sans-serif;
+  --font-head:    'Oswald', sans-serif;
+  --font-body:    'Source Sans 3', sans-serif;
 }
 
 /* ── Reset & base ───────────────────────────────────── */
@@ -34,7 +33,7 @@ body {
   display: flex;
   align-items: center;
   gap: 20px;
-  border-bottom: 3px solid var(--accent);
+  border-bottom: 3px solid var(--teal);
 }
 
 .hub-header .team-logo {
