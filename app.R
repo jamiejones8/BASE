@@ -1,15 +1,13 @@
 library(shiny)
 library(htmltools)
 
-# ── Card data ──────────────────────────────────────────────────────────────────
-# When a HF Space is deployed, swap "#" for the full URL.
 
 apps <- list(
   list(
-    title  = "Scouting Reports",
-    url    = "#",
-    status = "live"
-  ),
+  title  = "Catcher Reports",
+  url    = "#",
+  status = "live"
+),
   list(
     title  = "Postgame Hitter Reports",
     url    = "#",
@@ -69,15 +67,15 @@ ui <- fluidPage(
     tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
   ),
 
-  # ── Header
   tags$div(
-    class = "hub-header",
-    tags$div(
-      class = "header-text",
-      tags$h1("Brewster Whitecaps"),
-      tags$p("Analytics Hub · Cape Cod Baseball League")
-    )
+  class = "hub-header",
+  tags$div(
+    class = "header-text",
+    tags$h1("Brewster Whitecaps"),
+    tags$p("Centralized Application Platform for Staff")
   ),
+  tags$img(src = "logo.png", class = "team-logo")
+), 
 
   # ── Main
   tags$div(
