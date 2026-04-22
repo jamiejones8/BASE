@@ -23,7 +23,6 @@ apps <- list(
   list(
     id     = "umpire",
     title  = "Umpire Reports",
-    desc   = "Zone tendency and called-strike rate profiles for upcoming umpire assignments.",
     url    = "#",
     status = "live"
   ),
@@ -50,16 +49,15 @@ make_card <- function(app) {
   tags$img(src = paste0(app$id, ".png"), class = "card-img"),
 
   tags$div(
-    class = "card-body",
-    tags$div(class = "card-icon", app$icon),
-    tags$div(class = "card-title", app$title),
-    tags$div(class = "card-desc",  app$desc),
-    tags$div(
-      class = "card-footer",
-      tags$span(class = badge_class, badge_label),
-      tags$span(class = "card-arrow", "→")
-    )
+  class = "card-body",
+  tags$div(class = "card-icon", app$icon),
+  tags$div(class = "card-title", app$title),
+  tags$div(
+    class = "card-footer",
+    tags$span(class = badge_class, badge_label),
+    tags$span(class = "card-arrow", "→")
   )
+)
 )
 }
 
