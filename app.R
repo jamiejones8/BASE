@@ -25,42 +25,45 @@ apps <- list(
     title  = "Umpire Reports",
     url    = "#",
     status = "live"
+  ),
+  list(
+    id     = "mac",
+    title  = "MAC — Matchup Analysis",
+    url    = "#",
+    status = "live"
   )
 )
 
 # ── Helper: render one card ────────────────────────────────────────────────────
-
 make_card <- function(app) {
   is_coming_soon <- app$status == "coming_soon"
-  card_class <- paste("app-card", if (is_coming_soon) "coming-soon" else "")
+  card_class  <- paste("app-card", if (is_coming_soon) "coming-soon" else "")
   badge_class <- paste("status-badge", if (is_coming_soon) "coming-soon" else "live")
   badge_label <- if (is_coming_soon) "Coming Soon" else "Live"
 
   tags$a(
-  href   = app$url,
-  target = "_blank",
-  class  = card_class,
+    href   = app$url,
+    target = "_blank",
+    class  = card_class,
 
-  tags$img(src = paste0(app$id, ".png"), class = "card-img"),
+    tags$img(src = paste0(app$id, ".png"), class = "card-img"),
 
-  tags$div(
-  class = "card-body",
-  tags$div(class = "card-icon", app$icon),
-  tags$div(class = "card-title", app$title),
-  tags$div(
-    class = "card-footer",
-    tags$span(class = badge_class, badge_label),
-    tags$span(class = "card-arrow", "→")
+    tags$div(
+      class = "card-body",
+      tags$div(class = "card-icon",  app$icon),
+      tags$div(class = "card-title", app$title),
+      tags$div(
+        class = "card-footer",
+        tags$span(class = badge_class, badge_label),
+        tags$span(class = "card-arrow", "→")
+      )
+    )
   )
-)
-)
 }
 
 # ── UI ─────────────────────────────────────────────────────────────────────────
-
 ui <- fluidPage(
 
-  # Pull in Google Fonts + our stylesheet
   tags$head(
     tags$link(
       rel  = "stylesheet",
@@ -69,15 +72,16 @@ ui <- fluidPage(
     tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
   ),
 
+  # ── Header
   tags$div(
-  class = "hub-header",
-  tags$div(
-    class = "header-text",
-    tags$h1("Brewster Whitecaps"),
-    tags$p("Centralized Application Platform for Staff")
+    class = "hub-header",
+    tags$div(
+      class = "header-text",
+      tags$h1("Brewster Whitecaps"),
+      tags$p("Centralized Application Platform for Staff")
+    ),
+    tags$img(src = "logo.png", class = "team-logo")
   ),
-  tags$img(src = "logo.png", class = "team-logo")
-), 
 
   # ── Main
   tags$div(
@@ -88,22 +92,21 @@ ui <- fluidPage(
     tags$div(
       class = "app-grid",
       lapply(apps, make_card)
+    ),
+
+    # ── Standings
+    tags$div(
+      class = "section-label",
+      style = "margin-top: 40px;",
+      "2025 Cape Cod League Standings"
+    ),
+    tags$iframe(
+      src    = "https://www.capecodleague.com/standings/",
+      width  = "100%",
+      height = "600px",
+      style  = "border: none; border-radius: 10px;"
     )
   ),
-
-  tags$div(
-    class = "section-label",
-    style = "margin-top: 40px;",
-    "2025 Cape Cod League Standings"
-  ),
-  tags$iframe(
-    src    = "https://www.capecodleague.com/standings/",
-    width  = "100%",
-    height = "600px",
-    style  = "border: none; border-radius: 10px;"
-  )
-
-), 
 
   # ── Footer
   tags$div(
@@ -113,8 +116,6 @@ ui <- fluidPage(
 )
 
 # ── Server ─────────────────────────────────────────────────────────────────────
-# Framework only — no server logic needed at this stage.
-
 server <- function(input, output, session) {}
 
 shinyApp(ui = ui, server = server)
