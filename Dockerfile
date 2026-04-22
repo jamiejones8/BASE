@@ -4,6 +4,7 @@ WORKDIR /code
 
 RUN install2.r --error \
     shiny \
+    htmltools \
     dplyr \
     ggplot2 \
     readr \
