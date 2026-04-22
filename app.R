@@ -25,11 +25,6 @@ apps <- list(
     title  = "Umpire Reports",
     url    = "#",
     status = "live"
-  ),
-  list(
-    title  = "MAC — Matchup Analysis",
-    url    = "#",
-    status = "live"
   )
 )
 
