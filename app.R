@@ -3,14 +3,34 @@ library(htmltools)
 library(httr)
 library(xml2)
 
+library(xml2)
+
 fetch_standings <- function() {
-  url <- "https://baseball.pointstreak.com/standings.html?leagueid=166&seasonid=33239"
+  url  <- "https://baseball.pointstreak.com/standings.html?leagueid=166&seasonid=33239"
   page <- read_html(url)
-  tables <- html_table(page, header = TRUE)
-  tables
+  tables <- xml_find_all(page, ".//table")
+  
+  lapply(tables, function(t) {
+    rows <- xml_find_all(t, ".//tr")
+    data <- lapply(rows, function(r) {
+      xml_text(xml_find_all(r, ".//td|.//th"))
+    })
+    data <- data[sapply(data, length) > 0]
+    df <- as.data.frame(do.call(rbind, data[-1]), stringsAsFactors = FALSE)
+    names(df) <- data[[1]]
+    df
+  })
 }
 
-standings <- tryCatch(fetch_standings(), error = function(e) NULL)
+standings_error <- NULL
+
+standings <- tryCatch(
+  fetch_standings(),
+  error = function(e) {
+    standings_error <<- e$message
+    NULL
+  }
+)
                       
 apps <- list(
   list(
