@@ -1,12 +1,18 @@
 library(shiny)
 library(htmltools)
-library(rvest)
+library(httr)
+library(xml2)
 
 fetch_standings <- function() {
   url <- "https://baseball.pointstreak.com/standings.html?leagueid=166&seasonid=33239"
   page <- read_html(url)
-  tables <- page %>% html_nodes("table") %>% html_table()
-  tables
+  tables <- xml_find_all(page, ".//table")
+  lapply(tables, function(t) {
+    rows <- xml_find_all(t, ".//tr")
+    do.call(rbind, lapply(rows, function(r) {
+      xml_text(xml_find_all(r, ".//td|.//th"))
+    }))
+  })
 }
 
 standings <- tryCatch(fetch_standings(), error = function(e) NULL)
