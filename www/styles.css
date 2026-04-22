@@ -82,9 +82,11 @@ body {
 
 /* ── Card grid ──────────────────────────────────────── */
 .app-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  display: flex;
+  flex-direction: row;
   gap: 22px;
+  overflow-x: auto;
+  padding-bottom: 12px;
 }
 
 /* ── Individual card ────────────────────────────────── */
