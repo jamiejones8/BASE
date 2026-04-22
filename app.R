@@ -1,202 +1,106 @@
-/* ── Variables ─────────────────────────────────────── */
-:root {
-  --navy:       #0a1f44;
-  --navy-mid:   #122654;
-  --navy-light: #1a3470;
-  --white:      #ffffff;
-  --off-white:  #f4f6fa;
-  --sand:       #e8e0d0;
-  --accent:     #c8a951;        /* Cape Cod gold accent */
-  --text-main:  #0a1f44;
-  --text-muted: #5a6a85;
-  --radius:     10px;
-  --shadow:     0 4px 20px rgba(10, 31, 68, 0.10);
-  --shadow-hover: 0 8px 32px rgba(10, 31, 68, 0.18);
-  --font-head:  'Oswald', sans-serif;
-  --font-body:  'Source Sans 3', sans-serif;
+library(shiny)
+library(htmltools)
+
+# ── Card data ──────────────────────────────────────────────────────────────────
+# When a HF Space is deployed, swap "#" for the full URL.
+
+apps <- list(
+  list(
+    title  = "Scouting Reports",
+    url    = "#",
+    status = "live"
+  ),
+  list(
+    title  = "Postgame Hitter Reports",
+    url    = "#",
+    status = "live"
+  ),
+  list(
+    title  = "Postgame Pitcher Reports",
+    url    = "#",
+    status = "live"
+  ),
+  list(
+    title  = "Umpire Reports",
+    desc   = "Zone tendency and called-strike rate profiles for upcoming umpire assignments.",
+    url    = "#",
+    status = "live"
+  ),
+  list(
+    title  = "MAC — Matchup Analysis",
+    url    = "#",
+    status = "live"
+  )
+)
+
+# ── Helper: render one card ────────────────────────────────────────────────────
+
+make_card <- function(app) {
+  is_coming_soon <- app$status == "coming_soon"
+  card_class <- paste("app-card", if (is_coming_soon) "coming-soon" else "")
+  badge_class <- paste("status-badge", if (is_coming_soon) "coming-soon" else "live")
+  badge_label <- if (is_coming_soon) "Coming Soon" else "Live"
+
+  tags$a(
+    href   = app$url,
+    target = "_blank",
+    class  = card_class,
+    tags$div(class = "card-title", app$title),
+    tags$div(class = "card-desc",  app$desc),
+
+    tags$div(
+      class = "card-footer",
+      tags$span(class = badge_class, badge_label),
+      tags$span(class = "card-arrow", "→")
+    )
+  )
 }
 
-/* ── Reset & base ───────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+# ── UI ─────────────────────────────────────────────────────────────────────────
 
-body {
-  font-family: var(--font-body);
-  background-color: var(--off-white);
-  color: var(--text-main);
-  min-height: 100vh;
-}
+ui <- fluidPage(
 
-/* ── Header ─────────────────────────────────────────── */
-.hub-header {
-  background: var(--navy);
-  color: var(--white);
-  padding: 28px 40px 24px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  border-bottom: 3px solid var(--accent);
-}
+  # Pull in Google Fonts + our stylesheet
+  tags$head(
+    tags$link(
+      rel  = "stylesheet",
+      href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap"
+    ),
+    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
+  ),
 
-.hub-header .team-logo {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  object-fit: contain;
-  background: var(--white);
-  padding: 4px;
-}
+  # ── Header
+  tags$div(
+    class = "hub-header",
+    tags$div(
+      class = "header-text",
+      tags$h1("Brewster Whitecaps"),
+      tags$p("Analytics Hub · Cape Cod Baseball League")
+    )
+  ),
 
-.hub-header .header-text h1 {
-  font-family: var(--font-head);
-  font-size: 1.9rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  line-height: 1.1;
-}
+  # ── Main
+  tags$div(
+    class = "hub-main",
 
-.hub-header .header-text p {
-  font-size: 0.88rem;
-  color: var(--sand);
-  margin-top: 3px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
+    tags$div(class = "section-label", "Applications"),
 
-/* ── Main content ───────────────────────────────────── */
-.hub-main {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 40px 24px 60px;
-}
+    tags$div(
+      class = "app-grid",
+      lapply(apps, make_card)
+    )
+  ),
 
-.section-label {
-  font-family: var(--font-head);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 20px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #dde2ec;
-}
+  # ── Footer
+  tags$div(
+    class = "hub-footer",
+    paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y"))
+  )
+)
 
-/* ── Card grid ──────────────────────────────────────── */
-.app-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 22px;
-}
+# ── Server ─────────────────────────────────────────────────────────────────────
+# Framework only — no server logic needed at this stage.
 
-/* ── Individual card ────────────────────────────────── */
-.app-card {
-  background: var(--white);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 28px 26px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  text-decoration: none;
-  color: inherit;
-  border: 1.5px solid transparent;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-  position: relative;
-  overflow: hidden;
-}
+server <- function(input, output, session) {}
 
-.app-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-hover);
-  border-color: var(--accent);
-  text-decoration: none;
-  color: inherit;
-}
-
-/* Top accent stripe */
-.app-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: var(--navy);
-  transition: background 0.18s ease;
-}
-
-.app-card:hover::before {
-  background: var(--accent);
-}
-
-/* Coming soon — muted */
-.app-card.coming-soon {
-  opacity: 0.55;
-  cursor: default;
-  pointer-events: none;
-}
-
-.app-card .card-icon {
-  font-size: 2rem;
-  line-height: 1;
-}
-
-.app-card .card-title {
-  font-family: var(--font-head);
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--navy);
-}
-
-.app-card .card-desc {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-  flex: 1;
-}
-
-.app-card .card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 6px;
-}
-
-.status-badge {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 3px 9px;
-  border-radius: 20px;
-}
-
-.status-badge.live {
-  background: #e6f4ea;
-  color: #1e7e34;
-}
-
-.status-badge.coming-soon {
-  background: #f0f0f0;
-  color: #888;
-}
-
-.card-arrow {
-  font-size: 1rem;
-  color: var(--accent);
-  opacity: 0;
-  transform: translateX(-4px);
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-.app-card:hover .card-arrow {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-/* ── Footer ─────────────────────────────────────────── */
-.hub-footer {
-  text-align: center;
-  padding: 20px;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  border-top: 1px solid #dde2ec;
-}
+shinyApp(ui = ui, server = server)
