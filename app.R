@@ -1,58 +1,202 @@
-library(shiny)
-library(bslib)
-library(dplyr)
-library(ggplot2)
-
-df <- readr::read_csv("penguins.csv")
-# Find subset of columns that are suitable for scatter plot
-df_num <- df |> select(where(is.numeric), -Year)
-
-ui <- page_sidebar(
-  theme = bs_theme(bootswatch = "minty"),
-  title = "Penguins explorer",
-  sidebar = sidebar(
-    varSelectInput("xvar", "X variable", df_num, selected = "Bill Length (mm)"),
-    varSelectInput("yvar", "Y variable", df_num, selected = "Bill Depth (mm)"),
-    checkboxGroupInput("species", "Filter by species",
-      choices = unique(df$Species), selected = unique(df$Species)
-    ),
-    hr(), # Add a horizontal rule
-    checkboxInput("by_species", "Show species", TRUE),
-    checkboxInput("show_margins", "Show marginal plots", TRUE),
-    checkboxInput("smooth", "Add smoother"),
-  ),
-  plotOutput("scatter")
-)
-
-server <- function(input, output, session) {
-  subsetted <- reactive({
-    req(input$species)
-    df |> filter(Species %in% input$species)
-  })
-
-  output$scatter <- renderPlot(
-    {
-      p <- ggplot(subsetted(), aes(!!input$xvar, !!input$yvar)) +
-        theme_light() +
-        list(
-          theme(legend.position = "bottom"),
-          if (input$by_species) aes(color = Species),
-          geom_point(),
-          if (input$smooth) geom_smooth()
-        )
-
-      if (input$show_margins) {
-        margin_type <- if (input$by_species) "density" else "histogram"
-        p <- p |> ggExtra::ggMarginal(
-          type = margin_type, margins = "both",
-          size = 8, groupColour = input$by_species, groupFill = input$by_species
-        )
-      }
-
-      p
-    },
-    res = 100
-  )
+/* ── Variables ─────────────────────────────────────── */
+:root {
+  --navy:       #0a1f44;
+  --navy-mid:   #122654;
+  --navy-light: #1a3470;
+  --white:      #ffffff;
+  --off-white:  #f4f6fa;
+  --sand:       #e8e0d0;
+  --accent:     #c8a951;        /* Cape Cod gold accent */
+  --text-main:  #0a1f44;
+  --text-muted: #5a6a85;
+  --radius:     10px;
+  --shadow:     0 4px 20px rgba(10, 31, 68, 0.10);
+  --shadow-hover: 0 8px 32px rgba(10, 31, 68, 0.18);
+  --font-head:  'Oswald', sans-serif;
+  --font-body:  'Source Sans 3', sans-serif;
 }
 
-shinyApp(ui, server)
+/* ── Reset & base ───────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--off-white);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.hub-header {
+  background: var(--navy);
+  color: var(--white);
+  padding: 28px 40px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 3px solid var(--accent);
+}
+
+.hub-header .team-logo {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: var(--white);
+  padding: 4px;
+}
+
+.hub-header .header-text h1 {
+  font-family: var(--font-head);
+  font-size: 1.9rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.hub-header .header-text p {
+  font-size: 0.88rem;
+  color: var(--sand);
+  margin-top: 3px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Main content ───────────────────────────────────── */
+.hub-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px 60px;
+}
+
+.section-label {
+  font-family: var(--font-head);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dde2ec;
+}
+
+/* ── Card grid ──────────────────────────────────────── */
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 22px;
+}
+
+/* ── Individual card ────────────────────────────────── */
+.app-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  border: 1.5px solid transparent;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.app-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--accent);
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Top accent stripe */
+.app-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--navy);
+  transition: background 0.18s ease;
+}
+
+.app-card:hover::before {
+  background: var(--accent);
+}
+
+/* Coming soon — muted */
+.app-card.coming-soon {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+
+.app-card .card-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.app-card .card-title {
+  font-family: var(--font-head);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--navy);
+}
+
+.app-card .card-desc {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.app-card .card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.status-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+
+.status-badge.live {
+  background: #e6f4ea;
+  color: #1e7e34;
+}
+
+.status-badge.coming-soon {
+  background: #f0f0f0;
+  color: #888;
+}
+
+.card-arrow {
+  font-size: 1rem;
+  color: var(--accent);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.app-card:hover .card-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ── Footer ─────────────────────────────────────────── */
+.hub-footer {
+  text-align: center;
+  padding: 20px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  border-top: 1px solid #dde2ec;
+}
