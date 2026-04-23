@@ -103,7 +103,7 @@ ui <- fluidPage(
     tags$div(
       class = "header-text",
       tags$h1("Brewster Whitecaps"),
-      tags$p("Centralized Application Platform for Staff")
+      tags$p("C.A.P.S. - Centralized Application Platform for Staff")
     ),
     tags$img(src = "logo.png", class = "team-logo")
   ),
