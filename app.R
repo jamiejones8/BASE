@@ -980,11 +980,14 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
   game_stats_benchmarks <- list(
     `Zone%` = c(42,53), `Strike%` = c(58,67), `Whiff%` = c(15,30), `Hard Hit%` = c(27,44)
   )
-  game_stats_color_matrix <- rbind(
+  game_stats_color_matrix <- tryCatch(
+  rbind(
     build_color_matrix_pitcher(counting_stats_display[1,,drop=FALSE],
                                game_stats_benchmarks, lower_is_better = "Hard Hit%"),
     matrix("white", nrow = 1, ncol = ncol(counting_stats_display))
-  )
+  ), error = function(e) { message("game_stats_color_matrix failed: ", e$message)
+    matrix("white", nrow = nrow(counting_stats_display), ncol = ncol(counting_stats_display)) }
+)
 
   fastball_pitch_benchmarks <- list(
     `Whiff%` = c(10,25), `Zone%` = c(44,57), `Strike%` = c(58,70),
@@ -1005,16 +1008,26 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
     "Changeup" = offspeed_pitch_benchmarks, "Splitter"  = offspeed_pitch_benchmarks
   )
 
-  pitch_specs_color_matrix <- build_split_color_matrix_pitcher(pitch_specs,  pitch_bench_map, "Hard Hit%")
-  risp_color_matrix        <- if (nrow(risp_stats) > 0)
-    build_split_color_matrix_pitcher(risp_stats, pitch_bench_map, "Hard Hit%") else NULL
+  pitch_specs_color_matrix <- tryCatch(
+  build_split_color_matrix_pitcher(pitch_specs, pitch_bench_map, "Hard Hit%"),
+  error = function(e) { message("pitch_specs_color_matrix failed: ", e$message)
+    matrix("white", nrow = nrow(pitch_specs), ncol = ncol(pitch_specs)) }
+)
+  risp_color_matrix <- if (nrow(risp_stats) > 0) tryCatch(
+  build_split_color_matrix_pitcher(risp_stats, pitch_bench_map, "Hard Hit%"),
+  error = function(e) { message("risp_color_matrix failed: ", e$message)
+    matrix("white", nrow = nrow(risp_stats), ncol = ncol(risp_stats)) }
+) else NULL
 
-  season_totals_color_matrix <- build_color_matrix_pitcher(
+  season_totals_color_matrix <- tryCatch(
+  build_color_matrix_pitcher(
     season_totals,
     list(`GB%` = c(35,53), `K%` = c(14,27), `BB%` = c(5,12),
          `Hard Hit%` = c(27,43), `Zone%` = c(44,55), `Strike%` = c(59,67), `Whiff%` = c(16,30)),
     lower_is_better = c("BB%","Hard Hit%")
-  )
+  ), error = function(e) { message("season_totals_color_matrix failed: ", e$message)
+    matrix("white", nrow = nrow(season_totals), ncol = ncol(season_totals)) }
+)
 
   fastball_split_benchmarks <- list(
     `Zone%` = c(33,50), `Strike%` = c(58,72), `Whiff%` = c(10,25),
@@ -1038,14 +1051,28 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
     "Changeup" = offspeed_split_benchmarks, "Splitter"  = offspeed_split_benchmarks
   )
 
-  lhh_color_matrix <- build_split_color_matrix_pitcher(lhh_table, lhh_rhh_bench_map, c("Hard Hit%","Contact%"))
-  rhh_color_matrix <- build_split_color_matrix_pitcher(rhh_table, lhh_rhh_bench_map, c("Hard Hit%","Contact%"))
+  lhh_color_matrix <- tryCatch(
+  build_split_color_matrix_pitcher(lhh_table, lhh_rhh_bench_map, c("Hard Hit%","Contact%")),
+  error = function(e) { message("lhh_color_matrix failed: ", e$message)
+    matrix("white", nrow = nrow(lhh_table), ncol = ncol(lhh_table)) }
+)
+  rhh_color_matrix <- tryCatch(
+  build_split_color_matrix_pitcher(rhh_table, lhh_rhh_bench_map, c("Hard Hit%","Contact%")),
+  error = function(e) { message("rhh_color_matrix failed: ", e$message)
+    matrix("white", nrow = nrow(rhh_table), ncol = ncol(rhh_table)) }
+)
 
-  arsenal_color_matrix <- matrix("white", nrow = nrow(season_pitch_specs), ncol = ncol(season_pitch_specs))
+
+  arsenal_color_matrix <- tryCatch({
+  m <- matrix("white", nrow = nrow(season_pitch_specs), ncol = ncol(season_pitch_specs))
   for (r in seq_len(nrow(season_pitch_specs))) {
     pt <- season_pitch_specs$Type[r]
-    arsenal_color_matrix[r, 1] <- ifelse(!is.na(pitcher_pitch_colors[pt]), pitcher_pitch_colors[pt], "white")
+    m[r, 1] <- ifelse(!is.na(pitcher_pitch_colors[pt]), pitcher_pitch_colors[pt], "white")
   }
+  m
+}, error = function(e) { message("arsenal_color_matrix failed: ", e$message)
+  matrix("white", nrow = nrow(season_pitch_specs), ncol = ncol(season_pitch_specs)) }
+)
 
   # ── Logo ──
   logo_grob <- tryCatch({
