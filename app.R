@@ -642,16 +642,13 @@ place_density_row_pitcher <- function(plots, y_top, height = 0.18) {
   }
 }
 
-# ==========================================
-# PITCHER — PDF GENERATION
-# ==========================================
 generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pitcher,
                                  manual_pitches, manual_ks, manual_bbs, manual_hits, manual_runs,
                                  output_file, logo_path = NULL) {
-  
-message("INSIDE generate_pitcher_pdf")
-  
-  message("fixing manual overrides")
+
+  message("INSIDE generate_pitcher_pdf")
+
+  # ── Force manual overrides to proper NA ──
   manual_pitches <- if (is.null(manual_pitches) || length(manual_pitches) == 0 || is.na(manual_pitches)) NA_integer_ else as.integer(manual_pitches)
   manual_ks      <- if (is.null(manual_ks)      || length(manual_ks) == 0      || is.na(manual_ks))      NA_integer_ else as.integer(manual_ks)
   manual_bbs     <- if (is.null(manual_bbs)     || length(manual_bbs) == 0     || is.na(manual_bbs))     NA_integer_ else as.integer(manual_bbs)
@@ -665,192 +662,36 @@ message("INSIDE generate_pitcher_pdf")
   games_played <- pitcher_data_season %>%
     summarise(games = n_distinct(as.Date(as.character(Date)))) %>% pull(games)
   message("games_played: ", games_played)
+
+  # ── Force numeric columns ──
+  coerce_numeric <- function(df) {
+    df %>% mutate(
+      RunsScored       = as.numeric(RunsScored),
+      ExitSpeed        = as.numeric(ExitSpeed),
+      PlateLocSide     = as.numeric(PlateLocSide),
+      PlateLocHeight   = as.numeric(PlateLocHeight),
+      RelSpeed         = as.numeric(RelSpeed),
+      InducedVertBreak = as.numeric(InducedVertBreak),
+      HorzBreak        = as.numeric(HorzBreak),
+      RelHeight        = as.numeric(RelHeight),
+      RelSide          = as.numeric(RelSide),
+      Extension        = as.numeric(Extension),
+      SpinRate         = as.numeric(SpinRate),
+      VertApprAngle    = as.numeric(VertApprAngle),
+      HorzApprAngle    = as.numeric(HorzApprAngle),
+      Balls            = as.integer(Balls),
+      Strikes          = as.integer(Strikes),
+      Inning           = as.integer(Inning),
+      PAofInning       = as.integer(PAofInning),
+      PitchofPA        = as.integer(PitchofPA)
+    )
+  }
+
+  pitcher_data        <- coerce_numeric(pitcher_data)
+  pitcher_data_season <- coerce_numeric(pitcher_data_season)
+  message("coercion done")
+
   # ── Counting stats ──
-  counting_stats <- pitcher_data %>%
-    mutate(
-      IsStrike  = PitchCall %in% c("StrikeCalled","StrikeSwinging","FoulBall",
-                                   "FoulBallNotFieldable","FoulTip","InPlay"),
-      IsZone    = !is.na(PlateLocSide) & !is.na(PlateLocHeight) &
-                  abs(PlateLocSide) <= 0.8303 &
-                  PlateLocHeight >= 1.5 & PlateLocHeight <= 3.3775,
-      IsWhiff   = PitchCall == "StrikeSwinging",
-      IsSwing   = PitchCall %in% c("StrikeSwinging","FoulBall",
-                                   "FoulBallNotFieldable","FoulTip","InPlay"),
-      IsHardHit = !is.na(ExitSpeed) & ExitSpeed >= 95 &
-                  !PitchCall %in% c("FoulBall","FoulBallNotFieldable","FoulBallFieldable","FoulTip")
-    ) %>%
-    summarise(
-      Pitches     = n(),
-      `K's`       = sum(KorBB == "Strikeout", na.rm = TRUE),
-      `BB's`      = sum(KorBB == "Walk",      na.rm = TRUE),
-      Hits        = sum(PlayResult %in% c("Single","Double","Triple","HomeRun"), na.rm = TRUE),
-      ER          = sum(RunsScored, na.rm = TRUE),
-      `Zone%`     = paste0(round(mean(IsZone,   na.rm = TRUE) * 100, 1), "%"),
-      `Strike%`   = paste0(round(mean(IsStrike, na.rm = TRUE) * 100, 1), "%"),
-      `Whiff%`    = paste0(round(sum(IsWhiff)   / sum(IsSwing) * 100, 1), "%"),
-      `Hard Hit%` = paste0(round(sum(IsHardHit) / sum(!is.na(ExitSpeed)) * 100, 1), "%")
-    ) %>%
-    mutate(
-      Pitches = if (!is.na(manual_pitches)) as.integer(manual_pitches) else Pitches,
-      `K's`   = if (!is.na(manual_ks))     as.integer(manual_ks)      else `K's`,
-      `BB's`  = if (!is.na(manual_bbs))    as.integer(manual_bbs)     else `BB's`,
-      Hits    = if (!is.na(manual_hits))   as.integer(manual_hits)    else Hits,
-      ER      = if (!is.na(manual_runs))   as.integer(manual_runs)    else ER
-    )
-
-  lg_avg_row <- data.frame(
-    Pitches = "-", `K's` = "-", `BB's` = "-", Hits = "-", ER = "-",
-    `Zone%` = lg_zone_pct, `Strike%` = lg_strike_pct,
-    `Whiff%` = lg_whiff_pct, `Hard Hit%` = lg_hh_pct,
-    check.names = FALSE
-  )
-
-  counting_stats_display <- bind_rows(
-    counting_stats %>% mutate(across(everything(), as.character)),
-    lg_avg_row
-  )
-
-  # ── Pitch specs ──
-  stuff_game    <- tryCatch(build_stuff_plus(pitcher_data),    error = function(e) NULL)
-  location_game <- tryCatch(build_location_plus(pitcher_data), error = function(e) NULL)
-
-  total_pitches_game <- nrow(pitcher_data)
-
-  pitch_specs <- pitcher_data %>%
-    mutate(
-      PitchType = map_pitch_type(TaggedPitchType),
-      IsStrike  = PitchCall %in% c("StrikeCalled","StrikeSwinging","FoulBall",
-                                   "FoulBallNotFieldable","FoulTip","InPlay"),
-      IsZone    = abs(PlateLocSide) <= 0.8303 & PlateLocHeight >= 1.5 & PlateLocHeight <= 3.3775,
-      IsWhiff   = PitchCall == "StrikeSwinging",
-      IsSwing   = PitchCall %in% c("StrikeSwinging","FoulBall",
-                                   "FoulBallNotFieldable","FoulTip","InPlay"),
-      IsHardHit = !is.na(ExitSpeed) & ExitSpeed >= 95 &
-                  !PitchCall %in% c("FoulBall","FoulBallNotFieldable","FoulBallFieldable","FoulTip")
-    ) %>%
-    filter(!is.na(PitchType)) %>%
-    group_by(PitchType) %>%
-    summarise(
-      usage_n     = n(),
-      `Usage%`    = paste0(round(n() / total_pitches_game * 100, 1), "%"),
-      Velo        = round(mean(RelSpeed,           na.rm = TRUE), 1),
-      iVB         = round(mean(InducedVertBreak,   na.rm = TRUE), 1),
-      HB          = round(mean(HorzBreak,          na.rm = TRUE), 1),
-      RelH        = round(mean(RelHeight,          na.rm = TRUE), 2),
-      RelS        = round(mean(RelSide,            na.rm = TRUE), 2),
-      Ext         = round(mean(Extension,          na.rm = TRUE), 2),
-      `Whiff%`    = round(ifelse(sum(IsSwing) == 0, NA, sum(IsWhiff) / sum(IsSwing) * 100), 1),
-      `Zone%`     = round(sum(IsZone, na.rm = TRUE) / n() * 100, 1),
-      `Strike%`   = round(sum(IsStrike, na.rm = TRUE) / n() * 100, 1),
-      `Hard Hit%` = round(ifelse(sum(!is.na(ExitSpeed)) == 0, NA,
-                                 sum(IsHardHit) / sum(!is.na(ExitSpeed)) * 100), 1),
-      .groups = "drop"
-    ) %>%
-    arrange(desc(usage_n)) %>%
-    select(-usage_n) %>%
-    rename(Type = PitchType) %>%
-    relocate(`Usage%`, .after = Type) %>%
-    { if (!is.null(stuff_game))    left_join(., stuff_game,    by = "Type") else . } %>%
-    { if (!is.null(location_game)) left_join(., location_game, by = "Type") else . } %>%
-    mutate(across(where(is.numeric), ~ ifelse(is.nan(.), NA, .)))
-
-  # ── RISP ──
-  risp_data <- pitcher_data %>%
-    arrange(Inning, PAofInning, PitchofPA) %>%
-    group_by(Inning) %>%
-    filter(n() > 0) %>%
-    mutate(
-      RunnerOnBase = PAofInning > min(PAofInning, na.rm = TRUE) &
-        cumsum(lag(PlayResult %in% c("Single","Double","Triple","Error","FieldersChoice") |
-                     KorBB %in% c("Walk","HitByPitch"), default = FALSE)) > 0,
-      RISP = RunnerOnBase & (
-        cumsum(lag(PlayResult %in% c("Double","Triple"), default = FALSE)) > 0 |
-          cumsum(lag(PlayResult == "StolenBase", default = FALSE)) > 0 |
-          cumsum(lag(PlayResult %in% c("Single","Double","Triple","Error","FieldersChoice") |
-                       KorBB %in% c("Walk","HitByPitch"), default = FALSE)) >= 2
-      )
-    ) %>%
-    ungroup() %>%
-    filter(RISP == TRUE)
-
-  risp_stats <- risp_data %>%
-    mutate(
-      PitchType = map_pitch_type(TaggedPitchType),
-      IsStrike  = PitchCall %in% c("StrikeCalled","StrikeSwinging","FoulBall",
-                                   "FoulBallNotFieldable","FoulTip","InPlay"),
-      IsZone    = !is.na(PlateLocSide) & !is.na(PlateLocHeight) &
-                  abs(PlateLocSide) <= 0.8303 &
-                  PlateLocHeight >= 1.5 & PlateLocHeight <= 3.3775,
-      IsWhiff   = PitchCall == "StrikeSwinging",
-      IsSwing   = PitchCall %in% c("StrikeSwinging","FoulBall",
-                                   "FoulBallNotFieldable","FoulTip","InPlay"),
-      IsHardHit = !is.na(ExitSpeed) & ExitSpeed >= 95
-    ) %>%
-    filter(!is.na(PitchType)) %>%
-    group_by(Type = PitchType) %>%
-    summarise(
-      Pitches     = n(),
-      Velo        = round(mean(RelSpeed,         na.rm = TRUE), 1),
-      iVB         = round(mean(InducedVertBreak, na.rm = TRUE), 1),
-      HB          = round(mean(HorzBreak,        na.rm = TRUE), 1),
-      `Whiff%`    = round(ifelse(sum(IsSwing) == 0, NA, sum(IsWhiff) / sum(IsSwing) * 100), 1),
-      `Zone%`     = round(mean(IsZone,   na.rm = TRUE) * 100, 1),
-      `Strike%`   = round(mean(IsStrike, na.rm = TRUE) * 100, 1),
-      `Hard Hit%` = round(ifelse(sum(!is.na(ExitSpeed)) == 0, NA,
-                                 sum(IsHardHit) / sum(!is.na(ExitSpeed)) * 100), 1),
-      .groups = "drop"
-    ) %>%
-    mutate(across(where(is.numeric), ~ ifelse(is.nan(.), NA, .)))
-
-  # ── Game plots ──
-  movement_data <- pitcher_data %>%
-    group_by(TaggedPitchType_clean) %>%
-    summarise(HB = round(mean(HorzBreak, na.rm = TRUE), 1),
-              iVB = round(mean(InducedVertBreak, na.rm = TRUE), 1),
-              Velo = round(mean(RelSpeed, na.rm = TRUE), 1), .groups = "drop")
-
-  p_movement <- ggplot() +
-    geom_vline(xintercept = 0, color = "black") +
-    geom_hline(yintercept = 0, color = "black") +
-    geom_point(data = pitcher_data,
-               aes(x = HorzBreak, y = InducedVertBreak, fill = TaggedPitchType_clean),
-               size = 4, alpha = 0.8, shape = 21, color = "black", stroke = 0.5) +
-    geom_point(data = movement_data,
-               aes(x = HB, y = iVB, color = TaggedPitchType_clean),
-               size = 10, alpha = 0.9) +
-    geom_text(data = movement_data, aes(x = HB, y = iVB, label = Velo),
-              color = "white", size = 3.5, fontface = "bold") +
-    scale_color_manual(values = pitcher_pitch_colors, drop = TRUE) +
-    scale_fill_manual(values = pitcher_pitch_colors,  drop = TRUE) +
-    labs(title = "Pitch Movement", x = "Horizontal Break (in)", y = "Induced Vertical Break (in)") +
-    xlim(-25, 25) + ylim(-25, 25) +
-    theme_minimal() +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
-
-  p_velo <- ggplot(pitcher_data,
-                   aes(x = RelSpeed, y = TaggedPitchType_clean,
-                       fill = TaggedPitchType_clean, color = TaggedPitchType_clean)) +
-    ggridges::geom_density_ridges(alpha = 0.6, scale = 0.9, rel_min_height = 0.01,
-                                  quantile_lines = TRUE, quantiles = 2) +
-    scale_fill_manual(values  = pitcher_pitch_colors, drop = TRUE) +
-    scale_color_manual(values = pitcher_pitch_colors, drop = TRUE) +
-    labs(title = "Velocity Distribution", x = "Velocity (mph)", y = NULL) +
-    theme_minimal() +
-    theme(legend.position = "none",
-          plot.title  = element_text(hjust = 0.5, size = 12, face = "bold"),
-          axis.text.y = element_text(size = 10, face = "bold"))
-
-  p_left  <- make_zone_plot_pitcher(pitcher_data, "Left",  "Strike Zone vs. LHH")
-  p_right <- make_zone_plot_pitcher(pitcher_data, "Right", "Strike Zone vs. RHH")
-
-  combined_plot <- (p_movement | p_velo) / (p_left | p_right) +
-    patchwork::plot_annotation(
-      caption = "Diamond = Hard Hit (95+ mph EV)",
-      theme   = theme(plot.caption = element_text(hjust = 0.5, size = 10, face = "italic"))
-    )
-
-# ── Counting stats ──
   counting_stats <- pitcher_data %>%
     mutate(
       IsStrike  = PitchCall %in% c("StrikeCalled","StrikeSwinging","FoulBall",
