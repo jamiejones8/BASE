@@ -250,16 +250,16 @@ generate_catcher_pdf <- function(framing, throwing, catcher, game_date, output_f
 
   catcher_name <- format_name(catcher)
 
-  g_steal        <- gameStealInfo(catcher, throwing, game_date)
-  g_framing      <- gameFramingInfo(catcher, framing, game_date)
-  g_frame_coords <- framingPlotData(catcher, framing, game_date)
+  g_steal        <- gameStealInfo(catcher, game_throwing, game_date)
+g_framing      <- gameFramingInfo(catcher, game_framing, game_date)
+g_frame_coords <- framingPlotData(catcher, game_framing, game_date)
   g_won_p        <- plot_framing(g_frame_coords, "Won",  paste0(game_date, " — Strikes Won"))
   g_lost_p       <- plot_framing(g_frame_coords, "Lost", paste0(game_date, " — Strikes Lost"))
 
-  s_steal        <- overallStealInfo(catcher, throwing)
-  s_steal_pitch  <- overallStealByPitch(catcher, throwing)
-  s_framing      <- overallFramingInfo(catcher, framing)
-  s_frame_coords <- framingPlotData(catcher, framing)
+  s_steal        <- overallStealInfo(catcher, season_throwing)
+s_steal_pitch  <- overallStealByPitch(catcher, season_throwing)
+s_framing      <- overallFramingInfo(catcher, season_framing)
+s_frame_coords <- framingPlotData(catcher, season_framing)
   s_won_p        <- plot_framing(s_frame_coords, "Won",  "Season — Strikes Won")
   s_lost_p       <- plot_framing(s_frame_coords, "Lost", "Season — Strikes Lost")
 
@@ -580,48 +580,36 @@ server <- function(input, output, session) {
   # ── Generate ──
   catcher_pdf_path <- reactiveVal(NULL)
 
-  observeEvent(input$generate_catcher, {
-    req(input$catcher_name, game_data(), season_data(), input$game_date_select)
+observeEvent(input$generate_catcher, {
+  req(input$catcher_name, game_data(), season_data(), input$game_date_select)
+  output$catcher_status <- renderUI({
+    div(style = "color: orange; font-weight: bold;", "Generating report...")
+  })
+  tryCatch({
+    tmp_pdf   <- tempfile(fileext = ".pdf")
+    game_date <- as.Date(input$game_date_select)
 
+    generate_catcher_pdf(
+      game_framing    = game_data()$framing  %>% mutate(Date = as.Date(as.character(Date))),
+      game_throwing   = game_data()$throwing %>% mutate(Date = as.Date(as.character(Date))),
+      season_framing  = season_data()$framing  %>% mutate(Date = as.Date(as.character(Date))),
+      season_throwing = season_data()$throwing %>% mutate(Date = as.Date(as.character(Date))),
+      catcher     = input$catcher_name,
+      game_date   = game_date,
+      output_file = tmp_pdf,
+      logo_path   = "www/logo.png"
+    )
+
+    catcher_pdf_path(tmp_pdf)
     output$catcher_status <- renderUI({
-      div(style = "color: orange; font-weight: bold;", "Generating report...")
+      div(style = "color: green; font-weight: bold;", "\u2713 Report ready!")
     })
-
-    tryCatch({
-      tmp_pdf   <- tempfile(fileext = ".pdf")
-      game_date <- as.Date(input$game_date_select)
-
-      combined_framing <- bind_rows(
-  game_data()$framing  %>% mutate(Date = as.character(Date)),
-  season_data()$framing %>% mutate(Date = as.character(Date))
-) %>% mutate(Date = as.Date(Date))
-
-combined_throwing <- bind_rows(
-  game_data()$throwing  %>% mutate(Date = as.character(Date)),
-  season_data()$throwing %>% mutate(Date = as.character(Date))
-) %>% mutate(Date = as.Date(Date))
-
-      generate_catcher_pdf(
-        framing     = combined_framing,
-        throwing    = combined_throwing,
-        catcher     = input$catcher_name,
-        game_date   = game_date,
-        output_file = tmp_pdf,
-        logo_path   = "www/logo.png"
-      )
-
-      catcher_pdf_path(tmp_pdf)
-
-      output$catcher_status <- renderUI({
-        div(style = "color: green; font-weight: bold;", "\u2713 Report ready!")
-      })
-
-    }, error = function(e) {
-      output$catcher_status <- renderUI({
-        div(style = "color: red;", paste("Error:", e$message))
-      })
+  }, error = function(e) {
+    output$catcher_status <- renderUI({
+      div(style = "color: red;", paste("Error:", e$message))
     })
   })
+})
 
   # ── Download ──
   output$catcher_download_ui <- renderUI({
