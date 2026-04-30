@@ -7,8 +7,10 @@ library(ggplot2)
 library(grid)
 library(magick)
 library(readr)
-library(tidymodels)
-
+library(workflows)
+library(parsnip)
+library(recipes)
+library(tune)
 # ==========================================
 # STANDINGS
 # ==========================================
