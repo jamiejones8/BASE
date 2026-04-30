@@ -649,19 +649,22 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
                                  manual_pitches, manual_ks, manual_bbs, manual_hits, manual_runs,
                                  output_file, logo_path = NULL) {
   
-  message("INSIDE generate_pitcher_pdf")
-
-  # Force manual overrides to proper NA
+message("INSIDE generate_pitcher_pdf")
+  
+  message("fixing manual overrides")
   manual_pitches <- if (is.null(manual_pitches) || length(manual_pitches) == 0 || is.na(manual_pitches)) NA_integer_ else as.integer(manual_pitches)
   manual_ks      <- if (is.null(manual_ks)      || length(manual_ks) == 0      || is.na(manual_ks))      NA_integer_ else as.integer(manual_ks)
   manual_bbs     <- if (is.null(manual_bbs)     || length(manual_bbs) == 0     || is.na(manual_bbs))     NA_integer_ else as.integer(manual_bbs)
   manual_hits    <- if (is.null(manual_hits)    || length(manual_hits) == 0    || is.na(manual_hits))    NA_integer_ else as.integer(manual_hits)
   manual_runs    <- if (is.null(manual_runs)    || length(manual_runs) == 0    || is.na(manual_runs))    NA_integer_ else as.integer(manual_runs)
+  message("manual overrides done")
 
-  pitcher_name  <- format_name(selected_pitcher)
+  pitcher_name <- format_name(selected_pitcher)
+  message("pitcher_name: ", pitcher_name)
+
   games_played <- pitcher_data_season %>%
     summarise(games = n_distinct(as.Date(as.character(Date)))) %>% pull(games)
-
+  message("games_played: ", games_played)
   # ── Counting stats ──
   counting_stats <- pitcher_data %>%
     mutate(
