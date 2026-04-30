@@ -856,7 +856,7 @@ games_played <- pitcher_data_season %>%
                 Velo = round(mean(RelSpeed,          na.rm = TRUE), 1),
                 .groups = "drop")
   }, error = function(e) { message("movement_data error: ", e$message); data.frame() })
-
+  message("building p_movement")
   p_movement <- tryCatch({
     ggplot() +
       geom_vline(xintercept = 0, color = "black") +
@@ -878,6 +878,7 @@ games_played <- pitcher_data_season %>%
       theme(legend.position = "none",
             plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
   }, error = function(e) { message("p_movement error: ", e$message); ggplot() + theme_void() })
+  message("building p_velo")
 
   p_velo <- tryCatch({
     ggplot(pitcher_data,
@@ -893,11 +894,15 @@ games_played <- pitcher_data_season %>%
             plot.title  = element_text(hjust = 0.5, size = 12, face = "bold"),
             axis.text.y = element_text(size = 10, face = "bold"))
   }, error = function(e) { message("p_velo error: ", e$message); ggplot() + theme_void() })
+  message("building p_left")
 
   p_left  <- tryCatch(make_zone_plot_pitcher(pitcher_data, "Left",  "Strike Zone vs. LHH"),
                       error = function(e) { message("p_left error: ", e$message); ggplot() + theme_void() })
+  message("building p_right")
+
   p_right <- tryCatch(make_zone_plot_pitcher(pitcher_data, "Right", "Strike Zone vs. RHH"),
                       error = function(e) { message("p_right error: ", e$message); ggplot() + theme_void() })
+  message("building combined_plot")
 
   combined_plot <- tryCatch({
     (p_movement | p_velo) / (p_left | p_right) +
