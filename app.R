@@ -206,7 +206,7 @@ gameFramingInfo <- function(catcher, df, game_date) {
 framingPlotData <- function(catcher, df, game_date = NULL) {
   out <- df %>% filter(Catcher == catcher, PitchCall %in% c("StrikeCalled","BallCalled"))
   if (!is.null(game_date)) out <- out %>% filter(as.Date(Date) == game_date)
-  out %>%
+  out <- out %>%
     mutate(
       PhysicalZone     = if_else(
         between(PlateLocHeight, 1.5, 3.3775) & between(PlateLocSide, -0.83083, 0.83083), 1, 0),
@@ -218,24 +218,32 @@ framingPlotData <- function(catcher, df, game_date = NULL) {
       `Plate Side`   = PlateLocSide
     ) %>%
     filter(`Strike Outcome` %in% c("Won","Lost")) %>%
-    mutate(`#` = row_number()) %>%
     select(-Catcher)
+
+  if (!is.null(game_date)) out <- out %>% mutate(`#` = row_number())
+  out
 }
 
 plot_framing <- function(plot_df, outcome_filter, plot_title) {
   df_filtered <- plot_df %>% filter(`Strike Outcome` == outcome_filter)
   pt_color    <- ifelse(outcome_filter == "Won", "#00840D", "#E1463E")
+  has_numbers <- "#" %in% names(df_filtered)
 
-  ggplot() +
+  p <- ggplot() +
     geom_polygon(data = data.frame(x = c(-0.708, 0.708, 0.708, 0, -0.708),
                                    y = c(0, 0, 0.25, 0.5, 0.25)),
                  aes(x = x, y = y), fill = "grey90", color = "black") +
     annotate("rect", xmin = -0.83083, xmax = 0.83083, ymin = 1.5, ymax = 3.3775,
              fill = NA, color = "black", linewidth = 1) +
     geom_point(data = df_filtered, aes(x = `Plate Side`, y = `Plate Height`),
-               color = pt_color, size = 6, alpha = 0.9) +
-    geom_text(data = df_filtered, aes(x = `Plate Side`, y = `Plate Height`, label = `#`),
-              color = "white", size = 2.5, fontface = "bold") +
+               color = pt_color, size = ifelse(has_numbers, 6, 3), alpha = 0.9)
+
+  if (has_numbers) {
+    p <- p + geom_text(data = df_filtered, aes(x = `Plate Side`, y = `Plate Height`, label = `#`),
+                       color = "white", size = 2.5, fontface = "bold")
+  }
+
+  p +
     xlim(-1.5, 1.5) + ylim(0, 3.75) +
     coord_fixed() +
     theme_minimal() +
