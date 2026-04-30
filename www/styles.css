@@ -70,8 +70,8 @@ body {
 
 .section-label {
   font-family: var(--font-head);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
+  font-size: 1.4rem;        /* was 0.78rem */
+  letter-spacing: 0.08em;   /* was 0.12em */
   text-transform: uppercase;
   color: var(--text-muted);
   margin-bottom: 20px;
