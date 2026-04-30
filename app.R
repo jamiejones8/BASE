@@ -94,7 +94,7 @@ ui <- fluidPage(
     rel  = "stylesheet",
     href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap"
   ),
-  tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=2")  # ← change here
+  tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=3")  # ← change here
 ),
 
   # ── Header
