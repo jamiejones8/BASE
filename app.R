@@ -246,7 +246,7 @@ plot_framing <- function(plot_df, outcome_filter, plot_title) {
 # ==========================================
 # CATCHER — PDF GENERATION
 # ==========================================
-generate_catcher_pdf <- function(framing, throwing, catcher, game_date, output_file, logo_path = NULL) {
+generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, season_throwing, catcher, game_date, output_file, logo_path = NULL) {
 
   catcher_name <- format_name(catcher)
 
