@@ -17,9 +17,13 @@ RUN install2.r --error \
     httr \
     xml2 \
     magick \
-    tidymodels \
+    workflows \
+    parsnip \
+    recipes \
+    tune \
     patchwork \
-    ggridges
+    ggridges \
+    xgboost
 
 COPY . .
 CMD ["R", "--quiet", "-e", "shiny::runApp(host='0.0.0.0', port=7860)"]
