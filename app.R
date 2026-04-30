@@ -904,18 +904,6 @@ games_played <- pitcher_data_season %>%
                       error = function(e) { message("p_right error: ", e$message); ggplot() + theme_void() })
   message("building combined_plot")
 
-combined_plot <- tryCatch({
-    gridExtra::arrangeGrob(
-      p_movement, p_velo, p_left, p_right,
-      ncol = 2,
-      bottom = grid::textGrob(
-        "Diamond = Hard Hit (95+ mph EV)",
-        gp = grid::gpar(fontface = "italic", cex = 0.8)
-      )
-    )
-  }, error = function(e) { message("combined_plot error: ", e$message); NULL })
-  message("step 6: game plots done")
-
   season_totals <- tryCatch({
     pitcher_data_season %>%
       mutate(
@@ -1200,10 +1188,24 @@ combined_plot <- tryCatch({
                     table_width = 0.70, header_cex = 0.80, cell_cex = 0.80,
                     alt_row_bg = "grey80", color_matrix = game_stats_color_matrix)
 
-if (!is.null(combined_plot)) {
-      pushViewport(viewport(x = 0.5, y = 0.82, width = 0.98, height = 0.46, just = c("center","top")))
-      gridExtra::grid.arrange(grobs = combined_plot$grobs, ncol = 2, newpage = FALSE)
-      popViewport()
+pushViewport(viewport(x = 0.27, y = 0.82, width = 0.46, height = 0.23, just = c("center","top")))
+    suppressWarnings(print(p_movement, newpage = FALSE))
+    popViewport()
+
+    pushViewport(viewport(x = 0.73, y = 0.82, width = 0.46, height = 0.23, just = c("center","top")))
+    suppressWarnings(print(p_velo, newpage = FALSE))
+    popViewport()
+
+    pushViewport(viewport(x = 0.27, y = 0.59, width = 0.46, height = 0.23, just = c("center","top")))
+    suppressWarnings(print(p_left, newpage = FALSE))
+    popViewport()
+
+    pushViewport(viewport(x = 0.73, y = 0.59, width = 0.46, height = 0.23, just = c("center","top")))
+    suppressWarnings(print(p_right, newpage = FALSE))
+    popViewport()
+
+    grid.text("Diamond = Hard Hit (95+ mph EV)", x = 0.5, y = 0.355,
+              gp = gpar(cex = 0.65, col = "grey40", fontface = "italic"))opViewport()
     }
 
     grid.text("Pitch Specifications", x = 0.5, y = 0.355,
