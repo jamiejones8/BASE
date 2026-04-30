@@ -48,6 +48,7 @@ draw_grid_table <- function(df,
                             table_width  = 0.85,
                             header_bg    = "#0C2340",
                             zebra_bg     = "#f0f4f8",
+                            alt_row_bg = NULL,
                             title_cex    = 0.75,
                             header_cex   = 0.60,
                             cell_cex     = 0.58,
@@ -80,7 +81,13 @@ draw_grid_table <- function(df,
 
   for (r in seq_len(nrow(df))) {
     for (i in seq_along(headers)) {
-      bg <- if (!is.null(color_matrix)) color_matrix[r, i] else if (r %% 2 == 0) zebra_bg else "white"
+      bg <- if (!is.null(color_matrix)) {
+        color_matrix[r, i]
+      } else if (!is.null(alt_row_bg) && r == 2) {
+        alt_row_bg
+      } else {
+        if (r %% 2 == 0) zebra_bg else "white"
+      }
       grid.rect(x = x_pos[i], y = y_cursor,
                 width = col_widths[i] * 0.98, height = row_h,
                 just = c("left","top"),
@@ -688,6 +695,8 @@ games_played <- pitcher_data_season %>%
       PitchofPA        = as.integer(PitchofPA)
     )
   }
+  pitcher_data        <- pitcher_data        %>% mutate(TaggedPitchType_clean = as.character(TaggedPitchType_clean))
+  pitcher_data_season <- pitcher_data_season %>% mutate(TaggedPitchType_clean = as.character(TaggedPitchType_clean))
   pitcher_data        <- coerce_numeric(pitcher_data)
   pitcher_data_season <- coerce_numeric(pitcher_data_season)
   message("coercion done")
@@ -1053,14 +1062,18 @@ games_played <- pitcher_data_season %>%
   game_stats_benchmarks <- list(
     `Zone%` = c(42,53), `Strike%` = c(58,67), `Whiff%` = c(15,30), `Hard Hit%` = c(27,44)
   )
-  game_stats_color_matrix <- tryCatch(
-    rbind(
-      build_color_matrix_pitcher(counting_stats_display[1,,drop=FALSE],
-                                 game_stats_benchmarks, lower_is_better = "Hard Hit%"),
-      matrix("white", nrow = 1, ncol = ncol(counting_stats_display))
-    ), error = function(e) { message("game_stats_color_matrix failed: ", e$message)
-      matrix("white", nrow = nrow(counting_stats_display), ncol = ncol(counting_stats_display)) }
-  )
+  game_stats_color_matrix <- tryCatch({
+    row1 <- build_color_matrix_pitcher(
+      counting_stats_display[1,,drop=FALSE],
+      game_stats_benchmarks,
+      lower_is_better = "Hard Hit%"
+    )
+    row2 <- matrix("white", nrow = 1, ncol = ncol(counting_stats_display))
+    rbind(row1, row2)
+  }, error = function(e) {
+    message("game_stats_color_matrix failed: ", e$message)
+    matrix("white", nrow = 2, ncol = ncol(counting_stats_display))
+  })
 
   fastball_pitch_benchmarks <- list(
     `Whiff%` = c(10,25), `Zone%` = c(44,57), `Strike%` = c(58,70),
@@ -1468,7 +1481,7 @@ ui <- fluidPage(
       rel  = "stylesheet",
       href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap"
     ),
-    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=4")
+    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=5")
   ),
 
   tags$div(
