@@ -7,6 +7,7 @@ library(ggplot2)
 library(grid)
 library(magick)
 library(readr)
+library(tidymodels)
 
 # ==========================================
 # STANDINGS
@@ -838,12 +839,15 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
   message("step 5: risp_stats done - rows: ", nrow(risp_stats))
 
   # ── Game plots ──
+  message("step 5b: building movement_data")
+
   movement_data <- pitcher_data %>%
     group_by(TaggedPitchType_clean) %>%
     summarise(HB   = round(mean(HorzBreak,        na.rm = TRUE), 1),
               iVB  = round(mean(InducedVertBreak,  na.rm = TRUE), 1),
               Velo = round(mean(RelSpeed,          na.rm = TRUE), 1),
               .groups = "drop")
+  message("step 5c: p_movement done")
 
   p_movement <- ggplot() +
     geom_vline(xintercept = 0, color = "black") +
@@ -864,6 +868,7 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
     theme_minimal() +
     theme(legend.position = "none",
           plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
+  message("step 5d: p_velo done")
 
   p_velo <- ggplot(pitcher_data,
                    aes(x = RelSpeed, y = TaggedPitchType_clean,
@@ -877,9 +882,13 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
     theme(legend.position = "none",
           plot.title  = element_text(hjust = 0.5, size = 12, face = "bold"),
           axis.text.y = element_text(size = 10, face = "bold"))
+  message("step 5e: p_left done")
 
   p_left  <- make_zone_plot_pitcher(pitcher_data, "Left",  "Strike Zone vs. LHH")
+  message("step 5f: p_right done")
+
   p_right <- make_zone_plot_pitcher(pitcher_data, "Right", "Strike Zone vs. RHH")
+  message("step 5g: combined_plot done")
 
   combined_plot <- (p_movement | p_velo) / (p_left | p_right) +
     patchwork::plot_annotation(
