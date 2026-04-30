@@ -838,6 +838,203 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
       theme   = theme(plot.caption = element_text(hjust = 0.5, size = 10, face = "italic"))
     )
 
+# ── Counting stats ──
+  counting_stats <- pitcher_data %>%
+    mutate(
+      IsStrike  = PitchCall %in% c("StrikeCalled","StrikeSwinging","FoulBall",
+                                   "FoulBallNotFieldable","FoulTip","InPlay"),
+      IsZone    = !is.na(PlateLocSide) & !is.na(PlateLocHeight) &
+                  abs(PlateLocSide) <= 0.8303 &
+                  PlateLocHeight >= 1.5 & PlateLocHeight <= 3.3775,
+      IsWhiff   = PitchCall == "StrikeSwinging",
+      IsSwing   = PitchCall %in% c("StrikeSwinging","FoulBall",
+                                   "FoulBallNotFieldable","FoulTip","InPlay"),
+      IsHardHit = !is.na(ExitSpeed) & ExitSpeed >= 95 &
+                  !PitchCall %in% c("FoulBall","FoulBallNotFieldable","FoulBallFieldable","FoulTip")
+    ) %>%
+    summarise(
+      Pitches     = n(),
+      `K's`       = sum(KorBB == "Strikeout", na.rm = TRUE),
+      `BB's`      = sum(KorBB == "Walk",      na.rm = TRUE),
+      Hits        = sum(PlayResult %in% c("Single","Double","Triple","HomeRun"), na.rm = TRUE),
+      ER          = sum(RunsScored, na.rm = TRUE),
+      `Zone%`     = paste0(round(mean(IsZone,   na.rm = TRUE) * 100, 1), "%"),
+      `Strike%`   = paste0(round(mean(IsStrike, na.rm = TRUE) * 100, 1), "%"),
+      `Whiff%`    = paste0(round(sum(IsWhiff)   / sum(IsSwing) * 100, 1), "%"),
+      `Hard Hit%` = paste0(round(sum(IsHardHit) / sum(!is.na(ExitSpeed)) * 100, 1), "%")
+    ) %>%
+    mutate(
+      Pitches = if (!is.na(manual_pitches)) as.integer(manual_pitches) else Pitches,
+      `K's`   = if (!is.na(manual_ks))     as.integer(manual_ks)      else `K's`,
+      `BB's`  = if (!is.na(manual_bbs))    as.integer(manual_bbs)     else `BB's`,
+      Hits    = if (!is.na(manual_hits))   as.integer(manual_hits)    else Hits,
+      ER      = if (!is.na(manual_runs))   as.integer(manual_runs)    else ER
+    )
+  message("step 1: counting_stats done")
+
+  lg_avg_row <- data.frame(
+    Pitches = "-", `K's` = "-", `BB's` = "-", Hits = "-", ER = "-",
+    `Zone%` = lg_zone_pct, `Strike%` = lg_strike_pct,
+    `Whiff%` = lg_whiff_pct, `Hard Hit%` = lg_hh_pct,
+    check.names = FALSE
+  )
+
+  counting_stats_display <- bind_rows(
+    counting_stats %>% mutate(across(everything(), as.character)),
+    lg_avg_row
+  )
+  message("step 2: counting_stats_display done")
+
+  # ── Pitch specs ──
+  stuff_game    <- tryCatch(build_stuff_plus(pitcher_data),    error = function(e) { message("stuff_game error: ", e$message); NULL })
+  location_game <- tryCatch(build_location_plus(pitcher_data), error = function(e) { message("location_game error: ", e$message); NULL })
+  message("step 3: stuff/location done")
+
+  total_pitches_game <- nrow(pitcher_data)
+
+  pitch_specs <- pitcher_data %>%
+    mutate(
+      PitchType = map_pitch_type(TaggedPitchType),
+      IsStrike  = PitchCall %in% c("StrikeCalled","StrikeSwinging","FoulBall",
+                                   "FoulBallNotFieldable","FoulTip","InPlay"),
+      IsZone    = abs(PlateLocSide) <= 0.8303 & PlateLocHeight >= 1.5 & PlateLocHeight <= 3.3775,
+      IsWhiff   = PitchCall == "StrikeSwinging",
+      IsSwing   = PitchCall %in% c("StrikeSwinging","FoulBall",
+                                   "FoulBallNotFieldable","FoulTip","InPlay"),
+      IsHardHit = !is.na(ExitSpeed) & ExitSpeed >= 95 &
+                  !PitchCall %in% c("FoulBall","FoulBallNotFieldable","FoulBallFieldable","FoulTip")
+    ) %>%
+    filter(!is.na(PitchType)) %>%
+    group_by(PitchType) %>%
+    summarise(
+      usage_n     = n(),
+      `Usage%`    = paste0(round(n() / total_pitches_game * 100, 1), "%"),
+      Velo        = round(mean(RelSpeed,           na.rm = TRUE), 1),
+      iVB         = round(mean(InducedVertBreak,   na.rm = TRUE), 1),
+      HB          = round(mean(HorzBreak,          na.rm = TRUE), 1),
+      RelH        = round(mean(RelHeight,          na.rm = TRUE), 2),
+      RelS        = round(mean(RelSide,            na.rm = TRUE), 2),
+      Ext         = round(mean(Extension,          na.rm = TRUE), 2),
+      `Whiff%`    = round(ifelse(sum(IsSwing) == 0, NA, sum(IsWhiff) / sum(IsSwing) * 100), 1),
+      `Zone%`     = round(sum(IsZone, na.rm = TRUE) / n() * 100, 1),
+      `Strike%`   = round(sum(IsStrike, na.rm = TRUE) / n() * 100, 1),
+      `Hard Hit%` = round(ifelse(sum(!is.na(ExitSpeed)) == 0, NA,
+                                 sum(IsHardHit) / sum(!is.na(ExitSpeed)) * 100), 1),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(usage_n)) %>%
+    select(-usage_n) %>%
+    rename(Type = PitchType) %>%
+    relocate(`Usage%`, .after = Type) %>%
+    { if (!is.null(stuff_game))    left_join(., stuff_game,    by = "Type") else . } %>%
+    { if (!is.null(location_game)) left_join(., location_game, by = "Type") else . } %>%
+    mutate(across(where(is.numeric), ~ ifelse(is.nan(.), NA, .)))
+  message("step 4: pitch_specs done - rows: ", nrow(pitch_specs))
+
+  # ── RISP ──
+  risp_data <- tryCatch({
+    pitcher_data %>%
+      arrange(Inning, PAofInning, PitchofPA) %>%
+      group_by(Inning) %>%
+      filter(n() > 0) %>%
+      mutate(
+        RunnerOnBase = PAofInning > min(PAofInning, na.rm = TRUE) &
+          cumsum(lag(PlayResult %in% c("Single","Double","Triple","Error","FieldersChoice") |
+                       KorBB %in% c("Walk","HitByPitch"), default = FALSE)) > 0,
+        RISP = RunnerOnBase & (
+          cumsum(lag(PlayResult %in% c("Double","Triple"), default = FALSE)) > 0 |
+            cumsum(lag(PlayResult == "StolenBase", default = FALSE)) > 0 |
+            cumsum(lag(PlayResult %in% c("Single","Double","Triple","Error","FieldersChoice") |
+                         KorBB %in% c("Walk","HitByPitch"), default = FALSE)) >= 2
+        )
+      ) %>%
+      ungroup() %>%
+      filter(RISP == TRUE)
+  }, error = function(e) { message("risp_data error: ", e$message); data.frame() })
+
+  risp_stats <- tryCatch({
+    risp_data %>%
+      mutate(
+        PitchType = map_pitch_type(TaggedPitchType),
+        IsStrike  = PitchCall %in% c("StrikeCalled","StrikeSwinging","FoulBall",
+                                     "FoulBallNotFieldable","FoulTip","InPlay"),
+        IsZone    = !is.na(PlateLocSide) & !is.na(PlateLocHeight) &
+                    abs(PlateLocSide) <= 0.8303 &
+                    PlateLocHeight >= 1.5 & PlateLocHeight <= 3.3775,
+        IsWhiff   = PitchCall == "StrikeSwinging",
+        IsSwing   = PitchCall %in% c("StrikeSwinging","FoulBall",
+                                     "FoulBallNotFieldable","FoulTip","InPlay"),
+        IsHardHit = !is.na(ExitSpeed) & ExitSpeed >= 95
+      ) %>%
+      filter(!is.na(PitchType)) %>%
+      group_by(Type = PitchType) %>%
+      summarise(
+        Pitches     = n(),
+        Velo        = round(mean(RelSpeed,         na.rm = TRUE), 1),
+        iVB         = round(mean(InducedVertBreak, na.rm = TRUE), 1),
+        HB          = round(mean(HorzBreak,        na.rm = TRUE), 1),
+        `Whiff%`    = round(ifelse(sum(IsSwing) == 0, NA, sum(IsWhiff) / sum(IsSwing) * 100), 1),
+        `Zone%`     = round(mean(IsZone,   na.rm = TRUE) * 100, 1),
+        `Strike%`   = round(mean(IsStrike, na.rm = TRUE) * 100, 1),
+        `Hard Hit%` = round(ifelse(sum(!is.na(ExitSpeed)) == 0, NA,
+                                   sum(IsHardHit) / sum(!is.na(ExitSpeed)) * 100), 1),
+        .groups = "drop"
+      ) %>%
+      mutate(across(where(is.numeric), ~ ifelse(is.nan(.), NA, .)))
+  }, error = function(e) { message("risp_stats error: ", e$message); data.frame() })
+  message("step 5: risp_stats done - rows: ", nrow(risp_stats))
+
+  # ── Game plots ──
+  movement_data <- pitcher_data %>%
+    group_by(TaggedPitchType_clean) %>%
+    summarise(HB   = round(mean(HorzBreak,        na.rm = TRUE), 1),
+              iVB  = round(mean(InducedVertBreak,  na.rm = TRUE), 1),
+              Velo = round(mean(RelSpeed,          na.rm = TRUE), 1),
+              .groups = "drop")
+
+  p_movement <- ggplot() +
+    geom_vline(xintercept = 0, color = "black") +
+    geom_hline(yintercept = 0, color = "black") +
+    geom_point(data = pitcher_data,
+               aes(x = HorzBreak, y = InducedVertBreak, fill = TaggedPitchType_clean),
+               size = 4, alpha = 0.8, shape = 21, color = "black", stroke = 0.5) +
+    geom_point(data = movement_data,
+               aes(x = HB, y = iVB, color = TaggedPitchType_clean),
+               size = 10, alpha = 0.9) +
+    geom_text(data = movement_data, aes(x = HB, y = iVB, label = Velo),
+              color = "white", size = 3.5, fontface = "bold") +
+    scale_color_manual(values = pitcher_pitch_colors, drop = TRUE) +
+    scale_fill_manual(values  = pitcher_pitch_colors, drop = TRUE) +
+    labs(title = "Pitch Movement",
+         x = "Horizontal Break (in)", y = "Induced Vertical Break (in)") +
+    xlim(-25, 25) + ylim(-25, 25) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
+
+  p_velo <- ggplot(pitcher_data,
+                   aes(x = RelSpeed, y = TaggedPitchType_clean,
+                       fill = TaggedPitchType_clean, color = TaggedPitchType_clean)) +
+    ggridges::geom_density_ridges(alpha = 0.6, scale = 0.9, rel_min_height = 0.01,
+                                  quantile_lines = TRUE, quantiles = 2) +
+    scale_fill_manual(values  = pitcher_pitch_colors, drop = TRUE) +
+    scale_color_manual(values = pitcher_pitch_colors, drop = TRUE) +
+    labs(title = "Velocity Distribution", x = "Velocity (mph)", y = NULL) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          plot.title  = element_text(hjust = 0.5, size = 12, face = "bold"),
+          axis.text.y = element_text(size = 10, face = "bold"))
+
+  p_left  <- make_zone_plot_pitcher(pitcher_data, "Left",  "Strike Zone vs. LHH")
+  p_right <- make_zone_plot_pitcher(pitcher_data, "Right", "Strike Zone vs. RHH")
+
+  combined_plot <- (p_movement | p_velo) / (p_left | p_right) +
+    patchwork::plot_annotation(
+      caption = "Diamond = Hard Hit (95+ mph EV)",
+      theme   = theme(plot.caption = element_text(hjust = 0.5, size = 10, face = "italic"))
+    )
+  message("step 6: game plots done")
+
   # ── Season stats ──
   season_totals <- pitcher_data_season %>%
     mutate(
@@ -868,13 +1065,15 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
       `Strike%`   = paste0(round(mean(IsStrike, na.rm = TRUE) * 100, 1), "%"),
       `Whiff%`    = paste0(round(sum(IsWhiff)   / sum(IsSwing)  * 100, 1), "%")
     )
+  message("step 7: season_totals done")
 
   # ── Season movement plot ──
   movement_data_season <- pitcher_data_season %>%
     group_by(TaggedPitchType_clean) %>%
-    summarise(HB = round(mean(HorzBreak, na.rm = TRUE), 1),
-              iVB = round(mean(InducedVertBreak, na.rm = TRUE), 1),
-              Velo = round(mean(RelSpeed, na.rm = TRUE), 1), .groups = "drop")
+    summarise(HB   = round(mean(HorzBreak,       na.rm = TRUE), 1),
+              iVB  = round(mean(InducedVertBreak, na.rm = TRUE), 1),
+              Velo = round(mean(RelSpeed,         na.rm = TRUE), 1),
+              .groups = "drop")
 
   p_movement_season <- ggplot() +
     geom_vline(xintercept = 0, color = "black") +
@@ -883,7 +1082,8 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
                aes(x = HorzBreak, y = InducedVertBreak, fill = TaggedPitchType_clean),
                size = 4, alpha = 0.8, shape = 21, color = "black", stroke = 0.5) +
     geom_point(data = movement_data_season,
-               aes(x = HB, y = iVB, color = TaggedPitchType_clean), size = 10, alpha = 0.9) +
+               aes(x = HB, y = iVB, color = TaggedPitchType_clean),
+               size = 10, alpha = 0.9) +
     geom_text(data = movement_data_season, aes(x = HB, y = iVB, label = Velo),
               color = "white", size = 3.5, fontface = "bold") +
     scale_color_manual(values = pitcher_pitch_colors, drop = TRUE) +
@@ -894,6 +1094,7 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
     theme_minimal() +
     theme(legend.position = "none",
           plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
+  message("step 8: season movement done")
 
   # ── Season pitch specs ──
   total_pitches_season <- nrow(pitcher_data_season)
@@ -919,6 +1120,7 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
     ) %>%
     arrange(desc(usage_n)) %>%
     select(-usage_n)
+  message("step 9: season_pitch_specs done - rows: ", nrow(season_pitch_specs))
 
   # ── Split tables ──
   make_split_table_pitcher <- function(data, batter_side) {
@@ -939,8 +1141,10 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
       )
 
     total_n       <- nrow(side_data)
-    stuff_side    <- tryCatch(build_stuff_plus(data %>% filter(BatterSide == batter_side)),    error = function(e) NULL)
-    location_side <- tryCatch(build_location_plus(data %>% filter(BatterSide == batter_side)), error = function(e) NULL)
+    stuff_side    <- tryCatch(build_stuff_plus(data %>% filter(BatterSide == batter_side)),
+                              error = function(e) { message("stuff_side error: ", e$message); NULL })
+    location_side <- tryCatch(build_location_plus(data %>% filter(BatterSide == batter_side)),
+                              error = function(e) { message("location_side error: ", e$message); NULL })
 
     result <- side_data %>%
       group_by(TaggedPitchType_clean) %>%
@@ -970,24 +1174,30 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
     result
   }
 
-  lhh_table <- make_split_table_pitcher(pitcher_data_season, "Left")
-  rhh_table <- make_split_table_pitcher(pitcher_data_season, "Right")
+  lhh_table <- tryCatch(make_split_table_pitcher(pitcher_data_season, "Left"),
+                        error = function(e) { message("lhh_table error: ", e$message); data.frame() })
+  rhh_table <- tryCatch(make_split_table_pitcher(pitcher_data_season, "Right"),
+                        error = function(e) { message("rhh_table error: ", e$message); data.frame() })
+  message("step 10: split tables done - lhh: ", nrow(lhh_table), " rhh: ", nrow(rhh_table))
 
-  density_lhh <- make_density_plots_pitcher(pitcher_data_season, "Left")
-  density_rhh <- make_density_plots_pitcher(pitcher_data_season, "Right")
+  density_lhh <- tryCatch(make_density_plots_pitcher(pitcher_data_season, "Left"),
+                          error = function(e) { message("density_lhh error: ", e$message); list() })
+  density_rhh <- tryCatch(make_density_plots_pitcher(pitcher_data_season, "Right"),
+                          error = function(e) { message("density_rhh error: ", e$message); list() })
+  message("step 11: density plots done")
 
   # ── Color matrices ──
   game_stats_benchmarks <- list(
     `Zone%` = c(42,53), `Strike%` = c(58,67), `Whiff%` = c(15,30), `Hard Hit%` = c(27,44)
   )
   game_stats_color_matrix <- tryCatch(
-  rbind(
-    build_color_matrix_pitcher(counting_stats_display[1,,drop=FALSE],
-                               game_stats_benchmarks, lower_is_better = "Hard Hit%"),
-    matrix("white", nrow = 1, ncol = ncol(counting_stats_display))
-  ), error = function(e) { message("game_stats_color_matrix failed: ", e$message)
-    matrix("white", nrow = nrow(counting_stats_display), ncol = ncol(counting_stats_display)) }
-)
+    rbind(
+      build_color_matrix_pitcher(counting_stats_display[1,,drop=FALSE],
+                                 game_stats_benchmarks, lower_is_better = "Hard Hit%"),
+      matrix("white", nrow = 1, ncol = ncol(counting_stats_display))
+    ), error = function(e) { message("game_stats_color_matrix failed: ", e$message)
+      matrix("white", nrow = nrow(counting_stats_display), ncol = ncol(counting_stats_display)) }
+  )
 
   fastball_pitch_benchmarks <- list(
     `Whiff%` = c(10,25), `Zone%` = c(44,57), `Strike%` = c(58,70),
@@ -1009,25 +1219,26 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
   )
 
   pitch_specs_color_matrix <- tryCatch(
-  build_split_color_matrix_pitcher(pitch_specs, pitch_bench_map, "Hard Hit%"),
-  error = function(e) { message("pitch_specs_color_matrix failed: ", e$message)
-    matrix("white", nrow = nrow(pitch_specs), ncol = ncol(pitch_specs)) }
-)
+    build_split_color_matrix_pitcher(pitch_specs, pitch_bench_map, "Hard Hit%"),
+    error = function(e) { message("pitch_specs_color_matrix failed: ", e$message)
+      matrix("white", nrow = nrow(pitch_specs), ncol = ncol(pitch_specs)) }
+  )
+
   risp_color_matrix <- if (nrow(risp_stats) > 0) tryCatch(
-  build_split_color_matrix_pitcher(risp_stats, pitch_bench_map, "Hard Hit%"),
-  error = function(e) { message("risp_color_matrix failed: ", e$message)
-    matrix("white", nrow = nrow(risp_stats), ncol = ncol(risp_stats)) }
-) else NULL
+    build_split_color_matrix_pitcher(risp_stats, pitch_bench_map, "Hard Hit%"),
+    error = function(e) { message("risp_color_matrix failed: ", e$message)
+      matrix("white", nrow = nrow(risp_stats), ncol = ncol(risp_stats)) }
+  ) else NULL
 
   season_totals_color_matrix <- tryCatch(
-  build_color_matrix_pitcher(
-    season_totals,
-    list(`GB%` = c(35,53), `K%` = c(14,27), `BB%` = c(5,12),
-         `Hard Hit%` = c(27,43), `Zone%` = c(44,55), `Strike%` = c(59,67), `Whiff%` = c(16,30)),
-    lower_is_better = c("BB%","Hard Hit%")
-  ), error = function(e) { message("season_totals_color_matrix failed: ", e$message)
-    matrix("white", nrow = nrow(season_totals), ncol = ncol(season_totals)) }
-)
+    build_color_matrix_pitcher(
+      season_totals,
+      list(`GB%` = c(35,53), `K%` = c(14,27), `BB%` = c(5,12),
+           `Hard Hit%` = c(27,43), `Zone%` = c(44,55), `Strike%` = c(59,67), `Whiff%` = c(16,30)),
+      lower_is_better = c("BB%","Hard Hit%")
+    ), error = function(e) { message("season_totals_color_matrix failed: ", e$message)
+      matrix("white", nrow = nrow(season_totals), ncol = ncol(season_totals)) }
+  )
 
   fastball_split_benchmarks <- list(
     `Zone%` = c(33,50), `Strike%` = c(58,72), `Whiff%` = c(10,25),
@@ -1052,27 +1263,28 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
   )
 
   lhh_color_matrix <- tryCatch(
-  build_split_color_matrix_pitcher(lhh_table, lhh_rhh_bench_map, c("Hard Hit%","Contact%")),
-  error = function(e) { message("lhh_color_matrix failed: ", e$message)
-    matrix("white", nrow = nrow(lhh_table), ncol = ncol(lhh_table)) }
-)
-  rhh_color_matrix <- tryCatch(
-  build_split_color_matrix_pitcher(rhh_table, lhh_rhh_bench_map, c("Hard Hit%","Contact%")),
-  error = function(e) { message("rhh_color_matrix failed: ", e$message)
-    matrix("white", nrow = nrow(rhh_table), ncol = ncol(rhh_table)) }
-)
+    build_split_color_matrix_pitcher(lhh_table, lhh_rhh_bench_map, c("Hard Hit%","Contact%")),
+    error = function(e) { message("lhh_color_matrix failed: ", e$message)
+      matrix("white", nrow = nrow(lhh_table), ncol = ncol(lhh_table)) }
+  )
 
+  rhh_color_matrix <- tryCatch(
+    build_split_color_matrix_pitcher(rhh_table, lhh_rhh_bench_map, c("Hard Hit%","Contact%")),
+    error = function(e) { message("rhh_color_matrix failed: ", e$message)
+      matrix("white", nrow = nrow(rhh_table), ncol = ncol(rhh_table)) }
+  )
 
   arsenal_color_matrix <- tryCatch({
-  m <- matrix("white", nrow = nrow(season_pitch_specs), ncol = ncol(season_pitch_specs))
-  for (r in seq_len(nrow(season_pitch_specs))) {
-    pt <- season_pitch_specs$Type[r]
-    m[r, 1] <- ifelse(!is.na(pitcher_pitch_colors[pt]), pitcher_pitch_colors[pt], "white")
-  }
-  m
-}, error = function(e) { message("arsenal_color_matrix failed: ", e$message)
-  matrix("white", nrow = nrow(season_pitch_specs), ncol = ncol(season_pitch_specs)) }
-)
+    m <- matrix("white", nrow = nrow(season_pitch_specs), ncol = ncol(season_pitch_specs))
+    for (r in seq_len(nrow(season_pitch_specs))) {
+      pt <- season_pitch_specs$Type[r]
+      m[r, 1] <- ifelse(!is.na(pitcher_pitch_colors[pt]), pitcher_pitch_colors[pt], "white")
+    }
+    m
+  }, error = function(e) { message("arsenal_color_matrix failed: ", e$message)
+    matrix("white", nrow = nrow(season_pitch_specs), ncol = ncol(season_pitch_specs)) }
+  )
+  message("step 12: all color matrices done")
 
   # ── Logo ──
   logo_grob <- tryCatch({
