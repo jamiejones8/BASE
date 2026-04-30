@@ -90,12 +90,12 @@ make_card <- function(app) {
 ui <- fluidPage(
 
   tags$head(
-    tags$link(
-      rel  = "stylesheet",
-      href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap"
-    ),
-    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
+  tags$link(
+    rel  = "stylesheet",
+    href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap"
   ),
+  tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=2")  # ← change here
+),
 
   # ── Header
   tags$div(
