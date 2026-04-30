@@ -63,49 +63,38 @@ body {
 
 /* ── Main content ───────────────────────────────────── */
 .hub-main {
-  max-width: 1100px;
+  max-width: 1600px;        /* was 1100px */
   margin: 0 auto;
-  padding: 40px 24px 60px;
-}
-
-.section-label {
-  font-family: var(--font-head);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 20px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #dde2ec;
+  padding: 40px 40px 60px; /* was 24px sides */
 }
 
 /* ── Card grid ──────────────────────────────────────── */
 .app-grid {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);  /* 4 equal columns for 4 cards */
   gap: 22px;
-  overflow-x: auto;
+  overflow-x: visible;      /* was auto */
   padding-bottom: 12px;
 }
 
 /* ── Individual card ────────────────────────────────── */
 .app-card {
+  min-width: unset;         /* remove fixed min-width */
+  width: 100%;              /* fill grid column */
+  height: 380px;
+  /* rest unchanged */
   background: var(--white);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
   text-decoration: none;
   color: inherit;
   border: 1.5px solid transparent;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   position: relative;
   overflow: hidden;
-  min-width: 280px;
-  width: 280px;
-  height: 380px;
   flex-shrink: 0;
 }
 
@@ -227,37 +216,39 @@ body {
 /* ── Standings ──────────────────────────────────────── */
 .standings-wrapper {
   margin-top: 16px;
+  width: 100%;
 }
 
 .standings-division-label {
   font-family: var(--font-head);
-  font-size: 0.85rem;
+  font-size: 1rem;              
   letter-spacing: 0.10em;
   text-transform: uppercase;
   color: var(--teal);
-  margin: 20px 0 8px;
+  margin: 24px 0 10px;          
 }
 
 table.shiny-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 1.05rem;           
   font-family: var(--font-body);
 }
 
 table.shiny-table th {
   background: var(--navy);
   color: var(--white);
-  padding: 8px 12px;
+  padding: 12px 18px;           
   text-align: left;
   font-family: var(--font-head);
   letter-spacing: 0.06em;
-  font-size: 0.78rem;
+  font-size: 0.95rem;           
 }
 
 table.shiny-table td {
-  padding: 8px 12px;
+  padding: 11px 18px;           
   border-bottom: 1px solid #dde2ec;
+  font-size: 1rem;
 }
 
 table.shiny-table tr:hover td {
