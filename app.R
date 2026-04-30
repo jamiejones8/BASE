@@ -648,6 +648,8 @@ place_density_row_pitcher <- function(plots, y_top, height = 0.18) {
 generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pitcher,
                                  manual_pitches, manual_ks, manual_bbs, manual_hits, manual_runs,
                                  output_file, logo_path = NULL) {
+  
+  message("INSIDE generate_pitcher_pdf")
 
   # Force manual overrides to proper NA
   manual_pitches <- if (is.null(manual_pitches) || length(manual_pitches) == 0 || is.na(manual_pitches)) NA_integer_ else as.integer(manual_pitches)
