@@ -1204,8 +1204,9 @@ pushViewport(viewport(x = 0.27, y = 0.82, width = 0.46, height = 0.23, just = c(
     suppressWarnings(print(p_right, newpage = FALSE))
     popViewport()
 
-    grid.text("Diamond = Hard Hit (95+ mph EV)", x = 0.5, y = 0.355,
-              gp = gpar(cex = 0.65, col = "grey40", fontface = "italic"))popViewport()
+grid.text("Diamond = Hard Hit (95+ mph EV)", x = 0.5, y = 0.355,
+              gp = gpar(cex = 0.65, col = "grey40", fontface = "italic"))
+    popViewport()
     }
 
     grid.text("Pitch Specifications", x = 0.5, y = 0.355,
