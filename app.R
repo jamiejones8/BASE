@@ -591,8 +591,15 @@ server <- function(input, output, session) {
       tmp_pdf   <- tempfile(fileext = ".pdf")
       game_date <- as.Date(input$game_date_select)
 
-      combined_framing  <- bind_rows(game_data()$framing,  season_data()$framing)
-      combined_throwing <- bind_rows(game_data()$throwing, season_data()$throwing)
+      combined_framing <- bind_rows(
+  game_data()$framing  %>% mutate(Date = as.character(Date)),
+  season_data()$framing %>% mutate(Date = as.character(Date))
+) %>% mutate(Date = as.Date(Date))
+
+combined_throwing <- bind_rows(
+  game_data()$throwing  %>% mutate(Date = as.character(Date)),
+  season_data()$throwing %>% mutate(Date = as.character(Date))
+) %>% mutate(Date = as.Date(Date))
 
       generate_catcher_pdf(
         framing     = combined_framing,
