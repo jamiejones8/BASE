@@ -904,13 +904,16 @@ games_played <- pitcher_data_season %>%
                       error = function(e) { message("p_right error: ", e$message); ggplot() + theme_void() })
   message("building combined_plot")
 
-  combined_plot <- tryCatch({
-    (p_movement | p_velo) / (p_left | p_right) +
-      patchwork::plot_annotation(
-        caption = "Diamond = Hard Hit (95+ mph EV)",
-        theme   = theme(plot.caption = element_text(hjust = 0.5, size = 10, face = "italic"))
+combined_plot <- tryCatch({
+    gridExtra::arrangeGrob(
+      p_movement, p_velo, p_left, p_right,
+      ncol = 2,
+      bottom = grid::textGrob(
+        "Diamond = Hard Hit (95+ mph EV)",
+        gp = grid::gpar(fontface = "italic", cex = 0.8)
       )
-  }, error = function(e) { message("combined_plot error: ", e$message); ggplot() + theme_void() })
+    )
+  }, error = function(e) { message("combined_plot error: ", e$message); NULL })
   message("step 6: game plots done")
 
   season_totals <- tryCatch({
@@ -1197,9 +1200,11 @@ games_played <- pitcher_data_season %>%
                     table_width = 0.70, header_cex = 0.80, cell_cex = 0.80,
                     alt_row_bg = "grey80", color_matrix = game_stats_color_matrix)
 
-    pushViewport(viewport(x = 0.5, y = 0.82, width = 0.98, height = 0.46, just = c("center","top")))
-    suppressWarnings(print(combined_plot, newpage = FALSE))
-    popViewport()
+if (!is.null(combined_plot)) {
+      pushViewport(viewport(x = 0.5, y = 0.82, width = 0.98, height = 0.46, just = c("center","top")))
+      gridExtra::grid.arrange(grobs = combined_plot$grobs, ncol = 2, newpage = FALSE)
+      popViewport()
+    }
 
     grid.text("Pitch Specifications", x = 0.5, y = 0.355,
               gp = gpar(fontface = "bold", cex = 0.90, col = "#0C2340"))
