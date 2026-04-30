@@ -1777,13 +1777,21 @@ observeEvent(input$generate_pitcher, {
   tryCatch({
     tmp_pdf <- tempfile(fileext = ".pdf")
 
+    message("pitcher step A: filtering game data")
     pitcher_data <- raw_pitcher_game() %>%
-      filter(Pitcher == input$pitcher_select) %>%
-      prep_pitcher_data()
+      filter(Pitcher == input$pitcher_select)
+    message("pitcher step B: game data rows: ", nrow(pitcher_data))
+    
+    pitcher_data <- pitcher_data %>% prep_pitcher_data()
+    message("pitcher step C: game data prepped rows: ", nrow(pitcher_data))
 
+    message("pitcher step D: filtering season data")
     pitcher_data_season <- raw_pitcher_season() %>%
-      filter(Pitcher == input$pitcher_select) %>%
-      prep_pitcher_data()
+      filter(Pitcher == input$pitcher_select)
+    message("pitcher step E: season data rows: ", nrow(pitcher_data_season))
+    
+    pitcher_data_season <- pitcher_data_season %>% prep_pitcher_data()
+    message("pitcher step F: season data prepped rows: ", nrow(pitcher_data_season))
 
     generate_pitcher_pdf(
       pitcher_data        = pitcher_data,
@@ -1799,12 +1807,12 @@ observeEvent(input$generate_pitcher, {
     )
 
     pitcher_pdf_path(tmp_pdf)
-
     output$pitcher_status <- renderUI({
       div(style = "color: green; font-weight: bold;", "\u2713 Report ready!")
     })
 
   }, error = function(e) {
+    message("pitcher ERROR: ", e$message)
     output$pitcher_status <- renderUI({
       div(style = "color: red;", paste("Error:", e$message))
     })
