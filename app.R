@@ -199,7 +199,8 @@ gameFramingInfo <- function(catcher, df, game_date) {
     ) %>%
     filter(`Strike Outcome` %in% c("Won","Lost")) %>%
     rename(Pitch = TaggedPitchType) %>%
-    select(Inning, Batter, Pitch, `Strike Outcome`, Count, `Plate Height`, `Plate Side`)
+    mutate(`#` = row_number()) %>%
+    select(`#`, Inning, Batter, Pitch, `Strike Outcome`, Count, `Plate Height`, `Plate Side`)
 }
 
 framingPlotData <- function(catcher, df, game_date = NULL) {
@@ -217,6 +218,7 @@ framingPlotData <- function(catcher, df, game_date = NULL) {
       `Plate Side`   = PlateLocSide
     ) %>%
     filter(`Strike Outcome` %in% c("Won","Lost")) %>%
+    mutate(`#` = row_number()) %>%
     select(-Catcher)
 }
 
@@ -231,7 +233,9 @@ plot_framing <- function(plot_df, outcome_filter, plot_title) {
     annotate("rect", xmin = -0.83083, xmax = 0.83083, ymin = 1.5, ymax = 3.3775,
              fill = NA, color = "black", linewidth = 1) +
     geom_point(data = df_filtered, aes(x = `Plate Side`, y = `Plate Height`),
-               color = pt_color, size = 3, alpha = 0.9) +
+               color = pt_color, size = 6, alpha = 0.9) +
+    geom_text(data = df_filtered, aes(x = `Plate Side`, y = `Plate Height`, label = `#`),
+              color = "white", size = 2.5, fontface = "bold") +
     xlim(-1.5, 1.5) + ylim(0, 3.75) +
     coord_fixed() +
     theme_minimal() +
