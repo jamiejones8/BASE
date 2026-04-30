@@ -463,7 +463,7 @@ catcher_ui <- function() {
           tags$h4("Postgame Report", style = "color: var(--navy); margin-bottom: 12px;"),
           fileInput("game_csv", "Upload Game CSV:", accept = ".csv",
                     buttonLabel = "Browse", placeholder = "No file selected"),
-          selectInput("team_select", "Select Brewster's Team:", choices = NULL),
+          selectInput("team_select", "Select Team:", choices = NULL),
           selectInput("game_date_select", "Select Game Date:", choices = NULL),
           selectInput("catcher_name", "Select Catcher:", choices = NULL),
           actionButton("generate_catcher", "Generate Report",
@@ -474,7 +474,7 @@ catcher_ui <- function() {
           tags$h4("Season Report", style = "color: var(--navy); margin-bottom: 12px;"),
           fileInput("season_csvs", "Upload Season CSVs:", accept = ".csv", multiple = TRUE,
                     buttonLabel = "Browse", placeholder = "No files selected"),
-          selectInput("season_team_select", "Select Brewster's Team:", choices = NULL)
+          selectInput("season_team_select", "Select Team:", choices = NULL)
         )
       ),
 
