@@ -657,8 +657,8 @@ generate_pitcher_pdf <- function(pitcher_data, pitcher_data_season, selected_pit
   manual_runs    <- if (is.null(manual_runs)    || length(manual_runs) == 0    || is.na(manual_runs))    NA_integer_ else as.integer(manual_runs)
 
   pitcher_name  <- format_name(selected_pitcher)
-  games_played  <- pitcher_data_season %>%
-    summarise(games = n_distinct(Date)) %>% pull(games)
+  games_played <- pitcher_data_season %>%
+    summarise(games = n_distinct(as.Date(as.character(Date)))) %>% pull(games)
 
   # ── Counting stats ──
   counting_stats <- pitcher_data %>%
