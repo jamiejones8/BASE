@@ -1206,21 +1206,19 @@ pushViewport(viewport(x = 0.27, y = 0.82, width = 0.46, height = 0.23, just = c(
 
 grid.text("Diamond = Hard Hit (95+ mph EV)", x = 0.5, y = 0.355,
               gp = gpar(cex = 0.65, col = "grey40", fontface = "italic"))
-    popViewport()
-    }
 
-    grid.text("Pitch Specifications", x = 0.5, y = 0.355,
+    grid.text("Pitch Specifications", x = 0.5, y = 0.33,
               gp = gpar(fontface = "bold", cex = 0.90, col = "#0C2340"))
     draw_grid_table(pitch_specs,
-                    y_top = 0.34, x_center = 0.5, row_h = 0.024,
+                    y_top = 0.31, x_center = 0.5, row_h = 0.024,
                     table_width = 0.94, header_cex = 0.80, cell_cex = 0.80,
                     color_matrix = pitch_specs_color_matrix)
 
     if (nrow(risp_stats) > 0) {
-      grid.text("Pitch Specs - RISP", x = 0.5, y = 0.185,
+      grid.text("Pitch Specs - RISP", x = 0.5, y = 0.165,
                 gp = gpar(fontface = "bold", cex = 0.90, col = "#0C2340"))
       draw_grid_table(risp_stats,
-                      y_top = 0.175, x_center = 0.5, row_h = 0.024,
+                      y_top = 0.155, x_center = 0.5, row_h = 0.024,
                       table_width = 0.80, header_cex = 0.80, cell_cex = 0.80,
                       color_matrix = risp_color_matrix)
     }
