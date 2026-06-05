@@ -507,10 +507,19 @@ build_location_plus <- function(data) {
       count_state = ifelse(!count_state %in% c("0-0","0-1","0-2","1-0","1-1","1-2",
                                                "2-0","2-1","2-2","3-0","3-1","3-2"),
                            NA, count_state),
-      count_state = as.factor(count_state),
+      count_state = factor(count_state, levels = c("0-0","0-1","0-2","1-0","1-1","1-2",
+                                                    "2-0","2-1","2-2","3-0","3-1","3-2")),
       PitchType   = map_pitch_type(TaggedPitchType)
     ) %>%
-    filter(!is.na(PitchType), !is.na(count_state))
+    filter(
+      !is.na(PitchType),
+      !is.na(count_state),
+      !is.na(PlateLocSide),
+      !is.na(PlateLocHeight)
+    ) %>%
+    mutate(count_state = droplevels(count_state))  # <-- this is the fix
+
+  if (nrow(loc_data) == 0) return(NULL)
 
   predictions <- predict(xgb_fit, new_data = loc_data) %>%
     rename(xRV288 = .pred)
