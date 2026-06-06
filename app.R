@@ -15,6 +15,8 @@ library(xgboost)
 library(base64enc)
 library(ggridges)
 
+source("scout_app.R")
+
 # ==========================================
 # STANDINGS
 # ==========================================
@@ -1388,28 +1390,29 @@ build_split_color_matrix_hitter <- function(df, bench_map, lower_is_better = c()
 # ==========================================
 # HITTER — SWING DECISION MODELS
 # ==========================================
-# NEW
 download_from_hf_dataset <- function(repo_id, filename, token) {
-  url     <- paste0("https://huggingface.co/datasets/", repo_id,
-                    "/resolve/main/", filename)
-  tmp     <- tempfile(fileext = paste0(".", tools::file_ext(filename)))
-  resp    <- httr::GET(url,
-                       httr::add_headers(Authorization = paste("Bearer", token)),
-                       httr::write_disk(tmp, overwrite = TRUE),
-                       httr::timeout(120))
+  url  <- paste0("https://huggingface.co/datasets/", repo_id, "/resolve/main/", filename)
+  tmp  <- tempfile(fileext = paste0(".", tools::file_ext(filename)))
+  resp <- httr::GET(url,
+                    httr::add_headers(Authorization = paste("Bearer", token)),
+                    httr::write_disk(tmp, overwrite = TRUE),
+                    httr::timeout(120))
   if (httr::http_error(resp)) stop("Failed to download ", filename, ": ", httr::status_code(resp))
   tmp
 }
 
+message("HITTER_TOKEN present: ", nchar(Sys.getenv("HITTER_TOKEN")) > 0)
 sd_models <- tryCatch({
   token <- Sys.getenv("HITTER_TOKEN")
-  repo  <- "BrewsterWhitecapsMAC/swing-decision-models"  # your private dataset repo id
+  repo  <- "BrewsterWhitecapsMAC/swing-decision-models"
+  message("Downloading swing decision models from HF dataset: ", repo)
   list(
     model_take  = readRDS(download_from_hf_dataset(repo, "HitterXRV_Take.rds",  token)),
     model_swing = readRDS(download_from_hf_dataset(repo, "HitterXRV_Swing.rds", token)),
     encodings   = readRDS(download_from_hf_dataset(repo, "encodings.rds",       token))
   )
 }, error = function(e) { message("Swing decision models not loaded: ", e$message); NULL })
+message("sd_models loaded: ", !is.null(sd_models))
 
 sd_features <- c("PlateLocHeight", "PlateLocSide", "count_state_enc", "pitch_type_enc")
 
@@ -2022,10 +2025,14 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 # HUB UI
 # ==========================================
 apps <- list(
-  list(id = "catcher", title = "Catcher Reports",         page = "catcher", status = "live"),
-  list(id = "hitter",  title = "Postgame Hitter Reports",  page = "hitter",  status = "live"),
-  list(id = "pitcher", title = "Postgame Pitcher Reports", page = "pitcher", status = "live"),
-  list(id = "umpire",  title = "Umpire Reports",           page = NULL,      status = "live")
+  list(id = "catcher",          title = "Catcher Reports",          page = "catcher",        status = "live"),
+  list(id = "hitter",           title = "Postgame Hitter Reports",  page = "hitter",         status = "live"),
+  list(id = "pitcher",          title = "Postgame Pitcher Reports", page = "pitcher",        status = "live"),
+  list(id = "pitcher_scouting", title = "Pitcher Scouting",         page = "scout_pitching", status = "live"),
+  list(id = "hitter_scouting",  title = "Hitter Scouting",          page = "scout_hitting",  status = "live"),
+  list(id = "acquisitions",     title = "Acquisitions",             page = "scout_acq",      status = "live"),
+  list(id = "player_grades",    title = "Player Grades",            page = "scout_grades",   status = "live"),
+  list(id = "umpire",           title = "Umpire Reports",           page = NULL,             status = "live")
 )
 
 make_card <- function(app) {
@@ -2262,11 +2269,17 @@ server <- function(input, output, session) {
     current_page(input$nav_to)
   })
 
+  scout_server(input, output, session)
+
   output$page_content <- renderUI({
-    if      (current_page() == "hub")     hub_ui()
-    else if (current_page() == "catcher") catcher_ui()
-    else if (current_page() == "hitter")  hitter_ui()
-    else if (current_page() == "pitcher") pitcher_ui()
+    if      (current_page() == "hub")            hub_ui()
+    else if (current_page() == "catcher")        catcher_ui()
+    else if (current_page() == "hitter")         hitter_ui()
+    else if (current_page() == "pitcher")        pitcher_ui()
+    else if (current_page() == "scout_pitching") scout_pitching_ui()
+    else if (current_page() == "scout_hitting")  scout_hitting_ui()
+    else if (current_page() == "scout_acq")      scout_acq_ui()
+    else if (current_page() == "scout_grades")   scout_grades_ui()
   })
 
   # ── Standings ──────────────────────────────────────────────────────────────
