@@ -2381,52 +2381,69 @@ server <- function(input, output, session) {
   # HITTER SERVER LOGIC
   # ==========================================
 
-  output$hitter_select_ui <- renderUI({
-    game_h   <- tryCatch(raw_hitter_game()   %>% pull(Batter) %>% unique(), error = function(e) character(0))
-    season_h <- tryCatch(raw_hitter_season() %>% pull(Batter) %>% unique(), error = function(e) character(0))
-    hitters  <- sort(unique(c(game_h, season_h)))
-    req(length(hitters) > 0)
-    selectInput("selected_hitter", "Select Hitter:", choices = hitters)
+# ==========================================
+# HITTER SERVER LOGIC
+# ==========================================
+raw_hitter_game <- reactive({
+  req(input$hitter_game_csv)
+  read.csv(input$hitter_game_csv$datapath, stringsAsFactors = FALSE)
+})
+
+raw_hitter_season <- reactive({
+  req(input$hitter_season_csvs)
+  lapply(input$hitter_season_csvs$datapath, function(f) {
+    read.csv(f, stringsAsFactors = FALSE, colClasses = "character") %>%
+      select(-any_of("GameForeignID"))
+  }) %>% bind_rows() %>% type.convert(as.is = TRUE)
+})
+
+output$hitter_select_ui <- renderUI({
+  req(input$hitter_game_csv, input$hitter_season_csvs)
+  game_h   <- tryCatch(raw_hitter_game()   %>% pull(Batter) %>% unique(), error = function(e) character(0))
+  season_h <- tryCatch(raw_hitter_season() %>% pull(Batter) %>% unique(), error = function(e) character(0))
+  hitters  <- sort(unique(c(game_h, season_h)))
+  req(length(hitters) > 0)
+  selectInput("selected_hitter", "Select Hitter:", choices = hitters)
+})
+
+hitter_pdf_path <- reactiveVal(NULL)
+
+observeEvent(input$generate_hitter, {
+  req(input$selected_hitter, raw_hitter_game(), raw_hitter_season())
+  output$hitter_status <- renderUI({
+    div(style = "color: orange; font-weight: bold;", "Generating report...")
   })
-
-  hitter_pdf_path <- reactiveVal(NULL)
-
-  observeEvent(input$generate_hitter, {
-    req(input$selected_hitter, raw_hitter_game(), raw_hitter_season())
+  tryCatch({
+    tmp_pdf <- tempfile(fileext = ".pdf")
+    generate_hitter_pdf(
+      game_data       = raw_hitter_game(),
+      season_data     = raw_hitter_season(),
+      selected_hitter = input$selected_hitter,
+      output_file     = tmp_pdf,
+      active_models   = sd_models
+    )
+    hitter_pdf_path(tmp_pdf)
     output$hitter_status <- renderUI({
-      div(style = "color: orange; font-weight: bold;", "Generating report...")
+      div(style = "color: green; font-weight: bold;", "\u2713 Report ready!")
     })
-    tryCatch({
-      tmp_pdf <- tempfile(fileext = ".pdf")
-      generate_hitter_pdf(
-        game_data        = raw_hitter_game(),
-        season_data      = raw_hitter_season(),
-        selected_hitter  = input$selected_hitter,
-        output_file      = tmp_pdf,
-        active_models    = sd_models
-      )
-      hitter_pdf_path(tmp_pdf)
-      output$hitter_status <- renderUI({
-        div(style = "color: green; font-weight: bold;", "\u2713 Report ready!")
-      })
-    }, error = function(e) {
-      message("hitter ERROR: ", e$message)
-      output$hitter_status <- renderUI({
-        div(style = "color: red;", paste("Error:", e$message))
-      })
+  }, error = function(e) {
+    message("hitter ERROR: ", e$message)
+    output$hitter_status <- renderUI({
+      div(style = "color: red;", paste("Error:", e$message))
     })
   })
+})
 
-  output$hitter_download_ui <- renderUI({
-    req(hitter_pdf_path())
-    downloadButton("download_hitter_pdf", "Download Report",
-                   class = "btn btn-success", style = "width: 200px;")
-  })
+output$hitter_download_ui <- renderUI({
+  req(hitter_pdf_path())
+  downloadButton("download_hitter_pdf", "Download Report",
+                 class = "btn btn-success", style = "width: 200px;")
+})
 
-  output$download_hitter_pdf <- downloadHandler(
-    filename = function() paste0(gsub(", ", "_", input$selected_hitter), "_HitterReport.pdf"),
-    content  = function(file) { req(hitter_pdf_path()); file.copy(hitter_pdf_path(), file, overwrite = TRUE) }
-  )
+output$download_hitter_pdf <- downloadHandler(
+  filename = function() paste0(gsub(", ", "_", input$selected_hitter), "_HitterReport.pdf"),
+  content  = function(file) { req(hitter_pdf_path()); file.copy(hitter_pdf_path(), file, overwrite = TRUE) }
+)
 
   # ==========================================
   # PITCHER SERVER LOGIC
