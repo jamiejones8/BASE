@@ -1407,9 +1407,9 @@ sd_models <- tryCatch({
   repo  <- "BrewsterWhitecapsMAC/swing-decision-models"
   message("Downloading swing decision models from HF dataset: ", repo)
   list(
-    model_take  = readRDS(download_from_hf_dataset(repo, "HitterXRV_Take.rds",  token)),
-    model_swing = readRDS(download_from_hf_dataset(repo, "HitterXRV_Swing.rds", token)),
-    encodings   = readRDS(download_from_hf_dataset(repo, "encodings.rds",       token))
+    model_take  = xgb.load(download_from_hf_dataset(repo, "HitterXRV_Take.ubj",  token)),
+    model_swing = xgb.load(download_from_hf_dataset(repo, "HitterXRV_Swing.ubj", token)),
+    encodings   = readRDS(download_from_hf_dataset(repo,  "encodings.rds",        token))
   )
 }, error = function(e) { message("Swing decision models not loaded: ", e$message); NULL })
 message("sd_models loaded: ", !is.null(sd_models))
