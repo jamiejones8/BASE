@@ -2237,8 +2237,91 @@ ui <- fluidPage(
       rel  = "stylesheet",
       href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap"
     ),
-    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=6")
+    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=7"),
+    tags$style(HTML("
+      #caps-splash {
+        position: fixed;
+        inset: 0;
+        background: #0C2340;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        transition: opacity 0.6s ease;
+      }
+      #caps-splash.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #splash-logo {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: scaleIn 1.2s ease forwards;
+        opacity: 0;
+        overflow: hidden;
+      }
+      #splash-logo img {
+        width: 90px;
+        height: 90px;
+        object-fit: contain;
+      }
+      #splash-title {
+        color: white;
+        font-family: 'Oswald', sans-serif;
+        font-size: 28px;
+        letter-spacing: 6px;
+        margin-top: 20px;
+        animation: fadeUp 1s ease 0.8s forwards;
+        opacity: 0;
+        text-transform: uppercase;
+      }
+      #splash-sub {
+        color: #9DC2EA;
+        font-size: 12px;
+        letter-spacing: 2px;
+        margin-top: 8px;
+        animation: fadeUp 1s ease 1.2s forwards;
+        opacity: 0;
+        text-align: center;
+      }
+      @keyframes scaleIn {
+        0%   { transform: scale(0.3); opacity: 0; }
+        70%  { transform: scale(1.1); opacity: 1; }
+        100% { transform: scale(1);   opacity: 1; }
+      }
+      @keyframes fadeUp {
+        from { transform: translateY(12px); opacity: 0; }
+        to   { transform: translateY(0);    opacity: 1; }
+      }
+    ")),
+    tags$script(HTML("
+      $(document).ready(function() {
+        setTimeout(function() {
+          $('#caps-splash').addClass('fade-out');
+          setTimeout(function() {
+            $('#caps-splash').remove();
+          }, 700);
+        }, 2800);
+      });
+    "))
   ),
+
+  tags$div(
+    id = "caps-splash",
+    tags$div(
+      id = "splash-logo",
+      tags$img(src = "logo.png")
+    ),
+    tags$div(id = "splash-title", "C.A.P.S."),
+    tags$div(id = "splash-sub", "Centralized Application Platform for Staff")
+  ),
+
   tags$div(
     class = "hub-header",
     tags$div(
@@ -2248,9 +2331,9 @@ ui <- fluidPage(
     ),
     tags$img(src = "logo.png", class = "team-logo")
   ),
+
   uiOutput("page_content")
 )
-
 # ==========================================
 # SERVER
 # ==========================================
