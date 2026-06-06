@@ -44,3 +44,4 @@ www/hitter_scouting.png filter=lfs diff=lfs merge=lfs -text
 www/pitcher_scouting.png filter=lfs diff=lfs merge=lfs -text
 www/player_grades.png filter=lfs diff=lfs merge=lfs -text
 Brewster_Whitecaps.svg.png filter=lfs diff=lfs merge=lfs -text
+www/logo.png filter=lfs diff=lfs merge=lfs -text
