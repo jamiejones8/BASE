@@ -1443,10 +1443,18 @@ recode_pitch_type_model <- function(x) {
 score_pitches_xrv <- function(df, models = sd_models) {
   if (is.null(models)) return(df %>% mutate(xRV_swing=NA_real_, xRV_take=NA_real_, xRV_diff=NA_real_))
   enc <- models$encodings
-  scored <- df %>% mutate(
-    pitch_type_model = recode_pitch_type_model(TaggedPitchType),
-    count_state_enc  = match(count_state, enc$count_state),
-    pitch_type_enc   = match(pitch_type_model, enc$pitch_type))
+  scored <- df %>%
+    mutate(
+      Balls       = as.integer(Balls),
+      Strikes     = as.integer(Strikes),
+      count_state = paste0(Balls, "-", Strikes),
+      count_state = ifelse(!count_state %in% c("0-0","0-1","0-2","1-0","1-1","1-2",
+                                               "2-0","2-1","2-2","3-0","3-1","3-2"),
+                           NA, count_state),
+      pitch_type_model = recode_pitch_type_model(TaggedPitchType),
+      count_state_enc  = match(count_state, enc$count_state),
+      pitch_type_enc   = match(pitch_type_model, enc$pitch_type)
+    )
   valid <- !is.na(scored$PlateLocHeight) & !is.na(scored$PlateLocSide) &
     !is.na(scored$count_state_enc) & !is.na(scored$pitch_type_enc) &
     scored$pitch_type_model != "Other"
@@ -2147,39 +2155,24 @@ catcher_ui <- function() {
 
 hitter_ui <- function() {
   tagList(
-    tags$div(
-      class = "hub-main",
-      tags$div(
-        style = "margin-bottom: 24px;",
-        tags$button("← Back to Hub",
-                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
-                    class = "btn btn-outline-secondary btn-sm")
-      ),
-      tags$h2("Hitter Report Generator",
-              style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 24px;"),
-      tags$div(
-        style = "display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 32px;",
+    tags$div(class="hub-main",
+      tags$div(style="margin-bottom: 24px;",
+        tags$button("← Back to Hub", onclick="Shiny.setInputValue('nav_to','hub',{priority:'event'})", class="btn btn-outline-secondary btn-sm")),
+      tags$h2("Hitter Report Generator", style="font-family: var(--font-head); color: var(--navy); margin-bottom: 24px;"),
+      tags$div(style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 32px;",
         tags$div(
-          tags$h4("Game CSV", style = "color: var(--navy); margin-bottom: 12px;"),
-          fileInput("hitter_game_csv", "Upload Game CSV:", accept = ".csv",
-                    buttonLabel = "Browse", placeholder = "No file selected"),
-          uiOutput("hitter_select_ui")
-        ),
+          tags$h4("Game CSV", style="color: var(--navy); margin-bottom: 12px;"),
+          fileInput("hitter_game_csv", "Upload Game CSV:", accept=".csv", buttonLabel="Browse", placeholder="No file selected"),
+          tags$h4("Season CSVs", style="color: var(--navy); margin-bottom: 12px;"),
+          fileInput("hitter_season_csvs", "Upload Season CSVs:", accept=".csv", multiple=TRUE, buttonLabel="Browse", placeholder="No files selected")),
         tags$div(
-          tags$h4("Season CSVs", style = "color: var(--navy); margin-bottom: 12px;"),
-          fileInput("hitter_season_csvs", "Upload Season CSVs:", accept = ".csv", multiple = TRUE,
-                    buttonLabel = "Browse", placeholder = "No files selected")
-        )
+          tags$h4("Select Player", style="color: var(--navy); margin-bottom: 12px;"),
+          uiOutput("hitter_team_select_ui"),
+          uiOutput("hitter_select_ui"))
       ),
-      actionButton("generate_hitter", "Generate Report",
-                   class = "btn btn-primary", style = "width: 200px;"),
-      br(), br(),
-      uiOutput("hitter_status"),
-      br(),
-      uiOutput("hitter_download_ui")
-    ),
-    tags$div(class = "hub-footer",
-             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+      actionButton("generate_hitter", "Generate Report", class="btn btn-primary", style="width: 200px;"),
+      br(), br(), uiOutput("hitter_status"), br(), uiOutput("hitter_download_ui")),
+    tags$div(class="hub-footer", paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
   )
 }
 
@@ -2384,6 +2377,9 @@ server <- function(input, output, session) {
 # ==========================================
 # HITTER SERVER LOGIC
 # ==========================================
+# ==========================================
+# HITTER SERVER LOGIC
+# ==========================================
 raw_hitter_game <- reactive({
   req(input$hitter_game_csv)
   read.csv(input$hitter_game_csv$datapath, stringsAsFactors = FALSE)
@@ -2397,11 +2393,31 @@ raw_hitter_season <- reactive({
   }) %>% bind_rows() %>% type.convert(as.is = TRUE)
 })
 
-output$hitter_select_ui <- renderUI({
+output$hitter_team_select_ui <- renderUI({
   req(input$hitter_game_csv, input$hitter_season_csvs)
-  game_h   <- tryCatch(raw_hitter_game()   %>% pull(Batter) %>% unique(), error = function(e) character(0))
-  season_h <- tryCatch(raw_hitter_season() %>% pull(Batter) %>% unique(), error = function(e) character(0))
-  hitters  <- sort(unique(c(game_h, season_h)))
+  teams <- tryCatch(
+    sort(unique(c(raw_hitter_game()$BatterTeam, raw_hitter_season()$BatterTeam))),
+    error = function(e) character(0)
+  )
+  req(length(teams) > 0)
+  selectInput("hitter_team_select", "Select Team:", choices = teams)
+})
+
+output$hitter_select_ui <- renderUI({
+  req(input$hitter_game_csv, input$hitter_season_csvs, input$hitter_team_select)
+  game_h <- tryCatch(
+    raw_hitter_game() %>%
+      filter(BatterTeam == input$hitter_team_select) %>%
+      pull(Batter) %>% unique(),
+    error = function(e) character(0)
+  )
+  season_h <- tryCatch(
+    raw_hitter_season() %>%
+      filter(BatterTeam == input$hitter_team_select) %>%
+      pull(Batter) %>% unique(),
+    error = function(e) character(0)
+  )
+  hitters <- sort(unique(c(game_h, season_h)))
   req(length(hitters) > 0)
   selectInput("selected_hitter", "Select Hitter:", choices = hitters)
 })
@@ -2409,15 +2425,15 @@ output$hitter_select_ui <- renderUI({
 hitter_pdf_path <- reactiveVal(NULL)
 
 observeEvent(input$generate_hitter, {
-  req(input$selected_hitter, raw_hitter_game(), raw_hitter_season())
+  req(input$selected_hitter, input$hitter_team_select, raw_hitter_game(), raw_hitter_season())
   output$hitter_status <- renderUI({
     div(style = "color: orange; font-weight: bold;", "Generating report...")
   })
   tryCatch({
     tmp_pdf <- tempfile(fileext = ".pdf")
     generate_hitter_pdf(
-      game_data       = raw_hitter_game(),
-      season_data     = raw_hitter_season(),
+      game_data       = raw_hitter_game() %>% filter(BatterTeam == input$hitter_team_select),
+      season_data     = raw_hitter_season() %>% filter(BatterTeam == input$hitter_team_select),
       selected_hitter = input$selected_hitter,
       output_file     = tmp_pdf,
       active_models   = sd_models
@@ -2444,6 +2460,7 @@ output$download_hitter_pdf <- downloadHandler(
   filename = function() paste0(gsub(", ", "_", input$selected_hitter), "_HitterReport.pdf"),
   content  = function(file) { req(hitter_pdf_path()); file.copy(hitter_pdf_path(), file, overwrite = TRUE) }
 )
+
 
   # ==========================================
   # PITCHER SERVER LOGIC
