@@ -1402,7 +1402,7 @@ download_from_hf_dataset <- function(repo_id, filename, token) {
 }
 
 sd_models <- tryCatch({
-  token <- Sys.getenv("HF_TOKEN")
+  token <- Sys.getenv("HITTER_TOKEN")
   repo  <- "BrewsterWhitecapsMAC/swing-decision-models"  # your private dataset repo id
   list(
     model_take  = readRDS(download_from_hf_dataset(repo, "HitterXRV_Take.rds",  token)),
