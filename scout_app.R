@@ -21,6 +21,9 @@ options(shiny.maxRequestSize = 500 * 1024^2)
 # ---- Pull models from a private HF dataset (token via Space secret HF_TOKEN) -
 library(httr)
 SCOUT_DATASET <- Sys.getenv("SCOUT_DATASET", "BrewsterWhitecapsMAC/REPLACE-ME")
+.tok <- Sys.getenv("HF_TOKEN")
+message(sprintf(">>> HF_TOKEN check — present:%s  length:%d  prefix:'%s'  (want length ~37-40, prefix 'hf_')",
+                nzchar(.tok), nchar(.tok), substr(.tok, 1, 3)))
 hf_get <- function(file, dest = file) {
   if (file.exists(dest)) return(dest)
   url <- paste0("https://huggingface.co/datasets/", SCOUT_DATASET, "/resolve/main/", file)
@@ -223,7 +226,9 @@ prep_pitches <- function(df) {
   for (c in need_num) df[[c]] <- suppressWarnings(as.numeric(df[[c]]))
   # If the plus columns aren't already present (i.e. a raw TrackMan upload),
   # compute them live from the trained models.
-  if (!is.null(MODELS) && all(is.na(df$StuffPlus))) df <- score_pitches(df)
+  if (!is.null(MODELS) && all(is.na(df$StuffPlus)))
+    df <- tryCatch(score_pitches(df),
+                   error = function(e) { message(">>> SCORING ERROR: ", conditionMessage(e)); df })
   if (!"Date"   %in% names(df)) df$Date   <- NA
   if (!"GameID" %in% names(df)) df$GameID <- paste(df$Date, df$Inning, sep = "_")
 
