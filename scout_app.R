@@ -22,12 +22,22 @@ options(shiny.maxRequestSize = 500 * 1024^2)
 library(httr)
 SCOUT_DATASET <- Sys.getenv("SCOUT_DATASET", "BrewsterWhitecapsMAC/REPLACE-ME")
 hf_get <- function(file, dest = file) {
-  if (!file.exists(dest)) tryCatch(
-    httr::GET(paste0("https://huggingface.co/datasets/", SCOUT_DATASET,
-                     "/resolve/main/", file),
-              httr::add_headers(Authorization = paste("Bearer", Sys.getenv("HF_TOKEN"))),
-              httr::write_disk(dest, overwrite = TRUE)),
-    error = function(e) message("HF download failed (", file, "): ", conditionMessage(e)))
+  if (file.exists(dest)) return(dest)
+  url <- paste0("https://huggingface.co/datasets/", SCOUT_DATASET, "/resolve/main/", file)
+  resp <- tryCatch(
+    httr::GET(url, httr::add_headers(Authorization = paste("Bearer", Sys.getenv("HF_TOKEN")))),
+    error = function(e) { message("HF connection error (", file, "): ", conditionMessage(e)); NULL })
+  if (is.null(resp)) return(dest)
+  st <- httr::status_code(resp)
+  if (st != 200) {
+    message(sprintf(">>> HF download FAILED for '%s' — HTTP %s from dataset '%s'. ",
+                    file, st, SCOUT_DATASET),
+            "Check that HF_TOKEN can read this (org-)private dataset and SCOUT_DATASET is exact.")
+    return(dest)
+  }
+  writeBin(httr::content(resp, "raw"), dest)
+  message(sprintf(">>> HF download OK: %s (%s bytes) from %s",
+                  file, format(file.info(dest)$size, big.mark = ","), SCOUT_DATASET))
   dest
 }
 hf_get("pitch_models.rds")
@@ -35,9 +45,13 @@ hf_get("xwoba_grid.rds")
 
 # Trained models for live, in-app scoring of raw uploads (blank if not present).
 MODELS <- tryCatch(if (file.exists("pitch_models.rds")) readRDS("pitch_models.rds") else NULL,
-                   error = function(e) NULL)
+                   error = function(e) { message(">>> readRDS pitch_models.rds failed: ",
+                                                  conditionMessage(e)); NULL })
 XWGRID <- tryCatch(if (file.exists("xwoba_grid.rds")) readRDS("xwoba_grid.rds") else NULL,
-                   error = function(e) NULL)
+                   error = function(e) { message(">>> readRDS xwoba_grid.rds failed: ",
+                                                  conditionMessage(e)); NULL })
+if (is.null(MODELS)) message(">>> MODELS is NULL — Stuff+/Location+/Pitching+ and all grades will be blank.")
+if (is.null(XWGRID)) message(">>> XWGRID is NULL — xwOBA columns will be blank.")
 # Linear-weights for full xwOBA (≈ recent MLB run-value scale)
 WOBA_BB <- 0.69; WOBA_HBP <- 0.72
 
@@ -728,24 +742,24 @@ hitter_grade_detail <- function(d, minpa = 10) {
 }
 
 grade_board <- function(d, type, minp, pop = NULL) {
-  if (type == "P") {
+  res <- if (type == "P") {
     d %>% filter(!is.na(Pitcher)) %>% group_by(Pitcher) %>% group_split() %>%
       map_dfr(function(g) { if (nrow(g) < minp) return(NULL)
         det <- pitcher_grade_detail(g, pop = pop); if (is.null(det)) return(NULL)
         o <- det %>% filter(Category == "OVERALL")
         tibble(Player = g$Pitcher[1], Hand = g$PThrows[1],
                `Coll Cur` = o$`Coll Cur`, `Coll Fut` = o$`Coll Fut`,
-               `MLB Cur` = o$`MLB Cur`, `MLB Fut` = o$`MLB Fut`) }) %>%
-      arrange(desc(`Coll Cur`))
+               `MLB Cur` = o$`MLB Cur`, `MLB Fut` = o$`MLB Fut`) })
   } else {
     d %>% filter(!is.na(Batter)) %>% group_by(Batter) %>% group_split() %>%
       map_dfr(function(g) { det <- hitter_grade_detail(g); if (is.null(det)) return(NULL)
         o <- det %>% filter(Category == "OVERALL")
         tibble(Player = g$Batter[1], Side = g$BatSide[1],
                `Coll Cur` = o$`Coll Cur`, `Coll Fut` = o$`Coll Fut`,
-               `MLB Cur` = o$`MLB Cur`, `MLB Fut` = o$`MLB Fut`) }) %>%
-      arrange(desc(`Coll Cur`))
+               `MLB Cur` = o$`MLB Cur`, `MLB Fut` = o$`MLB Fut`) })
   }
+  if (nrow(res) > 0 && "Coll Cur" %in% names(res)) res <- arrange(res, desc(`Coll Cur`))
+  res
 }
 GCOLS <- c("Coll Cur","Coll Fut","MLB Cur","MLB Fut")
 
