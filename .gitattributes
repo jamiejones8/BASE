@@ -39,3 +39,7 @@ PitcherModels/location_plus_model.rds filter=lfs diff=lfs merge=lfs -text
 PitcherModels/Stuff+2.rds filter=lfs diff=lfs merge=lfs -text
 www/brewster[[:space:]]team.jpg filter=lfs diff=lfs merge=lfs -text
 pitch_models.rds filter=lfs diff=lfs merge=lfs -text
+www/acquisitions.png filter=lfs diff=lfs merge=lfs -text
+www/hitter_scouting.png filter=lfs diff=lfs merge=lfs -text
+www/pitcher_scouting.png filter=lfs diff=lfs merge=lfs -text
+www/player_grades.png filter=lfs diff=lfs merge=lfs -text
