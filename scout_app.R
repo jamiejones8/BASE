@@ -1034,7 +1034,7 @@ scout_server <- function(input, output, session) {
     if (!is.null(input$team) && input$team != "__all__") d <- d[d[[col]] %in% input$team, , drop = FALSE]
     d }
 
-  observe({ d <- raw(); req(d)
+  observe({ d <- raw(); req(d, input$minp)
     dd <- team_filter(d, "PitcherTeam")
     pl <- dd %>% filter(!is.na(Pitcher)) %>% count(Pitcher, PThrows) %>%
       filter(n >= input$minp) %>% arrange(Pitcher)
@@ -1042,7 +1042,7 @@ scout_server <- function(input, output, session) {
     names(ch) <- ifelse(is.na(pl$PThrows), pl$Pitcher, paste0(pl$Pitcher, " (", pl$PThrows, "HP)"))
     updateSelectInput(session, "pitcher", choices = ch) })
 
-  observe({ d <- raw(); req(d)
+  observe({ d <- raw(); req(d, input$minp)
     dd <- team_filter(d, "BatterTeam")
     bl <- dd %>% filter(!is.na(Batter)) %>% count(Batter) %>% filter(n >= input$minp) %>% arrange(Batter)
     updateSelectInput(session, "batter", choices = setNames(bl$Batter, bl$Batter)) })
@@ -1151,7 +1151,7 @@ scout_server <- function(input, output, session) {
   })
 
   # --- Player Grades ---
-  observe({ d <- raw(); req(d)
+  observe({ d <- raw(); req(d, input$grade_type, input$minp)
     if (input$grade_type == "P") {
       dd <- team_filter(d, "PitcherTeam")
       pl <- dd %>% filter(!is.na(Pitcher)) %>% count(Pitcher, PThrows) %>%
