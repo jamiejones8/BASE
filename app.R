@@ -1585,7 +1585,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
   season_hitter <- season_data %>% filter(Batter == selected_hitter) %>% dedup() %>% score_pitches_xrv(models=active_models)
 
   logo_grob <- tryCatch({
-    img <- magick::image_read("www/logo.png")
+    img <- magick::image_read("www/logo1.png")
     img <- magick::image_resize(img, "x100")
     grid::rasterGrob(as.raster(img), interpolate=TRUE)
   }, error=function(e) grid::nullGrob())
@@ -2316,7 +2316,7 @@ ui <- fluidPage(
     id = "caps-splash",
     tags$div(
       id = "splash-logo",
-      tags$img(src = "logo.png")
+      tags$img(src = "logo1.png")
     ),
     tags$div(id = "splash-title", "C.A.P.S."),
     tags$div(id = "splash-sub", "Centralized Application Platform for Staff")
@@ -2329,7 +2329,7 @@ ui <- fluidPage(
       tags$h1("Brewster Whitecaps"),
       tags$p("C.A.P.S. - Centralized Application Platform for Staff")
     ),
-    tags$img(src = "logo.png", class = "team-logo")
+    tags$img(src = "logo1.png", class = "team-logo")
   ),
 
   uiOutput("page_content")
@@ -2429,7 +2429,7 @@ server <- function(input, output, session) {
         catcher     = input$catcher_name,
         game_date   = game_date,
         output_file = tmp_pdf,
-        logo_path   = "www/logo.png"
+        logo_path   = "www/logo1.png"
       )
       catcher_pdf_path(tmp_pdf)
       output$catcher_status <- renderUI({
@@ -2597,7 +2597,7 @@ output$download_hitter_pdf <- downloadHandler(
         manual_hits         = input$manual_hits,
         manual_runs         = input$manual_runs,
         output_file         = tmp_pdf,
-        logo_path           = "www/logo.png"
+        logo_path           = "www/logo1.png"
       )
       pitcher_pdf_path(tmp_pdf)
       output$pitcher_status <- renderUI({
