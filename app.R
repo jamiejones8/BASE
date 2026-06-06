@@ -17,26 +17,57 @@ library(ggridges)
 
 source("scout_app.R")
 
-# ==========================================
-# STANDINGS
-# ==========================================
-fetch_standings <- function() {
-  url  <- "https://baseball.pointstreak.com/standings.html?leagueid=166&seasonid=33239"
-  page <- read_html(url)
-  tables <- xml_find_all(page, ".//table")
-  lapply(tables, function(t) {
-    rows <- xml_find_all(t, ".//tr")
-    data <- lapply(rows, function(r) {
-      xml_text(xml_find_all(r, ".//td|.//th"))
-    })
-    data <- data[sapply(data, length) > 0]
-    df <- as.data.frame(do.call(rbind, data[-1]), stringsAsFactors = FALSE)
-    names(df) <- data[[1]]
-    df
-  })
-}
-
 standings <- tryCatch(fetch_standings(), error = function(e) NULL)
+
+# ── Roster ──
+roster_catchers <- data.frame(
+  Name = c("Owen Jenkins","Jacob Lee","Jimmy Janicki"),
+  Pos  = c("C","C","3B"),
+  `B/T`= c("R/R","R/R","R/R"),
+  Ht   = c("6'2","6'2","6'3"),
+  Wt   = c(215,205,224),
+  College = c("Kentucky","VCU","Troy"),
+  check.names = FALSE
+)
+roster_infielders <- data.frame(
+  Name = c("Dalton Wentz","Brendan Lawson","Pete Daniel","Nicholas Partida",
+           "Will Moore","Dane Harvey","Petey Craska","Jamie Laskofski",
+           "Landon Penfield","Jacob Lambdin","Jett Kenady","Alexander Peck"),
+  Pos  = c("MINF","SS/3B","SS","SS","INF","1B","1B","SS/3B/2B","3B","SS","SS","SS"),
+  `B/T`= c("S/R","L/R","R/R","R/R","L/R","L/R","L/R","L/R","L/R","R/R","R/R","R/R"),
+  Ht   = c("6'2","6'3","6'3","6'0","5'9","6'5","6'0","6'3","6'1","5'10","6'2","6'4"),
+  Wt   = c(215,215,180,180,170,270,250,185,210,185,185,205),
+  College = c("Wake Forest","Florida","VT","Texas A&M","Indiana","Ohio State",
+              "North Alabama","William & Mary","Charleston","Duke","Cal","Arkansas"),
+  check.names = FALSE
+)
+roster_outfielders <- data.frame(
+  Name = c("Adam Magpoc","Brody DeLamielleure","Michael Torres","Frank Carney",
+           "Terrence Kiel II","Jay Abernathy","Blaine Brown","Cash Strayer","Eric Hines"),
+  Pos  = c("2B/OF","COF","OF","OF","OF","OF/2B","OF/LHP","OF","OF"),
+  `B/T`= c("S/R","R/R","L/L","L/R","R/R","L/R","L/L","L/R","R/R"),
+  Ht   = c("5'10","6'1","5'11","5'10","6'0","5'10","6'3","6'2","6'3"),
+  Wt   = c(170,195,185,180,185,177,180,195,223),
+  College = c("Boston College","FSU","Miami","UC Irvine","Texas A&M",
+              "Tennessee","Tennessee","Florida","Alabama"),
+  check.names = FALSE
+)
+roster_pitchers <- data.frame(
+  Name = c("Charlie Willcox","Nate Harris","Logan Eisenrich","Ethan Grim","Zach Kmatz",
+           "Jordan Martin","Finbar O'Brien","Landon Mack","Joshua Whritenour",
+           "Schuyler Sandford","Jordan Regulski","Carter Williams","Maverick Rizy",
+           "Frank Menendez","Tommy Conley","Sebastian Santos-Olsen","Trent Collier",
+           "Charlie West","Nate Smithburg","Tye Briscoe"),
+  Pos  = c(rep("RHP",13),"LHP","LHP","LHP","LHP","LHP","LHP","LHP"),
+  Ht   = c("6'3","6'4","6'4","6'0","6'3","6'5","6'3","6'1","6'2","6'6","6'3","6'2","6'9",
+           "6'1","6'2","6'3","6'2","5'11","6'2","6'0"),
+  Wt   = c(210,225,200,190,215,215,205,200,190,210,175,210,250,
+           215,205,215,241,182,257,205),
+  College = c("Georgia Tech","Kentucky","VT","VT","Oregon State","Arkansas","Gonzaga",
+              "Tennessee","Florida","Florida","Duke","Midland JUCO","LSU",
+              "Miami","St Johns","Miami","Oklahoma","UConn","Oklahoma","Arkansas"),
+  check.names = FALSE
+)
 
 # ==========================================
 # SHARED HELPERS
@@ -2092,19 +2123,17 @@ hub_ui <- function() {
       tags$div(class = "section-label", "Applications"),
       tags$div(class = "app-grid", lapply(apps, make_card)),
       tags$div(class = "section-label", style = "margin-top: 40px;",
-               "2025 Cape Cod League Standings"),
+               "2025 Roster"),
       tags$div(
         class = "standings-wrapper",
-        if (!is.null(standings)) {
-          tagList(
-            tags$div(class = "standings-division-label", "East Division"),
-            tableOutput("east_standings"),
-            tags$div(class = "standings-division-label", "West Division"),
-            tableOutput("west_standings")
-          )
-        } else {
-          tags$p("Standings unavailable.", style = "color: var(--text-muted);")
-        }
+        tags$div(class = "standings-division-label", "Catchers"),
+        tableOutput("roster_catchers"),
+        tags$div(class = "standings-division-label", "Infielders"),
+        tableOutput("roster_infielders"),
+        tags$div(class = "standings-division-label", "Outfielders"),
+        tableOutput("roster_outfielders"),
+        tags$div(class = "standings-division-label", "Pitchers"),
+        tableOutput("roster_pitchers")
       )
     ),
     tags$div(
@@ -2358,9 +2387,10 @@ server <- function(input, output, session) {
     else if (current_page() == "scout_grades")   scout_grades_ui()
   })
 
-  # ── Standings ──────────────────────────────────────────────────────────────
-  output$east_standings <- renderTable({ standings[[1]] }, striped = TRUE, hover = TRUE)
-  output$west_standings <- renderTable({ standings[[2]] }, striped = TRUE, hover = TRUE)
+output$roster_catchers    <- renderTable({ roster_catchers },    striped = TRUE, hover = TRUE)
+output$roster_infielders  <- renderTable({ roster_infielders },  striped = TRUE, hover = TRUE)
+output$roster_outfielders <- renderTable({ roster_outfielders }, striped = TRUE, hover = TRUE)
+output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE, hover = TRUE)
 
   # ==========================================
   # CATCHER SERVER LOGIC
