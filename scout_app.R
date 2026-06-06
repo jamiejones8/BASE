@@ -1028,10 +1028,12 @@ scout_server <- function(input, output, session) {
 
   observe({ d <- raw(); req(d)
     teams <- sort(unique(stats::na.omit(c(d$PitcherTeam, d$BatterTeam))))
-    updateSelectInput(session, "team", choices = c("All teams" = "__all__", setNames(teams, teams))) })
+    updateSelectInput(session, "team", choices = c("All teams" = "__all__", setNames(teams, teams)),
+                      selected = if (!is.null(input$team) && nzchar(input$team)) input$team else "__all__") })
 
   team_filter <- function(d, col) {
-    if (!is.null(input$team) && input$team != "__all__") d <- d[d[[col]] %in% input$team, , drop = FALSE]
+    if (!is.null(input$team) && nzchar(input$team) && input$team != "__all__")
+      d <- d[d[[col]] %in% input$team, , drop = FALSE]
     d }
 
   observe({ d <- raw(); req(d, input$minp)
