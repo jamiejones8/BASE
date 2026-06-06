@@ -11,6 +11,7 @@ library(workflows)
 library(parsnip)
 library(recipes)
 library(tune)
+source("scout_app.R")
 # ==========================================
 # STANDINGS
 # ==========================================
@@ -1303,10 +1304,14 @@ grid.text("Diamond = Hard Hit (95+ mph EV)", x = 0.5, y = 0.355,
 # HUB UI
 # ==========================================
 apps <- list(
-  list(id = "catcher", title = "Catcher Reports",        page = "catcher", status = "live"),
-  list(id = "hitter",  title = "Postgame Hitter Reports", page = NULL,      status = "live"),
-  list(id = "pitcher", title = "Postgame Pitcher Reports",page = "pitcher",      status = "live"),
-  list(id = "umpire",  title = "Umpire Reports",          page = NULL,      status = "live")
+  list(id = "catcher",          title = "Catcher Reports",          page = "catcher",        status = "live"),
+  list(id = "pitcher",          title = "Postgame Pitcher Reports", page = "pitcher",        status = "live"),
+  list(id = "pitcher_scouting", title = "Pitcher Scouting",         page = "scout_pitching", status = "live"),
+  list(id = "hitter_scouting",  title = "Hitter Scouting",          page = "scout_hitting",  status = "live"),
+  list(id = "acquisitions",     title = "Acquisitions",             page = "scout_acq",      status = "live"),
+  list(id = "player_grades",    title = "Player Grades",            page = "scout_grades",   status = "live"),
+  list(id = "hitter",           title = "Postgame Hitter Reports",  page = NULL,             status = "live"),
+  list(id = "umpire",           title = "Umpire Reports",           page = NULL,             status = "live")
 )
 
 make_card <- function(app) {
@@ -1528,11 +1533,17 @@ server <- function(input, output, session) {
     current_page(input$nav_to)
   })
 
+  scout_server(input, output, session)
+
   output$page_content <- renderUI({
-  if      (current_page() == "hub")     hub_ui()
-  else if (current_page() == "catcher") catcher_ui()
-  else if (current_page() == "pitcher") pitcher_ui()
-})
+    if      (current_page() == "hub")            hub_ui()
+    else if (current_page() == "catcher")        catcher_ui()
+    else if (current_page() == "pitcher")        pitcher_ui()
+    else if (current_page() == "scout_pitching") scout_pitching_ui()
+    else if (current_page() == "scout_hitting")  scout_hitting_ui()
+    else if (current_page() == "scout_acq")      scout_acq_ui()
+    else if (current_page() == "scout_grades")   scout_grades_ui()
+  })
 
   # ── Standings ──
   output$east_standings <- renderTable({ standings[[1]] }, striped = TRUE, hover = TRUE)
