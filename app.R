@@ -2387,10 +2387,10 @@ server <- function(input, output, session) {
     else if (current_page() == "scout_grades")   scout_grades_ui()
   })
 
-output$roster_catchers    <- renderTable({ roster_catchers },    striped = TRUE, hover = TRUE, width = "100%")
-output$roster_infielders  <- renderTable({ roster_infielders },  striped = TRUE, hover = TRUE, width = "100%")
-output$roster_outfielders <- renderTable({ roster_outfielders }, striped = TRUE, hover = TRUE, width = "100%")
-output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE, hover = TRUE, width = "100%")
+output$roster_catchers    <- renderTable({ roster_catchers },    striped = TRUE, hover = TRUE, width = "100%", digits = 0)
+output$roster_infielders  <- renderTable({ roster_infielders },  striped = TRUE, hover = TRUE, width = "100%", digits = 0)
+output$roster_outfielders <- renderTable({ roster_outfielders }, striped = TRUE, hover = TRUE, width = "100%", digits = 0)
+output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE, hover = TRUE, width = "100%", digits = 0)
   # ==========================================
   # CATCHER SERVER LOGIC
   # ==========================================
