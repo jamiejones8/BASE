@@ -2380,20 +2380,6 @@ server <- function(input, output, session) {
   # ==========================================
   # HITTER SERVER LOGIC
   # ==========================================
-  raw_hitter_game <- reactive({
-    req(input$hitter_game_csv)
-    read.csv(input$hitter_game_csv$datapath, stringsAsFactors = FALSE) %>%
-      filter(Batter %in% brewster_roster)
-  })
-
-  raw_hitter_season <- reactive({
-    req(input$hitter_season_csvs)
-    lapply(input$hitter_season_csvs$datapath, function(f) {
-      read.csv(f, stringsAsFactors = FALSE, colClasses = "character") %>%
-        select(-any_of("GameForeignID"))
-    }) %>% bind_rows() %>% type.convert(as.is = TRUE) %>%
-      filter(Batter %in% brewster_roster)
-  })
 
   output$hitter_select_ui <- renderUI({
     game_h   <- tryCatch(raw_hitter_game()   %>% pull(Batter) %>% unique(), error = function(e) character(0))
