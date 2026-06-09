@@ -2328,6 +2328,51 @@ ui <- fluidPage(
         from { transform: translateY(12px); opacity: 0; }
         to   { transform: translateY(0);    opacity: 1; }
       }
+      @media (max-width: 1024px) {
+        .hub-main {
+          padding: 0 16px;
+        }
+        .app-grid {
+          grid-template-columns: repeat(2, 1fr) !important;
+        }
+        div[style*='grid-template-columns: 1fr 1fr'] {
+          grid-template-columns: 1fr !important;
+        }
+        div[style*='grid-template-columns: 1fr 1fr 1fr'] {
+          grid-template-columns: 1fr 1fr !important;
+        }
+        .btn {
+          min-height: 44px !important;
+          font-size: 15px !important;
+        }
+        input, select {
+          min-height: 44px !important;
+          font-size: 15px !important;
+        }
+        .form-control {
+          font-size: 15px !important;
+        }
+        .standings-wrapper {
+          overflow-x: auto;
+        }
+        .hub-header {
+          padding: 14px 16px !important;
+        }
+        .hub-header h1 {
+          font-size: 20px !important;
+        }
+        .team-logo {
+          height: 42px !important;
+        }
+        .card-title {
+          font-size: 13px !important;
+        }
+      }
+      @media (max-width: 768px) {
+        .app-grid {
+          grid-template-columns: repeat(2, 1fr) !important;
+        }
+      }
     ")),
     tags$script(HTML("
       $(document).ready(function() {
