@@ -22,7 +22,7 @@ standings <- tryCatch(fetch_standings(), error = function(e) NULL)
 # ── Roster ──
 roster_catchers <- data.frame(
   Name = c("Owen Jenkins","Jacob Lee","Jimmy Janicki"),
-  Pos  = c("C","C","3B"),
+  Pos  = c("C","C","C/3B"),
   `B/T`= c("R/R","R/R","R/R"),
   Ht   = c("6'2","6'2","6'3"),
   Wt   = c(215,205,224),
