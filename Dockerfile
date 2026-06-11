@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libcairo2-dev \
     libxt-dev \
+    librsvg2-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN install2.r --error \
@@ -22,7 +23,7 @@ RUN install2.r --error \
     patchwork ggridges xgboost \
     reactable tidyr purrr DBI RSQLite \
     bslib shinyjs DT data.table stringr \
-    lightgbm plotly gridExtra png sysfonts showtext
+    lightgbm plotly gridExtra png sysfonts showtext rsvg
 
 COPY . .
 RUN Rscript leaderboards/scripts/precompute_leaderboards_cache.R
