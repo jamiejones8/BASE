@@ -711,12 +711,8 @@ header_grob_fn <- function(pitcher_name, subtitle,
     )
   }
   # Title shows "Name - Team" when a team label is available.
-  title_text <- if (!is.null(team_label) && length(team_label) == 1 &&
-                    !is.na(team_label) && nzchar(team_label)) {
-    paste(pitcher_name, "-", team_label)
-  } else pitcher_name
   children <- c(children, list(
-    textGrob(title_text,
+    textGrob(pitcher_name,
              x = unit(text_x, "pt"), y = unit(1, "npc") - unit(20, "pt"),
              just = c("left","top"),
              gp = gpar(col = accent_color, fontsize = 42,
@@ -1583,15 +1579,25 @@ pitcher_card_server <- function(input, output, session) {
     if (nrow(pname) == 0) {
       showNotification("No pitchers found in the file.", type = "warning")
     } else {
-      pitchers <- sort(unique(pname$Pitcher))
-      vec <- setNames(pitchers, format_pitcher_name(pitchers))
+      pchoices <- pname %>%
+        distinct(Pitcher, PitcherTeam) %>%
+        arrange(Pitcher)
+      team_labels <- vapply(pchoices$PitcherTeam,
+                            function(t) team_palette(t)$label, character(1))
+      # Choice label is "Name - Team"; value encodes both as "Name::Team".
+      vec <- setNames(
+        paste(pchoices$Pitcher, pchoices$PitcherTeam, sep = "::"),
+        paste0(format_pitcher_name(pchoices$Pitcher), " - ", team_labels)
+      )
       updateSelectizeInput(session, "pc_pitcher", "Pitcher Name:", choices = vec)
     }
   })
 
   load_pitcher_pitches <- function() {
     req(game_data(), input$pc_pitcher)
-    pp <- game_data() %>% filter(Pitcher == input$pc_pitcher)
+    sel <- parse_pitcher_value(input$pc_pitcher)
+    if (is.na(sel$name)) { current_pitches(NULL); return() }
+    pp <- game_data() %>% filter(Pitcher == sel$name, PitcherTeam == sel$team)
 
     g_sel <- input$pc_game
     if (!is.null(g_sel) && nzchar(g_sel) && g_sel != "all" &&
@@ -1608,7 +1614,12 @@ pitcher_card_server <- function(input, output, session) {
   # Game dropdown follows the selected pitcher.
   observeEvent(input$pc_pitcher, {
     req(game_data(), input$pc_pitcher)
-    pp_all <- game_data() %>% filter(Pitcher == input$pc_pitcher)
+    sel <- parse_pitcher_value(input$pc_pitcher)
+    if (is.na(sel$name)) {
+      updateSelectInput(session, "pc_game", choices = c("All Games" = "all"), selected = "all")
+      return()
+    }
+    pp_all <- game_data() %>% filter(Pitcher == sel$name, PitcherTeam == sel$team)
     if ("GameUID" %in% names(pp_all) && nrow(pp_all) > 0) {
       have_date <- "Date" %in% names(pp_all)
       have_opp  <- "BatterTeam" %in% names(pp_all)
@@ -1762,7 +1773,7 @@ pitcher_card_server <- function(input, output, session) {
     if (nrow(game) == 0) {
       showNotification("No data available for the selected pitcher.", type = "warning"); return()
     }
-    pitcher_display <- format_pitcher_name(input$pc_pitcher)
+    pitcher_display <- format_pitcher_name(parse_pitcher_value(input$pc_pitcher)$name)
     page <- build_pitcher_card_page(game, pitcher_display,
                                     height_override = height_override_dec(),
                                     set_override    = set_override_val())
@@ -1781,7 +1792,9 @@ pitcher_card_server <- function(input, output, session) {
   output$pc_downloadPlot <- downloadHandler(
     filename = function() {
       paste0("Whitecaps_Pitcher_",
-             gsub("[^A-Za-z0-9]+", "_", if (is.null(input$pc_pitcher)) "card" else input$pc_pitcher),
+             gsub("[^A-Za-z0-9]+", "_",
+                  if (is.null(input$pc_pitcher)) "card"
+                  else parse_pitcher_value(input$pc_pitcher)$name),
              ".png")
     },
     content = function(file) {
