@@ -588,8 +588,6 @@ fetch_team_logo <- function(team_abbr, logo_url) {
     } else if (requireNamespace("magick", quietly = TRUE)) {
       mi <- magick::image_read(logo_url)
       mi <- magick::image_resize(mi, "512x512")
-      # Keep transparency — don't let magick flatten the SVG onto a white box.
-      mi <- magick::image_background(mi, "none")
       magick::image_write(mi, tmp, format = "png")
       png::readPNG(tmp)
     } else NULL
@@ -712,18 +710,13 @@ header_grob_fn <- function(pitcher_name, subtitle,
       just = c("left", "centre"), interpolate = TRUE
     )
   }
-  # Team label, top-right of the banner.
-  if (!is.null(team_label) && length(team_label) == 1 &&
-      !is.na(team_label) && nzchar(team_label)) {
-    children[[length(children) + 1]] <- textGrob(
-      toupper(team_label),
-      x = unit(1, "npc") - unit(22, "pt"), y = unit(0.5, "npc"),
-      just = c("right", "centre"),
-      gp = gpar(col = accent_color, fontsize = 18,
-                fontface = "bold", fontfamily = font_sans))
-  }
+  # Title shows "Name - Team" when a team label is available.
+  title_text <- if (!is.null(team_label) && length(team_label) == 1 &&
+                    !is.na(team_label) && nzchar(team_label)) {
+    paste(pitcher_name, "-", team_label)
+  } else pitcher_name
   children <- c(children, list(
-    textGrob(pitcher_name,
+    textGrob(title_text,
              x = unit(text_x, "pt"), y = unit(1, "npc") - unit(20, "pt"),
              just = c("left","top"),
              gp = gpar(col = accent_color, fontsize = 42,
