@@ -16,6 +16,7 @@ library(base64enc)
 library(ggridges)
 
 source("scout_app.R")
+source("leaderboards_embed.R")
 
 standings <- tryCatch(fetch_standings(), error = function(e) NULL)
 
@@ -2071,6 +2072,7 @@ apps <- list(
   list(id = "hitter_scouting",  title = "Hitter Scouting",          page = "scout_hitting",  status = "live"),
   list(id = "acquisitions",     title = "Acquisitions",             page = "scout_acq",      status = "live"),
   list(id = "player_grades",    title = "Player Grades",            page = "scout_grades",   status = "live"),
+  whitecaps_hub_card(),
   list(id = "umpire",           title = "Umpire Reports",           page = NULL,             status = "live")
 )
 
@@ -2079,6 +2081,7 @@ make_card <- function(app) {
   card_class  <- paste("app-card", if (is_coming_soon) "coming-soon" else "")
   badge_class <- paste("status-badge", if (is_coming_soon) "coming-soon" else "live")
   badge_label <- if (is_coming_soon) "Coming Soon" else "Live"
+  card_image  <- if (!is.null(app$image_src)) app$image_src else paste0(app$id, ".png")
 
   if (!is.null(app$page) && app$status == "live") {
     onclick_js <- paste0("Shiny.setInputValue('nav_to', '", app$page, "', {priority: 'event'})")
@@ -2086,7 +2089,7 @@ make_card <- function(app) {
       onclick = onclick_js,
       class   = card_class,
       style   = "cursor: pointer;",
-      tags$img(src = paste0(app$id, ".png"), class = "card-img"),
+      tags$img(src = card_image, class = "card-img"),
       tags$div(
         class = "card-body",
         tags$div(class = "card-title", app$title),
@@ -2102,7 +2105,7 @@ make_card <- function(app) {
       href   = if (!is.null(app$url)) app$url else "#",
       target = "_blank",
       class  = card_class,
-      tags$img(src = paste0(app$id, ".png"), class = "card-img"),
+      tags$img(src = card_image, class = "card-img"),
       tags$div(
         class = "card-body",
         tags$div(class = "card-title", app$title),
@@ -2396,15 +2399,7 @@ ui <- fluidPage(
     tags$div(id = "splash-sub", "Centralized Application Platform for Staff")
   ),
 
-  tags$div(
-    class = "hub-header",
-    tags$div(
-      class = "header-text",
-      tags$h1("Brewster Whitecaps"),
-      tags$p("C.A.P.S. - Centralized Application Platform for Staff")
-    ),
-    tags$img(src = "logo1.png", class = "team-logo")
-  ),
+  uiOutput("hub_header_ui"),
 
   uiOutput("page_content")
 )
@@ -2420,6 +2415,23 @@ server <- function(input, output, session) {
   })
 
   scout_server(input, output, session)
+  whitecaps_bind_parent_server(current_page, input, output, session)
+
+  output$hub_header_ui <- renderUI({
+    if (whitecaps_is_page(current_page())) {
+      return(NULL)
+    }
+
+    tags$div(
+      class = "hub-header",
+      tags$div(
+        class = "header-text",
+        tags$h1("Brewster Whitecaps"),
+        tags$p("C.A.P.S. - Centralized Application Platform for Staff")
+      ),
+      tags$img(src = "logo1.png", class = "team-logo")
+    )
+  })
 
   output$page_content <- renderUI({
     if      (current_page() == "hub")            hub_ui()
@@ -2430,6 +2442,7 @@ server <- function(input, output, session) {
     else if (current_page() == "scout_hitting")  scout_hitting_ui()
     else if (current_page() == "scout_acq")      scout_acq_ui()
     else if (current_page() == "scout_grades")   scout_grades_ui()
+    else if (whitecaps_is_page(current_page()))  whitecaps_embedded_ui()
   })
 
 output$roster_catchers    <- renderTable({ roster_catchers },    striped = TRUE, hover = TRUE, width = "100%", digits = 0)
