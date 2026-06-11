@@ -1,3 +1,13 @@
+whitecaps_hub_image_src <- local({
+  image_file <- "www/surf.png"
+
+  if (!file.exists(image_file)) {
+    return("surf.png")
+  }
+
+  paste0("surf.png?v=", as.integer(file.info(image_file)$mtime[[1]]))
+})
+
 WHITECAPS_PAGE_ID <- "whitecaps_app"
 
 whitecaps_env <- local({
@@ -12,7 +22,7 @@ whitecaps_hub_card <- function() {
     title = "Whitecaps Analytics",
     page = WHITECAPS_PAGE_ID,
     status = "live",
-    image_src = "surf.png"
+    image_src = whitecaps_hub_image_src
   )
 }
 
