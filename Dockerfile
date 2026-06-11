@@ -6,6 +6,14 @@ RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
     libssl-dev \
     libmagick++-dev \
+    cmake \
+    libpng-dev \
+    libfreetype6-dev \
+    libfontconfig1-dev \
+    libtiff-dev \
+    libjpeg-dev \
+    libcairo2-dev \
+    libxt-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN install2.r --error \
@@ -13,7 +21,8 @@ RUN install2.r --error \
     magick workflows parsnip recipes tune \
     patchwork ggridges xgboost \
     reactable tidyr purrr DBI RSQLite \
-    bslib shinyjs DT data.table stringr
+    bslib shinyjs DT data.table stringr \
+    lightgbm plotly gridExtra png sysfonts showtext
 
 COPY . .
 RUN Rscript leaderboards/scripts/precompute_leaderboards_cache.R
