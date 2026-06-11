@@ -9,7 +9,7 @@ whitecaps_env <- local({
 whitecaps_hub_card <- function() {
   list(
     id = "whitecaps_central",
-    title = "Whitecaps Leaderboards",
+    title = "Whitecaps Analytics",
     page = WHITECAPS_PAGE_ID,
     status = "live",
     image_src = "surf.png"
