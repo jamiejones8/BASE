@@ -49,3 +49,4 @@ www/logo1.png filter=lfs diff=lfs merge=lfs -text
 www/surf.png filter=lfs diff=lfs merge=lfs -text
 leaderboards/data/2026Season.csv filter=lfs diff=lfs merge=lfs -text
 leaderboards/www/caps.svg.png filter=lfs diff=lfs merge=lfs -text
+leaderboards/cache/leaderboards_cache.rds filter=lfs diff=lfs merge=lfs -text

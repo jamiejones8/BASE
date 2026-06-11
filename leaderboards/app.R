@@ -11,6 +11,7 @@ library(dplyr)
 
 WHITE_CAPS_APP_DIR <- normalizePath(".", winslash = "/", mustWork = TRUE)
 WHITE_CAPS_DATA_DIR <- file.path(WHITE_CAPS_APP_DIR, "data")
+WHITE_CAPS_CACHE_DIR <- file.path(WHITE_CAPS_APP_DIR, "cache")
 WHITE_CAPS_WWW_DIR <- file.path(WHITE_CAPS_APP_DIR, "www")
 WHITE_CAPS_RESOURCE_PREFIX <- "whitecaps-assets"
 
@@ -43,13 +44,17 @@ source("helpers/calculate_pitcher_stats.R", local = TRUE)
 source("helpers/calculate_hitter_stats.R", local = TRUE)
 source("helpers/process_calculations.R", local = TRUE)
 source("helpers/checkbox_loader.R", local = TRUE)
+source("helpers/home_counts.R", local = TRUE)
+source("helpers/pitch_type_summary.R", local = TRUE)
+source("helpers/cache_loader.R", local = TRUE)
 source("helpers/print_layouts.R", local = TRUE)
 
 # ---- THEME ----
 whitecaps_theme <- bs_theme(
-  bg = "#f8f9fa",
-  fg = "#000000",
-  primary = "#262f49",
+  bg = "#f4f7f8",
+  fg = "#172033",
+  primary = "#06768A",
+  secondary = "#21283D",
   base_font = font_google("Inter")
 )
 
@@ -153,6 +158,7 @@ server <- function(input, output, session) {
   pitching_data         <- reactiveVal(NULL)   # leaderboard output
   hitting_data          <- reactiveVal(NULL)   # leaderboard output
   process_data_reactive <- reactiveVal(NULL)   # process stats output
+  precomputed_bundle    <- reactiveVal(NULL)   # optional precomputed leaderboard cache
   refresh_trigger       <- reactiveVal(runif(1))
   pitcher_tto_pages <- c("pitching", "process", "pitchtype", "pitcher_totals")
   pitcher_tto_choices <- c("All Times Through Order", PITCHER_TTO_LEVELS())
@@ -163,14 +169,31 @@ server <- function(input, output, session) {
   load_local_data <- function() {
     tryCatch({
       message("📥 Loading bundled TrackMan data from /data...")
-      
-      data_list <- load_bundled_data_file(compute_summaries = FALSE)
-      
-      combined <- data_list$raw
-      
-      combined_data(combined)
-      
-      message("🏁 Bundled data loaded successfully.")
+
+      active_file <- pick_active_bundled_file()
+      cache_result <- load_valid_leaderboards_cache(active_file)
+
+      if (isTRUE(cache_result$valid)) {
+        bundle <- cache_result$bundle
+        combined_data(bundle$processed_raw)
+        precomputed_bundle(bundle)
+        message("⚡ Loaded precomputed leaderboards cache for ", active_file$label)
+        return(invisible(NULL))
+      }
+
+      precomputed_bundle(NULL)
+      if (!is.null(cache_result$reason) && nzchar(cache_result$reason)) {
+        message("ℹ️ Precomputed cache unavailable: ", cache_result$reason)
+      }
+
+      data_list <- load_bundled_data_file(
+        file_path = active_file$path,
+        compute_summaries = FALSE
+      )
+
+      combined_data(data_list$raw)
+
+      message("🏁 Bundled data loaded successfully using live calculations.")
     }, error = function(e) {
       message("❌ Error loading bundled data: ", e$message)
       stop(e)
@@ -209,18 +232,54 @@ server <- function(input, output, session) {
     choice
   })
 
+  get_cached_tto_table <- function(bundle, field, choice) {
+    if (is.null(bundle) || !field %in% names(bundle)) {
+      return(NULL)
+    }
+
+    table_list <- bundle[[field]]
+    if (is.null(table_list) || !is.list(table_list) || !choice %in% names(table_list)) {
+      return(NULL)
+    }
+
+    table_list[[choice]]
+  }
+
   filtered_pitching_for_pages <- reactive({
     df <- filtered_team_pitching()
     if (is.null(df) || nrow(df) == 0) return(df)
     filter_pitcher_times_through_order(df, selected_pitcher_tto())
   })
+
+  current_pitch_type_breakdown <- reactive({
+    bundle <- precomputed_bundle()
+    choice <- selected_pitcher_tto()
+    cached <- get_cached_tto_table(bundle, "pitch_type_breakdown_by_tto", choice)
+
+    if (!is.null(cached)) {
+      return(cached)
+    }
+
+    filtered_pitching_for_pages()
+  })
   
   # Recompute leaderboards/process whenever filtered data changes
-  observeEvent(list(filtered_pitching_for_pages(), filtered_team_hitting()), {
+  observeEvent(list(filtered_pitching_for_pages(), filtered_team_hitting(), selected_pitcher_tto(), precomputed_bundle()), {
     bp <- filtered_pitching_for_pages()
     bh <- filtered_team_hitting()
-    
-    if (is.null(bp) || nrow(bp) == 0) {
+    bundle <- precomputed_bundle()
+    choice <- selected_pitcher_tto()
+    cached_pitching <- get_cached_tto_table(bundle, "pitching_stats_by_tto", choice)
+    cached_process <- get_cached_tto_table(bundle, "process_stats_by_tto", choice)
+    cached_hitting <- if (!is.null(bundle)) bundle$hitting_stats else NULL
+
+    if (!is.null(cached_pitching) && !is.null(cached_process)) {
+      pitching_data(
+        cached_pitching %>%
+          dplyr::left_join(cached_process, by = c("Pitcher", "Pitches"))
+      )
+      process_data_reactive(cached_process)
+    } else if (is.null(bp) || nrow(bp) == 0) {
       pitching_data(NULL)
       process_data_reactive(NULL)
     } else {
@@ -233,8 +292,10 @@ server <- function(input, output, session) {
       )
       process_data_reactive(pitching_process)
     }
-    
-    if (is.null(bh) || nrow(bh) == 0) {
+
+    if (!is.null(cached_hitting)) {
+      hitting_data(cached_hitting)
+    } else if (is.null(bh) || nrow(bh) == 0) {
       hitting_data(NULL)
     } else {
       hitting_data(calculate_hitter_stats(bh))
@@ -316,183 +377,33 @@ server <- function(input, output, session) {
   }
 
   home_hitter_counts <- reactive({
-    df <- filtered_team_hitting()
-    if (is.null(df) || nrow(df) == 0) return(NULL)
-
-    names(df) <- gsub("\\.", "/", names(df))
-    needed_cols <- c("Batter", "PlayResult", "KorBB", "PitchCall", "GameID", "Inning", "Top/Bottom", "PAofInning", "PitchofPA")
-    for (col in needed_cols) {
-      if (!col %in% names(df)) df[[col]] <- NA
+    bundle <- precomputed_bundle()
+    if (!is.null(bundle$home_counts$hitter_counts)) {
+      return(bundle$home_counts$hitter_counts)
     }
 
-    df <- df %>%
-      mutate(
-        Batter = trimws(as.character(Batter)),
-        PlayResult = as.character(PlayResult),
-        KorBB = as.character(KorBB),
-        PitchCall = as.character(PitchCall),
-        Inning = suppressWarnings(as.integer(Inning)),
-        `Top/Bottom` = as.character(`Top/Bottom`),
-        PAofInning = suppressWarnings(as.integer(PAofInning)),
-        PitchofPA = suppressWarnings(as.integer(PitchofPA))
-      ) %>%
-      filter(!is.na(Batter), Batter != "") %>%
-      group_by(Batter) %>%
-      arrange(
-        dplyr::coalesce(as.character(GameID), ""),
-        dplyr::coalesce(Inning, 0L),
-        dplyr::coalesce(`Top/Bottom`, ""),
-        dplyr::coalesce(PAofInning, 0L),
-        dplyr::coalesce(PitchofPA, 0L),
-        .by_group = TRUE
-      ) %>%
-      mutate(pa_index = cumsum(dplyr::coalesce(PitchofPA == 1L, FALSE))) %>%
-      ungroup()
-
-    pa_summary <- df %>%
-      filter(pa_index > 0) %>%
-      group_by(Batter) %>%
-      summarise(PA = max(pa_index), .groups = "drop")
-
-    pa_last <- df %>%
-      filter(pa_index > 0) %>%
-      group_by(Batter, pa_index) %>%
-      slice_max(dplyr::coalesce(PitchofPA, 0L), n = 1, with_ties = FALSE) %>%
-      ungroup()
-
-    pa_events <- pa_last %>%
-      group_by(Batter) %>%
-      summarise(
-        `1B` = sum(PlayResult == "Single", na.rm = TRUE),
-        `2B` = sum(PlayResult == "Double", na.rm = TRUE),
-        `3B` = sum(PlayResult == "Triple", na.rm = TRUE),
-        HR = sum(PlayResult == "HomeRun", na.rm = TRUE),
-        Hits = sum(PlayResult %in% c("Single", "Double", "Triple", "HomeRun"), na.rm = TRUE),
-        Walks = sum(KorBB == "Walk", na.rm = TRUE),
-        HBP = sum(PitchCall == "HitByPitch", na.rm = TRUE),
-        .groups = "drop"
-      )
-
-    pa_summary %>%
-      left_join(pa_events, by = "Batter") %>%
-      mutate(
-        `1B` = dplyr::coalesce(`1B`, 0L),
-        `2B` = dplyr::coalesce(`2B`, 0L),
-        `3B` = dplyr::coalesce(`3B`, 0L),
-        HR = dplyr::coalesce(HR, 0L),
-        Hits = dplyr::coalesce(Hits, 0L),
-        Walks = dplyr::coalesce(Walks, 0L),
-        HBP = dplyr::coalesce(HBP, 0L),
-        AB = pmax(PA - Walks - HBP, 0L),
-        TB = `1B` + (2L * `2B`) + (3L * `3B`) + (4L * HR),
-        OBP = ifelse(PA > 0, (Hits + Walks + HBP) / PA, NA_real_),
-        SLG = ifelse(AB > 0, TB / AB, NA_real_),
-        OPS = OBP + SLG
-      )
+    df <- filtered_team_hitting()
+    build_home_hitter_counts(df)
   })
 
   home_pitcher_counts <- reactive({
-    df <- filtered_team_pitching()
-    if (is.null(df) || nrow(df) == 0) return(NULL)
-
-    names(df) <- gsub("\\.", "/", names(df))
-    needed_cols <- c("Pitcher", "KorBB", "OutsOnPlay", "RunsScored", "GameID", "Inning", "Top/Bottom", "PAofInning", "PitchofPA")
-    for (col in needed_cols) {
-      if (!col %in% names(df)) df[[col]] <- NA
+    bundle <- precomputed_bundle()
+    if (!is.null(bundle$home_counts$pitcher_counts)) {
+      return(bundle$home_counts$pitcher_counts)
     }
 
-    df <- df %>%
-      mutate(
-        Pitcher = trimws(as.character(Pitcher)),
-        KorBB = as.character(KorBB),
-        OutsOnPlay = suppressWarnings(as.integer(OutsOnPlay)),
-        RunsScored = suppressWarnings(as.numeric(RunsScored)),
-        Inning = suppressWarnings(as.integer(Inning)),
-        `Top/Bottom` = as.character(`Top/Bottom`),
-        PAofInning = suppressWarnings(as.integer(PAofInning)),
-        PitchofPA = suppressWarnings(as.integer(PitchofPA))
-      ) %>%
-      filter(!is.na(Pitcher), Pitcher != "") %>%
-      group_by(Pitcher) %>%
-      arrange(
-        dplyr::coalesce(as.character(GameID), ""),
-        dplyr::coalesce(Inning, 0L),
-        dplyr::coalesce(`Top/Bottom`, ""),
-        dplyr::coalesce(PAofInning, 0L),
-        dplyr::coalesce(PitchofPA, 0L),
-        .by_group = TRUE
-      ) %>%
-      mutate(pa_index = cumsum(dplyr::coalesce(PitchofPA == 1L, FALSE))) %>%
-      ungroup()
-
-    pa_summary <- df %>%
-      filter(pa_index > 0) %>%
-      group_by(Pitcher) %>%
-      summarise(PA = max(pa_index), .groups = "drop")
-
-    runs_summary <- df %>%
-      group_by(Pitcher) %>%
-      summarise(
-        RunsAllowed = sum(dplyr::coalesce(RunsScored, 0), na.rm = TRUE),
-        .groups = "drop"
-      )
-
-    pa_last <- df %>%
-      filter(pa_index > 0) %>%
-      group_by(Pitcher, pa_index) %>%
-      slice_max(dplyr::coalesce(PitchofPA, 0L), n = 1, with_ties = FALSE) %>%
-      ungroup() %>%
-      mutate(
-        is_k = KorBB == "Strikeout",
-        outs_on_play = dplyr::coalesce(OutsOnPlay, 0L),
-        outs_recorded = ifelse(is_k & outs_on_play < 1L, 1L, outs_on_play)
-      )
-
-    pa_events <- pa_last %>%
-      group_by(Pitcher) %>%
-      summarise(
-        Strikeouts = sum(is_k, na.rm = TRUE),
-        Walks = sum(KorBB == "Walk", na.rm = TRUE),
-        Outs = sum(outs_recorded, na.rm = TRUE),
-        .groups = "drop"
-      )
-
-    pa_summary %>%
-      left_join(pa_events, by = "Pitcher") %>%
-      left_join(runs_summary, by = "Pitcher") %>%
-      mutate(
-        Strikeouts = dplyr::coalesce(Strikeouts, 0L),
-        Walks = dplyr::coalesce(Walks, 0L),
-        Outs = dplyr::coalesce(Outs, 0L),
-        RunsAllowed = dplyr::coalesce(RunsAllowed, 0),
-        IP = paste0(Outs %/% 3L, ".", Outs %% 3L),
-        ERA = ifelse(Outs > 0, round((RunsAllowed * 27) / Outs, 2), NA_real_)
-      )
+    df <- filtered_team_pitching()
+    build_home_pitcher_counts(df)
   })
 
   home_pitcher_walks_counts <- reactive({
-    df <- filtered_team_pitching()
-    if (is.null(df) || nrow(df) == 0) return(NULL)
-
-    names(df) <- gsub("\\.", "/", names(df))
-    needed_cols <- c("Pitcher", "KorBB", "PitchofPA")
-    for (col in needed_cols) {
-      if (!col %in% names(df)) df[[col]] <- NA
+    bundle <- precomputed_bundle()
+    if (!is.null(bundle$home_counts$pitcher_walks_counts)) {
+      return(bundle$home_counts$pitcher_walks_counts)
     }
 
-    df %>%
-      mutate(
-        Pitcher = trimws(as.character(Pitcher)),
-        KorBB = as.character(KorBB),
-        PitchofPA = suppressWarnings(as.numeric(PitchofPA))
-      ) %>%
-      filter(!is.na(Pitcher), Pitcher != "") %>%
-      group_by(Pitcher) %>%
-      summarise(
-        PA = sum(PitchofPA == 1, na.rm = TRUE),
-        Walks = sum(KorBB == "Walk", na.rm = TRUE),
-        .groups = "drop"
-      )
+    df <- filtered_team_pitching()
+    build_home_pitcher_walks_counts(df)
   })
 
   output$home_hit_hits <- DT::renderDataTable({
@@ -830,65 +741,7 @@ server <- function(input, output, session) {
   }
 
   summarize_pitch_types_for_print <- function(df) {
-    if (is.null(df) || nrow(df) == 0) return(tibble::tibble())
-
-    names(df) <- trimws(names(df))
-
-    df <- df %>%
-      mutate(
-        Pitcher = trimws(as.character(Pitcher)),
-        TaggedPitchType = trimws(as.character(TaggedPitchType)),
-        TaggedHitTypeNorm = toupper(gsub("\\s+", "", trimws(as.character(TaggedHitType)))),
-        TaggedPitchType = ifelse(
-          is.na(TaggedPitchType) | TaggedPitchType == "",
-          NA_character_,
-          gsub("\\s+", "", tools::toTitleCase(tolower(TaggedPitchType)))
-        ),
-        PlateLocHeight = safe_num(PlateLocHeight),
-        PlateLocSide = safe_num(PlateLocSide)
-      ) %>%
-      mutate(
-        InZone = dplyr::case_when(
-          is.na(PlateLocHeight) | is.na(PlateLocSide) ~ NA,
-          PlateLocSide >= -0.83 & PlateLocSide <= 0.83 &
-            PlateLocHeight >= 1.6 & PlateLocHeight <= 3.5 ~ TRUE,
-          TRUE ~ FALSE
-        )
-      )
-
-    swing_calls <- c("InPlay", "FoulBallNotFieldable", "FoulBallFieldable", "StrikeSwinging")
-    whiff_calls <- c("StrikeSwinging")
-    csw_calls <- c("StrikeCalled", "StrikeSwinging")
-
-    df %>%
-      filter(!is.na(Pitcher), Pitcher != "", !is.na(TaggedPitchType)) %>%
-      group_by(Pitcher, TaggedPitchType) %>%
-      summarise(
-        Pitches = n(),
-        Swings = sum(PitchCall %in% swing_calls, na.rm = TRUE),
-        Whiffs = sum(PitchCall %in% whiff_calls, na.rm = TRUE),
-        InPlay = sum(PitchCall == "InPlay", na.rm = TRUE),
-        GroundBalls = sum(
-          PitchCall == "InPlay" & TaggedHitTypeNorm == "GROUNDBALL",
-          na.rm = TRUE
-        ),
-        `Whiff%` = if_else(Swings > 0, (Whiffs / Swings) * 100, NA_real_),
-        `CSW%` = mean(PitchCall %in% csw_calls, na.rm = TRUE) * 100,
-        ZoneDen = sum(!is.na(InZone)),
-        `Zone%` = if_else(
-          ZoneDen > 0,
-          (sum(InZone %in% TRUE, na.rm = TRUE) / ZoneDen) * 100,
-          NA_real_
-        ),
-        .groups = "drop"
-      ) %>%
-      rename(PitchType = TaggedPitchType) %>%
-      mutate(
-        `Whiff%` = round(`Whiff%`, 1),
-        `CSW%` = round(`CSW%`, 1),
-        `Zone%` = round(`Zone%`, 1)
-      ) %>%
-      arrange(Pitcher, desc(Pitches))
+    prepare_pitch_type_breakdown_data(df)
   }
 
   build_home_print_ui <- function() {
@@ -1099,7 +952,7 @@ server <- function(input, output, session) {
   }
 
   build_pitch_type_print_ui <- function() {
-    df <- summarize_pitch_types_for_print(filtered_pitching_for_pages())
+    df <- summarize_pitch_types_for_print(current_pitch_type_breakdown())
 
     if (!is.null(df) && nrow(df) > 0) {
       top_two <- df %>%
@@ -1307,7 +1160,7 @@ server <- function(input, output, session) {
   pitching_totals_page_server("pitcher_totals", pitching_data)
   
   # ---- Pitch Type Breakdown ----
-  pitch_type_breakdown_page_server("pitchtype_page", filtered_pitching_for_pages)
+  pitch_type_breakdown_page_server("pitchtype_page", current_pitch_type_breakdown)
   
   # ---- Strength of Competition (uses FULL filtered combined; needs all hitters/pitchers for tiers) ----
   strength_of_competition_page_server("soc_page", pitch_data = filtered_combined)  # ✅ NEW
