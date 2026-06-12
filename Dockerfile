@@ -13,7 +13,8 @@ RUN install2.r --error \
     patchwork ggridges xgboost \
     reactable tidyr purrr DBI RSQLite \
     bslib shinyjs DT data.table stringr \
-    base64enc pdftools gridExtra png lightgbm
+    base64enc pdftools gridExtra png lightgbm \
+    sysfonts
 RUN Rscript -e "install.packages('arrow', repos='https://packagemanager.posit.co/cran/__linux__/jammy/latest')"
 COPY . .
 RUN Rscript leaderboards/scripts/precompute_leaderboards_cache.R
