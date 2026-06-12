@@ -14,7 +14,7 @@ RUN install2.r --error \
     reactable tidyr purrr DBI RSQLite \
     bslib shinyjs DT data.table stringr \
     base64enc pdftools gridExtra png lightgbm \
-    sysfonts
+    sysfonts plotly
 RUN Rscript -e "install.packages('arrow', repos='https://packagemanager.posit.co/cran/__linux__/jammy/latest')"
 COPY . .
 RUN Rscript leaderboards/scripts/precompute_leaderboards_cache.R
