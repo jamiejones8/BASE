@@ -15,7 +15,6 @@ library(xgboost)
 library(base64enc)
 library(ggridges)
 library(arrow)
-#library(pdftools)
 
 source("scout_app.R")
 source("leaderboards_embed.R")
@@ -1446,12 +1445,9 @@ pitcher_card_ui <- function() {
       sidebarLayout(
         sidebarPanel(
           width = 3,
-          fileInput("pc_incsv", "Input File (CSV or Parquet)",
-                    accept = c(".csv", ".parquet"), multiple = FALSE),
-          actionButton("pc_update", "Load Pitchers", icon("magnifying-glass"),
-                       class = "btn-primary btn-block"),
-          selectizeInput("pc_pitcher", "Pitcher Name:", NULL),
-          selectInput("pc_game", "Game:", choices = c("All Games" = "all")),
+          uiOutput("pc_team_ui"),
+          uiOutput("pc_dates_ui"),
+          uiOutput("pc_pitcher_ui"),
           tags$label("Enter Pitcher Height (only used for pitchers not in the height CSV)",
                      style = "font-weight:bold; margin-top:8px;"),
           helpText("Arm angle = atan2(RelHeight - shoulder, RelSide), shoulder = 70% of height. ",
@@ -1551,7 +1547,6 @@ pitcher_card_ui <- function() {
 
 pitcher_card_server <- function(input, output, session) {
 
-  game_data       <- reactiveVal()
   current_pitches <- reactiveVal(NULL)
   selected_points <- reactiveVal(NULL)
   card_page       <- reactiveVal(NULL)
@@ -1572,74 +1567,52 @@ pitcher_card_server <- function(input, output, session) {
     if (length(v) == 0 || is.na(v) || !is.finite(v) || v == 0) NULL else v
   })
 
-  observeEvent(input$pc_update, {
-    req(input$pc_incsv)
-    df    <- read_input_file(input$pc_incsv$datapath, input$pc_incsv$name)
-    pname <- pitcher_summary(df)
-    game_data(pname)
-    if (nrow(pname) == 0) {
-      showNotification("No pitchers found in the file.", type = "warning")
-    } else {
-      pchoices <- pname %>%
-        distinct(Pitcher, PitcherTeam) %>%
-        arrange(Pitcher)
-      team_labels <- vapply(pchoices$PitcherTeam,
-                            function(t) team_palette(t)$label, character(1))
-      # Choice label is "Name - Team"; value encodes both as "Name::Team".
-      vec <- setNames(
-        paste(pchoices$Pitcher, pchoices$PitcherTeam, sep = "::"),
-        paste0(format_pitcher_name(pchoices$Pitcher), " - ", team_labels)
-      )
-      updateSelectizeInput(session, "pc_pitcher", "Pitcher Name:", choices = vec)
-    }
+  # Team / date / pitcher selectors driven by the shared master_data
+  # (HF parquet, test.csv fallback) — same source the hitter reports use.
+  output$pc_team_ui <- renderUI({
+    req(!is.null(master_data))
+    teams <- sort(unique(master_data$PitcherTeam))
+    selectInput("pc_team", "Select Team:", choices = teams,
+                selected = teams[grepl("BRE|Brewster", teams, ignore.case = TRUE)][1])
+  })
+
+  output$pc_dates_ui <- renderUI({
+    req(!is.null(master_data), input$pc_team)
+    dates <- master_data %>%
+      filter(PitcherTeam == input$pc_team) %>%
+      mutate(d = as.Date(as.character(Date))) %>%
+      pull(d) %>% unique() %>% sort(decreasing = TRUE)
+    selectInput("pc_dates", "Select Date(s):",
+                choices  = as.character(dates),
+                selected = as.character(dates[1]),
+                multiple = TRUE, selectize = TRUE)
+  })
+
+  output$pc_pitcher_ui <- renderUI({
+    req(!is.null(master_data), input$pc_team, input$pc_dates)
+    pitchers <- master_data %>%
+      filter(PitcherTeam == input$pc_team,
+             as.character(as.Date(as.character(Date))) %in% input$pc_dates) %>%
+      pull(Pitcher) %>% unique() %>% sort()
+    req(length(pitchers) > 0)
+    selectInput("pc_pitcher", "Select Pitcher:",
+                choices = setNames(pitchers, format_pitcher_name(pitchers)))
   })
 
   load_pitcher_pitches <- function() {
-    req(game_data(), input$pc_pitcher)
-    sel <- parse_pitcher_value(input$pc_pitcher)
-    if (is.na(sel$name)) { current_pitches(NULL); return() }
-    pp <- game_data() %>% filter(Pitcher == sel$name, PitcherTeam == sel$team)
-
-    g_sel <- input$pc_game
-    if (!is.null(g_sel) && nzchar(g_sel) && g_sel != "all" &&
-        "GameUID" %in% names(pp)) {
-      pp <- pp %>% filter(GameUID == g_sel)
-    }
-    pp <- pp %>%
+    req(!is.null(master_data), input$pc_team, input$pc_dates, input$pc_pitcher)
+    pp <- master_data %>%
+      filter(PitcherTeam == input$pc_team,
+             as.character(as.Date(as.character(Date))) %in% input$pc_dates,
+             Pitcher == input$pc_pitcher) %>%
+      pitcher_summary() %>%
       mutate(TaggedPitchType = canonicalize_pitch(TaggedPitchType),
              row_id = row_number())
     current_pitches(pp)
     selected_points(NULL)
   }
 
-  # Game dropdown follows the selected pitcher.
-  observeEvent(input$pc_pitcher, {
-    req(game_data(), input$pc_pitcher)
-    sel <- parse_pitcher_value(input$pc_pitcher)
-    if (is.na(sel$name)) {
-      updateSelectInput(session, "pc_game", choices = c("All Games" = "all"), selected = "all")
-      return()
-    }
-    pp_all <- game_data() %>% filter(Pitcher == sel$name, PitcherTeam == sel$team)
-    if ("GameUID" %in% names(pp_all) && nrow(pp_all) > 0) {
-      have_date <- "Date" %in% names(pp_all)
-      have_opp  <- "BatterTeam" %in% names(pp_all)
-      keep_cols <- c("GameUID", if (have_date) "Date", if (have_opp) "BatterTeam")
-      g_df <- pp_all %>% distinct(across(all_of(keep_cols)))
-      if (have_date) g_df <- g_df %>% arrange(Date)
-      labels <- vapply(seq_len(nrow(g_df)), function(i) {
-        d <- if (have_date && !is.na(g_df$Date[i])) format_pretty_date(g_df$Date[i]) else "?"
-        o <- if (have_opp && !is.na(g_df$BatterTeam[i])) team_palette(g_df$BatterTeam[i])$label else "?"
-        paste0(d, "  ·  vs ", o)
-      }, character(1))
-      choices <- c("All Games" = "all", setNames(as.character(g_df$GameUID), labels))
-    } else {
-      choices <- c("All Games" = "all")
-    }
-    updateSelectInput(session, "pc_game", choices = choices, selected = "all")
-  }, ignoreInit = TRUE)
-
-  observeEvent(list(input$pc_pitcher, input$pc_game), { load_pitcher_pitches() },
+  observeEvent(list(input$pc_pitcher, input$pc_dates), { load_pitcher_pitches() },
                ignoreInit = TRUE)
   observeEvent(input$pc_reset_pitches, { load_pitcher_pitches() })
 
@@ -1774,7 +1747,7 @@ pitcher_card_server <- function(input, output, session) {
     if (nrow(game) == 0) {
       showNotification("No data available for the selected pitcher.", type = "warning"); return()
     }
-    pitcher_display <- format_pitcher_name(parse_pitcher_value(input$pc_pitcher)$name)
+    pitcher_display <- format_pitcher_name(input$pc_pitcher)
     page <- build_pitcher_card_page(game, pitcher_display,
                                     height_override = height_override_dec(),
                                     set_override    = set_override_val())
@@ -1794,8 +1767,7 @@ pitcher_card_server <- function(input, output, session) {
     filename = function() {
       paste0("Whitecaps_Pitcher_",
              gsub("[^A-Za-z0-9]+", "_",
-                  if (is.null(input$pc_pitcher)) "card"
-                  else parse_pitcher_value(input$pc_pitcher)$name),
+                  if (is.null(input$pc_pitcher)) "card" else input$pc_pitcher),
              ".png")
     },
     content = function(file) {
