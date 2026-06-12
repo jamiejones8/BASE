@@ -14,6 +14,7 @@ library(tune)
 library(xgboost)
 library(base64enc)
 library(ggridges)
+library(arrow)
 
 source("scout_app.R")
 source("leaderboards_embed.R")
@@ -710,7 +711,6 @@ header_grob_fn <- function(pitcher_name, subtitle,
       just = c("left", "centre"), interpolate = TRUE
     )
   }
-  # Title shows "Name - Team" when a team label is available.
   children <- c(children, list(
     textGrob(pitcher_name,
              x = unit(text_x, "pt"), y = unit(1, "npc") - unit(20, "pt"),
@@ -2203,7 +2203,119 @@ xgb_fit              <- readRDS("PitcherModels/location_plus_model.rds")
 league_stats_pitcher <- readRDS("PitcherModels/location_plus_league_stats_pitcher.rds")
 
 # ==========================================
-# HITTER - CONSTANTS & HELPERS
+# HITTER DATA SOURCE + REPORT HELPERS (from capstest.R)
+# ==========================================
+download_from_hf_dataset <- function(repo_id, filename, token) {
+  url  <- paste0("https://huggingface.co/datasets/", repo_id, "/resolve/main/", filename)
+  tmp  <- tempfile(fileext = paste0(".", tools::file_ext(filename)))
+  resp <- httr::GET(url,
+                    httr::add_headers(Authorization = paste("Bearer", token)),
+                    httr::write_disk(tmp, overwrite = TRUE),
+                    httr::timeout(120))
+  if (httr::http_error(resp)) stop("Failed to download ", filename, ": ", httr::status_code(resp))
+  tmp
+}
+
+read_data_file <- function(path) {
+  ext <- tolower(tools::file_ext(path))
+  if (ext == "parquet") {
+    if (!requireNamespace("arrow", quietly = TRUE))
+      stop("arrow package required for parquet files but is not installed")
+    arrow::read_parquet(path)
+  } else if (ext %in% c("csv", "txt")) {
+    readr::read_csv(path, show_col_types = FALSE)
+  } else {
+    stop("Unsupported file type: ", ext)
+  }
+}
+
+message("Loading master game data...")
+master_data <- tryCatch({
+  token <- Sys.getenv("HITTER_TOKEN")
+  if (nchar(token) == 0) stop("No HITTER_TOKEN set")
+  path <- download_from_hf_dataset("BrewsterWhitecapsMAC/game-data", "brewster_2026.parquet", token)
+  read_data_file(path)
+}, error = function(e) {
+  message("HF parquet load failed: ", e$message)
+  message("Trying test.csv fallback...")
+  tryCatch({
+    df <- readr::read_csv("test.csv", show_col_types = FALSE)
+    message("Loaded test.csv — rows: ", nrow(df))
+    df
+  }, error = function(e2) {
+    message("test.csv also failed: ", e2$message)
+    NULL
+  })
+})
+
+master_last_updated <- if (!is.null(master_data)) format(Sys.time(), "%b %d, %Y at %I:%M %p") else "unavailable"
+message("Master data rows: ", if (!is.null(master_data)) nrow(master_data) else 0)
+
+pdf_to_pngs <- function(pdf_path, dpi = 200) {
+  img <- magick::image_read_pdf(pdf_path, density = dpi)
+  w   <- as.character(round(8.5 * dpi))
+  h   <- as.character(round(11  * dpi))
+  img <- magick::image_resize(img, paste0(w, "x", h, "!"))
+  png_paths <- vapply(seq_along(img), function(i) {
+    tmp <- tempfile(fileext = ".png")
+    magick::image_write(img[i], path = tmp, format = "png")
+    tmp
+  }, character(1))
+  png_paths
+}
+
+png_to_base64 <- function(path) {
+  paste0("data:image/png;base64,", base64enc::base64encode(path))
+}
+
+report_viewer_ui <- function(png_paths, pdf_path, download_id_pdf, download_id_png) {
+  n_pages  <- length(png_paths)
+  img_tags <- lapply(seq_along(png_paths), function(i) {
+    tags$div(
+      style = "margin-bottom: 16px;",
+      tags$p(
+        style = "font-size: 11px; color: #888; margin-bottom: 4px;",
+        paste0("Page ", i, " of ", n_pages)
+      ),
+      tags$img(
+        src   = png_to_base64(png_paths[[i]]),
+        style = paste0(
+          "width: 100%;",
+          "aspect-ratio: 8.5 / 11;",
+          "object-fit: contain;",
+          "border: 0.5px solid #ddd;",
+          "border-radius: 6px;",
+          "display: block;",
+          "background: #fff;"
+        )
+      )
+    )
+  })
+
+  tagList(
+    tags$div(
+      style = "display: flex; gap: 12px; margin-bottom: 16px;",
+      downloadButton(download_id_pdf, "Download PDF",
+                     class = "btn btn-success", style = "width: 160px;"),
+      downloadButton(download_id_png, "Download PNG(s)",
+                     class = "btn btn-outline-secondary", style = "width: 160px;")
+    ),
+    tags$div(
+      style = paste0(
+        "max-height: 900px;",
+        "overflow-y: auto;",
+        "border: 0.5px solid #ddd;",
+        "border-radius: 8px;",
+        "padding: 16px;",
+        "background: #f8f8f8;"
+      ),
+      do.call(tagList, img_tags)
+    )
+  )
+}
+
+# ==========================================
+# HITTER CONSTANTS & HELPERS
 # ==========================================
 hitter_pitch_colors <- c(
   "Four Seam" = "red",    "Sinker"    = "orange",
@@ -2224,13 +2336,13 @@ hitter_home_plate <- data.frame(
 
 clean_hitter_pitch_type <- function(pt) {
   case_when(
-    pt %in% c("Fastball", "FourSeamFastBall", "Four-Seam") ~ "Four Seam",
-    pt %in% c("Sinker", "TwoSeamFastBall")                 ~ "Sinker",
-    pt == "Slider"    ~ "Slider",
-    pt == "Curveball" ~ "Curveball",
-    pt %in% c("ChangeUp", "Changeup") ~ "Changeup",
-    pt == "Cutter"    ~ "Cutter",
-    pt == "Splitter"  ~ "Splitter",
+    pt %in% c("Fastball","FourSeamFastBall","Four-Seam") ~ "Four Seam",
+    pt %in% c("Sinker","TwoSeamFastBall")               ~ "Sinker",
+    pt == "Slider"                                       ~ "Slider",
+    pt == "Curveball"                                    ~ "Curveball",
+    pt %in% c("ChangeUp","Changeup")                     ~ "Changeup",
+    pt == "Cutter"                                       ~ "Cutter",
+    pt == "Splitter"                                     ~ "Splitter",
     TRUE ~ NA_character_
   )
 }
@@ -2239,10 +2351,9 @@ build_color_matrix_hitter <- function(df, benchmarks, lower_is_better = c()) {
   get_color <- function(value, bottom, top, flip = FALSE) {
     value <- suppressWarnings(as.numeric(gsub("%", "", value)))
     if (is.na(value)) return("white")
-    normalized <- (value - bottom) / (top - bottom)
-    normalized <- pmax(0, pmin(1, normalized))
+    normalized <- pmax(0, pmin(1, (value - bottom) / (top - bottom)))
     if (flip) normalized <- 1 - normalized
-    colorRamp(c("#E1463E", "#CDCD00", "#00840D"))(normalized) %>%
+    colorRamp(c("#E1463E","#CDCD00","#00840D"))(normalized) %>%
       { rgb(.[1], .[2], .[3], maxColorValue = 255) }
   }
   color_matrix <- matrix("white", nrow = nrow(df), ncol = ncol(df))
@@ -2259,26 +2370,17 @@ build_color_matrix_hitter <- function(df, benchmarks, lower_is_better = c()) {
 }
 
 hitter_season_benchmarks <- list(
-  AVG        = c(0.200, 0.360), OBP  = c(0.290, 0.450), SLG  = c(0.339, 0.667),
-  `K%`       = c(9.8,  26.5),  `BB%`= c(6.3,  18.8),
-  `Whiff%`   = c(12.8, 30.7),  `HardHit%` = c(20, 55)
+  AVG=c(0.200,0.360), OBP=c(0.290,0.450), SLG=c(0.339,0.667),
+  `K%`=c(9.8,26.5), `BB%`=c(6.3,18.8), `Whiff%`=c(12.8,30.7), `HardHit%`=c(20,55)
 )
-hitter_lower_is_better <- c("K%", "Whiff%")
+hitter_lower_is_better <- c("K%","Whiff%")
 
-hitter_fastball_split_benchmarks <- list(
-  `Swing%` = c(37.2,52.2), `Contact%` = c(72,90), `Chase%` = c(14,29),
-  `Barrel%`= c(6,30),      `IZ Whiff%`= c(6,23),  `HardHit%`= c(18,56), `Avg EV`= c(80,92))
-hitter_breaker_split_benchmarks <- list(
-  `Swing%` = c(30,48),     `Contact%` = c(56,82), `Chase%` = c(15,35),
-  `Barrel%`= c(0,30),      `IZ Whiff%`= c(8,29),  `HardHit%`= c(9,50),  `Avg EV`= c(77,90))
-hitter_offspeed_split_benchmarks <- list(
-  `Swing%` = c(36,54),     `Contact%` = c(56,81), `Chase%` = c(20,39),
-  `Barrel%`= c(4,30),      `IZ Whiff%`= c(10,34), `HardHit%`= c(14,54), `Avg EV`= c(79,91))
-hitter_split_lower_is_better <- c("Chase%", "IZ Whiff%")
 hitter_split_bench_map <- list(
-  "Fastball" = hitter_fastball_split_benchmarks,
-  "Breaker"  = hitter_breaker_split_benchmarks,
-  "Offspeed" = hitter_offspeed_split_benchmarks)
+  "Fastball" = list(`Swing%`=c(37.2,52.2), `Contact%`=c(72,90), `Chase%`=c(14,29), `Barrel%`=c(6,30),  `IZ Whiff%`=c(6,23),  `HardHit%`=c(18,56), `Avg EV`=c(80,92)),
+  "Breaker"  = list(`Swing%`=c(30,48),     `Contact%`=c(56,82), `Chase%`=c(15,35), `Barrel%`=c(0,30),  `IZ Whiff%`=c(8,29),  `HardHit%`=c(9,50),  `Avg EV`=c(77,90)),
+  "Offspeed" = list(`Swing%`=c(36,54),     `Contact%`=c(56,81), `Chase%`=c(20,39), `Barrel%`=c(4,30),  `IZ Whiff%`=c(10,34), `HardHit%`=c(14,54), `Avg EV`=c(79,91))
+)
+hitter_split_lower_is_better <- c("Chase%","IZ Whiff%")
 
 build_split_color_matrix_hitter <- function(df, bench_map, lower_is_better = c()) {
   color_matrix <- matrix("white", nrow = nrow(df), ncol = ncol(df))
@@ -2294,24 +2396,13 @@ build_split_color_matrix_hitter <- function(df, bench_map, lower_is_better = c()
 }
 
 # ==========================================
-# HITTER - SWING DECISION MODELS
+# SWING DECISION MODELS
 # ==========================================
-download_from_hf_dataset <- function(repo_id, filename, token) {
-  url  <- paste0("https://huggingface.co/datasets/", repo_id, "/resolve/main/", filename)
-  tmp  <- tempfile(fileext = paste0(".", tools::file_ext(filename)))
-  resp <- httr::GET(url,
-                    httr::add_headers(Authorization = paste("Bearer", token)),
-                    httr::write_disk(tmp, overwrite = TRUE),
-                    httr::timeout(120))
-  if (httr::http_error(resp)) stop("Failed to download ", filename, ": ", httr::status_code(resp))
-  tmp
-}
-
 message("HITTER_TOKEN present: ", nchar(Sys.getenv("HITTER_TOKEN")) > 0)
 sd_models <- tryCatch({
   token <- Sys.getenv("HITTER_TOKEN")
   repo  <- "BrewsterWhitecapsMAC/swing-decision-models"
-  message("Downloading swing decision models from HF dataset: ", repo)
+  message("Downloading swing decision models...")
   list(
     model_take  = xgb.load(download_from_hf_dataset(repo, "HitterXRV_Take.ubj",  token)),
     model_swing = xgb.load(download_from_hf_dataset(repo, "HitterXRV_Swing.ubj", token)),
@@ -2320,17 +2411,7 @@ sd_models <- tryCatch({
 }, error = function(e) { message("Swing decision models not loaded: ", e$message); NULL })
 message("sd_models loaded: ", !is.null(sd_models))
 
-sd_features <- c("PlateLocHeight", "PlateLocSide", "count_state_enc", "pitch_type_enc")
-
-brewster_roster <- c(
-  "French, Anderson", "Jenkins, Owen", "Lee, Jacob",
-  "Wentz, Dalton", "Lawson, Brendan", "Daniel, Pete", "Partida, Nicholas",
-  "Moore, Will", "Craska, Petey", "Laskofski, Jamie", "Penfield, Landon",
-  "Rhine, Will", "Lambdin, Jake",
-  "Magpoc, Adam", "DeLamielleure, Brody", "Torres, Michael", "Carney, Frankie",
-  "Daniel, Conlan", "Kiel II, Terrence", "Abernathy, Jay", "Brown, Blaine",
-  "Strayer, Cash"
-)
+sd_features <- c("PlateLocHeight","PlateLocSide","count_state_enc","pitch_type_enc")
 
 recode_pitch_type_model <- function(x) {
   case_when(
@@ -2351,19 +2432,17 @@ score_pitches_xrv <- function(df, models = sd_models) {
   enc <- models$encodings
   scored <- df %>%
     mutate(
-      Balls       = as.integer(Balls),
-      Strikes     = as.integer(Strikes),
+      Balls = as.integer(Balls), Strikes = as.integer(Strikes),
       count_state = paste0(Balls, "-", Strikes),
       count_state = ifelse(!count_state %in% c("0-0","0-1","0-2","1-0","1-1","1-2",
-                                               "2-0","2-1","2-2","3-0","3-1","3-2"),
-                           NA, count_state),
+                                               "2-0","2-1","2-2","3-0","3-1","3-2"), NA, count_state),
       pitch_type_model = recode_pitch_type_model(TaggedPitchType),
       count_state_enc  = match(count_state, enc$count_state),
       pitch_type_enc   = match(pitch_type_model, enc$pitch_type)
     )
   valid <- !is.na(scored$PlateLocHeight) & !is.na(scored$PlateLocSide) &
-    !is.na(scored$count_state_enc) & !is.na(scored$pitch_type_enc) &
-    scored$pitch_type_model != "Other"
+           !is.na(scored$count_state_enc) & !is.na(scored$pitch_type_enc) &
+           scored$pitch_type_model != "Other"
   scored$xRV_swing <- NA_real_; scored$xRV_take <- NA_real_
   if (any(valid)) {
     dmat <- xgb.DMatrix(as.matrix(scored[valid, sd_features]))
@@ -2374,33 +2453,6 @@ score_pitches_xrv <- function(df, models = sd_models) {
     select(-pitch_type_model, -count_state_enc, -pitch_type_enc)
 }
 
-plot_xrv_diff_heatmap <- function(count_label=NULL, pitch_label="FF", title_prefix="", models=sd_models) {
-  if (is.null(models)) return(ggplot() + theme_void())
-  enc <- models$encodings
-  grid_df <- expand.grid(PlateLocHeight=seq(0.75,4.25,by=0.20), PlateLocSide=seq(-2.0,2.0,by=0.20))
-  grid_df$count_state_enc <- if (!is.null(count_label)) match(count_label, enc$count_state) else 1L
-  grid_df$pitch_type_enc  <- match(pitch_label, enc$pitch_type)
-  if (any(is.na(grid_df$count_state_enc)) || any(is.na(grid_df$pitch_type_enc)))
-    return(ggplot() + theme_void())
-  dmat <- xgb.DMatrix(as.matrix(grid_df[, sd_features]))
-  grid_df$xRV_swing <- predict(models$model_swing, dmat)
-  grid_df$xRV_take  <- predict(models$model_take,  dmat)
-  grid_df$diff      <- grid_df$xRV_swing - grid_df$xRV_take
-  subtitle <- if (!is.null(count_label)) paste0(title_prefix,"Count: ",count_label," | Pitch: ",pitch_label) else paste0(title_prefix,"Pitch: ",pitch_label)
-  ggplot(grid_df, aes(x=PlateLocSide, y=PlateLocHeight, fill=diff)) +
-    geom_tile() +
-    scale_fill_gradient2(low="blue", mid="white", high="red", midpoint=0, name="Swing−Take\nxRV") +
-    geom_path(data=hitter_strike_zone, aes(x=PlateLocSide, y=PlateLocHeight), inherit.aes=FALSE, color="black", linewidth=1) +
-    annotate("rect", xmin=-0.7083, xmax=0.7083, ymin=0.0, ymax=0.15, fill="grey70", color="black") +
-    coord_fixed() + xlim(-2.5,2.5) + ylim(0,5) +
-    labs(subtitle=subtitle, x=NULL, y=NULL) +
-    theme_minimal(base_size=9) +
-    theme(plot.subtitle=element_text(hjust=0.5,size=7.5), panel.grid=element_blank(),
-          axis.text=element_blank(), axis.ticks=element_blank(),
-          legend.key.size=unit(0.35,"cm"), legend.text=element_text(size=6),
-          legend.title=element_text(size=6.5))
-}
-
 summarise_xrv_swdec <- function(scored_df) {
   scored_df %>% filter(!is.na(xRV_diff)) %>%
     mutate(ModelShouldSwing = xRV_diff > 0,
@@ -2409,9 +2461,9 @@ summarise_xrv_swdec <- function(scored_df) {
     summarise(Total=n(), GoodDec=sum(GoodxDec,na.rm=TRUE),
               SwingPitches=sum(ModelShouldSwing,na.rm=TRUE),
               ActualSwings=sum(DidSwing,na.rm=TRUE), .groups="drop") %>%
-    mutate(`xSwDec%`    = paste0(round(GoodDec      /pmax(Total,1)*100,1),"%"),
-           `Mdl Swing%` = paste0(round(SwingPitches /pmax(Total,1)*100,1),"%"),
-           `Act Swing%` = paste0(round(ActualSwings /pmax(Total,1)*100,1),"%")) %>%
+    mutate(`xSwDec%`    = paste0(round(GoodDec      / pmax(Total,1)*100, 1), "%"),
+           `Mdl Swing%` = paste0(round(SwingPitches / pmax(Total,1)*100, 1), "%"),
+           `Act Swing%` = paste0(round(ActualSwings / pmax(Total,1)*100, 1), "%")) %>%
     select(`xSwDec%`, `Mdl Swing%`, `Act Swing%`)
 }
 
@@ -2421,18 +2473,12 @@ make_swdec_plot <- function(df, plot_title) {
   ggplot() +
     geom_polygon(data=hitter_home_plate, aes(x=x,y=y), fill="grey85", color="black", linewidth=0.8) +
     geom_path(data=hitter_strike_zone, aes(x=PlateLocSide,y=PlateLocHeight), color="black", linewidth=1.2) +
-    geom_point(data=df, aes(x=PlateLocSide,y=PlateLocHeight,shape=DecLabel),
-               size=6.5, color="black", alpha=0.3) +
-    geom_point(data=df, aes(x=PlateLocSide,y=PlateLocHeight,color=DecLabel,shape=DecLabel),
-               size=5.5, alpha=0.92) +
-    scale_color_manual(values=dec_colors, name=NULL,
-                       guide=guide_legend(override.aes=list(size=3.5))) +
-    scale_shape_manual(values=dec_shapes, name=NULL,
-                       guide=guide_legend(override.aes=list(size=3.5))) +
+    geom_point(data=df, aes(x=PlateLocSide,y=PlateLocHeight,shape=DecLabel), size=6.5, color="black", alpha=0.3) +
+    geom_point(data=df, aes(x=PlateLocSide,y=PlateLocHeight,color=DecLabel,shape=DecLabel), size=5.5, alpha=0.92) +
+    scale_color_manual(values=dec_colors, name=NULL, guide=guide_legend(override.aes=list(size=3.5))) +
+    scale_shape_manual(values=dec_shapes, name=NULL, guide=guide_legend(override.aes=list(size=3.5))) +
     xlim(-2.5,2.5) + ylim(0,5) + coord_fixed() +
-    labs(title=plot_title,
-         subtitle="▲ Swing  ● Take  |  Green = Good  Red = Bad",
-         x=NULL, y=NULL) +
+    labs(title=plot_title, subtitle="\u25b2 Swing  \u25cf Take  |  Green = Good  Red = Bad", x=NULL, y=NULL) +
     theme_minimal(base_size=10) +
     theme(plot.title=element_text(hjust=0.5,face="bold",size=11,color="#0C2340"),
           plot.subtitle=element_text(hjust=0.5,size=7,color="grey50"),
@@ -2445,40 +2491,28 @@ make_swdec_heatmap <- function(df, plot_title) {
   bin_w <- 0.30
   binned <- df %>%
     filter(!is.na(PlateLocSide), !is.na(PlateLocHeight)) %>%
-    mutate(
-      bx = round(PlateLocSide   / bin_w) * bin_w,
-      by = round(PlateLocHeight / bin_w) * bin_w
-    ) %>%
+    mutate(bx = round(PlateLocSide/bin_w)*bin_w, by = round(PlateLocHeight/bin_w)*bin_w) %>%
     group_by(bx, by) %>%
-    summarise(GoodPct = mean(SwDec == 1, na.rm=TRUE), N = n(), .groups="drop") %>%
+    summarise(GoodPct = mean(SwDec==1, na.rm=TRUE), N=n(), .groups="drop") %>%
     filter(N >= 2)
-
   ggplot() +
-    geom_tile(data=binned, aes(x=bx, y=by, fill=GoodPct),
-              width=bin_w*0.97, height=bin_w*0.97) +
-    scale_fill_gradient2(low="blue", mid="white", high="red",
-                         midpoint=0.70, limits=c(0,1), guide="none") +
-    geom_polygon(data=hitter_home_plate, aes(x=x, y=y),
-                 fill="grey85", color="black", linewidth=0.8, inherit.aes=FALSE) +
-    geom_path(data=hitter_strike_zone, aes(x=PlateLocSide, y=PlateLocHeight),
-              color="black", linewidth=1.2, inherit.aes=FALSE) +
+    geom_tile(data=binned, aes(x=bx, y=by, fill=GoodPct), width=bin_w*0.97, height=bin_w*0.97) +
+    scale_fill_gradient2(low="blue", mid="white", high="red", midpoint=0.70, limits=c(0,1), guide="none") +
+    geom_polygon(data=hitter_home_plate, aes(x=x,y=y), fill="grey85", color="black", linewidth=0.8, inherit.aes=FALSE) +
+    geom_path(data=hitter_strike_zone, aes(x=PlateLocSide,y=PlateLocHeight), color="black", linewidth=1.2, inherit.aes=FALSE) +
     xlim(-2.5,2.5) + ylim(0,5) + coord_fixed() +
-    labs(title=plot_title,
-         subtitle="Red = Good Decisions  |  Blue = Bad Decisions",
-         x=NULL, y=NULL) +
+    labs(title=plot_title, subtitle="Red = Good Decisions  |  Blue = Bad Decisions", x=NULL, y=NULL) +
     theme_minimal(base_size=10) +
     theme(plot.title=element_text(hjust=0.5,face="bold",size=11,color="#0C2340"),
           plot.subtitle=element_text(hjust=0.5,size=7,color="grey50"),
-          axis.text=element_blank(), axis.ticks=element_blank(),
-          panel.grid=element_blank(), legend.position="none")
+          axis.text=element_blank(), axis.ticks=element_blank(), panel.grid=element_blank())
 }
 
 # ==========================================
-# HITTER - PDF GENERATION
+# HITTER PDF
 # ==========================================
 generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_file,
-                                 active_models = sd_models) {
-
+                                active_models = sd_models) {
   hitter_name <- format_name(selected_hitter)
 
   dedup <- function(df) {
@@ -2496,23 +2530,21 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     grid::rasterGrob(as.raster(img), interpolate=TRUE)
   }, error=function(e) grid::nullGrob())
 
-  # -- Game Stats --
   counting_stats <- game_hitter %>%
     mutate(
-      IsWhiff  = PitchCall == "StrikeSwinging",
-      IsSwing  = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip","InPlay"),
-      IsChase  = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip") &
+      IsWhiff = PitchCall == "StrikeSwinging",
+      IsSwing = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip","InPlay"),
+      IsChase = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip") &
         (abs(PlateLocSide) > 0.8303 | PlateLocHeight < 1.5 | PlateLocHeight > 3.3775),
-      IsBall   = PitchCall == "BallCalled" &
+      IsBall  = PitchCall == "BallCalled" &
         (abs(PlateLocSide) > 0.8303 | PlateLocHeight < 1.5 | PlateLocHeight > 3.3775),
-      IsLast   = if ("is_last_pitch_of_PA" %in% names(.)) is_last_pitch_of_PA == TRUE else
-        PitchCall %in% c("InPlay","HitByPitch")
+      IsLast  = PitchCall %in% c("InPlay","HitByPitch")
     ) %>%
     summarise(
       PA       = sum(IsLast, na.rm=TRUE),
       Hits     = sum(IsLast & PlayResult %in% c("Single","Double","Triple","HomeRun"), na.rm=TRUE),
       `K's`    = sum(IsLast & PitchCall == "StrikeSwinging" & Strikes == 2, na.rm=TRUE) +
-        sum(IsLast & PitchCall == "StrikeCalled"   & Strikes == 2, na.rm=TRUE),
+                 sum(IsLast & PitchCall == "StrikeCalled"   & Strikes == 2, na.rm=TRUE),
       `BB's`   = sum(IsLast & PitchCall == "BallCalled" & Balls == 3, na.rm=TRUE),
       `2B`     = sum(IsLast & PlayResult == "Double", na.rm=TRUE),
       `3B`     = sum(IsLast & PlayResult == "Triple", na.rm=TRUE),
@@ -2534,11 +2566,10 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
         !InZone & PitchCall == "StrikeCalled" & Strikes == 2                                    ~ 0,
         !InZone & PitchCall %in% c("StrikeSwinging","FoulBallNotFieldable","FoulBall","InPlay") ~ 0,
         TRUE ~ NA_real_),
-      DecLabel   = case_when(
-        SwDec==1 & DidSwing  ~ "Good Swing", SwDec==1 & !DidSwing ~ "Good Take",
-        SwDec==0 & DidSwing  ~ "Bad Swing",  SwDec==0 & !DidSwing ~ "Bad Take",
-        TRUE ~ NA_character_),
-      CountLabel = paste0(Balls,"-",Strikes)
+      DecLabel = case_when(
+        SwDec==1 & DidSwing ~ "Good Swing", SwDec==1 & !DidSwing ~ "Good Take",
+        SwDec==0 & DidSwing ~ "Bad Swing",  SwDec==0 & !DidSwing ~ "Bad Take",
+        TRUE ~ NA_character_)
     ) %>%
     filter(!is.na(SwDec), !is.na(PlateLocHeight), !is.na(PlateLocSide))
 
@@ -2559,20 +2590,10 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     mutate(SwDec=paste0(Good," / ",Total), `SwDec%`=round(Good/Total*100,1)) %>%
     select(`Pitch Type`=PitchTypeGroup, SwDec, `SwDec%`)
 
-  swdec_by_count <- swing_decisions %>%
-    mutate(CountType=case_when(
-      Balls-Strikes>=1 ~ "Hitter Ahead", Strikes-Balls>=1 ~ "Pitcher Ahead",
-      Balls==Strikes   ~ "Even",         TRUE             ~ "Neutral")) %>%
-    group_by(CountType) %>%
-    summarise(Good=sum(SwDec), Total=n(), .groups="drop") %>%
-    mutate(SwDec=paste0(Good," / ",Total), `SwDec%`=round(Good/Total*100,1)) %>%
-    select(Count=CountType, SwDec, `SwDec%`)
-
   game_swdec_plot <- make_swdec_plot(swing_decisions, "Game Swing Decisions by Location")
 
-  game_xrv_overall <- if (!is.null(active_models) && any(!is.na(game_hitter$xRV_diff))) {
-    summarise_xrv_swdec(game_hitter) %>% mutate(` `="Overall") %>% select(` `, everything())
-  } else NULL
+  game_xrv_overall <- if (!is.null(active_models) && any(!is.na(game_hitter$xRV_diff)))
+    summarise_xrv_swdec(game_hitter) %>% mutate(` `="Overall") %>% select(` `, everything()) else NULL
 
   game_xrv_by_pitch <- if (!is.null(active_models) && any(!is.na(game_hitter$xRV_diff))) {
     game_hitter %>%
@@ -2593,7 +2614,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       IsWhiff     = PitchCall == "StrikeSwinging",
       InZone      = abs(PlateLocSide)<=0.8303 & PlateLocHeight>=1.5 & PlateLocHeight<=3.3775,
       IsZoneWhiff = IsWhiff & InZone, IsZoneSwing = IsSwing & InZone,
-      IsChase     = IsSwing & !InZone, IsOutZone   = !InZone,
+      IsChase     = IsSwing & !InZone, IsOutZone = !InZone,
       IsHardHit   = PitchCall=="InPlay" & !is.na(ExitSpeed) & ExitSpeed>=95
     ) %>%
     filter(!is.na(TaggedPitchType_clean)) %>%
@@ -2617,10 +2638,10 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     filter(!is.na(PlateLocSide), !is.na(PlateLocHeight)) %>%
     mutate(TaggedPitchType_clean=clean_hitter_pitch_type(TaggedPitchType),
            ContactType=case_when(
-             ExitSpeed>=95                                ~ "Hard Hit",
-             PitchCall=="StrikeSwinging"                 ~ "Whiff",
-             PitchCall %in% c("StrikeCalled","BallCalled") ~ "Take",
-             PitchCall=="InPlay"                         ~ "In Play",
+             ExitSpeed>=95                                                ~ "Hard Hit",
+             PitchCall=="StrikeSwinging"                                  ~ "Whiff",
+             PitchCall %in% c("StrikeCalled","BallCalled")               ~ "Take",
+             PitchCall=="InPlay"                                          ~ "In Play",
              TRUE ~ "Take")) %>%
     filter(!is.na(TaggedPitchType_clean))
 
@@ -2643,18 +2664,16 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
           legend.text=element_text(size=8)) +
     guides(fill="none", shape=guide_legend(title="Contact Type"))
 
-  # -- Season Stats --
   season_stats <- season_hitter %>%
     mutate(
-      IsSwing    = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip","InPlay"),
-      IsWhiff    = PitchCall=="StrikeSwinging",
-      IsHardHit  = PitchCall=="InPlay" & !is.na(ExitSpeed) & ExitSpeed>=95,
-      IsBIP      = PitchCall=="InPlay" & !is.na(ExitSpeed),
-      IsHit      = PlayResult %in% c("Single","Double","Triple","HomeRun"),
+      IsSwing   = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip","InPlay"),
+      IsWhiff   = PitchCall=="StrikeSwinging",
+      IsHardHit = PitchCall=="InPlay" & !is.na(ExitSpeed) & ExitSpeed>=95,
+      IsBIP     = PitchCall=="InPlay" & !is.na(ExitSpeed),
+      IsHit     = PlayResult %in% c("Single","Double","Triple","HomeRun"),
       Is2B=PlayResult=="Double", Is3B=PlayResult=="Triple", IsHR=PlayResult=="HomeRun",
       IsK=KorBB=="Strikeout", IsBB=KorBB=="Walk", IsHBP=PitchCall=="HitByPitch",
-      IsLastPitch = if ("is_last_pitch_of_PA" %in% names(.)) is_last_pitch_of_PA==TRUE else
-        (KorBB %in% c("Strikeout","Walk") | PitchCall %in% c("InPlay","HitByPitch")),
+      IsLastPitch = KorBB %in% c("Strikeout","Walk") | PitchCall %in% c("InPlay","HitByPitch"),
       IsPA = IsLastPitch & (KorBB %in% c("Strikeout","Walk") | PitchCall %in% c("InPlay","HitByPitch")),
       IsAB = IsPA & !IsBB & !IsHBP & !PlayResult %in% c("Sacrifice","SacrificeFly")
     ) %>%
@@ -2679,7 +2698,6 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 
   season_color_matrix <- build_color_matrix_hitter(season_stats, hitter_season_benchmarks, hitter_lower_is_better)
 
-  # -- Season Swing Decisions --
   season_swing_decisions <- season_hitter %>%
     mutate(
       InZone   = PlateLocHeight>=1.5 & PlateLocHeight<=3.3775 & abs(PlateLocSide)<=0.8303,
@@ -2694,10 +2712,9 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
         !InZone & PitchCall %in% c("StrikeSwinging","FoulBallNotFieldable","FoulBall","InPlay") ~ 0,
         TRUE ~ NA_real_),
       DecLabel=case_when(
-        SwDec==1 & DidSwing  ~ "Good Swing", SwDec==1 & !DidSwing ~ "Good Take",
-        SwDec==0 & DidSwing  ~ "Bad Swing",  SwDec==0 & !DidSwing ~ "Bad Take",
-        TRUE ~ NA_character_),
-      CountLabel=paste0(Balls,"-",Strikes)
+        SwDec==1 & DidSwing ~ "Good Swing", SwDec==1 & !DidSwing ~ "Good Take",
+        SwDec==0 & DidSwing ~ "Bad Swing",  SwDec==0 & !DidSwing ~ "Bad Take",
+        TRUE ~ NA_character_)
     ) %>%
     filter(!is.na(SwDec), !is.na(PlateLocHeight), !is.na(PlateLocSide))
 
@@ -2719,34 +2736,11 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     mutate(SwDec=paste0(Good," / ",Total), `SwDec%`=round(Good/Total*100,1)) %>%
     select(`Pitch Type`=PitchTypeGroup, SwDec, `SwDec%`)
 
-  season_swdec_by_count <- season_swing_decisions %>%
-    mutate(CountType=case_when(
-      Balls-Strikes>=1 ~ "Hitter Ahead", Strikes-Balls>=1 ~ "Pitcher Ahead",
-      Balls==Strikes ~ "Even", TRUE ~ "Neutral")) %>%
-    group_by(CountType) %>%
-    summarise(Good=sum(SwDec), Total=n(), .groups="drop") %>%
-    mutate(SwDec=paste0(Good," / ",Total), `SwDec%`=round(Good/Total*100,1)) %>%
-    select(Count=CountType, SwDec, `SwDec%`)
-
   season_swdec_plot <- make_swdec_heatmap(season_swing_decisions, "Season Swing Decisions by Location")
 
-  season_xrv_overall <- if (!is.null(active_models) && any(!is.na(season_hitter$xRV_diff))) {
-    summarise_xrv_swdec(season_hitter) %>% mutate(` `="Overall") %>% select(` `, everything())
-  } else NULL
+  season_xrv_overall <- if (!is.null(active_models) && any(!is.na(season_hitter$xRV_diff)))
+    summarise_xrv_swdec(season_hitter) %>% mutate(` `="Overall") %>% select(` `, everything()) else NULL
 
-  season_xrv_by_pitch <- if (!is.null(active_models) && any(!is.na(season_hitter$xRV_diff))) {
-    season_hitter %>%
-      mutate(PitchTypeGroup=case_when(
-        TaggedPitchType %in% c("FourSeamFastBall","Fastball","Four-Seam","Sinker","TwoSeamFastBall","Cutter") ~ "Fastball",
-        TaggedPitchType %in% c("Changeup","Splitter","ChangeUp")                                             ~ "Offspeed",
-        TaggedPitchType %in% c("Curveball","Slider","Sweeper","Slurve")                                      ~ "Breaking Ball",
-        TRUE ~ NA_character_)) %>%
-      filter(!is.na(PitchTypeGroup)) %>%
-      group_by(`Pitch Type`=PitchTypeGroup) %>%
-      group_modify(~summarise_xrv_swdec(.x)) %>% ungroup()
-  } else NULL
-
-  # -- RHP/LHP Stats --
   make_split_stats_hitter <- function(data, hand) {
     data %>%
       filter(Batter==selected_hitter, PitcherThrows==hand) %>%
@@ -2790,7 +2784,6 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
   rhp_color_matrix <- build_split_color_matrix_hitter(rhp_stats, hitter_split_bench_map, hitter_split_lower_is_better)
   lhp_color_matrix <- build_split_color_matrix_hitter(lhp_stats, hitter_split_bench_map, hitter_split_lower_is_better)
 
-  # -- Density Plots --
   make_density_plots_hitter <- function(data, hand) {
     split_data <- data %>%
       filter(Batter==selected_hitter, PitcherThrows==hand) %>%
@@ -2800,14 +2793,12 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
         TaggedPitchType %in% c("Changeup","Splitter","ChangeUp")                                             ~ "Offspeed",
         TRUE ~ NA_character_)) %>%
       filter(!is.na(PitchGroup), !is.na(PlateLocSide), !is.na(PlateLocHeight))
-    group_levels <- c("Fastball","Breaker","Offspeed")
-    plots <- lapply(group_levels, function(grp) {
+    lapply(c("Fastball","Breaker","Offspeed"), function(grp) {
       grp_data   <- split_data %>% filter(PitchGroup==grp)
       whiff_data <- grp_data  %>% filter(PitchCall=="StrikeSwinging")
       hh_data    <- grp_data  %>% filter(PitchCall=="InPlay",!is.na(ExitSpeed),ExitSpeed>=95)
       if (nrow(grp_data)<1)
-        return(ggplot()+theme_void()+labs(title=grp)+
-                 theme(plot.title=element_text(hjust=0.5,size=13,face="bold")))
+        return(ggplot()+theme_void()+labs(title=grp)+theme(plot.title=element_text(hjust=0.5,size=13,face="bold")))
       p <- ggplot(grp_data, aes(x=PlateLocSide,y=PlateLocHeight)) +
         stat_density_2d(aes(fill=after_stat(density)),geom="raster",contour=FALSE,interpolate=TRUE) +
         scale_fill_gradient(low="lightblue",high="red") +
@@ -2820,15 +2811,13 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       p+xlim(-2.5,2.5)+ylim(0,5)+coord_fixed()+labs(title=grp)+theme_minimal()+
         theme(legend.position="none",plot.title=element_text(hjust=0.5,size=13,face="bold"),
               axis.text=element_blank(),axis.ticks=element_blank(),axis.title=element_blank(),panel.grid=element_blank())
-    })
-    setNames(plots, group_levels)
+    }) %>% setNames(c("Fastball","Breaker","Offspeed"))
   }
 
   density_rhp <- make_density_plots_hitter(season_data, "Right")
   density_lhp <- make_density_plots_hitter(season_data, "Left")
 
-  # -- Draw PDF --
-  pdf(output_file, width=11, height=15)
+  pdf(output_file, width=8.5, height=11)
   on.exit(try(dev.off(), silent=TRUE), add=TRUE)
 
   page_header_hitter <- function(name, subtitle) {
@@ -2838,54 +2827,38 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     pushViewport(viewport(x=0.96,y=0.965,width=0.07,height=0.08,just=c("center","center")))
     grid.draw(logo_grob); popViewport()
   }
-
   page_footer_hitter <- function() {
     grid.text("Data: TrackMan | Brewster Whitecaps Analytics",
               x=0.5,y=0.02,gp=gpar(cex=0.55,col="#0C2340",fontface="italic"))
   }
 
   tryCatch({
-
-    # PAGE 1 - GAME
+    # PAGE 1 — GAME
     grid.newpage()
     page_header_hitter(hitter_name, "Postgame Hitter Report")
-
     grid.text("Game Stats", x=0.5,y=0.89,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
     draw_grid_table(counting_stats, y_top=0.865, x_center=0.5, row_h=0.018, cell_cex=0.90)
-
     pushViewport(viewport(x=0.5,y=0.82,width=0.96,height=0.30,just=c("center","top")))
     print(zone_plot, newpage=FALSE); popViewport()
-
     draw_grid_table(stats_by_pitch, title="Stats by Pitch Type",
                     y_top=0.490, x_center=0.5, row_h=0.026, title_cex=0.90, header_cex=0.80, cell_cex=0.80)
-
     grid.lines(x=c(0.03,0.97), y=c(0.300,0.300), gp=gpar(col="#9DC2EA", lwd=1))
-    grid.text("Swing Decisions", x=0.5, y=0.290,
-              gp=gpar(fontface="bold", cex=0.90, col="#0C2340"))
-
-    grid.text("Game", x=0.25, y=0.290,
-              gp=gpar(fontface="bold", cex=0.75, col="#0C2340"))
+    grid.text("Swing Decisions", x=0.5, y=0.290, gp=gpar(fontface="bold", cex=0.90, col="#0C2340"))
+    grid.text("Game", x=0.25, y=0.290, gp=gpar(fontface="bold", cex=0.75, col="#0C2340"))
     pushViewport(viewport(x=0.12, y=0.312, width=0.22, height=0.250, just=c("center","top")))
-    print(game_swdec_plot +
-            theme(plot.title=element_blank(), plot.subtitle=element_blank(),
-                  legend.position="none"),
+    print(game_swdec_plot + theme(plot.title=element_blank(),plot.subtitle=element_blank(),legend.position="none"),
           newpage=FALSE); popViewport()
-
-    draw_grid_table(overall_swdec,  title="Overall",
+    draw_grid_table(overall_swdec, title="Overall",
                     y_top=0.260, x_center=0.34, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
     draw_grid_table(swdec_by_pitch, title="By Pitch",
                     y_top=0.180, x_center=0.34, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
     if (!is.null(active_models) && !is.null(game_xrv_overall))
       draw_grid_table(game_xrv_overall, title="xRV",
                       y_top=0.075, x_center=0.34, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
-
-    grid.text("Season", x=0.75, y=0.290,
-              gp=gpar(fontface="bold", cex=0.75, col="#0C2340"))
+    grid.text("Season", x=0.75, y=0.290, gp=gpar(fontface="bold", cex=0.75, col="#0C2340"))
     pushViewport(viewport(x=0.62, y=0.312, width=0.22, height=0.250, just=c("center","top")))
-    print(season_swdec_plot +
-            theme(plot.title=element_blank(), plot.subtitle=element_blank()),
+    print(season_swdec_plot + theme(plot.title=element_blank(),plot.subtitle=element_blank()),
           newpage=FALSE); popViewport()
-
     draw_grid_table(season_overall_swdec, title="Overall",
                     y_top=0.260, x_center=0.84, row_h=0.016, table_width=0.20, cell_cex=0.60,
                     title_cex=0.82, alt_row_bg="grey80")
@@ -2894,17 +2867,14 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     if (!is.null(active_models) && !is.null(season_xrv_overall))
       draw_grid_table(season_xrv_overall, title="xRV",
                       y_top=0.075, x_center=0.84, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
-
     page_footer_hitter()
 
-    # PAGE 2 - SEASON
+    # PAGE 2 — SEASON
     grid.newpage()
     page_header_hitter(hitter_name, "2026 Season Report")
-
     draw_grid_table(season_stats, title="Season Stats",
                     y_top=0.900, x_center=0.5, row_h=0.020, table_width=0.65,
                     header_cex=0.80, cell_cex=0.80, title_cex=0.90, color_matrix=season_color_matrix)
-
     grid.text("Location Density vs. RHP", x=0.5,y=0.83,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
     grid.text("X = Whiff  |  Diamond = Hard Hit (95+ EV)", x=0.5,y=0.695,gp=gpar(cex=0.58,col="grey40",fontface="italic"))
     pushViewport(viewport(x=0.17,y=0.81,width=0.30,height=0.20,just=c("center","top")))
@@ -2913,11 +2883,9 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     print(density_rhp[["Breaker"]],newpage=FALSE); popViewport()
     pushViewport(viewport(x=0.83,y=0.81,width=0.30,height=0.20,just=c("center","top")))
     print(density_rhp[["Offspeed"]],newpage=FALSE); popViewport()
-
     grid.text("Stats vs. RHP by Pitch Type", x=0.5,y=0.60,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
     draw_grid_table(rhp_stats, y_top=0.59, x_center=0.5, row_h=0.015,
                     table_width=0.90, header_cex=0.62, cell_cex=0.75, color_matrix=rhp_color_matrix)
-
     grid.text("Location Density vs. LHP", x=0.5,y=0.50,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
     pushViewport(viewport(x=0.17,y=0.49,width=0.28,height=0.20,just=c("center","top")))
     print(density_lhp[["Fastball"]],newpage=FALSE); popViewport()
@@ -2925,14 +2893,11 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     print(density_lhp[["Breaker"]],newpage=FALSE); popViewport()
     pushViewport(viewport(x=0.83,y=0.49,width=0.28,height=0.20,just=c("center","top")))
     print(density_lhp[["Offspeed"]],newpage=FALSE); popViewport()
-
     grid.text("Stats vs. LHP by Pitch Type", x=0.5,y=0.28,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
     draw_grid_table(lhp_stats, y_top=0.27, x_center=0.5, row_h=0.015,
                     table_width=0.90, header_cex=0.62, cell_cex=0.75, color_matrix=lhp_color_matrix)
-
     page_footer_hitter()
-
-  }, error=function(e) message("PDF error: ", e$message))
+  }, error=function(e) message("Hitter PDF error: ", e$message))
 }
 
 # ==========================================
@@ -3062,23 +3027,27 @@ catcher_ui <- function() {
 hitter_ui <- function() {
   tagList(
     tags$div(class="hub-main",
-      tags$div(style="margin-bottom: 24px;",
-        tags$button("< Back to Hub", onclick="Shiny.setInputValue('nav_to','hub',{priority:'event'})", class="btn btn-outline-secondary btn-sm")),
-      tags$h2("Hitter Report Generator", style="font-family: var(--font-head); color: var(--navy); margin-bottom: 24px;"),
-      tags$div(style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 32px;",
+      tags$div(style="margin-bottom:24px;",
+        tags$button("← Back to Hub",
+                    onclick="Shiny.setInputValue('nav_to','hub',{priority:'event'})",
+                    class="btn btn-outline-secondary btn-sm")),
+      tags$h2("Hitter Report Generator",
+              style="font-family:var(--font-head);color:var(--navy);margin-bottom:24px;"),
+      tags$div(style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:32px;",
         tags$div(
-          tags$h4("Game CSV", style="color: var(--navy); margin-bottom: 12px;"),
-          fileInput("hitter_game_csv", "Upload Game CSV:", accept=".csv", buttonLabel="Browse", placeholder="No file selected"),
-          tags$h4("Season CSVs", style="color: var(--navy); margin-bottom: 12px;"),
-          fileInput("hitter_season_csvs", "Upload Season CSVs:", accept=".csv", multiple=TRUE, buttonLabel="Browse", placeholder="No files selected")),
-        tags$div(
-          tags$h4("Select Player", style="color: var(--navy); margin-bottom: 12px;"),
+          tags$h4("Select Team & Game(s)", style="color:var(--navy);margin-bottom:12px;"),
           uiOutput("hitter_team_select_ui"),
+          uiOutput("hitter_dates_ui")),
+        tags$div(
+          tags$h4("Select Player", style="color:var(--navy);margin-bottom:12px;"),
           uiOutput("hitter_select_ui"))
       ),
-      actionButton("generate_hitter", "Generate Report", class="btn btn-primary", style="width: 200px;"),
-      br(), br(), uiOutput("hitter_status"), br(), uiOutput("hitter_download_ui")),
-    tags$div(class="hub-footer", paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+      actionButton("generate_hitter","Generate Report",class="btn btn-primary",style="width:200px;"),
+      br(), br(),
+      uiOutput("hitter_status"), br(),
+      uiOutput("hitter_report_ui")
+    ),
+    tags$div(class="hub-footer", paste0("Brewster Whitecaps Analytics · ",format(Sys.Date(),"%Y")))
   )
 }
 
@@ -3418,87 +3387,89 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
   )
 
   # ==========================================
-  # HITTER SERVER LOGIC
+  # HITTER SERVER
   # ==========================================
-  raw_hitter_game <- reactive({
-    req(input$hitter_game_csv)
-    read.csv(input$hitter_game_csv$datapath, stringsAsFactors = FALSE)
-  })
-
-  raw_hitter_season <- reactive({
-    req(input$hitter_season_csvs)
-    lapply(input$hitter_season_csvs$datapath, function(f) {
-      read.csv(f, stringsAsFactors = FALSE, colClasses = "character") %>%
-        select(-any_of("GameForeignID"))
-    }) %>% bind_rows() %>% type.convert(as.is = TRUE)
-  })
-
+  # Dynamic team/date/player selectors driven by master_data
   output$hitter_team_select_ui <- renderUI({
-    req(input$hitter_game_csv, input$hitter_season_csvs)
-    teams <- tryCatch(
-      sort(unique(c(raw_hitter_game()$BatterTeam, raw_hitter_season()$BatterTeam))),
-      error = function(e) character(0)
-    )
-    req(length(teams) > 0)
-    selectInput("hitter_team_select", "Select Team:", choices = teams)
+    req(!is.null(master_data))
+    teams <- sort(unique(master_data$BatterTeam))
+    selectInput("hitter_team_select", "Select Team:", choices=teams,
+                selected=teams[grepl("BRE|Brewster", teams, ignore.case=TRUE)][1])
+  })
+
+  output$hitter_dates_ui <- renderUI({
+    req(!is.null(master_data), input$hitter_team_select)
+    dates <- master_data %>%
+      filter(BatterTeam == input$hitter_team_select) %>%
+      mutate(d = as.Date(as.character(Date))) %>%
+      pull(d) %>% unique() %>% sort(decreasing=TRUE)
+    selectInput("hitter_dates", "Select Date(s):",
+                choices  = as.character(dates),
+                selected = as.character(dates[1]),
+                multiple = TRUE,
+                selectize = TRUE)
   })
 
   output$hitter_select_ui <- renderUI({
-    req(input$hitter_game_csv, input$hitter_season_csvs, input$hitter_team_select)
-    game_h <- tryCatch(
-      raw_hitter_game() %>%
-        filter(BatterTeam == input$hitter_team_select) %>%
-        pull(Batter) %>% unique(),
-      error = function(e) character(0)
-    )
-    season_h <- tryCatch(
-      raw_hitter_season() %>%
-        filter(BatterTeam == input$hitter_team_select) %>%
-        pull(Batter) %>% unique(),
-      error = function(e) character(0)
-    )
-    hitters <- sort(unique(c(game_h, season_h)))
+    req(!is.null(master_data), input$hitter_team_select, input$hitter_dates)
+    hitters <- master_data %>%
+      filter(BatterTeam == input$hitter_team_select,
+             as.character(as.Date(as.character(Date))) %in% input$hitter_dates) %>%
+      pull(Batter) %>% unique() %>% sort()
     req(length(hitters) > 0)
-    selectInput("selected_hitter", "Select Hitter:", choices = hitters)
+    selectInput("selected_hitter", "Select Hitter:", choices=hitters)
   })
 
-  hitter_pdf_path <- reactiveVal(NULL)
+  hitter_pdf_path  <- reactiveVal(NULL)
+  hitter_png_paths <- reactiveVal(NULL)
 
   observeEvent(input$generate_hitter, {
-    req(input$selected_hitter, input$hitter_team_select, raw_hitter_game(), raw_hitter_season())
-    output$hitter_status <- renderUI({
-      div(style = "color: orange; font-weight: bold;", "Generating report...")
-    })
+    req(input$selected_hitter, input$hitter_team_select, input$hitter_dates, !is.null(master_data))
+    output$hitter_status <- renderUI({ div(style="color:orange;font-weight:bold;","Generating report...") })
     tryCatch({
-      tmp_pdf <- tempfile(fileext = ".pdf")
+      selected_dates <- as.Date(input$hitter_dates)
+      team           <- input$hitter_team_select
+
+      game_data   <- master_data %>% filter(as.Date(as.character(Date)) %in% selected_dates,   BatterTeam == team)
+      season_data <- master_data %>% filter(as.Date(as.character(Date)) <= max(selected_dates), BatterTeam == team)
+
+      tmp_pdf <- tempfile(fileext=".pdf")
       generate_hitter_pdf(
-        game_data       = raw_hitter_game() %>% filter(BatterTeam == input$hitter_team_select),
-        season_data     = raw_hitter_season() %>% filter(BatterTeam == input$hitter_team_select),
-        selected_hitter = input$selected_hitter,
-        output_file     = tmp_pdf,
-        active_models   = sd_models
+        game_data=game_data, season_data=season_data,
+        selected_hitter=input$selected_hitter,
+        output_file=tmp_pdf, active_models=sd_models
       )
       hitter_pdf_path(tmp_pdf)
-      output$hitter_status <- renderUI({
-        div(style = "color: green; font-weight: bold;", "✓ Report ready!")
-      })
-    }, error = function(e) {
+      output$hitter_status <- renderUI({ div(style="color:orange;font-weight:bold;","Rendering pages...") })
+      hitter_png_paths(pdf_to_pngs(tmp_pdf))
+      output$hitter_status <- renderUI({ div(style="color:green;font-weight:bold;","\u2713 Report ready!") })
+    }, error=function(e) {
       message("hitter ERROR: ", e$message)
-      output$hitter_status <- renderUI({
-        div(style = "color: red;", paste("Error:", e$message))
-      })
+      output$hitter_status <- renderUI({ div(style="color:red;",paste("Error:",e$message)) })
     })
   })
 
-  output$hitter_download_ui <- renderUI({
-    req(hitter_pdf_path())
-    downloadButton("download_hitter_pdf", "Download Report",
-                   class = "btn btn-success", style = "width: 200px;")
+  output$hitter_report_ui <- renderUI({
+    req(hitter_png_paths(), hitter_pdf_path())
+    report_viewer_ui(hitter_png_paths(), hitter_pdf_path(),
+                     "download_hitter_pdf", "download_hitter_png")
   })
-
   output$download_hitter_pdf <- downloadHandler(
-    filename = function() paste0(gsub(", ", "_", input$selected_hitter), "_HitterReport.pdf"),
-    content  = function(file) { req(hitter_pdf_path()); file.copy(hitter_pdf_path(), file, overwrite = TRUE) }
+    filename = function() paste0(gsub(", ","_",input$selected_hitter),"_HitterReport.pdf"),
+    content  = function(file) { req(hitter_pdf_path()); file.copy(hitter_pdf_path(), file, overwrite=TRUE) }
+  )
+  output$download_hitter_png <- downloadHandler(
+    filename = function() paste0(gsub(", ","_",input$selected_hitter),"_HitterReport.zip"),
+    content  = function(file) {
+      req(hitter_png_paths())
+      pngs <- hitter_png_paths()
+      tmp_dir   <- tempdir()
+      out_files <- vapply(seq_along(pngs), function(i) {
+        dest <- file.path(tmp_dir, paste0("page_",i,".png"))
+        file.copy(pngs[[i]], dest, overwrite=TRUE); dest
+      }, character(1))
+      zip(file, files=out_files, flags="-j")
+    }
   )
 
   # ==========================================
