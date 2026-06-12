@@ -15,7 +15,7 @@ library(xgboost)
 library(base64enc)
 library(ggridges)
 library(arrow)
-library(pdftools)
+#library(pdftools)
 
 source("scout_app.R")
 source("leaderboards_embed.R")
