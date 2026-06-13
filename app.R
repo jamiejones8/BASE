@@ -2960,40 +2960,28 @@ hub_ui <- function() {
 
 catcher_ui <- function() {
   tagList(
-    tags$div(
-      class = "hub-main",
-      tags$div(
-        style = "margin-bottom: 24px;",
-        tags$button("< Back to Hub",
-                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
-                    class = "btn btn-outline-secondary btn-sm")
-      ),
+    tags$div(class="hub-main",
+      tags$div(style="margin-bottom:24px;",
+        tags$button("← Back to Hub",
+                    onclick="Shiny.setInputValue('nav_to','hub',{priority:'event'})",
+                    class="btn btn-outline-secondary btn-sm")),
       tags$h2("Catcher Report Generator",
-              style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 24px;"),
-      tags$div(
-        style = "display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 32px;",
+              style="font-family:var(--font-head);color:var(--navy);margin-bottom:24px;"),
+      tags$div(style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:32px;",
         tags$div(
-          tags$h4("Postgame Report", style = "color: var(--navy); margin-bottom: 12px;"),
-          fileInput("game_csv", "Upload Game CSV:", accept = ".csv",
-                    buttonLabel = "Browse", placeholder = "No file selected"),
-          selectInput("team_select", "Select Team:", choices = NULL),
-          selectInput("game_date_select", "Select Game Date:", choices = NULL),
-          selectInput("catcher_name", "Select Catcher:", choices = NULL),
-          actionButton("generate_catcher", "Generate Report", class = "btn btn-primary w-100")
-        ),
+          tags$h4("Select Team & Game", style="color:var(--navy);margin-bottom:12px;"),
+          uiOutput("catcher_team_select_ui"),
+          uiOutput("catcher_date_ui")),
         tags$div(
-          tags$h4("Season Report", style = "color: var(--navy); margin-bottom: 12px;"),
-          fileInput("season_csvs", "Upload Season CSVs:", accept = ".csv", multiple = TRUE,
-                    buttonLabel = "Browse", placeholder = "No files selected"),
-          selectInput("season_team_select", "Select Team:", choices = NULL)
-        )
+          tags$h4("Select Catcher", style="color:var(--navy);margin-bottom:12px;"),
+          uiOutput("catcher_select_ui"))
       ),
-      uiOutput("catcher_status"),
-      br(),
-      uiOutput("catcher_download_ui")
+      actionButton("generate_catcher","Generate Report",class="btn btn-primary",style="width:200px;"),
+      br(), br(),
+      uiOutput("catcher_status"), br(),
+      uiOutput("catcher_report_ui")
     ),
-    tags$div(class = "hub-footer",
-             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+    tags$div(class="hub-footer", paste0("Brewster Whitecaps Analytics · ",format(Sys.Date(),"%Y")))
   )
 }
 
@@ -3268,96 +3256,96 @@ output$roster_catchers    <- renderTable({ roster_catchers },    striped = TRUE,
 output$roster_infielders  <- renderTable({ roster_infielders },  striped = TRUE, hover = TRUE, width = "100%", digits = 0)
 output$roster_outfielders <- renderTable({ roster_outfielders }, striped = TRUE, hover = TRUE, width = "100%", digits = 0)
 output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE, hover = TRUE, width = "100%", digits = 0)
+# ==========================================
+  # CATCHER SERVER (master_data driven, inline viewer)
   # ==========================================
-  # CATCHER SERVER LOGIC
-  # ==========================================
-  raw_game <- reactive({
-    req(input$game_csv)
-    read_csv(input$game_csv$datapath, show_col_types = FALSE)
+  output$catcher_team_select_ui <- renderUI({
+    req(!is.null(master_data))
+    teams <- sort(unique(master_data$CatcherTeam))
+    selectInput("catcher_team_select", "Select Team:", choices=teams,
+                selected=teams[grepl("BRE|Brewster", teams, ignore.case=TRUE)][1])
+  })
+  output$catcher_date_ui <- renderUI({
+    req(!is.null(master_data), input$catcher_team_select)
+    dates <- master_data %>%
+      filter(CatcherTeam == input$catcher_team_select) %>%
+      mutate(d = as.Date(as.character(Date))) %>%
+      pull(d) %>% unique() %>% sort(decreasing=TRUE)
+    selectInput("catcher_game_date", "Select Game Date:",
+                choices = as.character(dates),
+                selected = as.character(dates[1]))
+  })
+  output$catcher_select_ui <- renderUI({
+    req(!is.null(master_data), input$catcher_team_select, input$catcher_game_date)
+    catchers <- master_data %>%
+      filter(CatcherTeam == input$catcher_team_select,
+             as.character(as.Date(as.character(Date))) == input$catcher_game_date) %>%
+      pull(Catcher) %>% unique() %>% sort()
+    req(length(catchers) > 0)
+    selectInput("catcher_name", "Select Catcher:", choices=catchers)
   })
 
-  observe({
-    req(raw_game())
-    teams <- sort(unique(raw_game()$CatcherTeam))
-    updateSelectInput(session, "team_select", choices = teams)
-  })
-
-  game_data_catcher <- reactive({
-    req(raw_game(), input$team_select)
-    prep_catcher_data(raw_game(), input$team_select)
-  })
-
-  observe({
-    req(game_data_catcher())
-    dates <- sort(unique(as.Date(game_data_catcher()$framing$Date)), decreasing = TRUE)
-    updateSelectInput(session, "game_date_select", choices = as.character(dates))
-  })
-
-  observe({
-    req(game_data_catcher())
-    catchers <- sort(unique(game_data_catcher()$framing$Catcher))
-    updateSelectInput(session, "catcher_name", choices = catchers)
-  })
-
-  raw_season_catcher <- reactive({
-    req(input$season_csvs)
-    bind_rows(lapply(input$season_csvs$datapath, function(f) {
-      read_csv(f, show_col_types = FALSE, col_types = cols(.default = "c"))
-    })) %>% type.convert(as.is = TRUE)
-  })
-
-  observe({
-    req(raw_season_catcher())
-    teams <- sort(unique(raw_season_catcher()$CatcherTeam))
-    updateSelectInput(session, "season_team_select", choices = teams)
-  })
-
-  season_data_catcher <- reactive({
-    req(raw_season_catcher(), input$season_team_select)
-    prep_catcher_data(raw_season_catcher(), input$season_team_select)
-  })
-
-  catcher_pdf_path <- reactiveVal(NULL)
+  catcher_pdf_path  <- reactiveVal(NULL)
+  catcher_png_paths <- reactiveVal(NULL)
 
   observeEvent(input$generate_catcher, {
-    req(input$catcher_name, game_data_catcher(), season_data_catcher(), input$game_date_select)
-    output$catcher_status <- renderUI({
-      div(style = "color: orange; font-weight: bold;", "Generating report...")
-    })
+    req(input$catcher_name, input$catcher_team_select, input$catcher_game_date, !is.null(master_data))
+    output$catcher_status <- renderUI({ div(style="color:orange;font-weight:bold;","Generating report...") })
     tryCatch({
-      tmp_pdf   <- tempfile(fileext = ".pdf")
-      game_date <- as.Date(input$game_date_select)
+      team      <- input$catcher_team_select
+      game_date <- as.Date(input$catcher_game_date)
+
+      game_raw   <- master_data %>% filter(as.Date(as.character(Date)) == game_date)
+      season_raw <- master_data %>% filter(as.Date(as.character(Date)) <= game_date)
+
+      game_prep   <- prep_catcher_data(game_raw,   team)
+      season_prep <- prep_catcher_data(season_raw, team)
+
+      tmp_pdf <- tempfile(fileext=".pdf")
       generate_catcher_pdf(
-        game_framing    = game_data_catcher()$framing  %>% mutate(Date = as.Date(as.character(Date))),
-        game_throwing   = game_data_catcher()$throwing %>% mutate(Date = as.Date(as.character(Date))),
-        season_framing  = season_data_catcher()$framing  %>% mutate(Date = as.Date(as.character(Date))),
-        season_throwing = season_data_catcher()$throwing %>% mutate(Date = as.Date(as.character(Date))),
+        game_framing    = game_prep$framing    %>% mutate(Date = as.Date(as.character(Date))),
+        game_throwing   = game_prep$throwing   %>% mutate(Date = as.Date(as.character(Date))),
+        season_framing  = season_prep$framing  %>% mutate(Date = as.Date(as.character(Date))),
+        season_throwing = season_prep$throwing %>% mutate(Date = as.Date(as.character(Date))),
         catcher     = input$catcher_name,
         game_date   = game_date,
         output_file = tmp_pdf,
         logo_path   = "www/logo1.png"
       )
       catcher_pdf_path(tmp_pdf)
-      output$catcher_status <- renderUI({
-        div(style = "color: green; font-weight: bold;", "✓ Report ready!")
-      })
-    }, error = function(e) {
-      output$catcher_status <- renderUI({
-        div(style = "color: red;", paste("Error:", e$message))
-      })
+      output$catcher_status <- renderUI({ div(style="color:orange;font-weight:bold;","Rendering pages...") })
+      catcher_png_paths(pdf_to_pngs(tmp_pdf))
+      output$catcher_status <- renderUI({ div(style="color:green;font-weight:bold;","\u2713 Report ready!") })
+    }, error=function(e) {
+      message("catcher ERROR: ", e$message)
+      output$catcher_status <- renderUI({ div(style="color:red;",paste("Error:",e$message)) })
     })
   })
 
-  output$catcher_download_ui <- renderUI({
-    req(catcher_pdf_path())
-    downloadButton("download_catcher_pdf", "Download Report",
-                   class = "btn btn-success", style = "width: 200px;")
+  output$catcher_report_ui <- renderUI({
+    req(catcher_png_paths(), catcher_pdf_path())
+    report_viewer_ui(catcher_png_paths(), catcher_pdf_path(),
+                     "download_catcher_pdf", "download_catcher_png")
   })
-
   output$download_catcher_pdf <- downloadHandler(
-    filename = function() paste0(gsub(", ", "_", input$catcher_name), "_CatcherReport.pdf"),
-    content  = function(file) { req(catcher_pdf_path()); file.copy(catcher_pdf_path(), file, overwrite = TRUE) }
+    filename = function() paste0(gsub(", ","_",input$catcher_name),"_CatcherReport.pdf"),
+    content  = function(file) { req(catcher_pdf_path()); file.copy(catcher_pdf_path(), file, overwrite=TRUE) }
   )
+  output$download_catcher_png <- downloadHandler(
+    filename = function() paste0(gsub(", ","_",input$catcher_name),"_CatcherReport.zip"),
+    content  = function(file) {
+      req(catcher_png_paths())
+      pngs <- catcher_png_paths()
+      tmp_dir   <- tempdir()
+      out_files <- vapply(seq_along(pngs), function(i) {
+        dest <- file.path(tmp_dir, paste0("page_",i,".png"))
+        file.copy(pngs[[i]], dest, overwrite=TRUE); dest
+      }, character(1))
+      zip(file, files=out_files, flags="-j")
+    }
+  )
+ 
+
 
   # ==========================================
   # HITTER SERVER
