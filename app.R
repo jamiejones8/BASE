@@ -2504,6 +2504,21 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
                                 active_models = sd_models) {
   hitter_name <- format_name(selected_hitter)
 
+  # Fall back to AutoPitchType when TaggedPitchType is missing/undefined.
+  fill_pitch_type <- function(df) {
+    if ("AutoPitchType" %in% names(df)) {
+      df <- df %>%
+        mutate(TaggedPitchType = ifelse(
+          is.na(TaggedPitchType) | TaggedPitchType %in% c("", "Undefined", "Other"),
+          AutoPitchType,
+          TaggedPitchType
+        ))
+    }
+    df
+  }
+  game_data   <- fill_pitch_type(game_data)
+  season_data <- fill_pitch_type(season_data)
+
   dedup <- function(df) {
     key_cols <- intersect(c("GameID","Batter","Inning","Balls","Strikes","Outs",
                             "PitchCall","TaggedPitchType","PlateLocHeight","PlateLocSide"), names(df))
@@ -2512,6 +2527,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 
   game_hitter   <- game_data   %>% filter(Batter == selected_hitter) %>% dedup() %>% score_pitches_xrv(models=active_models)
   season_hitter <- season_data %>% filter(Batter == selected_hitter) %>% dedup() %>% score_pitches_xrv(models=active_models)
+  ...
 
   logo_grob <- tryCatch({
     img <- magick::image_read("www/logo1.png")
