@@ -20,7 +20,19 @@ if (!(WHITE_CAPS_RESOURCE_PREFIX %in% names(shiny::resourcePaths()))) {
 }
 
 whitecaps_asset_path <- function(path = "") {
-  paste0(WHITE_CAPS_RESOURCE_PREFIX, "/", path)
+  base_path <- paste0(WHITE_CAPS_RESOURCE_PREFIX, "/", path)
+
+  if (is.null(path) || !nzchar(path)) {
+    return(base_path)
+  }
+
+  asset_file <- file.path(WHITE_CAPS_WWW_DIR, path)
+  if (!file.exists(asset_file)) {
+    return(base_path)
+  }
+
+  asset_version <- as.integer(file.info(asset_file)$mtime[[1]])
+  paste0(base_path, "?v=", asset_version)
 }
 
 # ---- BRAND CONFIG ----

@@ -5,4 +5,4 @@ APP_FOOTER_TEXT <- "Built for Brewster Whitecaps Baseball"
 TEAM_DISPLAY_NAME <- "Whitecaps"
 ORGANIZATION_DISPLAY_NAME <- "Brewster Whitecaps Baseball"
 BRAND_LOGO_FILE <- whitecaps_asset_path("caps.svg.png")
-ACTIVE_TEAM_CODE <- "TEX_BOB"
+ACTIVE_TEAM_CODE <- "BRE_WHI"

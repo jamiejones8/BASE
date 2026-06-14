@@ -15,6 +15,10 @@ SUPPORTED_BUNDLED_EXTENSIONS <- function() {
   c("csv")
 }
 
+PREFERRED_BUNDLED_FILE_NAME <- function() {
+  "data.csv"
+}
+
 is_supported_bundled_file <- function(path) {
   ext <- tolower(tools::file_ext(path))
   nzchar(ext) && ext %in% SUPPORTED_BUNDLED_EXTENSIONS()
@@ -98,14 +102,33 @@ pick_active_bundled_file <- function(
     return(list(path = NULL, label = NULL, file_count = 0L))
   }
 
-  chosen <- files[1, , drop = FALSE]
+  preferred_name <- PREFERRED_BUNDLED_FILE_NAME()
+  preferred_files <- files[files$File == preferred_name, , drop = FALSE]
+
+  if (nrow(preferred_files) > 0) {
+    chosen <- preferred_files[1, , drop = FALSE]
+  } else {
+    chosen <- files[1, , drop = FALSE]
+    warning(
+      "⚠️ Expected bundled data file '", preferred_name, "' was not found in /data. ",
+      "Using ", chosen$File[[1]], " instead."
+    )
+  }
 
   if (nrow(files) > 1) {
-    warning(
-      "⚠️ Multiple CSV files were found in /data. ",
-      "The app is designed for one active file and will use the most recently updated file: ",
-      chosen$File[[1]]
-    )
+    if (chosen$File[[1]] == preferred_name) {
+      warning(
+        "⚠️ Multiple CSV files were found in /data. ",
+        "The app is designed for one active file and will use the preferred file: ",
+        chosen$File[[1]]
+      )
+    } else {
+      warning(
+        "⚠️ Multiple CSV files were found in /data. ",
+        "The app is designed for one active file and will use: ",
+        chosen$File[[1]]
+      )
+    }
   }
 
   list(
