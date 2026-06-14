@@ -2527,7 +2527,6 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 
   game_hitter   <- game_data   %>% filter(Batter == selected_hitter) %>% dedup() %>% score_pitches_xrv(models=active_models)
   season_hitter <- season_data %>% filter(Batter == selected_hitter) %>% dedup() %>% score_pitches_xrv(models=active_models)
-  ...
 
   logo_grob <- tryCatch({
     img <- magick::image_read("www/logo1.png")
