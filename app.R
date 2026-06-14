@@ -338,7 +338,19 @@ scale_Stuff <- function(raw_score, model_mean, model_sd) {
 }
 
 cleanColumnContents <- function(df) {
-  
+
+  # Fall back to AutoPitchType when TaggedPitchType is missing/undefined.
+  if ("AutoPitchType" %in% names(df)) {
+    df <- df %>%
+      mutate(
+        TaggedPitchType = ifelse(
+          is.na(TaggedPitchType) | TaggedPitchType %in% c("", "Undefined", "Other"),
+          AutoPitchType,
+          TaggedPitchType
+        )
+      )
+  }
+
   df <- df %>%
     mutate(
       TaggedPitchType = case_when(
@@ -356,7 +368,7 @@ cleanColumnContents <- function(df) {
            PitchCall = ifelse(PitchCall %in% c('Error','error','FieldersChoice','Sacrifice','Fielderschoice'), 'Out', PitchCall),
            PitchCall = ifelse(PitchCall %in% c('homerun','Homerun'), 'HomeRun', PitchCall),
            PitchCall = ifelse(PitchCall %in% c('SIngle'), 'Single', PitchCall))
-  
+
 }
 
 get_rotated_movement <- function(data, ivb_col = "IVB", hb_col = "HB", pitcher_throws_col = "PitcherThrows", arm_angle_col = "armangle") {
