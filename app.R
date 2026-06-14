@@ -3450,7 +3450,7 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
   )
 
   # ==========================================
-  # PITCHER SERVER LOGIC -> BrewSummaryCard card
+  # PITCHER SERVER LOGIC -> BrewSummaryCard card 
   # ==========================================
   # (Old PDF-based pitcher server logic removed; the card tab is bound above via
   #  pitcher_card_server(input, output, session).)
