@@ -2104,7 +2104,7 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
   pdf(output_file, width = 11, height = 15)
   on.exit(try(dev.off(), silent = TRUE), add = TRUE)
 
-  tryCatch({
+tryCatch({
     # PAGE 1 - GAME
     grid.newpage()
     pushViewport(viewport(x = 0.5, y = 0.97, width = 1, height = 0.06, just = c("center","top")))
@@ -2117,24 +2117,25 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
     popViewport()
     popViewport()
 
-    draw_grid_table(g_steal,
+    y_after_steal <- draw_grid_table(g_steal,
                     title = "Game Throwing - Steal Attempts",
                     y_top = 0.88, x_center = 0.5, row_h = 0.022,
                     table_width = 0.88, header_cex = 0.70, cell_cex = 0.72, title_cex = 0.90)
 
-    draw_grid_table(g_framing,
+    y_after_framing <- draw_grid_table(g_framing,
                     title = "Game Framing - Strike Log",
-                    y_top = 0.77, x_center = 0.5, row_h = 0.020,
+                    y_top = y_after_steal - 0.04, x_center = 0.5, row_h = 0.020,
                     table_width = 0.75, header_cex = 0.68, cell_cex = 0.68, title_cex = 0.90)
 
-    grid.text("Game Framing - Strike Locations", x = 0.5, y = 0.46,
+    plots_y <- y_after_framing - 0.03
+    grid.text("Game Framing - Strike Locations", x = 0.5, y = plots_y,
               gp = gpar(fontface = "bold", cex = 0.90, col = "#0C2340"))
 
-    pushViewport(viewport(x = 0.27, y = 0.44, width = 0.42, height = 0.22, just = c("center","top")))
+    pushViewport(viewport(x = 0.27, y = plots_y - 0.02, width = 0.42, height = 0.22, just = c("center","top")))
     print(g_won_p, newpage = FALSE)
     popViewport()
 
-    pushViewport(viewport(x = 0.73, y = 0.44, width = 0.42, height = 0.22, just = c("center","top")))
+    pushViewport(viewport(x = 0.73, y = plots_y - 0.02, width = 0.42, height = 0.22, just = c("center","top")))
     print(g_lost_p, newpage = FALSE)
     popViewport()
 
