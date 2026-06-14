@@ -2970,7 +2970,7 @@ hub_ui <- function() {
       tags$div(class = "section-label", "Applications"),
       tags$div(class = "app-grid", lapply(apps, make_card)),
       tags$div(class = "section-label", style = "margin-top: 40px;",
-               "2025 Roster"),
+               "2026 Roster"),
       tags$div(
         class = "standings-wrapper",
         tags$div(class = "standings-division-label", "Catchers"),
