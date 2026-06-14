@@ -152,6 +152,7 @@ getBrewStuff <- function(game, final_model, bullpen = FALSE,
         RelSpeed = round(RelSpeed, 1),
         InducedVertBreak = round(InducedVertBreak, 1),
         HorzBreak = round(HorzBreak, 1),
+        HorzBreak_orig = HorzBreak,
         HorzBreak = ifelse(PitcherThrows == "Left", HorzBreak * -1, HorzBreak),
         SpinRate = round(SpinRate, 1),
         RelHeight = round(RelHeight, 1),
@@ -173,6 +174,7 @@ getBrewStuff <- function(game, final_model, bullpen = FALSE,
         RelSpeed = round(RelSpeed, 1),
         InducedVertBreak = round(InducedVertBreak, 1),
         HorzBreak = round(HorzBreak, 1),
+        HorzBreak_orig = HorzBreak,
         HorzBreak = ifelse(PitcherThrows == "Left", HorzBreak * -1, HorzBreak),
         SpinRate = round(SpinRate, 1),
         RelHeight = round(RelHeight, 1),
@@ -944,19 +946,24 @@ build_arsenal_grob <- function(arsenal_full, percentiledata) {
 
 mockup_break_plot <- function(game) {
   game <- game %>% mutate(TaggedPitchType = canonicalize_pitch(TaggedPitchType))
+
+  # Movement plot shows TRUE horizontal break for lefties (un-flipped). The
+  # Stuff+ pipeline and everything else keep the flipped HorzBreak.
+  if ("HorzBreak_orig" %in% names(game)) {
+    game <- game %>% mutate(HorzBreak = HorzBreak_orig)
+  }
+
   avg_break <- game %>%
     group_by(TaggedPitchType) %>%
     summarise(HorzBreak = mean(HorzBreak, na.rm = TRUE),
               InducedVertBreak = mean(InducedVertBreak, na.rm = TRUE),
               .groups = "drop")
-
   pitcher_hand <- {
     h <- unique(game$PitcherThrows); h <- h[!is.na(h)][1]
     if (is.null(h)) NA_character_ else h
   }
   fac <- if (!is.na(pitcher_hand) && pitcher_hand == "Left") -1 else 1
   arm_len <- 32
-
   arm_lines <- if ("armangle" %in% names(game)) {
     game %>%
       group_by(TaggedPitchType) %>%
@@ -966,14 +973,12 @@ mockup_break_plot <- function(game) {
              x_end = arm_len * cos(angle_rad) * fac,
              y_end = arm_len * sin(angle_rad))
   } else NULL
-
   arm_overall <- if ("armangle" %in% names(game)) {
     suppressWarnings(mean(game$armangle, na.rm = TRUE))
   } else NaN
   arm_subtitle <- if (is.finite(arm_overall)) {
     sprintf("Est. Arm Angle: %.1f°", round(arm_overall, 1))
   } else "Est. Arm Angle: --"
-
   p <- ggplot(game, aes(HorzBreak, InducedVertBreak, colour = TaggedPitchType)) +
     geom_vline(xintercept = 0, colour = tok$zero_axis,
                linetype = "dotted", linewidth = 0.4) +
@@ -984,7 +989,6 @@ mockup_break_plot <- function(game) {
                colour = "black", alpha = 0.85) +
     geom_point(data = avg_break, aes(fill = TaggedPitchType),
                shape = 21, size = 5.5, stroke = 1.4, colour = "white")
-
   if (!is.null(arm_lines) && nrow(arm_lines) > 0) {
     p <- p + geom_segment(data = arm_lines,
                           aes(x = 0, y = 0, xend = x_end, yend = y_end,
