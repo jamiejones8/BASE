@@ -793,7 +793,7 @@ markers_legend_grob <- function() {
 build_arsenal_grob <- function(arsenal_full, percentiledata) {
   
   display_names <- c("Type","Usage","FPS","Velo","Top","Spin",
-                     "IVB","HB","RelH","RelS","Ext","AA","CSW","Whiff","Chase",
+                     "IVB","HB","RelH","RelS","Ext","Strike%","CSW","Whiff","Chase",
                      "Stuff+ vL","Stuff+ vR","Stuff+")
   
   names(arsenal_full) <- display_names
@@ -1194,7 +1194,7 @@ arsenal_summary <- function(game, height_override = NULL, set_override = NULL) {
       RelH     = sprintf("%.1f", round(mean(RelHeight, na.rm = TRUE), 1)),
       RelS     = sprintf("%.1f", round(mean(RelSide, na.rm = TRUE), 1)),
       Ext      = sprintf("%.1f", round(mean(Extension, na.rm = TRUE), 1)),
-      AA       = sprintf("%.1f°", round(mean(armangle, na.rm = TRUE), 1)),
+      `Strike%` = sprintf("%.1f%%", sum(Strike, na.rm = TRUE) / N * 100),
       CSW      = sprintf("%.1f%%", (sum(Whiff, na.rm = TRUE) +
                                     sum(CallStrike, na.rm = TRUE)) / N * 100),
       Whiff    = sprintf("%.1f%%", sum(Whiff, na.rm = TRUE) /
@@ -1208,7 +1208,7 @@ arsenal_summary <- function(game, height_override = NULL, set_override = NULL) {
     ) %>%
     arrange(-N) %>%
     select(Type = TaggedPitchType, Usage, FPS, Velo, Top, Spin,
-           IVB, HB, RelH, RelS, Ext, AA, CSW, Whiff, Chase, StuffPvL, StuffPvR, StuffP)
+           IVB, HB, RelH, RelS, Ext, `Strike%`, CSW, Whiff, Chase, StuffPvL, StuffPvR, StuffP)
 
   total <- game %>%
     summarise(
@@ -1223,7 +1223,7 @@ arsenal_summary <- function(game, height_override = NULL, set_override = NULL) {
       RelH     = sprintf("%.1f", round(mean(RelHeight, na.rm = TRUE), 1)),
       RelS     = sprintf("%.1f", round(mean(RelSide, na.rm = TRUE),  1)),
       Ext      = sprintf("%.1f", round(mean(Extension, na.rm = TRUE), 1)),
-      AA       = sprintf("%.1f°", round(mean(armangle, na.rm = TRUE), 1)),
+      `Strike%` = sprintf("%.1f%%", sum(Strike, na.rm = TRUE) / n() * 100),
       CSW      = sprintf("%.1f%%", (sum(Whiff, na.rm = TRUE) +
                                     sum(CallStrike, na.rm = TRUE)) / n() * 100),
       Whiff    = sprintf("%.1f%%", sum(Whiff, na.rm = TRUE) /
