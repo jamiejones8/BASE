@@ -793,7 +793,7 @@ markers_legend_grob <- function() {
 build_arsenal_grob <- function(arsenal_full, percentiledata) {
   
   display_names <- c("Type","Usage","FPS","Velo","Top","Spin",
-                     "IVB","HB","RelH","RelS","Ext","Strike%","CSW","Whiff","Chase",
+                     "IVB","HB","RelH","RelS","Ext","AA","CSW","Whiff","Chase",
                      "Stuff+ vL","Stuff+ vR","Stuff+")
   
   names(arsenal_full) <- display_names
@@ -1194,7 +1194,7 @@ arsenal_summary <- function(game, height_override = NULL, set_override = NULL) {
       RelH     = sprintf("%.1f", round(mean(RelHeight, na.rm = TRUE), 1)),
       RelS     = sprintf("%.1f", round(mean(RelSide, na.rm = TRUE), 1)),
       Ext      = sprintf("%.1f", round(mean(Extension, na.rm = TRUE), 1)),
-      `Strike%` = sprintf("%.1f%%", sum(Strike, na.rm = TRUE) / N * 100),
+      AA       = sprintf("%.1f°", round(mean(armangle, na.rm = TRUE), 1)),
       CSW      = sprintf("%.1f%%", (sum(Whiff, na.rm = TRUE) +
                                     sum(CallStrike, na.rm = TRUE)) / N * 100),
       Whiff    = sprintf("%.1f%%", sum(Whiff, na.rm = TRUE) /
@@ -1208,7 +1208,7 @@ arsenal_summary <- function(game, height_override = NULL, set_override = NULL) {
     ) %>%
     arrange(-N) %>%
     select(Type = TaggedPitchType, Usage, FPS, Velo, Top, Spin,
-           IVB, HB, RelH, RelS, Ext, `Strike%`, CSW, Whiff, Chase, StuffPvL, StuffPvR, StuffP)
+           IVB, HB, RelH, RelS, Ext, AA, CSW, Whiff, Chase, StuffPvL, StuffPvR, StuffP)
 
   total <- game %>%
     summarise(
@@ -1223,7 +1223,7 @@ arsenal_summary <- function(game, height_override = NULL, set_override = NULL) {
       RelH     = sprintf("%.1f", round(mean(RelHeight, na.rm = TRUE), 1)),
       RelS     = sprintf("%.1f", round(mean(RelSide, na.rm = TRUE),  1)),
       Ext      = sprintf("%.1f", round(mean(Extension, na.rm = TRUE), 1)),
-      `Strike%` = sprintf("%.1f%%", sum(Strike, na.rm = TRUE) / n() * 100),
+      AA       = sprintf("%.1f°", round(mean(armangle, na.rm = TRUE), 1)),
       CSW      = sprintf("%.1f%%", (sum(Whiff, na.rm = TRUE) +
                                     sum(CallStrike, na.rm = TRUE)) / n() * 100),
       Whiff    = sprintf("%.1f%%", sum(Whiff, na.rm = TRUE) /
@@ -1450,6 +1450,14 @@ pitcher_card_ui <- function() {
       sidebarLayout(
         sidebarPanel(
           width = 3,
+          checkboxInput("pc_manual_enabled", "Upload single-game CSV", value = FALSE),
+          conditionalPanel(
+            condition = "input.pc_manual_enabled",
+            fileInput("pc_manual_csv", "Game CSV:", accept = c(".csv", ".parquet"),
+                      buttonLabel = "Browse", placeholder = "No file selected"),
+            helpText("Appended to the CapeCod26 season so its date appears below. ",
+                     "Season stats still use CapeCod26.")
+          ),
           uiOutput("pc_team_ui"),
           uiOutput("pc_dates_ui"),
           uiOutput("pc_pitcher_ui"),
@@ -1555,6 +1563,11 @@ pitcher_card_ui <- function() {
 
 pitcher_card_server <- function(input, output, session) {
 
+  # CapeCod26 season, optionally with this page's manual single-game CSV appended.
+  master_data <- reactive({
+    combine_with_manual(season_data, input$pc_manual_enabled, input$pc_manual_csv)
+  })
+
   current_pitches <- reactiveVal(NULL)
   selected_points <- reactiveVal(NULL)
   card_page       <- reactiveVal(NULL)
@@ -1576,18 +1589,19 @@ pitcher_card_server <- function(input, output, session) {
   })
 
   # Team / date / pitcher selectors driven by the shared master_data
-  # (HF parquet, test.csv fallback) — same source the hitter reports use.
+  # (CapeCod26 season + optional manual single-game CSV) — same source as
+  # the hitter reports.
   output$pc_team_ui <- renderUI({
-    req(!is.null(master_data))
-    teams <- sort(unique(master_data$PitcherTeam))
+    req(!is.null(master_data()))
+    teams <- sort(unique(master_data()$PitcherTeam))
     selectInput("pc_team", "Select Team:",
                 choices  = setNames(teams, team_display_name(teams)),
                 selected = teams[grepl("BRE|Brewster", teams, ignore.case = TRUE)][1])
   })
 
   output$pc_dates_ui <- renderUI({
-    req(!is.null(master_data), input$pc_team)
-    dates <- master_data %>%
+    req(!is.null(master_data()), input$pc_team)
+    dates <- master_data() %>%
       filter(PitcherTeam == input$pc_team) %>%
       mutate(d = as.Date(as.character(Date))) %>%
       pull(d) %>% unique() %>% sort(decreasing = TRUE)
@@ -1598,8 +1612,8 @@ pitcher_card_server <- function(input, output, session) {
   })
 
   output$pc_pitcher_ui <- renderUI({
-    req(!is.null(master_data), input$pc_team, input$pc_dates)
-    pitchers <- master_data %>%
+    req(!is.null(master_data()), input$pc_team, input$pc_dates)
+    pitchers <- master_data() %>%
       filter(PitcherTeam == input$pc_team,
              as.character(as.Date(as.character(Date))) %in% input$pc_dates) %>%
       pull(Pitcher) %>% unique() %>% sort()
@@ -1609,8 +1623,8 @@ pitcher_card_server <- function(input, output, session) {
   })
 
   load_pitcher_pitches <- function() {
-    req(!is.null(master_data), input$pc_team, input$pc_dates, input$pc_pitcher)
-    pp <- master_data %>%
+    req(!is.null(master_data()), input$pc_team, input$pc_dates, input$pc_pitcher)
+    pp <- master_data() %>%
       filter(PitcherTeam == input$pc_team,
              as.character(as.Date(as.character(Date))) %in% input$pc_dates,
              Pitcher == input$pc_pitcher) %>%
@@ -2270,26 +2284,58 @@ read_data_file <- function(path) {
 }
 
 message("Loading master game data...")
-master_data <- tryCatch({
-  token <- Sys.getenv("HITTER_TOKEN")
-  if (nchar(token) == 0) stop("No HITTER_TOKEN set")
-  path <- download_from_hf_dataset("BrewsterWhitecapsMAC/game-data", "brewster_2026.parquet", token)
-  read_data_file(path)
+# Season data source: CapeCod26.parquet (produced daily by CapeCodScraper.R). All
+# reports read from this. Override the location with the CAPECOD_PARQUET env var.
+capecod_parquet_path <- {
+  p <- Sys.getenv("CAPECOD_PARQUET")
+  if (nzchar(p)) p else "C:/Users/timot/Downloads/CapeCod/CapeCod26.parquet"
+}
+season_data <- tryCatch({
+  if (!file.exists(capecod_parquet_path))
+    stop("CapeCod26.parquet not found at ", capecod_parquet_path)
+  df <- read_data_file(capecod_parquet_path)
+  message("Loaded CapeCod26.parquet — rows: ", nrow(df))
+  df
 }, error = function(e) {
-  message("HF parquet load failed: ", e$message)
-  message("Trying test.csv fallback...")
-  tryCatch({
-    df <- readr::read_csv("test.csv", show_col_types = FALSE)
-    message("Loaded test.csv — rows: ", nrow(df))
-    df
-  }, error = function(e2) {
-    message("test.csv also failed: ", e2$message)
-    NULL
-  })
+  message("CapeCod26.parquet load failed: ", e$message)
+  NULL
 })
 
-master_last_updated <- if (!is.null(master_data)) format(Sys.time(), "%b %d, %Y at %I:%M %p") else "unavailable"
-message("Master data rows: ", if (!is.null(master_data)) nrow(master_data) else 0)
+master_last_updated <- if (!is.null(season_data)) format(Sys.time(), "%b %d, %Y at %I:%M %p") else "unavailable"
+message("Season data rows: ", if (!is.null(season_data)) nrow(season_data) else 0)
+
+# ----------------------------------------------------------------------------
+# Manual single-game CSV support. Each report page has a toggle + uploader; when
+# enabled the uploaded game is appended to the CapeCod26 season so its date(s)
+# show up in the team/date selectors. The season itself stays CapeCod26.
+# ----------------------------------------------------------------------------
+align_manual_to_season <- function(manual, season) {
+  common <- intersect(names(manual), names(season))
+  for (col in common) {
+    target <- season[[col]]
+    manual[[col]] <- tryCatch({
+      if      (inherits(target, "Date")) as.Date(as.character(manual[[col]]))
+      else if (is.numeric(target))       suppressWarnings(as.numeric(manual[[col]]))
+      else if (is.character(target))     as.character(manual[[col]])
+      else if (is.logical(target))       as.logical(manual[[col]])
+      else manual[[col]]
+    }, error = function(e) manual[[col]])
+  }
+  manual
+}
+
+combine_with_manual <- function(season, enabled, file) {
+  if (is.null(season)) return(season)
+  if (!isTRUE(enabled) || is.null(file)) return(season)
+  manual <- tryCatch(read_input_file(file$datapath, file$name), error = function(e) {
+    message("Manual game CSV read failed: ", e$message); NULL
+  })
+  if (is.null(manual) || nrow(manual) == 0) return(season)
+  manual <- align_manual_to_season(manual, season)
+  tryCatch(dplyr::bind_rows(season, manual), error = function(e) {
+    message("Manual game bind failed: ", e$message); season
+  })
+}
 
 pdf_to_pngs <- function(pdf_path, dpi = 200) {
   img <- magick::image_read_pdf(pdf_path, density = dpi)
@@ -2592,6 +2638,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       `Whiff%` = paste0(round(sum(IsWhiff,na.rm=TRUE)/pmax(sum(IsSwing,na.rm=TRUE),1)*100,1),"%"),
       `Chase%` = paste0(round(sum(IsChase,na.rm=TRUE)/pmax(sum(IsBall+IsChase,na.rm=TRUE),1)*100,1),"%")
     )
+
   swing_decisions <- game_hitter %>%
     mutate(
       InZone   = PlateLocHeight>=1.5 & PlateLocHeight<=3.3775 & abs(PlateLocSide)<=0.8303,
@@ -2611,10 +2658,12 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
         TRUE ~ NA_character_)
     ) %>%
     filter(!is.na(SwDec), !is.na(PlateLocHeight), !is.na(PlateLocSide))
+
   overall_swdec <- swing_decisions %>%
     summarise(Good=sum(SwDec==1), Total=n()) %>%
     mutate(` `="Overall", SwDec=paste0(Good," / ",Total), `SwDec%`=round(Good/Total*100,1)) %>%
     select(` `, SwDec, `SwDec%`)
+
   swdec_by_pitch <- swing_decisions %>%
     mutate(PitchTypeGroup=case_when(
       TaggedPitchType %in% c("FourSeamFastBall","Fastball","Four-Seam","Sinker","TwoSeamFastBall","Cutter") ~ "Fastball",
@@ -2626,9 +2675,12 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     summarise(Good=sum(SwDec), Total=n(), .groups="drop") %>%
     mutate(SwDec=paste0(Good," / ",Total), `SwDec%`=round(Good/Total*100,1)) %>%
     select(`Pitch Type`=PitchTypeGroup, SwDec, `SwDec%`)
+
   game_swdec_plot <- make_swdec_plot(swing_decisions, "Game Swing Decisions by Location")
+
   game_xrv_overall <- if (!is.null(active_models) && any(!is.na(game_hitter$xRV_diff)))
     summarise_xrv_swdec(game_hitter) %>% mutate(` `="Overall") %>% select(` `, everything()) else NULL
+
   game_xrv_by_pitch <- if (!is.null(active_models) && any(!is.na(game_hitter$xRV_diff))) {
     game_hitter %>%
       mutate(PitchTypeGroup=case_when(
@@ -2640,6 +2692,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       group_by(`Pitch Type`=PitchTypeGroup) %>%
       group_modify(~summarise_xrv_swdec(.x)) %>% ungroup()
   } else NULL
+
   stats_by_pitch <- game_hitter %>%
     mutate(
       TaggedPitchType_clean = clean_hitter_pitch_type(TaggedPitchType),
@@ -2728,7 +2781,9 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       `HardHit%`=paste0(round(HH/pmax(BIP,1)*100,1),"%")
     ) %>%
     select(AVG,OBP,SLG,`K%`,`BB%`,`Whiff%`,`HardHit%`)
+
   season_color_matrix <- build_color_matrix_hitter(season_stats, hitter_season_benchmarks, hitter_lower_is_better)
+
   season_swing_decisions <- season_hitter %>%
     mutate(
       InZone   = PlateLocHeight>=1.5 & PlateLocHeight<=3.3775 & abs(PlateLocSide)<=0.8303,
@@ -2748,11 +2803,13 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
         TRUE ~ NA_character_)
     ) %>%
     filter(!is.na(SwDec), !is.na(PlateLocHeight), !is.na(PlateLocSide))
+
   season_overall_swdec <- season_swing_decisions %>%
     summarise(Good=sum(SwDec==1), Total=n()) %>%
     mutate(` `="Overall", SwDec=paste0(Good," / ",Total), `SwDec%`=round(Good/Total*100,1)) %>%
     select(` `, SwDec, `SwDec%`) %>%
     bind_rows(data.frame(` `="League Avg", SwDec="-", `SwDec%`=73.0, check.names=FALSE))
+
   season_swdec_by_pitch <- season_swing_decisions %>%
     mutate(PitchTypeGroup=case_when(
       TaggedPitchType %in% c("FourSeamFastBall","Fastball","Four-Seam","Sinker","TwoSeamFastBall","Cutter") ~ "Fastball",
@@ -2764,9 +2821,12 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     summarise(Good=sum(SwDec), Total=n(), .groups="drop") %>%
     mutate(SwDec=paste0(Good," / ",Total), `SwDec%`=round(Good/Total*100,1)) %>%
     select(`Pitch Type`=PitchTypeGroup, SwDec, `SwDec%`)
+
   season_swdec_plot <- make_swdec_heatmap(season_swing_decisions, "Season Swing Decisions by Location")
+
   season_xrv_overall <- if (!is.null(active_models) && any(!is.na(season_hitter$xRV_diff)))
     summarise_xrv_swdec(season_hitter) %>% mutate(` `="Overall") %>% select(` `, everything()) else NULL
+
   make_split_stats_hitter <- function(data, hand) {
     data %>%
       filter(Batter==selected_hitter, PitcherThrows==hand) %>%
@@ -2804,10 +2864,12 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       arrange(factor(`Pitch Type`,levels=c("Fastball","Breaker","Offspeed"))) %>%
       mutate(across(everything(),~ifelse(is.na(.)|.=="NA%","-",as.character(.))))
   }
+
   rhp_stats <- make_split_stats_hitter(season_data, "Right")
   lhp_stats <- make_split_stats_hitter(season_data, "Left")
   rhp_color_matrix <- build_split_color_matrix_hitter(rhp_stats, hitter_split_bench_map, hitter_split_lower_is_better)
   lhp_color_matrix <- build_split_color_matrix_hitter(lhp_stats, hitter_split_bench_map, hitter_split_lower_is_better)
+
   make_density_plots_hitter <- function(data, hand) {
     split_data <- data %>%
       filter(Batter==selected_hitter, PitcherThrows==hand) %>%
@@ -2837,10 +2899,13 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
               axis.text=element_blank(),axis.ticks=element_blank(),axis.title=element_blank(),panel.grid=element_blank())
     }) %>% setNames(c("Fastball","Breaker","Offspeed"))
   }
+
   density_rhp <- make_density_plots_hitter(season_data, "Right")
   density_lhp <- make_density_plots_hitter(season_data, "Left")
+
   pdf(output_file, width=8.5, height=11)
   on.exit(try(dev.off(), silent=TRUE), add=TRUE)
+
   page_header_hitter <- function(name, subtitle) {
     grid.rect(x=0,y=1,width=1,height=0.06,just=c("left","top"),gp=gpar(fill="#0C2340",col=NA))
     grid.text(name,     x=0.03,y=0.978,just="left",gp=gpar(col="white",   fontface="bold",cex=1.2))
@@ -2852,6 +2917,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     grid.text("Data: TrackMan | Brewster Whitecaps Analytics",
               x=0.5,y=0.02,gp=gpar(cex=0.55,col="#0C2340",fontface="italic"))
   }
+
   tryCatch({
     # PAGE 1 — GAME
     grid.newpage()
@@ -2888,6 +2954,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       draw_grid_table(season_xrv_overall, title="xRV",
                       y_top=0.075, x_center=0.84, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
     page_footer_hitter()
+
     # PAGE 2 — SEASON
     grid.newpage()
     page_header_hitter(hitter_name, "2026 Season Report")
@@ -2918,6 +2985,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     page_footer_hitter()
   }, error=function(e) message("Hitter PDF error: ", e$message))
 }
+
 # ==========================================
 # HUB UI
 # ==========================================
@@ -2932,12 +3000,14 @@ apps <- list(
   whitecaps_hub_card(),
   list(id = "umpire",           title = "Umpire Reports",           page = NULL,             status = "live")
 )
+
 make_card <- function(app) {
   is_coming_soon <- app$status == "coming_soon"
   card_class  <- paste("app-card", if (is_coming_soon) "coming-soon" else "")
   badge_class <- paste("status-badge", if (is_coming_soon) "coming-soon" else "live")
   badge_label <- if (is_coming_soon) "Coming Soon" else "Live"
   card_image  <- if (!is.null(app$image_src)) app$image_src else paste0(app$id, ".png")
+
   if (!is.null(app$page) && app$status == "live") {
     onclick_js <- paste0("Shiny.setInputValue('nav_to', '", app$page, "', {priority: 'event'})")
     tags$div(
@@ -2973,6 +3043,7 @@ make_card <- function(app) {
     )
   }
 }
+
 hub_ui <- function() {
   tagList(
     tags$div(
@@ -2999,6 +3070,7 @@ hub_ui <- function() {
     )
   )
 }
+
 catcher_ui <- function() {
   tagList(
     tags$div(
@@ -3015,6 +3087,14 @@ catcher_ui <- function() {
         style = "display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 32px;",
         tags$div(
           tags$h4("Select Team & Game", style = "color: var(--navy); margin-bottom: 12px;"),
+          checkboxInput("catcher_manual_enabled", "Upload single-game CSV", value = FALSE),
+          conditionalPanel(
+            condition = "input.catcher_manual_enabled",
+            fileInput("catcher_manual_csv", "Game CSV:", accept = c(".csv", ".parquet"),
+                      buttonLabel = "Browse", placeholder = "No file selected"),
+            helpText("Appended to the CapeCod26 season so its date appears below. ",
+                     "Season stats still use CapeCod26.")
+          ),
           uiOutput("catcher_team_select_ui"),
           uiOutput("catcher_date_ui")
         ),
@@ -3038,6 +3118,7 @@ catcher_ui <- function() {
              paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
   )
 }
+
 hitter_ui <- function() {
   tagList(
     tags$div(class="hub-main",
@@ -3050,6 +3131,13 @@ hitter_ui <- function() {
       tags$div(style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:32px;",
         tags$div(
           tags$h4("Select Team & Game(s)", style="color:var(--navy);margin-bottom:12px;"),
+          checkboxInput("hitter_manual_enabled", "Upload single-game CSV", value = FALSE),
+          conditionalPanel(
+            condition = "input.hitter_manual_enabled",
+            fileInput("hitter_manual_csv", "Game CSV:", accept = c(".csv", ".parquet"),
+                      buttonLabel = "Browse", placeholder = "No file selected"),
+            helpText("Appended to the CapeCod26 season so its date appears below. ",
+                     "Season stats still use CapeCod26.")),
           uiOutput("hitter_team_select_ui"),
           uiOutput("hitter_dates_ui")),
         tags$div(
@@ -3070,6 +3158,7 @@ hitter_ui <- function() {
     tags$div(class="hub-footer", paste0("Brewster Whitecaps Analytics · ",format(Sys.Date(),"%Y")))
   )
 }
+
 # Old PDF-based pitcher_ui() is retained but no longer routed to; the pitcher
 # page now renders pitcher_card_ui() (BrewSummaryCard). Kept for reference.
 pitcher_ui <- function() {
@@ -3123,6 +3212,7 @@ pitcher_ui <- function() {
              paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
   )
 }
+
 # ==========================================
 # UI
 # ==========================================
@@ -3251,6 +3341,7 @@ ui <- fluidPage(
       });
     "))
   ),
+
   tags$div(
     id = "caps-splash",
     tags$div(
@@ -3260,24 +3351,40 @@ ui <- fluidPage(
     tags$div(id = "splash-title", "C.A.P.S."),
     tags$div(id = "splash-sub", "Centralized Application Platform for Staff")
   ),
+
   uiOutput("hub_header_ui"),
+
   uiOutput("page_content")
 )
 # ==========================================
 # SERVER
 # ==========================================
 server <- function(input, output, session) {
+
   current_page <- reactiveVal("hub")
+
   observeEvent(input$nav_to, {
     current_page(input$nav_to)
   })
+
   scout_server(input, output, session)
   whitecaps_bind_parent_server(current_page, input, output, session)
   pitcher_card_server(input, output, session)
+
+  # CapeCod26 season, optionally with each report's manual single-game CSV
+  # appended so the uploaded game's date is selectable. Season stays CapeCod26.
+  catcher_data <- reactive({
+    combine_with_manual(season_data, input$catcher_manual_enabled, input$catcher_manual_csv)
+  })
+  hitter_data <- reactive({
+    combine_with_manual(season_data, input$hitter_manual_enabled, input$hitter_manual_csv)
+  })
+
   output$hub_header_ui <- renderUI({
     if (whitecaps_is_page(current_page())) {
       return(NULL)
     }
+
     tags$div(
       class = "hub-header",
       tags$div(
@@ -3288,6 +3395,7 @@ server <- function(input, output, session) {
       tags$img(src = "logo1.png", class = "team-logo")
     )
   })
+
   output$page_content <- renderUI({
     if      (current_page() == "hub")            hub_ui()
     else if (current_page() == "catcher")        catcher_ui()
@@ -3299,6 +3407,7 @@ server <- function(input, output, session) {
     else if (current_page() == "scout_grades")   scout_grades_ui()
     else if (whitecaps_is_page(current_page()))  whitecaps_embedded_ui()
   })
+
 output$roster_catchers    <- renderTable({ roster_catchers },    striped = TRUE, hover = TRUE, width = "100%", digits = 0)
 output$roster_infielders  <- renderTable({ roster_infielders },  striped = TRUE, hover = TRUE, width = "100%", digits = 0)
 output$roster_outfielders <- renderTable({ roster_outfielders }, striped = TRUE, hover = TRUE, width = "100%", digits = 0)
@@ -3306,47 +3415,55 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
   # ==========================================
   # CATCHER SERVER LOGIC
   # ==========================================
-  # Team / date / catcher selectors driven by the shared master_data
-  # (HF parquet, test.csv fallback) — same source as the hitter/pitcher reports.
+  # Team / date / catcher selectors driven by catcher_data
+  # (CapeCod26 season + optional manual single-game CSV).
   output$catcher_team_select_ui <- renderUI({
-    req(!is.null(master_data))
-    teams <- sort(unique(master_data$CatcherTeam))
+    req(!is.null(catcher_data()))
+    teams <- sort(unique(catcher_data()$CatcherTeam))
     selectInput("catcher_team_select", "Select Team:",
                 choices  = setNames(teams, team_display_name(teams)),
                 selected = teams[grepl("BRE|Brewster", teams, ignore.case = TRUE)][1])
   })
+
   output$catcher_date_ui <- renderUI({
-    req(!is.null(master_data), input$catcher_team_select)
-    dates <- master_data %>%
+    req(!is.null(catcher_data()), input$catcher_team_select)
+    dates <- catcher_data() %>%
       filter(CatcherTeam == input$catcher_team_select) %>%
       mutate(d = as.Date(as.character(Date))) %>%
       pull(d) %>% unique() %>% sort(decreasing = TRUE)
     selectInput("catcher_date", "Select Game Date:",
                 choices = as.character(dates), selected = as.character(dates[1]))
   })
+
   output$catcher_select_ui <- renderUI({
-    req(!is.null(master_data), input$catcher_team_select, input$catcher_date)
-    catchers <- master_data %>%
+    req(!is.null(catcher_data()), input$catcher_team_select, input$catcher_date)
+    catchers <- catcher_data() %>%
       filter(CatcherTeam == input$catcher_team_select,
              as.character(as.Date(as.character(Date))) == input$catcher_date) %>%
       pull(Catcher) %>% unique() %>% sort()
     req(length(catchers) > 0)
     selectInput("catcher_name", "Select Catcher:", choices = catchers)
   })
+
   catcher_pdf_path  <- reactiveVal(NULL)
   catcher_png_paths <- reactiveVal(NULL)
   catcher_opp       <- reactiveVal(NA_character_)
+
   observeEvent(input$generate_catcher, {
-    req(input$catcher_name, input$catcher_team_select, input$catcher_date, !is.null(master_data))
+    req(input$catcher_name, input$catcher_team_select, input$catcher_date, !is.null(catcher_data()))
     output$catcher_status <- renderUI({ div(style = "color:orange;font-weight:bold;", "Generating report...") })
     tryCatch({
       team      <- input$catcher_team_select
       game_date <- as.Date(input$catcher_date)
-      game_raw   <- master_data %>% filter(as.Date(as.character(Date)) == game_date)
+      md        <- catcher_data()
+
+      game_raw   <- md %>% filter(as.Date(as.character(Date)) == game_date)
       catcher_opp(most_common_opponent(game_raw %>% filter(CatcherTeam == team), "BatterTeam"))
+
       # Game = selected date; Season = everything up to that date for the team.
       game_dat   <- prep_catcher_data(game_raw,  team, input$catcher_pitch_src)
-      season_dat <- prep_catcher_data(master_data %>% filter(as.Date(as.character(Date)) <= game_date),  team, input$catcher_pitch_src)
+      season_dat <- prep_catcher_data(md %>% filter(as.Date(as.character(Date)) <= game_date),  team, input$catcher_pitch_src)
+
       tmp_pdf <- tempfile(fileext = ".pdf")
       generate_catcher_pdf(
         game_framing    = game_dat$framing    %>% mutate(Date = as.Date(as.character(Date))),
@@ -3367,6 +3484,7 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
       output$catcher_status <- renderUI({ div(style = "color:red;", paste("Error:", e$message)) })
     })
   })
+
   output$catcher_report_ui <- renderUI({
     req(catcher_png_paths(), catcher_pdf_path())
     report_viewer_ui(catcher_png_paths(), catcher_pdf_path(),
@@ -3380,6 +3498,7 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
     filename = function() paste0(report_base_name(input$catcher_name, input$catcher_date, catcher_opp(), "Catcher"), ".png"),
     content  = function(file) { req(catcher_png_paths()); combine_pngs(catcher_png_paths(), file) }
   )
+
   # Build every catcher's report for the selected date and bundle as a zip.
   output$download_catcher_all <- downloadHandler(
     filename = function() {
@@ -3388,16 +3507,18 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
              " - ", format(d, "%B %d"), " Catcher Reports.zip")
     },
     content = function(file) {
-      req(!is.null(master_data), input$catcher_team_select, input$catcher_date)
+      req(!is.null(catcher_data()), input$catcher_team_select, input$catcher_date)
+      md         <- catcher_data()
       team       <- input$catcher_team_select
       game_date  <- as.Date(input$catcher_date)
-      game_raw   <- master_data %>% filter(as.Date(as.character(Date)) == game_date)
-      season_raw <- master_data %>% filter(as.Date(as.character(Date)) <= game_date)
+      game_raw   <- md %>% filter(as.Date(as.character(Date)) == game_date)
+      season_raw <- md %>% filter(as.Date(as.character(Date)) <= game_date)
       opp        <- most_common_opponent(game_raw %>% filter(CatcherTeam == team), "BatterTeam")
       gd <- prep_catcher_data(game_raw,   team, input$catcher_pitch_src)
       sd <- prep_catcher_data(season_raw, team, input$catcher_pitch_src)
       catchers <- sort(unique(c(gd$framing$Catcher, gd$throwing$Catcher)))
       req(length(catchers) > 0)
+
       tmp_dir   <- file.path(tempdir(), paste0("catcher_all_", as.integer(Sys.time())))
       dir.create(tmp_dir, showWarnings = FALSE)
       out_files <- character(0)
@@ -3422,20 +3543,23 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
       zip(file, files = out_files, flags = "-j")
     }
   )
+
   # ==========================================
   # HITTER SERVER
   # ==========================================
-  # Dynamic team/date/player selectors driven by master_data
+  # Dynamic team/date/player selectors driven by hitter_data
+  # (CapeCod26 season + optional manual single-game CSV).
   output$hitter_team_select_ui <- renderUI({
-    req(!is.null(master_data))
-    teams <- sort(unique(master_data$BatterTeam))
+    req(!is.null(hitter_data()))
+    teams <- sort(unique(hitter_data()$BatterTeam))
     selectInput("hitter_team_select", "Select Team:",
                 choices  = setNames(teams, team_display_name(teams)),
                 selected = teams[grepl("BRE|Brewster", teams, ignore.case=TRUE)][1])
   })
+
   output$hitter_dates_ui <- renderUI({
-    req(!is.null(master_data), input$hitter_team_select)
-    dates <- master_data %>%
+    req(!is.null(hitter_data()), input$hitter_team_select)
+    dates <- hitter_data() %>%
       filter(BatterTeam == input$hitter_team_select) %>%
       mutate(d = as.Date(as.character(Date))) %>%
       pull(d) %>% unique() %>% sort(decreasing=TRUE)
@@ -3445,27 +3569,34 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
                 multiple = TRUE,
                 selectize = TRUE)
   })
+
   output$hitter_select_ui <- renderUI({
-    req(!is.null(master_data), input$hitter_team_select, input$hitter_dates)
-    hitters <- master_data %>%
+    req(!is.null(hitter_data()), input$hitter_team_select, input$hitter_dates)
+    hitters <- hitter_data() %>%
       filter(BatterTeam == input$hitter_team_select,
              as.character(as.Date(as.character(Date))) %in% input$hitter_dates) %>%
       pull(Batter) %>% unique() %>% sort()
     req(length(hitters) > 0)
     selectInput("selected_hitter", "Select Hitter:", choices=hitters)
   })
+
   hitter_pdf_path  <- reactiveVal(NULL)
   hitter_png_paths <- reactiveVal(NULL)
   hitter_opp       <- reactiveVal(NA_character_)
+
   observeEvent(input$generate_hitter, {
-    req(input$selected_hitter, input$hitter_team_select, input$hitter_dates, !is.null(master_data))
+    req(input$selected_hitter, input$hitter_team_select, input$hitter_dates, !is.null(hitter_data()))
     output$hitter_status <- renderUI({ div(style="color:orange;font-weight:bold;","Generating report...") })
     tryCatch({
       selected_dates <- as.Date(input$hitter_dates)
       team           <- input$hitter_team_select
-      game_data   <- master_data %>% filter(as.Date(as.character(Date)) %in% selected_dates,   BatterTeam == team) %>% apply_pitch_source(input$hitter_pitch_src)
-      season_data <- master_data %>% filter(as.Date(as.character(Date)) <= max(selected_dates), BatterTeam == team) %>% apply_pitch_source(input$hitter_pitch_src)
+      md             <- hitter_data()
+
+      game_data   <- md %>% filter(as.Date(as.character(Date)) %in% selected_dates,   BatterTeam == team) %>% apply_pitch_source(input$hitter_pitch_src)
+      season_data <- md %>% filter(as.Date(as.character(Date)) <= max(selected_dates), BatterTeam == team) %>% apply_pitch_source(input$hitter_pitch_src)
+
       hitter_opp(most_common_opponent(game_data %>% filter(Batter == input$selected_hitter), "PitcherTeam"))
+
       tmp_pdf <- tempfile(fileext=".pdf")
       generate_hitter_pdf(
         game_data=game_data, season_data=season_data,
@@ -3481,6 +3612,7 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
       output$hitter_status <- renderUI({ div(style="color:red;",paste("Error:",e$message)) })
     })
   })
+
   output$hitter_report_ui <- renderUI({
     req(hitter_png_paths(), hitter_pdf_path())
     report_viewer_ui(hitter_png_paths(), hitter_pdf_path(),
@@ -3494,6 +3626,7 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
     filename = function() paste0(report_base_name(input$selected_hitter, input$hitter_dates, hitter_opp(), "Hitter"), ".png"),
     content  = function(file) { req(hitter_png_paths()); combine_pngs(hitter_png_paths(), file) }
   )
+
   # Build every hitter's report for the selected date(s) and bundle as a zip.
   output$download_hitter_all <- downloadHandler(
     filename = function() {
@@ -3502,14 +3635,15 @@ output$roster_pitchers    <- renderTable({ roster_pitchers },    striped = TRUE,
              " - ", format(d, "%B %d"), " Hitter Reports.zip")
     },
     content = function(file) {
-      req(!is.null(master_data), input$hitter_team_select, input$hitter_dates)
+      req(!is.null(hitter_data()), input$hitter_team_select, input$hitter_dates)
       team           <- input$hitter_team_select
       selected_dates <- as.Date(input$hitter_dates)
-      base_df    <- master_data %>% filter(BatterTeam == team)
+      base_df    <- hitter_data() %>% filter(BatterTeam == team)
       game_all   <- base_df %>% filter(as.Date(as.character(Date)) %in% selected_dates)    %>% apply_pitch_source(input$hitter_pitch_src)
       season_all <- base_df %>% filter(as.Date(as.character(Date)) <= max(selected_dates)) %>% apply_pitch_source(input$hitter_pitch_src)
       hitters <- sort(unique(game_all$Batter))
       req(length(hitters) > 0)
+
       tmp_dir   <- file.path(tempdir(), paste0("hitter_all_", as.integer(Sys.time())))
       dir.create(tmp_dir, showWarnings = FALSE)
       out_files <- character(0)
