@@ -1091,7 +1091,8 @@ mockup_plate_plot <- function(game, side) {
     guides(fill = "none", colour = "none", shape = "none") +
     coord_fixed() +
     xlim(-3, 3) + ylim(0, 5) +
-    labs(title = sprintf("PITCH LOCATION  ·  %sHB", side), x = NULL, y = NULL) +
+    labs(title = sprintf("PITCH LOCATION  ·  %sHB", side),
+         subtitle = "Catcher's View", x = NULL, y = NULL) +
     theme_void(base_family = font_sans) +
     theme(
       plot.background  = element_rect(fill = "#FFFFFF", colour = NA),
@@ -1099,7 +1100,10 @@ mockup_plate_plot <- function(game, side) {
       legend.position  = "none",
       plot.title = element_text(colour = "#5F5F6B", size = 13,
                                 face = "bold", hjust = 0,
-                                margin = margin(b = 4, l = 8)),
+                                margin = margin(b = 1, l = 8)),
+      plot.subtitle = element_text(colour = "#8B8B96", size = 9,
+                                   face = "italic", hjust = 0,
+                                   margin = margin(b = 4, l = 8)),
       plot.margin = margin(8, 8, 8, 8)
     )
 }
