@@ -1419,6 +1419,26 @@ draw_card_to_png <- function(page, file,
   invisible(file)
 }
 
+# Draw one or more built card pages to a multi-page PDF (one card per page).
+# Pages are square to match the 1:1 card layout (e.g. game card, then season card).
+draw_cards_to_pdf <- function(pages, file, width = 12.5, height = 12.5, dpi = 300) {
+  pages <- Filter(Negate(is.null), pages)
+  if (length(pages) == 0) return(invisible(file))
+  if (requireNamespace("showtext", quietly = TRUE)) showtext::showtext_opts(dpi = dpi)
+  grDevices::cairo_pdf(file, width = width, height = height,
+                       onefile = TRUE, bg = tok$bg_page)
+  if (requireNamespace("showtext", quietly = TRUE)) showtext::showtext_begin()
+  on.exit({
+    if (requireNamespace("showtext", quietly = TRUE)) showtext::showtext_end()
+    grDevices::dev.off()
+  }, add = TRUE, after = FALSE)
+  for (i in seq_along(pages)) {
+    if (i > 1) grid::grid.newpage()
+    grid::grid.draw(pages[[i]])
+  }
+  invisible(file)
+}
+
 # ============================================================================
 # CARD TAB UI + SERVER (inlined — was pitcher_card_tab.R)
 # ============================================================================
@@ -1505,7 +1525,10 @@ pitcher_card_ui <- function() {
                        class = "btn-success btn-block"),
           actionButton("pc_reset_pitches", "Reset Pitch Tags",
                        class = "btn-secondary btn-block"),
-          downloadButton("pc_downloadPlot", "Download Card", class = "btn-info btn-block")
+          downloadButton("pc_downloadPlot", "Download PDF (Game + Season)",
+                         class = "btn-info btn-block"),
+          downloadButton("pc_downloadPng", "Download PNG (1:1)",
+                         class = "btn-info btn-block")
         ),
         mainPanel(
           tabsetPanel(
@@ -1568,9 +1591,10 @@ pitcher_card_server <- function(input, output, session) {
     combine_with_manual(season_data, input$pc_manual_enabled, input$pc_manual_csv)
   })
 
-  current_pitches <- reactiveVal(NULL)
-  selected_points <- reactiveVal(NULL)
-  card_page       <- reactiveVal(NULL)
+  current_pitches  <- reactiveVal(NULL)
+  selected_points  <- reactiveVal(NULL)
+  card_page        <- reactiveVal(NULL)
+  season_card_page <- reactiveVal(NULL)
 
   # ft + in -> decimal feet; NULL when both blank so the override is skipped.
   height_override_dec <- reactive({
@@ -1634,6 +1658,19 @@ pitcher_card_server <- function(input, output, session) {
              row_id = row_number())
     current_pitches(pp)
     selected_points(NULL)
+  }
+
+  # Full-season pitches for the selected pitcher (all dates in CapeCod26), used
+  # for the season page of the PDF. Independent of the date selector and of any
+  # retag/delete edits applied to the game card.
+  load_pitcher_pitches_season <- function() {
+    req(!is.null(master_data()), input$pc_team, input$pc_pitcher)
+    master_data() %>%
+      filter(PitcherTeam == input$pc_team, Pitcher == input$pc_pitcher) %>%
+      apply_pitch_source(input$pc_pitch_src) %>%
+      pitcher_summary() %>%
+      mutate(TaggedPitchType = canonicalize_pitch(TaggedPitchType),
+             row_id = row_number())
   }
 
   observeEvent(list(input$pc_pitcher, input$pc_dates, input$pc_pitch_src),
@@ -1776,6 +1813,18 @@ pitcher_card_server <- function(input, output, session) {
                                     height_override = height_override_dec(),
                                     set_override    = set_override_val())
     card_page(page)
+
+    # Season card (all of this pitcher's CapeCod26 pitches) for the PDF's 2nd page.
+    season <- tryCatch(load_pitcher_pitches_season(), error = function(e) NULL)
+    season_page <- if (!is.null(season) && nrow(season) > 0) {
+      tryCatch(
+        build_pitcher_card_page(season, pitcher_display,
+                                height_override = height_override_dec(),
+                                set_override    = set_override_val()),
+        error = function(e) { message("season card error: ", e$message); NULL }
+      )
+    } else NULL
+    season_card_page(season_page)
   })
 
   output$pc_combinedPlot <- renderImage({
@@ -1787,7 +1836,22 @@ pitcher_card_server <- function(input, output, session) {
          width = "100%", height = "auto", alt = "Pitching Summary Card")
   }, deleteFile = TRUE)
 
+  # 2-page PDF: page 1 = selected-game card, page 2 = full-season card.
   output$pc_downloadPlot <- downloadHandler(
+    filename = function() {
+      if (is.null(input$pc_pitcher)) return("Pitcher Report.pdf")
+      opp <- most_common_opponent(current_pitches(), "BatterTeam")
+      paste0(report_base_name(input$pc_pitcher, input$pc_dates, opp, "Pitcher"), ".pdf")
+    },
+    content = function(file) {
+      req(card_page())
+      draw_cards_to_pdf(list(card_page(), season_card_page()), file,
+                        width = 12.5, height = 12.5, dpi = 300)
+    }
+  )
+
+  # PNG export of the game card, square (1:1) at 300 dpi.
+  output$pc_downloadPng <- downloadHandler(
     filename = function() {
       if (is.null(input$pc_pitcher)) return("Pitcher Report.png")
       opp <- most_common_opponent(current_pitches(), "BatterTeam")
