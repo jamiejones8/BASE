@@ -2284,16 +2284,10 @@ read_data_file <- function(path) {
 }
 
 message("Loading master game data...")
-# Season data source: CapeCod26.parquet (produced daily by CapeCodScraper.R). All
-# reports read from this. Override the location with the CAPECOD_PARQUET env var.
-capecod_parquet_path <- {
-  p <- Sys.getenv("CAPECOD_PARQUET")
-  if (nzchar(p)) p else "C:/Users/timot/Downloads/CapeCod/CapeCod26.parquet"
-}
+# Season data source: CapeCod26.parquet, read from the app dir (committed alongside
+# the app on the Space, like College26Heights.csv / percentile_table.csv).
 season_data <- tryCatch({
-  if (!file.exists(capecod_parquet_path))
-    stop("CapeCod26.parquet not found at ", capecod_parquet_path)
-  df <- read_data_file(capecod_parquet_path)
+  df <- arrow::read_parquet("CapeCod26.parquet")
   message("Loaded CapeCod26.parquet — rows: ", nrow(df))
   df
 }, error = function(e) {
