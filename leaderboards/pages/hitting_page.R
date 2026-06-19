@@ -185,28 +185,6 @@ hitting_page_server <- function(id, hitting_data) {
     }
     
     # =========================================================
-    #  HITTER PPI CALCULATION (scaled 0–1 like wOBA)
-    # =========================================================
-    calculate_hitter_ppi <- function(df) {
-      df %>%
-        mutate(
-          across(c(`K%`, `BB%`, `Barrel%`), as.numeric),
-          
-          Z_K = (`K%` - mean(`K%`, na.rm = TRUE)) / sd(`K%`, na.rm = TRUE),
-          Z_BB = (`BB%` - mean(`BB%`, na.rm = TRUE)) / sd(`BB%`, na.rm = TRUE),
-          Z_Barrel = (`Barrel%` - mean(`Barrel%`, na.rm = TRUE)) / sd(`Barrel%`, na.rm = TRUE),
-          
-          RawPPI = (-0.5 * Z_K) + (0.5 * Z_BB) + (0.5 * Z_Barrel),
-          
-          HitterPPI = (1 / (1 + exp(-RawPPI))) * 0.9,
-          HitterPPI = HitterPPI - 0.15,
-          HitterPPI = pmin(pmax(HitterPPI, 0), 1.25),
-          HitterPPI = round(HitterPPI, 3)
-        ) %>%
-        select(-Z_K, -Z_BB, -Z_Barrel, -RawPPI)
-    }
-    
-    # =========================================================
     #  Leaderboard Outputs
     # =========================================================
     output$top_zcontact <- DT::renderDataTable({

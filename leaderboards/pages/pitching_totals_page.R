@@ -96,17 +96,7 @@ pitching_totals_page_server <- function(id, pitching_data) {
     #  PPI CALCULATION FUNCTION
     # =========================================================
     calculate_ppi <- function(df) {
-      df %>%
-        mutate(
-          across(c(`K%`, `BB%`, `Barrel%`), as.numeric),
-          Z_K = (`K%` - mean(`K%`, na.rm = TRUE)) / sd(`K%`, na.rm = TRUE),
-          Z_BB = (`BB%` - mean(`BB%`, na.rm = TRUE)) / sd(`BB%`, na.rm = TRUE),
-          Z_Barrel = (`Barrel%` - mean(`Barrel%`, na.rm = TRUE)) / sd(`Barrel%`, na.rm = TRUE),
-          
-          RawPPI = (1.2 * Z_K) - (0.9 * Z_BB) - (0.9 * Z_Barrel),
-          `PPI (ERA)` = sprintf("%.2f", round(4.50 - (0.5 * RawPPI), 2))
-        ) %>%
-        select(-Z_K, -Z_BB, -Z_Barrel, -RawPPI)
+      calculate_pitcher_ppi(df)
     }
     
     # =========================================================

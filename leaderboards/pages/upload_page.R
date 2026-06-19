@@ -14,15 +14,15 @@ upload_page_ui <- function(id) {
       div(class = "txst-header", "Data Files"),
       div(
         class = "page-subtitle",
-        paste(APP_TITLE, "loads one bundled CSV directly from the app's /data folder")
+        paste(APP_TITLE, "loads one CSV directly from the parent CAPS folder")
       ),
 
       div(
         class = "leaderboard-card-full",
-        h4("Bundled Data File"),
+        h4("Configured Data File"),
         p(
-          "The app is designed to use one active CSV from /data.",
-          "If multiple CSVs are present during development, the most recently updated file will be used."
+          "The app is configured to read one explicit file from the parent CAPS folder.",
+          paste("Current target:", basename(WHITE_CAPS_SOURCE_FILE))
         ),
         actionButton(ns("refresh_local_btn"), "Reload Bundled Data", class = "txst-btn"),
         br(), br(),
@@ -45,22 +45,12 @@ upload_page_server <- function(id, refresh_trigger) {
     })
 
     observeEvent(input$refresh_local_btn, {
-      output$sync_status <- renderText("⏳ Reloading bundled data from /data...")
+      output$sync_status <- renderText("⏳ Reloading configured data file from the parent CAPS folder...")
       refresh_trigger(runif(1))
       active_file <- pick_active_bundled_file()
       output$sync_status <- renderText({
         if (is.null(active_file$path) || !nzchar(active_file$path)) {
-          return("⚠️ No CSV file was found in /data.")
-        }
-
-        if (isTRUE(active_file$file_count > 1)) {
-          return(
-            paste0(
-              "✅ Reloaded bundled data. Using ",
-              active_file$label,
-              ". Remove extra CSVs from /data when you're ready to keep the app on a single-file setup."
-            )
-          )
+          return(paste0("⚠️ Could not find ", basename(WHITE_CAPS_SOURCE_FILE), " in the parent CAPS folder."))
         }
 
         paste0("✅ Reloaded bundled data from ", active_file$label, ".")

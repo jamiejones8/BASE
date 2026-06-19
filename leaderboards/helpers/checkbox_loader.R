@@ -1,6 +1,6 @@
 # =========================================================
 #  BREWSTER WHITECAPS — bundled single-file loader
-#  - Loads one active CSV from /data
+#  - Loads one active CSV from an explicit configured path
 #  - Uses data.table::fread() for speed
 # =========================================================
 
@@ -8,6 +8,7 @@ library(dplyr)
 library(data.table)
 
 source("helpers/process_data.R", local = TRUE)
+source("helpers/metric_helpers.R", local = TRUE)
 source("helpers/calculate_pitcher_stats.R", local = TRUE)
 source("helpers/calculate_hitter_stats.R", local = TRUE)
 
@@ -15,8 +16,16 @@ SUPPORTED_BUNDLED_EXTENSIONS <- function() {
   c("csv")
 }
 
+configured_bundled_source_file <- function() {
+  get0(
+    "WHITE_CAPS_SOURCE_FILE",
+    inherits = TRUE,
+    ifnotfound = file.path("..", "test.csv")
+  )
+}
+
 PREFERRED_BUNDLED_FILE_NAME <- function() {
-  "data.csv"
+  basename(configured_bundled_source_file())
 }
 
 is_supported_bundled_file <- function(path) {
@@ -47,18 +56,11 @@ safe_count_rows <- function(path) {
 }
 
 list_bundled_data_files <- function(
-    data_dir = get0("WHITE_CAPS_DATA_DIR", inherits = TRUE, ifnotfound = "data")
+    source_file = configured_bundled_source_file()
 ) {
-  all_files <- list.files(
-    data_dir,
-    full.names = TRUE,
-    recursive = FALSE,
-    all.files = FALSE
-  )
+  normalized_source <- normalizePath(source_file, winslash = "/", mustWork = FALSE)
 
-  files <- all_files[vapply(all_files, is_supported_bundled_file, logical(1))]
-
-  if (!length(files)) {
+  if (!is_supported_bundled_file(normalized_source) || !file.exists(normalized_source)) {
     return(
       tibble::tibble(
         Path = character(),
@@ -72,11 +74,11 @@ list_bundled_data_files <- function(
     )
   }
 
-  info <- file.info(files)
+  info <- file.info(normalized_source)
   out <- data.table::data.table(
-    Path = normalizePath(files, winslash = "/", mustWork = FALSE),
-    File = basename(files),
-    Rows = vapply(files, safe_count_rows, integer(1)),
+    Path = normalized_source,
+    File = basename(normalized_source),
+    Rows = safe_count_rows(normalized_source),
     SizeBytes = info$size,
     SizeMB = round(info$size / (1024^2), 2),
     ModifiedRaw = info$mtime,
@@ -94,42 +96,15 @@ list_bundled_data_files <- function(
 }
 
 pick_active_bundled_file <- function(
-    data_dir = get0("WHITE_CAPS_DATA_DIR", inherits = TRUE, ifnotfound = "data")
+    source_file = configured_bundled_source_file()
 ) {
-  files <- list_bundled_data_files(data_dir)
+  files <- list_bundled_data_files(source_file)
 
   if (!nrow(files)) {
     return(list(path = NULL, label = NULL, file_count = 0L))
   }
 
-  preferred_name <- PREFERRED_BUNDLED_FILE_NAME()
-  preferred_files <- files[files$File == preferred_name, , drop = FALSE]
-
-  if (nrow(preferred_files) > 0) {
-    chosen <- preferred_files[1, , drop = FALSE]
-  } else {
-    chosen <- files[1, , drop = FALSE]
-    warning(
-      "⚠️ Expected bundled data file '", preferred_name, "' was not found in /data. ",
-      "Using ", chosen$File[[1]], " instead."
-    )
-  }
-
-  if (nrow(files) > 1) {
-    if (chosen$File[[1]] == preferred_name) {
-      warning(
-        "⚠️ Multiple CSV files were found in /data. ",
-        "The app is designed for one active file and will use the preferred file: ",
-        chosen$File[[1]]
-      )
-    } else {
-      warning(
-        "⚠️ Multiple CSV files were found in /data. ",
-        "The app is designed for one active file and will use: ",
-        chosen$File[[1]]
-      )
-    }
-  }
+  chosen <- files[1, , drop = FALSE]
 
   list(
     path = chosen$Path[[1]],
@@ -140,11 +115,11 @@ pick_active_bundled_file <- function(
 
 load_bundled_data_file <- function(
     file_path = NULL,
-    data_dir = get0("WHITE_CAPS_DATA_DIR", inherits = TRUE, ifnotfound = "data"),
+    source_file = configured_bundled_source_file(),
     compute_summaries = FALSE
 ) {
   active_file <- if (is.null(file_path) || !nzchar(file_path)) {
-    pick_active_bundled_file(data_dir)
+    pick_active_bundled_file(source_file)
   } else {
     list(
       path = normalizePath(file_path, winslash = "/", mustWork = FALSE),
@@ -154,7 +129,11 @@ load_bundled_data_file <- function(
   }
 
   if (is.null(active_file$path) || !nzchar(active_file$path) || !file.exists(active_file$path)) {
-    warning("⚠️ bundled_loader: No active CSV file found in /data.")
+    warning(
+      "⚠️ bundled_loader: No configured CSV file was found at ",
+      normalizePath(source_file, winslash = "/", mustWork = FALSE),
+      "."
+    )
     empty <- tibble::tibble()
     return(list(raw = empty, pitching = empty, hitting = empty))
   }

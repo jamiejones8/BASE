@@ -10,6 +10,8 @@ library(DT)
 library(dplyr)
 
 WHITE_CAPS_APP_DIR <- normalizePath(".", winslash = "/", mustWork = TRUE)
+WHITE_CAPS_PARENT_DIR <- dirname(WHITE_CAPS_APP_DIR)
+WHITE_CAPS_SOURCE_FILE <- file.path(WHITE_CAPS_PARENT_DIR, "test.csv")
 WHITE_CAPS_DATA_DIR <- file.path(WHITE_CAPS_APP_DIR, "data")
 WHITE_CAPS_CACHE_DIR <- file.path(WHITE_CAPS_APP_DIR, "cache")
 WHITE_CAPS_WWW_DIR <- file.path(WHITE_CAPS_APP_DIR, "www")
@@ -52,6 +54,7 @@ source("pages/strength_of_competition_page.R", local = TRUE)
 # ---- HELPERS ----
 source("helpers/process_data.R", local = TRUE)
 source("helpers/pitcher_times_through_order.R", local = TRUE)
+source("helpers/metric_helpers.R", local = TRUE)
 source("helpers/calculate_pitcher_stats.R", local = TRUE)
 source("helpers/calculate_hitter_stats.R", local = TRUE)
 source("helpers/process_calculations.R", local = TRUE)
@@ -180,7 +183,7 @@ server <- function(input, output, session) {
   # =========================================================
   load_local_data <- function() {
     tryCatch({
-      message("📥 Loading bundled TrackMan data from /data...")
+      message("📥 Loading bundled TrackMan data from ", normalizePath(WHITE_CAPS_SOURCE_FILE, winslash = "/", mustWork = FALSE), "...")
 
       active_file <- pick_active_bundled_file()
       cache_result <- load_valid_leaderboards_cache(active_file)
@@ -609,36 +612,11 @@ server <- function(input, output, session) {
   }
 
   calculate_hitter_ppi_print <- function(df) {
-    if (is.null(df) || nrow(df) == 0) return(df)
-
-    df %>%
-      mutate(
-        across(c(`K%`, `BB%`, `Barrel%`), safe_num),
-        Z_K = (`K%` - mean(`K%`, na.rm = TRUE)) / sd(`K%`, na.rm = TRUE),
-        Z_BB = (`BB%` - mean(`BB%`, na.rm = TRUE)) / sd(`BB%`, na.rm = TRUE),
-        Z_Barrel = (`Barrel%` - mean(`Barrel%`, na.rm = TRUE)) / sd(`Barrel%`, na.rm = TRUE),
-        RawPPI = (-0.5 * Z_K) + (0.5 * Z_BB) + (0.5 * Z_Barrel),
-        HitterPPI = (1 / (1 + exp(-RawPPI))) * 0.9,
-        HitterPPI = HitterPPI - 0.15,
-        HitterPPI = pmin(pmax(HitterPPI, 0), 1.25),
-        HitterPPI = round(HitterPPI, 3)
-      ) %>%
-      select(-Z_K, -Z_BB, -Z_Barrel, -RawPPI)
+    calculate_hitter_ppi(df)
   }
 
   calculate_pitcher_ppi_print <- function(df) {
-    if (is.null(df) || nrow(df) == 0) return(df)
-
-    df %>%
-      mutate(
-        across(c(`K%`, `BB%`, `Barrel%`), safe_num),
-        Z_K = (`K%` - mean(`K%`, na.rm = TRUE)) / sd(`K%`, na.rm = TRUE),
-        Z_BB = (`BB%` - mean(`BB%`, na.rm = TRUE)) / sd(`BB%`, na.rm = TRUE),
-        Z_Barrel = (`Barrel%` - mean(`Barrel%`, na.rm = TRUE)) / sd(`Barrel%`, na.rm = TRUE),
-        RawPPI = (1.2 * Z_K) - (0.9 * Z_BB) - (0.9 * Z_Barrel),
-        `PPI (ERA)` = round(4.50 - (0.5 * RawPPI), 2)
-      ) %>%
-      select(-Z_K, -Z_BB, -Z_Barrel, -RawPPI)
+    calculate_pitcher_ppi(df)
   }
 
   metric_leaders_table <- function(df, entity_col, metric_cfg) {
