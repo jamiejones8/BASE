@@ -22,7 +22,7 @@ RUN install2.r --error \
     reactable tidyr purrr DBI RSQLite \
     bslib shinyjs DT data.table stringr \
     base64enc pdftools \
-    plotly gridExtra png sysfonts showtext rsvg
+    plotly gridExtra png sysfonts showtext rsvg gridlayout
 
 RUN Rscript -e "install.packages(c('arrow','lightgbm'), repos='https://packagemanager.posit.co/cran/__linux__/jammy/latest')"
 
