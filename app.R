@@ -785,12 +785,12 @@ markers_legend_grob <- function() {
     rectGrob(gp = gpar(fill = tok$bg_page, col = NA)),
     # Hard Hit — diamond
     pointsGrob(x = unit(0.40, "npc"), y = unit(0.5, "npc"),
-               pch = 23, size = unit(11, "pt"), gp = key_gp),
+               pch = 22, size = unit(11, "pt"), gp = key_gp),
     textGrob("Hard Hit (95+ EV)", x = unit(0.415, "npc"), y = unit(0.5, "npc"),
              hjust = 0, gp = txt_gp),
     # Whiff — square
     pointsGrob(x = unit(0.565, "npc"), y = unit(0.5, "npc"),
-               pch = 22, size = unit(11, "pt"), gp = key_gp),
+               pch = 23, size = unit(11, "pt"), gp = key_gp),
     textGrob("Whiff", x = unit(0.58, "npc"), y = unit(0.5, "npc"),
              hjust = 0, gp = txt_gp)
   ))
