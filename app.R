@@ -1081,7 +1081,7 @@ mockup_plate_plot <- function(game, side) {
     # Only Whiff / Hard Hit appear in the legend; ordinary pitches stay circles.
     # Explicit limits keep all three levels in the domain so the Hard Hit /
     # Whiff legend keys always render, even when the data has none of them.
-    scale_shape_manual(values = c("Other" = 21, "Whiff" = 22, "Hard Hit" = 23),
+    scale_shape_manual(values = c("Other" = 21, "Whiff" = 23, "Hard Hit" = 22),
                        limits = c("Other", "Whiff", "Hard Hit"),
                        breaks = c("Hard Hit", "Whiff"), name = NULL,
                        drop = FALSE) +
