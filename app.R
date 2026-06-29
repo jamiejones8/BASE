@@ -4280,16 +4280,33 @@ acq_board_server <- function(input, output, session) {
   output$pbp_pitcher_table <- renderDT({
     filtered_pitchers() %>%
       mutate(Profile = ifelse(has_pbp, "✓", "—"),
-             `Age/Yr` = acq_age_or_class(age, class_year)) %>%
-      select(Name = pitcher_name, Hand = pitch_hand, `Age/Yr`,
+             `Age/Yr` = acq_age_or_class(age, class_year),
+             # Clickable name -> fires pbp_name_click with this row's index
+             # (1..n in filtered_pitchers() order). stopPropagation keeps the
+             # click from also toggling row selection used by "Mark ineligible".
+             Name = sprintf(
+               paste0("<a href='#' onclick=\"event.stopPropagation();",
+                      "Shiny.setInputValue('pbp_name_click', %d, {priority:'event'});",
+                      "return false;\" style='color:%s;font-weight:bold;cursor:pointer;'>%s</a>"),
+               dplyr::row_number(), ACQ_TEAL, htmltools::htmlEscape(pitcher_name))) %>%
+      select(Name, Hand = pitch_hand, `Age/Yr`,
              School = college, Team = team_name, League = league_name,
              Profile, G, IP, ERA, FIP, WHIP,
              `K/9` = K9, `BB/9` = BB9, `K/BB` = KBB, `HR/9` = HR9) %>%
-      datatable(selection = "multiple", rownames = FALSE,
+      datatable(selection = "multiple", rownames = FALSE, escape = FALSE,
                 options = list(pageLength = 25, scrollX = TRUE, dom = "ftip",
                                initComplete = acq_dt_header_js()),
                 class = "display compact") %>%
       formatRound(c("ERA","FIP","WHIP","K/9","BB/9","K/BB","HR/9"), 2)
+  })
+
+  # Click a pitcher's name -> open their profile directly (no row-select needed).
+  observeEvent(input$pbp_name_click, {
+    idx <- input$pbp_name_click
+    fp  <- filtered_pitchers()
+    if (is.null(idx) || idx < 1 || idx > nrow(fp)) return()
+    selected_key(fp$source_key[idx])
+    toggleModal(session, "pitcher_modal", toggle = "open")
   })
 
   observeEvent(input$view_pitcher, {
