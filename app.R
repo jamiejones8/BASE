@@ -3644,7 +3644,7 @@ acq_pitcher_season_tagged <- acq_pitcher_season %>%
     class_year = NA_character_
   )
 
-acq_necbl_pitchers_clean <- necbl_pitching %>%
+acq_necbl_pitchers_clean <- acq_necbl_pitching %>%
   mutate(source_key = paste(player_name, team, "NECBL")) %>%
   mutate(
     pitcher_name = coalesce(full_name, player_name),
@@ -3710,7 +3710,7 @@ acq_hitting_all_clean <- acq_hitting_all %>%
          team_name, league_name, G, AB, H, R,
          `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, source_key)
 
-acq_necbl_hitting_clean <- necbl_hitting %>%
+acq_necbl_hitting_clean <- acq_necbl_hitting %>%
   mutate(source_key = paste(player_name, Team, "NECBL")) %>%
   mutate(
     player_name = coalesce(full_name, player_name),
