@@ -32,14 +32,64 @@ last     <- dplyr::last
 source("scout_app.R")
 source("leaderboards_embed.R")
 
-Sys.getenv("write_token")
-Sys.getenv("HF_TOKEN")
+# ══════════════════════════════════════════════════════════════════════════════
+# HF HUB WRITE-BACK HELPER
+# ══════════════════════════════════════════════════════════════════════════════
 
-all_env <- Sys.getenv()
-all_env[grepl("token|hf", names(all_env), ignore.case = TRUE)]
+HF_REPO_ID   <- "BrewsterWhitecapsMAC/CAPS"
+HF_REPO_TYPE <- "space"
 
-test_path <- tempfile(fileext = ".txt")
-writeLines("test push from CAPS app", test_path)
+push_file_to_hf <- function(local_path, repo_path,
+                            commit_message = paste("Update", repo_path)) {
+
+  token <- Sys.getenv("write_token")
+  if (!nzchar(token)) {
+    message("HF write token not found — skipping push for ", repo_path)
+    return(invisible(FALSE))
+  }
+
+  if (!file.exists(local_path)) {
+    message("Local file not found, cannot push: ", local_path)
+    return(invisible(FALSE))
+  }
+
+  file_content <- readBin(local_path, "raw", file.info(local_path)$size)
+  encoded      <- base64enc::base64encode(file_content)
+
+  url <- glue::glue(
+    "https://huggingface.co/api/spaces/{HF_REPO_ID}/commit/main"
+  )
+
+  body <- list(
+    summary = commit_message,
+    files = list(
+      list(
+        path     = repo_path,
+        content  = encoded,
+        encoding = "base64"
+      )
+    )
+  )
+
+  resp <- httr::POST(
+    url,
+    httr::add_headers(
+      Authorization  = paste("Bearer", token),
+      `Content-Type` = "application/json"
+    ),
+    body   = jsonlite::toJSON(body, auto_unbox = TRUE),
+    encode = "raw"
+  )
+
+  if (httr::status_code(resp) >= 200 && httr::status_code(resp) < 300) {
+    message("Pushed to HF: ", repo_path)
+    return(invisible(TRUE))
+  } else {
+    message("HF push failed (", httr::status_code(resp), "): ",
+            httr::content(resp, as = "text", encoding = "UTF-8"))
+    return(invisible(FALSE))
+  }
+}
 
 result <- push_file_to_hf(test_path, "test_push.txt", "Testing HF write-back")
 print(result)
