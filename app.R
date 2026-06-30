@@ -2723,6 +2723,8 @@ score_pitches_xrv <- function(df, models = sd_models) {
   enc <- models$encodings
   scored <- df %>%
     mutate(
+      PlateLocHeight = suppressWarnings(as.numeric(PlateLocHeight)),
+      PlateLocSide   = suppressWarnings(as.numeric(PlateLocSide)),
       Balls = as.integer(Balls), Strikes = as.integer(Strikes),
       count_state = paste0(Balls, "-", Strikes),
       count_state = ifelse(!count_state %in% c("0-0","0-1","0-2","1-0","1-1","1-2",
@@ -2736,9 +2738,17 @@ score_pitches_xrv <- function(df, models = sd_models) {
            scored$pitch_type_model != "Other"
   scored$xRV_swing <- NA_real_; scored$xRV_take <- NA_real_
   if (any(valid)) {
-    dmat <- xgb.DMatrix(as.matrix(scored[valid, sd_features]))
-    scored$xRV_swing[valid] <- predict(models$model_swing, dmat)
-    scored$xRV_take[valid]  <- predict(models$model_take,  dmat)
+    feature_frame <- scored[valid, sd_features, drop = FALSE] %>%
+      mutate(across(everything(), ~ suppressWarnings(as.numeric(.x))))
+    feature_matrix <- data.matrix(feature_frame)
+    keep <- stats::complete.cases(feature_matrix)
+
+    if (any(keep)) {
+      dmat <- xgb.DMatrix(feature_matrix[keep, , drop = FALSE])
+      scored_rows <- which(valid)[keep]
+      scored$xRV_swing[scored_rows] <- predict(models$model_swing, dmat)
+      scored$xRV_take[scored_rows]  <- predict(models$model_take,  dmat)
+    }
   }
   scored %>% mutate(xRV_diff = xRV_swing - xRV_take) %>%
     select(-pitch_type_model, -count_state_enc, -pitch_type_enc)
