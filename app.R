@@ -33,11 +33,13 @@ source("scout_app.R")
 source("leaderboards_embed.R")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# HF HUB WRITE-BACK HELPER
+# HF HUB WRITE-BACK HELPER — now points at a Dataset repo, not the Space repo
+# Dataset repos don't trigger Space rebuilds on commit, so ineligible list
+# changes no longer restart the app.
 # ══════════════════════════════════════════════════════════════════════════════
 
-HF_REPO_ID   <- "BrewsterWhitecapsMAC/CAPS"
-HF_REPO_TYPE <- "space"
+HF_DATA_REPO_ID   <- "BrewsterWhitecapsMAC/acq-board-data"
+HF_DATA_REPO_TYPE <- "dataset"
 
 push_file_to_hf <- function(local_path, repo_path,
                             commit_message = paste("Update", repo_path)) {
@@ -57,7 +59,7 @@ push_file_to_hf <- function(local_path, repo_path,
   encoded      <- base64enc::base64encode(file_content)
 
   url <- glue::glue(
-    "https://huggingface.co/api/spaces/{HF_REPO_ID}/commit/main"
+    "https://huggingface.co/api/datasets/{HF_DATA_REPO_ID}/commit/main"
   )
 
   body <- list(
@@ -82,7 +84,7 @@ push_file_to_hf <- function(local_path, repo_path,
   )
 
   if (httr::status_code(resp) >= 200 && httr::status_code(resp) < 300) {
-    message("Pushed to HF: ", repo_path)
+    message("Pushed to HF dataset: ", repo_path)
     return(invisible(TRUE))
   } else {
     message("HF push failed (", httr::status_code(resp), "): ",
@@ -90,6 +92,34 @@ push_file_to_hf <- function(local_path, repo_path,
     return(invisible(FALSE))
   }
 }
+
+pull_file_from_hf <- function(repo_path, local_path) {
+
+  token <- Sys.getenv("write_token")
+
+  url <- glue::glue(
+    "https://huggingface.co/datasets/{HF_DATA_REPO_ID}/resolve/main/{repo_path}"
+  )
+
+  resp <- tryCatch(
+    httr::GET(
+      url,
+      httr::add_headers(Authorization = paste("Bearer", token)),
+      httr::write_disk(local_path, overwrite = TRUE),
+      httr::timeout(15)
+    ),
+    error = function(e) NULL
+  )
+
+  if (is.null(resp) || httr::http_error(resp)) {
+    message("HF pull failed for ", repo_path, " — using local fallback if present.")
+    return(invisible(FALSE))
+  }
+
+  message("Pulled from HF dataset: ", repo_path)
+  return(invisible(TRUE))
+}
+
 
 fetch_next_whitecaps_game <- function() {
   resp <- tryCatch(
@@ -3737,6 +3767,10 @@ ACQ_ALL_LEAGUES <- c("All", "MLB Draft League", "Appalachian League",
 
 ACQ_INELIG_FILE   <- "ineligible_pitchers.csv"
 ACQ_INELIG_FILE_H <- "ineligible_hitters.csv"
+
+# Pull the latest copy from the dataset repo at startup, before reading
+invisible(pull_file_from_hf("ineligible_pitchers.csv", ACQ_INELIG_FILE))
+invisible(pull_file_from_hf("ineligible_hitters.csv",  ACQ_INELIG_FILE_H))
 
 acq_load_ineligible <- function() {
   if (!file.exists(ACQ_INELIG_FILE)) return(character(0))
