@@ -32,6 +32,12 @@ last     <- dplyr::last
 source("scout_app.R")
 source("leaderboards_embed.R")
 
+Sys.getenv("write_token")
+Sys.getenv("HF_TOKEN")
+
+all_env <- Sys.getenv()
+all_env[grepl("token|hf", names(all_env), ignore.case = TRUE)]
+
 test_path <- tempfile(fileext = ".txt")
 writeLines("test push from CAPS app", test_path)
 
