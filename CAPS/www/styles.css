@@ -1,0 +1,268 @@
+:root {
+  --navy:         #0a1f44;
+  --navy-mid:     #122654;
+  --navy-light:   #1a3470;
+  --teal:         #0a9396;
+  --teal-light:   #94d2bd;
+  --white:        #ffffff;
+  --off-white:    #f4f6fa;
+  --text-main:    #0a1f44;
+  --text-muted:   #5a6a85;
+  --radius:       10px;
+  --shadow:       0 4px 20px rgba(10, 31, 68, 0.10);
+  --shadow-hover: 0 8px 32px rgba(10, 31, 68, 0.18);
+  --font-head:    'Oswald', sans-serif;
+  --font-body:    'Source Sans 3', sans-serif;
+}
+
+/* ── Reset & base ───────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--off-white);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.hub-header {
+  background: var(--navy);
+  color: var(--white);
+  padding: 28px 40px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 3px solid var(--teal);
+}
+
+.hub-header .team-logo {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: var(--white);
+  padding: 4px;
+}
+
+.hub-header .header-text h1 {
+  font-family: var(--font-head);
+  font-size: 1.9rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.hub-header .header-text p {
+  font-size: 0.88rem;
+  color: var(--teal-light);
+  margin-top: 3px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Main content ───────────────────────────────────── */
+.hub-main {
+  max-width: 100%;
+  margin: 0;
+  padding: 40px 48px 60px;
+}
+
+.section-label {
+  font-family: var(--font-head);
+  font-size: 1.4rem;        /* was 0.78rem */
+  letter-spacing: 0.08em;   /* was 0.12em */
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dde2ec;
+}
+
+/* ── Card grid ──────────────────────────────────────── */
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 22px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+
+/* ── Individual card ────────────────────────────────── */
+.app-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  text-decoration: none;
+  color: inherit;
+  border: 1.5px solid transparent;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  position: relative;
+  overflow: hidden;
+  min-width: 280px;
+  width: 100%;
+  height: 420px;
+  flex-shrink: 0;
+}
+
+.app-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--teal);
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Top accent stripe */
+.app-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--navy);
+  transition: background 0.18s ease;
+  z-index: 1;
+}
+
+.app-card:hover::before {
+  background: var(--teal);
+}
+
+/* Coming soon — muted */
+.app-card.coming-soon {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Card image */
+.card-img {
+  width: 100%;
+  height: 240px;
+  object-fit: cover;
+  object-position: center top;
+  flex-shrink: 0;
+}
+
+/* Card body */
+.card-body {
+  padding: 14px 18px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+}
+
+.app-card .card-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.app-card .card-title {
+  font-family: var(--font-head);
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--navy);
+}
+
+.app-card .card-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.app-card .card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.status-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+
+.status-badge.live {
+  background: #e0f4f4;
+  color: var(--teal);
+}
+
+.status-badge.coming-soon {
+  background: #f0f0f0;
+  color: #888;
+}
+
+.card-arrow {
+  font-size: 1rem;
+  color: var(--teal);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.app-card:hover .card-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ── Standings ──────────────────────────────────────── */
+.standings-wrapper {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.standings-division-label {
+  font-family: var(--font-head);
+  font-size: 1rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin: 24px 0 10px;
+}
+
+.standings-wrapper table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1.05rem;
+  font-family: var(--font-body);
+}
+
+.standings-wrapper table th {
+  background: var(--navy);
+  color: var(--white);
+  padding: 12px 18px;
+  text-align: left;
+  font-family: var(--font-head);
+  letter-spacing: 0.06em;
+  font-size: 0.95rem;
+}
+
+.standings-wrapper table td {
+  padding: 11px 18px;
+  border-bottom: 1px solid #dde2ec;
+  font-size: 1rem;
+}
+
+.standings-wrapper table tr:hover td {
+  background: #f0f9f9;
+}
+
+/* ── Footer ─────────────────────────────────────────── */
+.hub-footer {
+  text-align: center;
+  padding: 20px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  border-top: 1px solid #dde2ec;
+}
