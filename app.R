@@ -91,9 +91,6 @@ push_file_to_hf <- function(local_path, repo_path,
   }
 }
 
-result <- push_file_to_hf(test_path, "test_push.txt", "Testing HF write-back")
-print(result)
-
 fetch_next_whitecaps_game <- function() {
   resp <- tryCatch(
     httr::GET(paste0(
