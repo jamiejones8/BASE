@@ -1,8 +1,8 @@
 ---
-title: CAPS TEST
-emoji: 📚
+title: CAPS
+emoji: 📊
 colorFrom: blue
-colorTo: yellow
+colorTo: green
 sdk: docker
 pinned: false
 ---
