@@ -3748,6 +3748,8 @@ acq_load_ineligible <- function() {
 
 acq_save_ineligible <- function(keys) {
   tibble(source_key = as.character(keys)) %>% write_csv(ACQ_INELIG_FILE)
+  push_file_to_hf(ACQ_INELIG_FILE, "ineligible_pitchers.csv",
+                  paste("Update ineligible pitchers —", length(keys), "total"))
 }
 
 acq_load_ineligible_h <- function() {
@@ -3760,6 +3762,8 @@ acq_load_ineligible_h <- function() {
 
 acq_save_ineligible_h <- function(keys) {
   tibble(source_key = as.character(keys)) %>% write_csv(ACQ_INELIG_FILE_H)
+  push_file_to_hf(ACQ_INELIG_FILE_H, "ineligible_hitters.csv",
+                  paste("Update ineligible hitters —", length(keys), "total"))
 }
 
 acq_dt_header_js <- function() {
@@ -3984,9 +3988,6 @@ acq_board_ui <- function() {
     div(id = "nav_run_updates", class = "sidebar-action",
         tags$i(class = "ti ti-refresh"), "Run updates"
     ),
-    actionButton("test_hf_push", "Test HF Push", class = "btn-action",
-                 style = "margin-top:8px; width:100%;")
-),
 
           # ── Main area ───────────────────────────────────────────────────────
           div(class = "main-area",
@@ -4304,18 +4305,6 @@ acq_board_server <- function(input, output, session) {
   observeEvent(input$nav_hitters,    { switch_page("hitters") },    ignoreInit = TRUE)
   observeEvent(input$nav_top10,      { switch_page("top10") },      ignoreInit = TRUE)
   observeEvent(input$nav_ineligible, { switch_page("ineligible") }, ignoreInit = TRUE)
-  observeEvent(input$test_hf_push, {
-  test_path <- tempfile(fileext = ".txt")
-  writeLines(paste("Test push at", Sys.time()), test_path)
-
-  result <- push_file_to_hf(test_path, "test_push.txt", "Testing HF write-back")
-
-  if (isTRUE(result)) {
-    showNotification("HF push succeeded! Check the repo file list.", type = "message", duration = 6)
-  } else {
-    showNotification("HF push failed. Check server logs.", type = "error", duration = 6)
-  }
-})
 
   observeEvent(input$open_top10,   { toggleModal(session, "top10_modal", toggle = "open") })
   observeEvent(input$open_top10_h, { toggleModal(session, "top10_modal", toggle = "open") })
