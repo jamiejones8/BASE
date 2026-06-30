@@ -32,6 +32,12 @@ last     <- dplyr::last
 source("scout_app.R")
 source("leaderboards_embed.R")
 
+test_path <- tempfile(fileext = ".txt")
+writeLines("test push from CAPS app", test_path)
+
+result <- push_file_to_hf(test_path, "test_push.txt", "Testing HF write-back")
+print(result)
+
 fetch_next_whitecaps_game <- function() {
   resp <- tryCatch(
     httr::GET(paste0(
