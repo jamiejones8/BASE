@@ -15,19 +15,13 @@ hitting_page_ui <- function(id) {
   
   div(
     class = "main-container",
-    
-    # ---- Header ----
-    div(class = "txst-header", "Hitting Leaderboards"),
-    p(class = "page-subtitle",
-      paste("Top 10", TEAM_DISPLAY_NAME, "hitters across seven key offensive metrics (including PPI).")),
-    tags$hr(),
-    
+
     # --- Leaderboard Grid (2x3 + 1 wide) ---
     div(
       class = "leaderboard-grid",
       
       div(class = "leaderboard-card", 
-          h4("In-Zone Contact%"),
+          h4("In-Zone Contact"),
           DT::dataTableOutput(ns("top_zcontact"))
       ),
       div(class = "leaderboard-card",
@@ -35,15 +29,15 @@ hitting_page_ui <- function(id) {
           DT::dataTableOutput(ns("top_chase"))
       ),
       div(class = "leaderboard-card",
-          h4("In-Zone Swing% (No D1 Average)"),
+          h4("In-Zone Swing"),
           DT::dataTableOutput(ns("top_zswing"))
       ),
       div(class = "leaderboard-card",
-          h4("Max Exit Velocity (No D1 Average)"),
+          h4("Max Exit Velo"),
           DT::dataTableOutput(ns("top_maxev"))
       ),
       div(class = "leaderboard-card",
-          h4("90th Percentile EV (mph)"),
+          h4("90th EV"),
           DT::dataTableOutput(ns("top_p90ev"))
       ),
       div(class = "leaderboard-card",
@@ -51,7 +45,7 @@ hitting_page_ui <- function(id) {
           DT::dataTableOutput(ns("top_barrel"))
       ),
       div(class = "leaderboard-card-wide",
-          h4("Hitter PPI (No D1 Average)"),
+          h4("Hitter PPI"),
           DT::dataTableOutput(ns("top_ppi"))
       )
     ),
@@ -59,7 +53,7 @@ hitting_page_ui <- function(id) {
     tags$hr(),
     div(
       class = "page-footer-note",
-      p(em("Leaderboards update automatically with the latest TrackMan data."))
+      p(em("Updates with the latest TrackMan data."))
     )
   )
 }
@@ -184,63 +178,52 @@ hitting_page_server <- function(id, hitting_data) {
       apply_d1_highlight(dt, metric_name, num_col)
     }
     
+    leaderboard_tables <- reactive({
+      req(hitting_data())
+
+      base <- hitting_data()
+      ppi <- calculate_hitter_ppi_metric(base)
+
+      list(
+        zcontact = rank_metric_leaders(base, "Batter", "Z-Contact%"),
+        chase = rank_metric_leaders(base, "Batter", "Chase%", descending = FALSE),
+        zswing = rank_metric_leaders(base, "Batter", "Z-Swing%"),
+        maxev = rank_metric_leaders(base, "Batter", "MaxEV"),
+        p90ev = rank_metric_leaders(base, "Batter", "P90EV"),
+        barrel = rank_metric_leaders(base, "Batter", "Barrel%"),
+        ppi = rank_metric_leaders(ppi, "Batter", "HitterPPI")
+      )
+    })
+    
     # =========================================================
     #  Leaderboard Outputs
     # =========================================================
     output$top_zcontact <- DT::renderDataTable({
-      req(hitting_data())
-      df <- hitting_data() %>%
-        arrange(desc(`Z-Contact%`)) %>%
-        slice_head(n = 10)
-      format_table(df, "Z-Contact%")
+      format_table(leaderboard_tables()$zcontact, "Z-Contact%")
     })
     
     output$top_chase <- DT::renderDataTable({
-      req(hitting_data())
-      df <- hitting_data() %>%
-        arrange(`Chase%`) %>%
-        slice_head(n = 10)
-      format_table(df, "Chase%", descending = FALSE)
+      format_table(leaderboard_tables()$chase, "Chase%", descending = FALSE)
     })
     
     output$top_zswing <- DT::renderDataTable({
-      req(hitting_data())
-      df <- hitting_data() %>%
-        arrange(desc(`Z-Swing%`)) %>%
-        slice_head(n = 10)
-      format_table(df, "Z-Swing%")
+      format_table(leaderboard_tables()$zswing, "Z-Swing%")
     })
     
     output$top_maxev <- DT::renderDataTable({
-      req(hitting_data())
-      df <- hitting_data() %>%
-        arrange(desc(MaxEV)) %>%
-        slice_head(n = 10)
-      format_table(df, "MaxEV")
+      format_table(leaderboard_tables()$maxev, "MaxEV")
     })
     
     output$top_p90ev <- DT::renderDataTable({
-      req(hitting_data())
-      df <- hitting_data() %>%
-        arrange(desc(P90EV)) %>%
-        slice_head(n = 10)
-      format_table(df, "P90EV")
+      format_table(leaderboard_tables()$p90ev, "P90EV")
     })
     
     output$top_barrel <- DT::renderDataTable({
-      req(hitting_data())
-      df <- hitting_data() %>%
-        arrange(desc(`Barrel%`)) %>%
-        slice_head(n = 10)
-      format_table(df, "Barrel%")
+      format_table(leaderboard_tables()$barrel, "Barrel%")
     })
     
     output$top_ppi <- DT::renderDataTable({
-      req(hitting_data())
-      df <- calculate_hitter_ppi(hitting_data()) %>%
-        arrange(desc(HitterPPI)) %>%
-        slice_head(n = 10)
-      format_table(df, "HitterPPI")
+      format_table(leaderboard_tables()$ppi, "HitterPPI")
     })
   })
 }

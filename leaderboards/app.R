@@ -1,6 +1,6 @@
 # =========================================================
 #  BREWSTER WHITECAPS ANALYTICS
-#  Bundled single-file data loader for leaderboard pages
+#  Shared leaderboard workspace for embedded Whitecaps views
 # =========================================================
 
 library(shiny)
@@ -10,8 +10,6 @@ library(DT)
 library(dplyr)
 
 WHITE_CAPS_APP_DIR <- normalizePath(".", winslash = "/", mustWork = TRUE)
-WHITE_CAPS_PARENT_DIR <- dirname(WHITE_CAPS_APP_DIR)
-WHITE_CAPS_SOURCE_FILE <- file.path(WHITE_CAPS_PARENT_DIR, "test.csv")
 WHITE_CAPS_DATA_DIR <- file.path(WHITE_CAPS_APP_DIR, "data")
 WHITE_CAPS_CACHE_DIR <- file.path(WHITE_CAPS_APP_DIR, "cache")
 WHITE_CAPS_WWW_DIR <- file.path(WHITE_CAPS_APP_DIR, "www")
@@ -49,12 +47,10 @@ source("pages/upload_page.R", local = TRUE)
 source("pages/pitching_totals_page.R", local = TRUE)
 source("pages/hitting_totals_page.R", local = TRUE)
 source("pages/pitch_type_breakdown_page.R", local = TRUE)
-source("pages/strength_of_competition_page.R", local = TRUE)
 
 # ---- HELPERS ----
 source("helpers/process_data.R", local = TRUE)
 source("helpers/pitcher_times_through_order.R", local = TRUE)
-source("helpers/metric_helpers.R", local = TRUE)
 source("helpers/calculate_pitcher_stats.R", local = TRUE)
 source("helpers/calculate_hitter_stats.R", local = TRUE)
 source("helpers/process_calculations.R", local = TRUE)
@@ -62,6 +58,7 @@ source("helpers/checkbox_loader.R", local = TRUE)
 source("helpers/home_counts.R", local = TRUE)
 source("helpers/pitch_type_summary.R", local = TRUE)
 source("helpers/cache_loader.R", local = TRUE)
+source("helpers/leaderboard_rankings.R", local = TRUE)
 source("helpers/print_layouts.R", local = TRUE)
 
 # ---- THEME ----
@@ -70,27 +67,28 @@ whitecaps_theme <- bs_theme(
   fg = "#172033",
   primary = "#06768A",
   secondary = "#21283D",
-  base_font = font_google("Inter")
+  base_font = "Source Sans 3",
+  heading_font = "Oswald"
 )
 
 # =========================================================
 #  UI
 # =========================================================
-ui <- fluidPage(
-  theme = whitecaps_theme,
+whitecaps_ui_dependencies <- function() {
+  tagList(
   useShinyjs(),
-    tags$head(
-      tags$title(APP_TITLE),
-      tags$link(rel = "icon", type = "image/png", href = BRAND_LOGO_FILE),
-      tags$link(
-        id = "whitecaps-stylesheet",
-        rel = "stylesheet",
-        type = "text/css",
-        href = whitecaps_asset_path("styles.css")
-      ),
-      tags$link(
-        id = "whitecaps-font-bebas",
-        href = "https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap",
+  tags$head(
+    tags$title(APP_TITLE),
+    tags$link(rel = "icon", type = "image/png", href = BRAND_LOGO_FILE),
+    tags$link(
+      id = "whitecaps-stylesheet",
+      rel = "stylesheet",
+      type = "text/css",
+      href = whitecaps_asset_path("styles.css")
+    ),
+    tags$link(
+      id = "whitecaps-font-app",
+      href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap",
       rel = "stylesheet"
     ),
     tags$script(HTML("
@@ -108,68 +106,115 @@ ui <- fluidPage(
         window.print();
       });
     "))
-  ),
-  
-  # ---- NAV BAR ----
+  )
+  )
+}
+
+whitecaps_page_meta <- function(page) {
+  switch(
+    page,
+    "home" = list(
+      title = APP_HOME_TITLE,
+      subtitle = "Season leaders at a glance."
+    ),
+    "hitting" = list(
+      title = "Hitting Leaderboards",
+      subtitle = paste("Top 10", TEAM_DISPLAY_NAME, "hitters in seven key metrics.")
+    ),
+    "pitching" = list(
+      title = "Pitching Leaderboards",
+      subtitle = paste("Top 10", TEAM_DISPLAY_NAME, "pitchers in seven key metrics.")
+    ),
+    "process" = list(
+      title = "Pitching Process",
+      subtitle = paste("Top 10", TEAM_DISPLAY_NAME, "arms in four command metrics.")
+    ),
+    "pitchtype" = list(
+      title = "Pitch Type Breakdown",
+      subtitle = "Pitch results by type."
+    ),
+    "hitting_totals" = list(
+      title = "Hitting Totals",
+      subtitle = "All hitters in one table."
+    ),
+    "pitcher_totals" = list(
+      title = "Pitching Totals",
+      subtitle = "All pitchers in one table."
+    ),
+    "upload" = list(
+      title = "Data",
+      subtitle = "Current leaderboard source."
+    ),
+    list(
+      title = APP_TITLE,
+      subtitle = NULL
+    )
+  )
+}
+
+whitecaps_shell_ui <- function() {
   div(
-    class = "top-nav",
+    class = "leaderboards-shell",
+
+    # ---- NAV BAR ----
     div(
-      class = "logo-wrapper",
-      a(
-        href = "#",
-        id = "nav_home_logo",
-        class = "nav-logo-link",
-        tags$img(src = BRAND_LOGO_FILE, class = "nav-logo")
+      class = "top-nav",
+      div(
+        class = "logo-wrapper",
+        a(
+          href = "#",
+          id = "nav_home_logo",
+          class = "nav-logo-link",
+          tags$img(src = BRAND_LOGO_FILE, class = "nav-logo")
+        )
+      ),
+      div(
+        class = "nav-links",
+        a("CAPS", href = "#", class = "nav-item", id = "nav_caps_hub"),
+        a("Home", href = "#", class = "nav-item active", id = "nav_home"),
+        a("Hitting", href = "#", class = "nav-item", id = "nav_hitting"),
+        a("Pitching", href = "#", class = "nav-item", id = "nav_pitching"),
+        a("Process", href = "#", class = "nav-item", id = "nav_process"),
+        a("Pitch Types", href = "#", class = "nav-item", id = "nav_pitchtype"),
+        a("Hit Totals", href = "#", class = "nav-item", id = "nav_hitter_rl"),
+        a("Pitch Totals", href = "#", class = "nav-item", id = "nav_pitcher_rl"),
+        a("Data", href = "#", class = "nav-item", id = "nav_upload")
       )
     ),
-    div(
-      class = "nav-links",
-      a("CAPS Hub", href = "#", class = "nav-item", id = "nav_caps_hub"),
-      a("Home", href = "#", class = "nav-item active", id = "nav_home"),
-      a("Hitting", href = "#", class = "nav-item", id = "nav_hitting"),
-      a("Pitching", href = "#", class = "nav-item", id = "nav_pitching"),
-      a("Process", href = "#", class = "nav-item", id = "nav_process"),
-      a("Pitch Type Breakdown", href = "#", class = "nav-item", id = "nav_pitchtype"),
-      a("Strength of Comp", href = "#", class = "nav-item", id = "nav_soc"),  # ✅ NEW
-      a("Hitting Totals", href = "#", class = "nav-item", id = "nav_hitter_rl"),
-      a("Pitching Totals", href = "#", class = "nav-item", id = "nav_pitcher_rl"),
-      a("Data Files", href = "#", class = "nav-item", id = "nav_upload")
-    )
-  ),
 
-  uiOutput("pitcher_tto_filter_bar"),
+    uiOutput("page_header_bar"),
 
-  div(
-    class = "page-actions-bar",
+    # ---- PAGE BODY ----
     div(
-      class = "page-actions-inner",
-      actionButton(
-        inputId = "save_pdf",
-        label = "Save Current Page as PDF",
-        class = "txst-btn print-page-btn"
-      )
-    )
-  ),
-  
-  # ---- PAGE BODY ----
-  div(
-    id = "print-target",
-    div(class = "screen-page-body", uiOutput("page_body")),
-    div(class = "print-page-body", uiOutput("print_page_body"))
-  ),
-  
-  # ---- FOOTER ----
-  div(class = "site-footer", p(APP_FOOTER_TEXT))
+      id = "print-target",
+      div(class = "screen-page-body", uiOutput("page_body")),
+      div(class = "print-page-body", uiOutput("print_page_body"))
+    ),
+
+    # ---- FOOTER ----
+    div(class = "site-footer", p(APP_FOOTER_TEXT))
+  )
+}
+
+embedded_ui <- tagList(
+  whitecaps_ui_dependencies(),
+  whitecaps_shell_ui()
+)
+
+ui <- fluidPage(
+  theme = whitecaps_theme,
+  embedded_ui
 )
 
 # =========================================================
 #  SERVER
 # =========================================================
 server <- function(input, output, session) {
+  message("🚀 Initializing Whitecaps leaderboards server")
   
   # ---- REACTIVES ----
   current_page          <- reactiveVal("home")
-  combined_data         <- reactiveVal(NULL)   # full processed pitch-by-pitch from one bundled file
+  combined_data         <- reactiveVal(NULL)   # full processed pitch-by-pitch from the shared leaderboard source
   pitching_data         <- reactiveVal(NULL)   # leaderboard output
   hitting_data          <- reactiveVal(NULL)   # leaderboard output
   process_data_reactive <- reactiveVal(NULL)   # process stats output
@@ -179,11 +224,11 @@ server <- function(input, output, session) {
   pitcher_tto_choices <- c("All Times Through Order", PITCHER_TTO_LEVELS())
   
   # =========================================================
-  #  LOAD BUNDLED DATA (ONLY on init + manual refresh)
+  #  LOAD LEADERBOARD DATA (ONLY on init + manual refresh)
   # =========================================================
   load_local_data <- function() {
     tryCatch({
-      message("📥 Loading bundled TrackMan data from ", normalizePath(WHITE_CAPS_SOURCE_FILE, winslash = "/", mustWork = FALSE), "...")
+      message("📥 Loading leaderboard data from CapeCod26.parquet...")
 
       active_file <- pick_active_bundled_file()
       cache_result <- load_valid_leaderboards_cache(active_file)
@@ -208,9 +253,9 @@ server <- function(input, output, session) {
 
       combined_data(data_list$raw)
 
-      message("🏁 Bundled data loaded successfully using live calculations.")
+      message("🏁 Leaderboard data loaded successfully using live calculations.")
     }, error = function(e) {
-      message("❌ Error loading bundled data: ", e$message)
+      message("❌ Error loading leaderboard data: ", e$message)
       stop(e)
     })
   }
@@ -320,31 +365,61 @@ server <- function(input, output, session) {
   # =========================================================
   #  PAGE RENDERING
   # =========================================================
-  output$pitcher_tto_filter_bar <- renderUI({
-    if (!current_page() %in% pitcher_tto_pages) return(NULL)
+  output$page_header_bar <- renderUI({
+    meta <- whitecaps_page_meta(current_page())
+    controls <- list()
 
-    selected_choice <- isolate(input$pitcher_tto)
-    if (is.null(selected_choice) || !selected_choice %in% pitcher_tto_choices) {
-      selected_choice <- pitcher_tto_choices[[1]]
-    }
+    if (current_page() %in% pitcher_tto_pages) {
+      selected_choice <- isolate(input$pitcher_tto)
+      if (is.null(selected_choice) || !selected_choice %in% pitcher_tto_choices) {
+        selected_choice <- pitcher_tto_choices[[1]]
+      }
 
-    div(
-      class = "season-filter-bar pitcher-tto-filter-bar",
-      style = "padding: 0 24px 12px 24px; display:flex; justify-content:center;",
-      div(
-        class = "pitcher-tto-filter-inner",
-        div(class = "pitcher-tto-filter-label", "Pitching Split"),
-        div(
-          class = "pitcher-tto-filter-select",
-          selectInput(
-            inputId = "pitcher_tto",
-            label = NULL,
-            choices = pitcher_tto_choices,
-            selected = selected_choice,
-            width = "320px",
-            selectize = FALSE
+      controls <- c(
+        controls,
+        list(
+          div(
+            class = "pitcher-tto-filter-inner page-header-filter",
+            div(class = "pitcher-tto-filter-label", "Pitching Split"),
+            div(
+              class = "pitcher-tto-filter-select",
+              selectInput(
+                inputId = "pitcher_tto",
+                label = NULL,
+                choices = pitcher_tto_choices,
+                selected = selected_choice,
+                width = "320px",
+                selectize = FALSE
+              )
+            )
           )
         )
+      )
+    }
+
+    controls <- c(
+      controls,
+      list(
+        actionButton(
+          inputId = "save_pdf",
+          label = "Save PDF",
+          class = "txst-btn print-page-btn"
+        )
+      )
+    )
+
+    div(
+      class = "page-header-bar",
+      div(
+        class = "page-header-inner",
+        div(
+          class = "page-header-copy",
+          div(class = "txst-header", meta$title),
+          if (!is.null(meta$subtitle) && nzchar(meta$subtitle)) {
+            p(class = "page-subtitle", meta$subtitle)
+          }
+        ),
+        do.call(div, c(list(class = "page-header-controls"), controls))
       )
     )
   })
@@ -357,12 +432,13 @@ server <- function(input, output, session) {
       "pitching"       = pitching_page_ui("pitch"),
       "process"        = process_page_ui("process"),
       "pitchtype"      = pitch_type_breakdown_page_ui("pitchtype_page"),
-      "soc"            = strength_of_competition_page_ui("soc_page"),  # ✅ NEW
       "hitting_totals" = hitting_totals_page_ui("hit_totals"),
       "pitcher_totals" = pitching_totals_page_ui("pitcher_totals"),
       "upload"         = upload_page_ui("upload_page")
     )
   })
+  outputOptions(output, "page_body", suspendWhenHidden = FALSE)
+  outputOptions(output, "page_header_bar", suspendWhenHidden = FALSE)
 
   # =========================================================
   #  HOME PAGE COUNTING LEADERBOARDS
@@ -421,93 +497,94 @@ server <- function(input, output, session) {
     build_home_pitcher_walks_counts(df)
   })
 
-  output$home_hit_hits <- DT::renderDataTable({
-    df <- home_hitter_counts()
-    if (is.null(df)) return(make_home_dt(NULL))
-    make_home_dt(
-      df %>%
-        arrange(desc(Hits), desc(PA), Batter) %>%
-        slice_head(n = 10) %>%
-        select(Batter, Hits, PA)
+  home_leaderboards <- reactive({
+    hitters <- home_hitter_counts()
+    pitchers <- home_pitcher_counts()
+    pitcher_walks <- home_pitcher_walks_counts()
+
+    list(
+      home_hit_hits = if (is.null(hitters)) NULL else {
+        rank_metric_leaders(hitters, "Batter", "Hits") %>%
+          dplyr::select(Batter, Hits, PA)
+      },
+      home_hit_ops = if (is.null(hitters)) NULL else {
+        rank_metric_leaders(
+          hitters,
+          "Batter",
+          "OPS",
+          filter_fn = function(df) df %>% dplyr::filter(PA >= hitter_ops_pa_min, !is.na(OPS))
+        ) %>%
+          dplyr::transmute(Batter, OPS = sprintf("%.3f", OPS), PA)
+      },
+      home_hit_walks = if (is.null(hitters)) NULL else {
+        rank_metric_leaders(hitters, "Batter", "Walks") %>%
+          dplyr::select(Batter, Walks, PA)
+      },
+      home_hit_hr = if (is.null(hitters)) NULL else {
+        rank_metric_leaders(hitters, "Batter", "HR") %>%
+          dplyr::select(Batter, HR, PA)
+      },
+      home_pitch_k = if (is.null(pitchers)) NULL else {
+        rank_metric_leaders(pitchers, "Pitcher", "Strikeouts") %>%
+          dplyr::select(Pitcher, Strikeouts, PA)
+      },
+      home_pitch_era = if (is.null(pitchers)) NULL else {
+        rank_metric_leaders(
+          pitchers,
+          "Pitcher",
+          "ERA",
+          descending = FALSE,
+          filter_fn = function(df) df %>% dplyr::filter(PA >= pitcher_era_pa_min, !is.na(ERA), Outs > 0)
+        ) %>%
+          dplyr::transmute(Pitcher, ERA = sprintf("%.2f", ERA), IP, PA)
+      },
+      home_pitch_bb_low = if (is.null(pitcher_walks)) NULL else {
+        rank_metric_leaders(
+          pitcher_walks,
+          "Pitcher",
+          "Walks",
+          descending = FALSE,
+          filter_fn = function(df) df %>% dplyr::filter(PA >= pitcher_walks_pa_min)
+        ) %>%
+          dplyr::select(Pitcher, Walks, PA)
+      },
+      home_pitch_ip = if (is.null(pitchers)) NULL else {
+        rank_metric_leaders(pitchers, "Pitcher", "IP", sort_col = "Outs") %>%
+          dplyr::select(Pitcher, IP, PA)
+      }
     )
+  })
+
+  output$home_hit_hits <- DT::renderDataTable({
+    make_home_dt(home_leaderboards()$home_hit_hits)
   })
 
   output$home_hit_ops <- DT::renderDataTable({
-    df <- home_hitter_counts()
-    if (is.null(df)) return(make_home_dt(NULL))
-    out <- df %>%
-      filter(PA >= hitter_ops_pa_min, !is.na(OPS)) %>%
-      arrange(desc(OPS), desc(PA), Batter) %>%
-      slice_head(n = 10) %>%
-      transmute(Batter, OPS = sprintf("%.3f", OPS), PA)
-    make_home_dt(out)
+    make_home_dt(home_leaderboards()$home_hit_ops)
   })
 
   output$home_hit_walks <- DT::renderDataTable({
-    df <- home_hitter_counts()
-    if (is.null(df)) return(make_home_dt(NULL))
-    make_home_dt(
-      df %>%
-        arrange(desc(Walks), desc(PA), Batter) %>%
-        slice_head(n = 10) %>%
-        select(Batter, Walks, PA)
-    )
+    make_home_dt(home_leaderboards()$home_hit_walks)
   })
 
   output$home_hit_hr <- DT::renderDataTable({
-    df <- home_hitter_counts()
-    if (is.null(df)) return(make_home_dt(NULL))
-    make_home_dt(
-      df %>%
-        arrange(desc(HR), desc(PA), Batter) %>%
-        slice_head(n = 10) %>%
-        select(Batter, HR, PA)
-    )
+    make_home_dt(home_leaderboards()$home_hit_hr)
   })
 
   output$home_pitch_k <- DT::renderDataTable({
-    df <- home_pitcher_counts()
-    if (is.null(df)) return(make_home_dt(NULL))
-    make_home_dt(
-      df %>%
-        arrange(desc(Strikeouts), desc(PA), Pitcher) %>%
-        slice_head(n = 10) %>%
-        select(Pitcher, Strikeouts, PA)
-    )
+    make_home_dt(home_leaderboards()$home_pitch_k)
   })
 
   output$home_pitch_era <- DT::renderDataTable({
-    df <- home_pitcher_counts()
-    if (is.null(df)) return(make_home_dt(NULL))
-    out <- df %>%
-      filter(PA >= pitcher_era_pa_min, !is.na(ERA), Outs > 0) %>%
-      arrange(ERA, desc(PA), Pitcher) %>%
-      slice_head(n = 10) %>%
-      transmute(Pitcher, ERA = sprintf("%.2f", ERA), IP, PA)
-    make_home_dt(out)
+    make_home_dt(home_leaderboards()$home_pitch_era)
   })
 
   output$home_pitch_bb_low <- DT::renderDataTable({
-    df <- home_pitcher_walks_counts()
-    if (is.null(df)) return(make_home_dt(NULL))
-    make_home_dt(
-      df %>%
-        filter(PA >= pitcher_walks_pa_min) %>%
-        arrange(Walks, desc(PA), Pitcher) %>%
-        slice_head(n = 10) %>%
-        select(Pitcher, Walks, PA)
-    )
+    make_home_dt(home_leaderboards()$home_pitch_bb_low)
   })
 
   output$home_pitch_ip <- DT::renderDataTable({
-    df <- home_pitcher_counts()
-    if (is.null(df)) return(make_home_dt(NULL))
-    make_home_dt(
-      df %>%
-        arrange(desc(Outs), desc(PA), Pitcher) %>%
-        slice_head(n = 10) %>%
-        select(Pitcher, IP, PA)
-    )
+    make_home_dt(home_leaderboards()$home_pitch_ip)
   })
 
   # =========================================================
@@ -612,11 +689,11 @@ server <- function(input, output, session) {
   }
 
   calculate_hitter_ppi_print <- function(df) {
-    calculate_hitter_ppi(df)
+    calculate_hitter_ppi_metric(df)
   }
 
   calculate_pitcher_ppi_print <- function(df) {
-    calculate_pitcher_ppi(df)
+    calculate_pitcher_ppi_metric(df)
   }
 
   metric_leaders_table <- function(df, entity_col, metric_cfg) {
@@ -1005,70 +1082,16 @@ server <- function(input, output, session) {
     )
   }
 
-  build_soc_print_ui <- function() {
-    min_pa <- input[["soc_page-min_pa"]]
-    if (is.null(min_pa)) min_pa <- 0
-
-    pd <- filtered_combined()
-    hitters_tbl <- data.frame()
-    pitchers_tbl <- data.frame()
-
-    if (!is.null(pd) && nrow(pd) > 0) {
-      hitters_pd <- pd %>% filter(BatterTeam == ACTIVE_TEAM_CODE)
-      pitchers_pd <- pd %>% filter(PitcherTeam == ACTIVE_TEAM_CODE)
-      soc <- list(
-        hitters = build_strength_of_comp_tables(hitters_pd, min_pa_qualify = min_pa)$hitters,
-        pitchers = build_strength_of_comp_tables(pitchers_pd, min_pa_qualify = min_pa)$pitchers
-      )
-
-      hitters_tbl <- soc$hitters %>%
-        select(Hitter, PA_Total, wOBA_Total, `wOBA vs LHP`, `wOBA vs RHP`,
-               `wOBA vs Top`, `wOBA vs Middle`, `wOBA vs Bottom`) %>%
-        arrange(desc(`wOBA vs Top`), desc(wOBA_Total)) %>%
-        slice_head(n = 8) %>%
-        mutate(
-          PA_Total = fmt_int(PA_Total),
-          wOBA_Total = fmt_dec(wOBA_Total, 3),
-          `wOBA vs LHP` = fmt_dec(`wOBA vs LHP`, 3),
-          `wOBA vs RHP` = fmt_dec(`wOBA vs RHP`, 3),
-          `wOBA vs Top` = fmt_dec(`wOBA vs Top`, 3),
-          `wOBA vs Middle` = fmt_dec(`wOBA vs Middle`, 3),
-          `wOBA vs Bottom` = fmt_dec(`wOBA vs Bottom`, 3)
-        )
-
-      pitchers_tbl <- soc$pitchers %>%
-        select(Pitcher, PA_Allowed_Total, wOBA_Allowed_Total,
-               `wOBA Allowed vs Top`, `wOBA Allowed vs Middle`, `wOBA Allowed vs Bottom`) %>%
-        arrange(`wOBA Allowed vs Top`, wOBA_Allowed_Total) %>%
-        slice_head(n = 8) %>%
-        mutate(
-          PA_Allowed_Total = fmt_int(PA_Allowed_Total),
-          wOBA_Allowed_Total = fmt_dec(wOBA_Allowed_Total, 3),
-          `wOBA Allowed vs Top` = fmt_dec(`wOBA Allowed vs Top`, 3),
-          `wOBA Allowed vs Middle` = fmt_dec(`wOBA Allowed vs Middle`, 3),
-          `wOBA Allowed vs Bottom` = fmt_dec(`wOBA Allowed vs Bottom`, 3)
-        )
-    }
-
-    print_report_page(
-      title = "Strength of Competition",
-      subtitle = "Condensed split summary focused on performance versus opponent tiers.",
-      meta_items = print_meta_items(
-        extra_items = list(list(label = "Min PA", value = as.character(min_pa)))
-      ),
-      body = print_two_column(
-        print_table_card("Hitters", build_print_table(hitters_tbl)),
-        print_table_card("Pitchers", build_print_table(pitchers_tbl))
-      )
-    )
-  }
-
   build_upload_print_ui <- function() {
     files <- list_bundled_data_files() %>%
-      mutate(Active = ifelse(row_number() == 1, "Yes", "")) %>%
+      mutate(
+        Active = ifelse(row_number() == 1, "Yes", ""),
+        Status = ifelse(IsLfsPointer, "Git LFS pointer", "Ready")
+      ) %>%
       transmute(
         Active,
         File,
+        Status,
         Rows = fmt_int(Rows),
         `Size (MB)` = fmt_plain(SizeMB, 2),
         Modified
@@ -1076,17 +1099,17 @@ server <- function(input, output, session) {
 
     stat_grid <- print_stat_grid(list(
       list(label = "Active File", value = format_active_data_file()),
-      list(label = "Files Found", value = fmt_int(nrow(files))),
+      list(label = "Sources Found", value = fmt_int(nrow(files))),
       list(label = "Total Rows", value = fmt_int(sum(safe_num(gsub(",", "", files$Rows)), na.rm = TRUE)))
     ))
 
     print_report_page(
       title = "Data Files",
-      subtitle = "Single-file bundled CSV inventory formatted for a one-page PDF export.",
+      subtitle = "Shared leaderboard source metadata formatted for a one-page PDF export.",
       meta_items = print_meta_items(),
       body = tagList(
         print_table_card("Current Input", stat_grid),
-        print_table_card("Bundled CSV Inventory", build_print_table(files))
+        print_table_card("Leaderboard Source", build_print_table(files))
       )
     )
   }
@@ -1099,7 +1122,6 @@ server <- function(input, output, session) {
       "pitching" = build_pitching_print_ui(),
       "process" = build_process_print_ui(),
       "pitchtype" = build_pitch_type_print_ui(),
-      "soc" = build_soc_print_ui(),
       "hitting_totals" = build_hitting_totals_print_ui(),
       "pitcher_totals" = build_pitching_totals_print_ui(),
       "upload" = build_upload_print_ui()
@@ -1113,7 +1135,6 @@ server <- function(input, output, session) {
   observeEvent(input$nav_pitching,   { current_page("pitching") })
   observeEvent(input$nav_process,    { current_page("process") })
   observeEvent(input$nav_pitchtype,  { current_page("pitchtype") })
-  observeEvent(input$nav_soc,        { current_page("soc") })           # ✅ NEW
   observeEvent(input$nav_hitter_rl,  { current_page("hitting_totals") })
   observeEvent(input$nav_pitcher_rl, { current_page("pitcher_totals") })
   observeEvent(input$nav_upload,     { current_page("upload") })
@@ -1128,7 +1149,6 @@ server <- function(input, output, session) {
       pitching       = "#nav_pitching",
       process        = "#nav_process",
       pitchtype      = "#nav_pitchtype",
-      soc            = "#nav_soc",
       hitting_totals = "#nav_hitter_rl",
       pitcher_totals = "#nav_pitcher_rl",
       upload         = "#nav_upload"
@@ -1151,9 +1171,6 @@ server <- function(input, output, session) {
   
   # ---- Pitch Type Breakdown ----
   pitch_type_breakdown_page_server("pitchtype_page", current_pitch_type_breakdown)
-  
-  # ---- Strength of Competition (uses FULL filtered combined; needs all hitters/pitchers for tiers) ----
-  strength_of_competition_page_server("soc_page", pitch_data = filtered_combined)  # ✅ NEW
   
   # ---- Upload Page ----
   upload_page_server("upload_page", refresh_trigger)

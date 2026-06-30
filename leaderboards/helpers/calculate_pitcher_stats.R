@@ -54,16 +54,27 @@ calculate_pitching_stats <- function(df) {
     filter(KorBB == "Walk") %>%
     count(Pitcher, name = "BB")
 
-  # ---- Batted-ball outcomes ----
-  batted_ball_df <- df %>%
+  # ---- BABIP (hits on balls in play / total balls in play) ----
+  hit_results <- c("Single", "Double", "Triple", "HomeRun")
+  babip_df <- df %>%
     group_by(Pitcher) %>%
     summarise(
-      BBE = sum(is_batted_ball_event(PitchCall), na.rm = TRUE),
-      BABIPDen = sum(is_batted_ball_event(PitchCall) & PlayResult != "HomeRun", na.rm = TRUE),
-      HitsInPlay = sum(is_batted_ball_event(PitchCall) & is_hit_in_play(PlayResult), na.rm = TRUE),
-      Barrels = sum(is_batted_ball_event(PitchCall) & is_brewster_barrel(ExitSpeed, Angle), na.rm = TRUE),
+      BIP = sum(PitchCall == "InPlay", na.rm = TRUE),
+      HitsInPlay = sum(PitchCall == "InPlay" & PlayResult %in% hit_results, na.rm = TRUE),
       .groups = "drop"
     )
+  
+  # ---- Barrels (fixed logic, numeric safe) ----
+  # ---- Barrels (ExitSpeed ≥ 95 mph and Launch Angle 5–40°) ----
+  barrel_df <- df %>%
+    filter(
+      !is.na(ExitSpeed),
+      !is.na(Angle),
+      ExitSpeed >= 95,
+      Angle >= 5,
+      Angle <= 40
+    ) %>%
+    count(Pitcher, name = "Barrels")
   
   # ---- Max Velocity (max release speed per pitcher) ----
   velo_df <- df %>%
@@ -72,7 +83,7 @@ calculate_pitching_stats <- function(df) {
     mutate(MaxVelo = ifelse(is.infinite(MaxVelo), NA_real_, MaxVelo))
   
   # ---- Whiff % (misses ÷ swings) ----
-  swing_labels <- pitch_swing_calls()
+  swing_labels <- c("StrikeSwinging", "FoulBallNotFieldable", "InPlay")
   swings <- df %>%
     filter(PitchCall %in% swing_labels)
   misses <- df %>%
@@ -111,16 +122,17 @@ calculate_pitching_stats <- function(df) {
     left_join(pa_counts, by = "Pitcher") %>%
     left_join(k_df, by = "Pitcher") %>%
     left_join(bb_df, by = "Pitcher") %>%
-    left_join(batted_ball_df, by = "Pitcher") %>%
+    left_join(babip_df, by = "Pitcher") %>%
+    left_join(barrel_df, by = "Pitcher") %>%
     left_join(velo_df, by = "Pitcher") %>%
     left_join(whiff_df, by = "Pitcher") %>%
     left_join(csw_df, by = "Pitcher") %>%
-    mutate(across(c(Pitches, PA, K, BB, BBE, BABIPDen, HitsInPlay, Barrels), ~ replace_na(., 0))) %>%
+    mutate(across(c(Pitches, PA, K, BB, BIP, HitsInPlay, Barrels), ~ replace_na(., 0))) %>%
     mutate(
       `K%`      = round(ifelse(PA > 0, K / PA * 100, 0), 1),
       `BB%`     = round(ifelse(PA > 0, BB / PA * 100, 0), 1),
-      BABIP     = ifelse(BABIPDen > 0, round(HitsInPlay / BABIPDen, 3), NA_real_),
-      `Barrel%` = round(ifelse(BBE > 0, Barrels / BBE * 100, 0), 1)
+      BABIP     = ifelse(BIP > 0, round(HitsInPlay / BIP, 3), NA_real_),
+      `Barrel%` = round(ifelse(PA > 0, Barrels / PA * 100, 0), 1)
     ) %>%
     select(
       Pitcher, Pitches, PA,

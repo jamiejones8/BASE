@@ -12,48 +12,42 @@ pitching_page_ui <- function(id) {
   
   div(
     class = "main-container",
-    
-    # ---- Header ----
-    div(class = "txst-header", "Pitching Leaderboards"),
-    p(class = "page-subtitle",
-      paste("Top 10", TEAM_DISPLAY_NAME, "pitchers across seven key outcome metrics.")),
-    tags$hr(),
-    
+
     # --- Leaderboard Grid (3x3 for symmetry) ---
     div(
       class = "leaderboard-grid",
       
       # Row 1
       div(class = "leaderboard-card",
-          h4("Strikeout Rate (K%)"),
+          h4("Strikeout Rate"),
           DT::dataTableOutput(ns("top_k"))
       ),
       div(class = "leaderboard-card",
-          h4("Walk Rate (BB%)"),
+          h4("Walk Rate"),
           DT::dataTableOutput(ns("top_bb"))
       ),
       div(class = "leaderboard-card",
-          h4("Barrel Rate Allowed (No D1 Average)"),
+          h4("Barrel Rate"),
           DT::dataTableOutput(ns("top_barrel"))
       ),
       
       # Row 2
       div(class = "leaderboard-card",
-          h4("Max Velocity (No D1 Average)"),
+          h4("Max Velo"),
           DT::dataTableOutput(ns("top_velo"))
       ),
       div(class = "leaderboard-card",
-          h4("Whiff Rate (Whiff%)"),
+          h4("Whiff Rate"),
           DT::dataTableOutput(ns("top_whiff"))
       ),
       div(class = "leaderboard-card",
-          h4("CSW% (No D1 Average)"),
+          h4("CSW%"),
           DT::dataTableOutput(ns("top_csw"))
       ),
       
       # Row 3 — Composite Performance
       div(class = "leaderboard-card-wide",
-          h4("Pitching Performance Index (No D1 Average)"),
+          h4("Pitching PPI"),
           DT::dataTableOutput(ns("top_ppi"))
       )
     ),
@@ -61,7 +55,7 @@ pitching_page_ui <- function(id) {
     tags$hr(),
     div(
       class = "page-footer-note",
-      p(em("Leaderboards update automatically with the latest TrackMan data."))
+      p(em("Updates with the latest TrackMan data."))
     )
   )
 }
@@ -196,63 +190,51 @@ pitching_page_server <- function(id, pitching_data) {
       apply_d1_highlight(dt, metric_name, num_col)
     }
     
-    # =========================================================
-    #  PPI Calculation (ERA-like scale)
-    #  NOTE: keep PPI as NUMERIC for sorting; formatting happens in format_table()
-    # =========================================================
-    calculate_ppi <- function(df) {
-      calculate_pitcher_ppi(df)
-    }
-    
-    ppi_data <- reactive({
+    leaderboard_tables <- reactive({
       req(pitching_data())
-      calculate_ppi(pitching_data())
+
+      ppi_data <- calculate_pitcher_ppi_metric(pitching_data())
+
+      list(
+        k = rank_metric_leaders(ppi_data, "Pitcher", "K%"),
+        bb = rank_metric_leaders(ppi_data, "Pitcher", "BB%", descending = FALSE),
+        barrel = rank_metric_leaders(ppi_data, "Pitcher", "Barrel%", descending = FALSE),
+        velo = rank_metric_leaders(ppi_data, "Pitcher", "MaxVelo"),
+        whiff = rank_metric_leaders(ppi_data, "Pitcher", "Whiff%"),
+        csw = rank_metric_leaders(ppi_data, "Pitcher", "CSW%"),
+        ppi = rank_metric_leaders(ppi_data, "Pitcher", "PPI (ERA)", descending = FALSE)
+      )
     })
     
     # =========================================================
     #  Leaderboards
     # =========================================================
     output$top_k <- DT::renderDataTable({
-      req(ppi_data())
-      df <- ppi_data() %>% arrange(desc(`K%`)) %>% slice_head(n = 10)
-      format_table(df, "K%")
+      format_table(leaderboard_tables()$k, "K%")
     })
     
     output$top_bb <- DT::renderDataTable({
-      req(ppi_data())
-      df <- ppi_data() %>% arrange(`BB%`) %>% slice_head(n = 10)
-      format_table(df, "BB%", descending = FALSE)
+      format_table(leaderboard_tables()$bb, "BB%", descending = FALSE)
     })
     
     output$top_barrel <- DT::renderDataTable({
-      req(ppi_data())
-      df <- ppi_data() %>% arrange(`Barrel%`) %>% slice_head(n = 10)
-      format_table(df, "Barrel%", descending = FALSE)
+      format_table(leaderboard_tables()$barrel, "Barrel%", descending = FALSE)
     })
     
     output$top_velo <- DT::renderDataTable({
-      req(ppi_data())
-      df <- ppi_data() %>% arrange(desc(MaxVelo)) %>% slice_head(n = 10)
-      format_table(df, "MaxVelo")
+      format_table(leaderboard_tables()$velo, "MaxVelo")
     })
     
     output$top_whiff <- DT::renderDataTable({
-      req(ppi_data())
-      df <- ppi_data() %>% arrange(desc(`Whiff%`)) %>% slice_head(n = 10)
-      format_table(df, "Whiff%")
+      format_table(leaderboard_tables()$whiff, "Whiff%")
     })
     
     output$top_csw <- DT::renderDataTable({
-      req(ppi_data())
-      df <- ppi_data() %>% arrange(desc(`CSW%`)) %>% slice_head(n = 10)
-      format_table(df, "CSW%")
+      format_table(leaderboard_tables()$csw, "CSW%")
     })
     
     output$top_ppi <- DT::renderDataTable({
-      req(ppi_data())
-      # lower PPI(ERA) is better, so ascending
-      df <- ppi_data() %>% arrange(`PPI (ERA)`) %>% slice_head(n = 10)
-      format_table(df, "PPI (ERA)", descending = FALSE)
+      format_table(leaderboard_tables()$ppi, "PPI (ERA)", descending = FALSE)
     })
   })
 }

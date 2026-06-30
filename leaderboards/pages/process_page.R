@@ -12,13 +12,7 @@ process_page_ui <- function(id) {
   
   div(
     class = "main-container",
-    
-    # ---- Header ----
-    div(class = "txst-header", "Pitching Process Leaderboards"),
-    p(class = "page-subtitle",
-      paste("Top 10", TEAM_DISPLAY_NAME, "arms across four core process metrics.")),
-    tags$hr(),
-    
+
     # --- Leaderboard Grid (2x2) ---
     div(
       class = "leaderboard-grid",
@@ -32,11 +26,11 @@ process_page_ui <- function(id) {
           DT::dataTableOutput(ns("top_zone"))
       ),
       div(class = "leaderboard-card",
-          h4("First Pitch Strike%"),
+          h4("First Pitch Strike"),
           DT::dataTableOutput(ns("top_fps"))
       ),
       div(class = "leaderboard-card",
-          h4("Early & Ahead% (No D1 Average)"),
+          h4("Early Ahead"),
           DT::dataTableOutput(ns("top_ea"))
       )
     ),
@@ -44,7 +38,7 @@ process_page_ui <- function(id) {
     tags$hr(),
     div(
       class = "page-footer-note",
-      p(em("Leaderboards update automatically with the latest TrackMan data."))
+      p(em("Updates with the latest TrackMan data."))
     )
   )
 }
@@ -143,37 +137,32 @@ process_page_server <- function(id, pitching_data) {
       apply_d1_highlight(dt, metric_name, num_col)
     }
     
+    leaderboard_tables <- reactive({
+      req(pitching_data())
+
+      list(
+        strike = rank_metric_leaders(pitching_data(), "Pitcher", "Strike%"),
+        zone = rank_metric_leaders(pitching_data(), "Pitcher", "Zone%"),
+        fps = rank_metric_leaders(pitching_data(), "Pitcher", "FirstPitchStrike%"),
+        ea = rank_metric_leaders(pitching_data(), "Pitcher", "EarlyAhead%")
+      )
+    })
+
     # ---- TOP-10 Leaderboards (sort BEFORE formatting) ----
     output$top_strike <- DT::renderDataTable({
-      req(pitching_data())
-      df <- pitching_data() %>%
-        arrange(desc(`Strike%`)) %>%
-        slice_head(n = 10)
-      format_table(df, "Strike%")
+      format_table(leaderboard_tables()$strike, "Strike%")
     })
     
     output$top_zone <- DT::renderDataTable({
-      req(pitching_data())
-      df <- pitching_data() %>%
-        arrange(desc(`Zone%`)) %>%
-        slice_head(n = 10)
-      format_table(df, "Zone%")
+      format_table(leaderboard_tables()$zone, "Zone%")
     })
     
     output$top_fps <- DT::renderDataTable({
-      req(pitching_data())
-      df <- pitching_data() %>%
-        arrange(desc(`FirstPitchStrike%`)) %>%
-        slice_head(n = 10)
-      format_table(df, "FirstPitchStrike%")
+      format_table(leaderboard_tables()$fps, "FirstPitchStrike%")
     })
     
     output$top_ea <- DT::renderDataTable({
-      req(pitching_data())
-      df <- pitching_data() %>%
-        arrange(desc(`EarlyAhead%`)) %>%
-        slice_head(n = 10)
-      format_table(df, "EarlyAhead%")
+      format_table(leaderboard_tables()$ea, "EarlyAhead%")
     })
   })
 }

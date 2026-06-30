@@ -16,8 +16,10 @@ calculate_pitching_process_stats <- function(df) {
     ))
   }
   
-  # ---- Define the strike-like pitch outcomes used throughout the app ----
-  strike_calls <- pitch_strike_calls()
+  # ---- Define what counts as a strike ----
+  # Only count strikes that actually change the count
+  # (called or swinging strikes; exclude 2-strike fouls)
+  strike_calls <- c("StrikeCalled", "StrikeSwinging", "FoulBallNotFieldable", "FoulBallFieldable", "InPlay")
 
   required_pa_cols <- c("GameID", "Inning", "Top/Bottom", "PAofInning")
   for (col in required_pa_cols) {
@@ -96,12 +98,9 @@ calculate_pitching_process_stats <- function(df) {
       # ended in <=3 pitches and not a barrel or HBP
       cond_b <- nrow(pa) <= 3
       if ("PlayResult" %in% names(pa)) {
+        last_result <- tail(pa$PlayResult, 1)
         last_pitch_call <- tail(pa$PitchCall, 1)
-        last_ev <- tail(suppressWarnings(as.numeric(pa$ExitSpeed)), 1)
-        last_angle <- tail(suppressWarnings(as.numeric(pa$Angle)), 1)
-        barrel_like <- isTRUE(is_brewster_barrel(last_ev, last_angle))
-
-        if (barrel_like || last_pitch_call %in% "HitByPitch") {
+        if (last_result %in% "Barrel" || last_pitch_call %in% "HitByPitch") {
           cond_b <- FALSE
         }
       }

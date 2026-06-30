@@ -19,7 +19,7 @@ whitecaps_env <- local({
 whitecaps_hub_card <- function() {
   list(
     id = "whitecaps_central",
-    title = "Whitecaps Leaderboards",
+    title = "Whitecaps Analytics",
     page = WHITECAPS_PAGE_ID,
     status = "live",
     image_src = whitecaps_hub_image_src
@@ -31,6 +31,10 @@ whitecaps_is_page <- function(page) {
 }
 
 whitecaps_embedded_ui <- function() {
+  if (exists("embedded_ui", envir = whitecaps_env, inherits = FALSE)) {
+    return(tagList(whitecaps_env$embedded_ui))
+  }
+
   tagList(whitecaps_env$ui)
 }
 
@@ -51,7 +55,7 @@ whitecaps_bind_parent_server <- function(current_page, input, output, session, h
 
     if (!whitecaps_is_page(current_page())) {
       removeUI(selector = "head #whitecaps-stylesheet", multiple = TRUE, immediate = TRUE)
-      removeUI(selector = "head #whitecaps-font-bebas", multiple = TRUE, immediate = TRUE)
+      removeUI(selector = "head #whitecaps-font-app", multiple = TRUE, immediate = TRUE)
     }
   }, ignoreInit = FALSE)
 }

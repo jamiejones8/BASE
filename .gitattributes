@@ -67,3 +67,9 @@ CAPS/www/surf.png filter=lfs diff=lfs merge=lfs -text
 CAPS/www/umpire.png filter=lfs diff=lfs merge=lfs -text
 CAPS/www/WAR.png filter=lfs diff=lfs merge=lfs -text
 CAPS/www/YD.png filter=lfs diff=lfs merge=lfs -text
+www/BRE.png filter=lfs diff=lfs merge=lfs -text
+www/FAL.png filter=lfs diff=lfs merge=lfs -text
+www/HAR.png filter=lfs diff=lfs merge=lfs -text
+www/HYA.png filter=lfs diff=lfs merge=lfs -text
+www/WAR.png filter=lfs diff=lfs merge=lfs -text
+www/YD.png filter=lfs diff=lfs merge=lfs -text

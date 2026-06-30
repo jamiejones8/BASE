@@ -12,12 +12,7 @@ hitting_totals_page_ui <- function(id) {
   ns <- NS(id)
   tagList(
     div(class = "main-container",
-        
-        # ---- Header ----
-        div(class = "txst-header", "Full Hitting Leaderboard"),
-        div(class = "page-subtitle", "All hitters with outcome and process metrics"),
-        tags$hr(),
-        
+
         # ---- Main Leaderboard ----
         div(class = "leaderboard-card-full",
             DTOutput(ns("full_hitting_table"))
@@ -26,7 +21,7 @@ hitting_totals_page_ui <- function(id) {
         
         # ---- Team Totals Table ----
         div(class = "team-totals-card",
-            h4("Team Totals (Averages)"),
+            h4("Team Averages"),
             DTOutput(ns("team_totals_table"))
         )
     )
@@ -89,13 +84,9 @@ hitting_totals_page_server <- function(id, hitting_data) {
       }
     }
     
-    # =========================================================
-    # MAIN TABLE
-    # =========================================================
-    output$full_hitting_table <- renderDT({
+    prepared_hitting_totals <- reactive({
       req(hitting_data())
-      df <- hitting_data()
-      
+
       safe_num <- function(x) suppressWarnings(as.numeric(x))
       safe_round <- function(x, digits = 1) suppressWarnings(round(safe_num(x), digits))
       normalize_pct_vec <- function(x) {
@@ -107,11 +98,11 @@ hitting_totals_page_server <- function(id, hitting_data) {
         else if (mx <= 1.0001) v <- v * 100
         v
       }
-      
+
       percent_cols <- c("K%","BB%","Barrel%","Contact%","Z-Contact%","Z-Swing%","Chase%","EV>95%")
-      velo_cols    <- c("MaxEV","P90EV")
-      
-      df <- calculate_hitter_ppi(df) %>%
+      velo_cols <- c("MaxEV","P90EV")
+
+      df <- calculate_hitter_ppi_metric(hitting_data()) %>%
         mutate(
           across(all_of(percent_cols), normalize_pct_vec),
           across(all_of(percent_cols), ~ safe_round(.x, 1)),
@@ -119,17 +110,30 @@ hitting_totals_page_server <- function(id, hitting_data) {
           BABIP = safe_round(BABIP, 3),
           across(all_of(velo_cols), ~ safe_round(.x, 1))
         )
-      
+
       if ("PA" %in% names(df) && "HitterPPI" %in% names(df)) {
         df <- df %>% relocate(HitterPPI, .after = PA)
       } else if ("HitterPPI" %in% names(df)) {
         df <- df %>% relocate(HitterPPI, .after = 1)
       }
-      
+
       df <- df %>% arrange(desc(as.numeric(HitterPPI)))
-      
-      percent_idx <- which(names(df) %in% percent_cols) - 1
-      velo_idx    <- which(names(df) %in% velo_cols) - 1
+
+      list(
+        df = df,
+        percent_cols = percent_cols,
+        velo_cols = velo_cols
+      )
+    })
+    
+    # =========================================================
+    # MAIN TABLE
+    # =========================================================
+    output$full_hitting_table <- renderDT({
+      prepared <- prepared_hitting_totals()
+      df <- prepared$df
+      percent_idx <- which(names(df) %in% prepared$percent_cols) - 1
+      velo_idx <- which(names(df) %in% prepared$velo_cols) - 1
       
       dt <- datatable(
         df,
@@ -188,8 +192,7 @@ hitting_totals_page_server <- function(id, hitting_data) {
     # TEAM TOTALS TABLE
     # =========================================================
     output$team_totals_table <- renderDT({
-      req(hitting_data())
-      df <- calculate_hitter_ppi(hitting_data())
+      df <- prepared_hitting_totals()$df
       
       numeric_cols <- c("PA", "wOBA", "BABIP", "HitterPPI", "K%", "BB%", "Barrel%", "Contact%",
                         "Z-Contact%", "Z-Swing%", "Chase%", "EV>95%", "MaxEV", "P90EV")

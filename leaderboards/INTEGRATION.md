@@ -5,7 +5,7 @@ The Whitecaps analytics app is intended to stay self-contained inside `CAPS/lead
 For normal Whitecaps updates, only touch:
 
 - `CAPS/leaderboards/`
-- `CAPS/test.csv`
+- `CAPS/CapeCod26.parquet`
 
 The parent CAPS app should only need these integration touchpoints:
 
@@ -18,14 +18,14 @@ Expected behavior:
 - The CAPS hub shows a `Whitecaps Analytics` card.
 - Clicking that card opens the embedded Whitecaps app.
 - The `CAPS Hub` button inside Whitecaps returns to the CAPS hub.
-- The Whitecaps app loads exactly one configured CSV from `CAPS/test.csv`.
+- The Whitecaps app loads `CAPS/CapeCod26.parquet` as its shared leaderboard source.
 - The Whitecaps app prefers a precomputed cache and falls back to live calculations if the cache is missing or stale.
 
 Preprocessing:
 
 - `leaderboards/scripts/precompute_leaderboards_cache.R` builds `leaderboards/cache/leaderboards_cache.rds`.
 - `leaderboards/cache/` is ignored by git and does not need to be committed.
-- The Docker build runs the preprocessing script automatically, so Hugging Face rebuilds the cache from the current `test.csv` during deploy.
+- The Docker build runs the preprocessing script automatically, so Hugging Face rebuilds the cache from the current `CapeCod26.parquet` during deploy.
 
 Quick verification:
 

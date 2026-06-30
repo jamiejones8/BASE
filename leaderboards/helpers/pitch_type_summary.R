@@ -41,13 +41,7 @@ prepare_pitch_type_breakdown_data <- function(df) {
       TaggedPitchType = str_replace_all(TaggedPitchType, "\\s+", ""),
       PlateLocHeight = safe_num(PlateLocHeight),
       PlateLocSide = safe_num(PlateLocSide)
-    )
-
-  loc <- normalize_plate_location_feet(df$PlateLocHeight, df$PlateLocSide)
-  df$PlateLocHeight <- loc$height
-  df$PlateLocSide <- loc$side
-
-  df <- df %>%
+    ) %>%
     mutate(
       InZone = case_when(
         is.na(PlateLocHeight) | is.na(PlateLocSide) ~ NA,
@@ -57,9 +51,9 @@ prepare_pitch_type_breakdown_data <- function(df) {
       )
     )
 
-  swing_calls <- pitch_swing_calls()
+  swing_calls <- c("InPlay", "FoulBallNotFieldable", "FoulBallFieldable", "StrikeSwinging")
   whiff_calls <- c("StrikeSwinging")
-  csw_calls <- pitch_csw_calls()
+  csw_calls <- c("StrikeCalled", "StrikeSwinging")
 
   df %>%
     filter(!is.na(Pitcher), Pitcher != "", !is.na(TaggedPitchType)) %>%

@@ -6,7 +6,7 @@
 #
 #  UPDATE:
 #   - Preserves BatterTeam / PitcherTeam in the FINAL output tables
-#     so pages can filter to BRE_WHI cleanly.
+#     so pages can filter to TEX_BOB cleanly.
 #   - Adds wOBA_Total splits vs LHP and vs RHP (overall totals)
 #     to the hitters output table (right of wOBA_Total).
 # =========================================================

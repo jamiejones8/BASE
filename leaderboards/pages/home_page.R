@@ -4,17 +4,11 @@
 home_page_ui <- function() {
   div(
     class = "main-container",
-    div(class = "txst-header", APP_HOME_TITLE),
-    p(
-      class = "page-subtitle",
-      "Counting stat leaders for hitters and pitchers from the current bundled data file."
-    ),
     div(
       class = "home-intro",
       h4(APP_COMMAND_CENTER),
       p(
-        "This home screen highlights quick-look counting leaders from the current Whitecaps data file.",
-        "Use the navigation above to jump into full hitter, pitcher, process, and totals breakdowns."
+        "Quick-look hitting and pitching leaders from the current Whitecaps season file."
       )
     ),
     tags$hr(),
@@ -59,7 +53,7 @@ home_page_ui <- function() {
         ),
         div(
           class = "leaderboard-card",
-          h4("Walks (Lowest, Min 3 PA)"),
+          h4("Fewest Walks"),
           DT::dataTableOutput("home_pitch_bb_low")
         ),
         div(

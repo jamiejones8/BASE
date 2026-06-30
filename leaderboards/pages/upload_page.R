@@ -10,21 +10,14 @@ upload_page_ui <- function(id) {
   tagList(
     div(
       class = "main-container",
-
-      div(class = "txst-header", "Data Files"),
-      div(
-        class = "page-subtitle",
-        paste(APP_TITLE, "loads one CSV directly from the parent CAPS folder")
-      ),
-
       div(
         class = "leaderboard-card-full",
-        h4("Configured Data File"),
+        h4("Current Source"),
         p(
-          "The app is configured to read one explicit file from the parent CAPS folder.",
-          paste("Current target:", basename(WHITE_CAPS_SOURCE_FILE))
+          "Leaderboards read from CapeCod26.parquet.",
+          "Reload here if the source file changes."
         ),
-        actionButton(ns("refresh_local_btn"), "Reload Bundled Data", class = "txst-btn"),
+        actionButton(ns("refresh_local_btn"), "Reload Data", class = "txst-btn"),
         br(), br(),
         textOutput(ns("sync_status")),
         br(),
@@ -45,24 +38,38 @@ upload_page_server <- function(id, refresh_trigger) {
     })
 
     observeEvent(input$refresh_local_btn, {
-      output$sync_status <- renderText("⏳ Reloading configured data file from the parent CAPS folder...")
+      output$sync_status <- renderText("⏳ Reloading leaderboard data source...")
       refresh_trigger(runif(1))
       active_file <- pick_active_bundled_file()
       output$sync_status <- renderText({
         if (is.null(active_file$path) || !nzchar(active_file$path)) {
-          return(paste0("⚠️ Could not find ", basename(WHITE_CAPS_SOURCE_FILE), " in the parent CAPS folder."))
+          return("⚠️ No leaderboard data source file was found.")
         }
 
-        paste0("✅ Reloaded bundled data from ", active_file$label, ".")
+        if (isTRUE(active_file$is_lfs_pointer)) {
+          return(
+            paste0(
+              "⚠️ Reloaded source metadata for ",
+              active_file$label,
+              ", but the local file is still a Git LFS pointer."
+            )
+          )
+        }
+
+        paste0("✅ Reloaded leaderboard data from ", active_file$label, ".")
       })
     }, ignoreInit = TRUE)
 
     output$files_table <- renderDT({
       df <- bundled_files() %>%
-        mutate(Active = ifelse(row_number() == 1, "Yes", "")) %>%
+        mutate(
+          Active = ifelse(row_number() == 1, "Yes", ""),
+          Status = ifelse(IsLfsPointer, "Git LFS pointer", "Ready")
+        ) %>%
         transmute(
           Active,
           File,
+          Status,
           Rows,
           `Size (MB)` = SizeMB,
           Modified

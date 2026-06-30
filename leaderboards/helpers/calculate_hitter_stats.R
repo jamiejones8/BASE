@@ -9,6 +9,26 @@ library(stringr)
 calculate_hitter_stats <- function(df,
                                    wBB = 0.69, wHBP = 0.72,
                                    w1B = 0.89, w2B = 1.27, w3B = 1.62, wHR = 2.10) {
+  if (is.null(df) || nrow(df) == 0) {
+    return(data.frame(
+      Batter = character(),
+      PA = numeric(),
+      wOBA = numeric(),
+      BABIP = numeric(),
+      `K%` = numeric(),
+      `BB%` = numeric(),
+      `Barrel%` = numeric(),
+      `Contact%` = numeric(),
+      `Z-Contact%` = numeric(),
+      `Z-Swing%` = numeric(),
+      `Chase%` = numeric(),
+      `EV>95%` = numeric(),
+      MaxEV = numeric(),
+      P90EV = numeric(),
+      check.names = FALSE
+    ))
+  }
+
   # --------- 0) Normalize column names ----------
   names(df) <- gsub("\\.", "/", names(df))
   
@@ -43,10 +63,6 @@ calculate_hitter_stats <- function(df,
       PAofInning     = suppressWarnings(as.integer(PAofInning)),
       PitchofPA      = suppressWarnings(as.integer(PitchofPA))
     )
-
-  loc <- normalize_plate_location_feet(df$PlateLocHeight, df$PlateLocSide)
-  df$PlateLocHeight <- loc$height
-  df$PlateLocSide <- loc$side
   
   # --------- 3) Zone logic — replicate xRV grid exactly ----------
   # Assumes PlateLocHeight / PlateLocSide are in FEET (which matches your example)
@@ -129,7 +145,9 @@ calculate_hitter_stats <- function(df,
       OOPitch  = (Zone == "OutZone"),
       OOSwing  = OOPitch & Swing,
       BBE      = PitchCall == "InPlay",
-      BarrelFlag = BBE & is_brewster_barrel(ExitSpeed, Angle),
+      BarrelFlag = BBE & !is.na(ExitSpeed) & !is.na(Angle) &
+        ((ExitSpeed >= 95 & Angle >= 5 & Angle <= 30) |
+           (ExitSpeed >= 105 & Angle >= 5 & Angle <= 40)),
       HardHit  = BBE & !is.na(ExitSpeed) & ExitSpeed >= 95,
       AirBall  = BBE & (TaggedHitType %in% c("LineDrive", "FlyBall", "Popup"))
     )
@@ -198,28 +216,23 @@ calculate_hitter_stats <- function(df,
     select(Batter_group, `Contact%`, `Z-Contact%`, `Z-Swing%`, `Chase%`)
   
   # --------- 8) Batted-ball metrics ----------
+  hit_results <- c("Single", "Double", "Triple", "HomeRun")
+
   bbe_rates <- df %>%
     group_by(Batter_group) %>%
     summarise(
-      BBECount = sum(BBE, na.rm = TRUE),
-      BABIPDen = sum(BBE & PlayResult != "HomeRun", na.rm = TRUE),
-      HitsInPlay = sum(BBE & is_hit_in_play(PlayResult), na.rm = TRUE),
+      BBE      = sum(BBE,        na.rm = TRUE),
+      HitsInPlay = sum(BBE & PlayResult %in% hit_results, na.rm = TRUE),
       Barrels  = sum(BarrelFlag, na.rm = TRUE),
       HardHits = sum(HardHit,    na.rm = TRUE),
-      MaxEV    = {
-        bbe_ev <- ExitSpeed[PitchCall == "InPlay" & !is.na(ExitSpeed)]
-        if (length(bbe_ev)) max(bbe_ev) else NA_real_
-      },
-      P90EV    = {
-        bbe_ev <- ExitSpeed[PitchCall == "InPlay" & !is.na(ExitSpeed)]
-        if (length(bbe_ev)) as.numeric(stats::quantile(bbe_ev, 0.9, na.rm = TRUE)) else NA_real_
-      },
+      MaxEV    = suppressWarnings(max(ExitSpeed, na.rm = TRUE)),
+      P90EV    = ifelse(BBE > 0, as.numeric(stats::quantile(ExitSpeed, 0.9, na.rm = TRUE)), NA_real_),
       .groups  = "drop"
     ) %>%
     mutate(
-      BABIP     = ifelse(BABIPDen > 0, round(HitsInPlay / BABIPDen, 3), NA_real_),
-      `EV>95%`  = ifelse(BBECount > 0, round(HardHits / BBECount * 100, 1), 0),
-      `Barrel%` = ifelse(BBECount > 0, round(Barrels  / BBECount * 100, 1), 0)
+      BABIP     = ifelse(BBE > 0, round(HitsInPlay / BBE, 3), NA_real_),
+      `EV>95%`  = ifelse(BBE > 0, round(HardHits / BBE * 100, 1), 0),
+      `Barrel%` = ifelse(BBE > 0, round(Barrels  / BBE * 100, 1), 0)
     ) %>%
     select(Batter_group, BABIP, `EV>95%`, MaxEV, P90EV, `Barrel%`)
   

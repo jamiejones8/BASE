@@ -71,7 +71,7 @@ read_leaderboards_cache <- function(cache_path = leaderboards_cache_path()) {
 
 validate_leaderboards_cache <- function(bundle, active_file) {
   if (is.null(active_file$path) || !nzchar(active_file$path) || !file.exists(active_file$path)) {
-    return(list(valid = FALSE, reason = "no active bundled CSV found"))
+    return(list(valid = FALSE, reason = "no active leaderboard source file found"))
   }
 
   if (is.null(bundle) || !is.list(bundle)) {
@@ -104,15 +104,15 @@ validate_leaderboards_cache <- function(bundle, active_file) {
   actual <- bundle$metadata$source
 
   if (is.null(actual$file) || !identical(actual$file, expected$file)) {
-    return(list(valid = FALSE, reason = "cache source file name does not match active CSV"))
+    return(list(valid = FALSE, reason = "cache source file name does not match the active leaderboard source"))
   }
 
   if (is.null(actual$size) || !identical(as.numeric(actual$size), as.numeric(expected$size))) {
-    return(list(valid = FALSE, reason = "cache source file size does not match active CSV"))
+    return(list(valid = FALSE, reason = "cache source file size does not match the active leaderboard source"))
   }
 
   if (is.null(actual$mtime) || !identical(as.numeric(actual$mtime), as.numeric(expected$mtime))) {
-    return(list(valid = FALSE, reason = "cache source file modified time does not match active CSV"))
+    return(list(valid = FALSE, reason = "cache source file modified time does not match the active leaderboard source"))
   }
 
   list(valid = TRUE, reason = NULL)

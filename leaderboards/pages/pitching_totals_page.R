@@ -11,12 +11,7 @@ pitching_totals_page_ui <- function(id) {
   ns <- NS(id)
   tagList(
     div(class = "main-container",
-        
-        # ---- Header ----
-        div(class = "txst-header", "Full Pitching Leaderboard"),
-        div(class = "page-subtitle", "All pitchers with outcome and process metrics"),
-        tags$hr(),
-        
+
         # ---- Main Leaderboard ----
         div(class = "leaderboard-card-full",
             DTOutput(ns("full_pitching_table"))
@@ -25,7 +20,7 @@ pitching_totals_page_ui <- function(id) {
         
         # ---- Team Totals Table ----
         div(class = "team-totals-card",
-            h4("Team Totals (Averages)"),
+            h4("Team Averages"),
             DTOutput(ns("team_totals_table"))
         )
     )
@@ -92,29 +87,9 @@ pitching_totals_page_server <- function(id, pitching_data) {
       }
     }
     
-    # =========================================================
-    #  PPI CALCULATION FUNCTION
-    # =========================================================
-    calculate_ppi <- function(df) {
-      calculate_pitcher_ppi(df)
-    }
-    
-    # =========================================================
-    #  MAIN TABLE
-    # =========================================================
-    output$full_pitching_table <- renderDT({
+    prepared_pitching_totals <- reactive({
       req(pitching_data())
-      df <- pitching_data()
-      
-      df <- df %>%
-        rename(
-          `FPS%` = `FirstPitchStrike%`,
-          `EA%`  = `EarlyAhead%`
-        )
-      
-      df <- calculate_ppi(df)
-      df <- df %>% select(-any_of("Pitches"))
-      
+
       safe_num <- function(x) suppressWarnings(as.numeric(x))
       safe_round <- function(x, digits = 1) suppressWarnings(round(safe_num(x), digits))
       normalize_pct_vec <- function(x) {
@@ -126,10 +101,18 @@ pitching_totals_page_server <- function(id, pitching_data) {
         else if (mx <= 1.0001) v <- v * 100
         v
       }
-      
+
+      df <- pitching_data() %>%
+        rename(
+          `FPS%` = `FirstPitchStrike%`,
+          `EA%`  = `EarlyAhead%`
+        ) %>%
+        calculate_pitcher_ppi_metric() %>%
+        select(-any_of("Pitches"))
+
       percent_cols <- grep("%$", names(df), value = TRUE)
       velo_cols <- intersect(c("MaxVelo"), names(df))
-      
+
       df <- df %>%
         mutate(
           across(all_of(percent_cols), normalize_pct_vec),
@@ -137,17 +120,30 @@ pitching_totals_page_server <- function(id, pitching_data) {
           BABIP = safe_round(BABIP, 3),
           across(all_of(velo_cols), ~ safe_round(.x, 1))
         )
-      
+
       if ("PA" %in% names(df) && "PPI (ERA)" %in% names(df)) {
         df <- df %>% relocate(`PPI (ERA)`, .after = PA)
       } else if ("PPI (ERA)" %in% names(df)) {
         df <- df %>% relocate(`PPI (ERA)`, .after = 1)
       }
-      
+
       df <- df %>% arrange(as.numeric(`PPI (ERA)`))
-      
-      percent_idx <- which(names(df) %in% percent_cols) - 1
-      velo_idx <- which(names(df) %in% velo_cols) - 1
+
+      list(
+        df = df,
+        percent_cols = percent_cols,
+        velo_cols = velo_cols
+      )
+    })
+    
+    # =========================================================
+    #  MAIN TABLE
+    # =========================================================
+    output$full_pitching_table <- renderDT({
+      prepared <- prepared_pitching_totals()
+      df <- prepared$df
+      percent_idx <- which(names(df) %in% prepared$percent_cols) - 1
+      velo_idx <- which(names(df) %in% prepared$velo_cols) - 1
       
       dt <- datatable(
         df,
@@ -208,15 +204,7 @@ pitching_totals_page_server <- function(id, pitching_data) {
     #  TEAM TOTALS TABLE
     # =========================================================
     output$team_totals_table <- renderDT({
-      req(pitching_data())
-      
-      df <- pitching_data() %>%
-        rename(
-          `FPS%` = `FirstPitchStrike%`,
-          `EA%`  = `EarlyAhead%`
-        ) %>%
-        calculate_ppi() %>%
-        select(-any_of("Pitches"))
+      df <- prepared_pitching_totals()$df
       
       numeric_cols <- df %>%
         select(where(is.numeric)) %>%

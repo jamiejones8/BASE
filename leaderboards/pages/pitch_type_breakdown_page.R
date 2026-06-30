@@ -13,12 +13,6 @@ pitch_type_breakdown_page_ui <- function(id) {
   tagList(
     div(
       class = "main-container",
-      div(class = "txst-header", "Pitch Type Breakdown"),
-      div(
-        class = "page-subtitle",
-        "Each pitcher's performance by pitch type"
-      ),
-      tags$hr(),
       div(
         class = "leaderboard-card-full",
         DTOutput(ns("pitch_type_table"))

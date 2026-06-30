@@ -16,8 +16,6 @@ old_wd <- setwd(app_dir)
 on.exit(setwd(old_wd), add = TRUE)
 
 WHITE_CAPS_APP_DIR <- app_dir
-WHITE_CAPS_PARENT_DIR <- dirname(WHITE_CAPS_APP_DIR)
-WHITE_CAPS_SOURCE_FILE <- file.path(WHITE_CAPS_PARENT_DIR, "test.csv")
 WHITE_CAPS_DATA_DIR <- file.path(WHITE_CAPS_APP_DIR, "data")
 WHITE_CAPS_CACHE_DIR <- file.path(WHITE_CAPS_APP_DIR, "cache")
 
@@ -28,7 +26,6 @@ whitecaps_asset_path <- function(path = "") {
 source("helpers/brand_config.R", local = TRUE)
 source("helpers/process_data.R", local = TRUE)
 source("helpers/pitcher_times_through_order.R", local = TRUE)
-source("helpers/metric_helpers.R", local = TRUE)
 source("helpers/calculate_pitcher_stats.R", local = TRUE)
 source("helpers/calculate_hitter_stats.R", local = TRUE)
 source("helpers/process_calculations.R", local = TRUE)
@@ -39,7 +36,7 @@ source("helpers/cache_loader.R", local = TRUE)
 
 active_file <- pick_active_bundled_file()
 if (is.null(active_file$path) || !nzchar(active_file$path) || !file.exists(active_file$path)) {
-  stop("No configured CSV file was found at CAPS/test.csv.", call. = FALSE)
+  stop("No leaderboard data source file was found.", call. = FALSE)
 }
 
 message("📦 Building precomputed leaderboards cache from ", active_file$label)
