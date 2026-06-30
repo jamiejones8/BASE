@@ -3644,9 +3644,10 @@ acq_pitcher_season_tagged <- acq_pitcher_season %>%
     class_year = NA_character_
   )
 
-acq_necbl_pitchers_clean <- acq_necbl_pitching %>%
+acq_necbl_pitchers_clean <- necbl_pitching %>%
+  mutate(source_key = paste(player_name, team, "NECBL")) %>%
   mutate(
-    pitcher_name = player_name,
+    pitcher_name = coalesce(full_name, player_name),
     pitch_hand   = throws,
     team_name    = team,
     IP_dec       = suppressWarnings(as.numeric(ip)),
@@ -3656,15 +3657,14 @@ acq_necbl_pitchers_clean <- acq_necbl_pitching %>%
     HR9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (coalesce(hr,0L) / IP_dec) * 9, NA), 1),
     FIP          = round(ifelse(!is.na(IP_dec) & IP_dec > 0,
                                 ((13*coalesce(hr,0L) + 3*(coalesce(bb,0L)+coalesce(hbp,0L)) -
-                                    2*coalesce(k,0L)) / IP_dec) + 3.10, NA), 2),
+                                   2*coalesce(k,0L)) / IP_dec) + 3.10, NA), 2),
     ERA          = suppressWarnings(as.numeric(era)),
     WHIP         = suppressWarnings(as.numeric(whip)),
     IP           = IP_dec,
     age          = NA_integer_,
     college      = school,
     class_year   = year,
-    has_pbp      = FALSE,
-    source_key   = paste(player_name, team, "NECBL")
+    has_pbp      = FALSE
   ) %>%
   select(pitcher_name, pitch_hand, age, class_year, college,
          team_name, league_name, G = app, IP, ERA, FIP, WHIP,
@@ -3710,13 +3710,20 @@ acq_hitting_all_clean <- acq_hitting_all %>%
          team_name, league_name, G, AB, H, R,
          `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, source_key)
 
-acq_necbl_hitting_clean <- acq_necbl_hitting %>%
+acq_necbl_hitting_clean <- necbl_hitting %>%
+  mutate(source_key = paste(player_name, Team, "NECBL")) %>%
   mutate(
-    player_name = player_name, team_name = Team, age = NA_integer_,
-    class_year  = year, college = school, R = NA_integer_, SB = NA_integer_,
-    OPS = round(coalesce(obp, 0) + coalesce(slg, 0), 3),
-    AVG = avg, OBP = obp, SLG = slg,
-    source_key  = paste(player_name, Team, "NECBL")
+    player_name = coalesce(full_name, player_name),
+    team_name   = Team,
+    age         = NA_integer_,
+    class_year  = year,
+    college     = school,
+    R           = NA_integer_,
+    SB          = NA_integer_,
+    OPS         = round(coalesce(obp, 0) + coalesce(slg, 0), 3),
+    AVG         = avg,
+    OBP         = obp,
+    SLG         = slg
   ) %>%
   select(player_name, position, age, class_year, college,
          team_name, league_name, G = gp, AB = ab, H = h, R,
