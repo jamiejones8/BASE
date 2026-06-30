@@ -1997,7 +1997,7 @@ standings <- tryCatch(fetch_standings(), error = function(e) NULL)
 
 fetch_whitecaps_roster <- function() {
   resp <- tryCatch(
-    httr::GET("https://statsapi.mlb.com/api/v1/teams/6096/roster?season=2026",
+    httr::GET("https://statsapi.mlb.com/api/v1/teams/6096/roster?season=2026&hydrate=person",
               httr::timeout(10)),
     error = function(e) NULL
   )
@@ -2013,6 +2013,8 @@ fetch_whitecaps_roster <- function() {
       Pos      = p$position$abbreviation,
       pos_type = p$position$type,
       Number   = p$jerseyNumber,
+      Bats     = p$person$batSide$code %||% "",
+      Throws   = p$person$pitchHand$code %||% "",
       stringsAsFactors = FALSE
     )
   }))
@@ -2022,10 +2024,10 @@ message("Fetching Whitecaps roster...")
 roster_raw <- tryCatch(fetch_whitecaps_roster(), error = function(e) NULL)
 
 if (!is.null(roster_raw)) {
-  roster_pitchers   <- roster_raw %>% filter(pos_type == "Pitcher")   %>% select(Name, Pos, Number)
-  roster_catchers   <- roster_raw %>% filter(pos_type == "Catcher")   %>% select(Name, Pos, Number)
-  roster_infielders <- roster_raw %>% filter(pos_type == "Infielder") %>% select(Name, Pos, Number)
-  roster_outfielders <- roster_raw %>% filter(pos_type == "Outfielder") %>% select(Name, Pos, Number)
+  roster_pitchers   <- roster_raw %>% filter(pos_type == "Pitcher")   %>% select(Name, Pos, Number, Bats, Throws)
+  roster_catchers   <- roster_raw %>% filter(pos_type == "Catcher")   %>% select(Name, Pos, Number, Bats, Throws)
+  roster_infielders <- roster_raw %>% filter(pos_type == "Infielder") %>% select(Name, Pos, Number, Bats, Throws)
+  roster_outfielders <- roster_raw %>% filter(pos_type == "Outfielder") %>% select(Name, Pos, Number, Bats, Throws)
 } else {
   message("Roster fetch failed — using hardcoded fallback")
   roster_pitchers <- data.frame(
@@ -2036,23 +2038,25 @@ if (!is.null(roster_raw)) {
              "Charlie West","Nate Smithburg","Tye Briscoe"),
     Pos    = c(rep("RHP",13),"LHP","LHP","LHP","LHP","LHP","LHP","LHP"),
     Number = rep("", 20),
+    Bats   = rep("", 20),
+    Throws = rep("", 20),
     stringsAsFactors = FALSE
   )
   roster_catchers <- data.frame(
     Name = c("Owen Jenkins","Jacob Lee","Jimmy Janicki"),
-    Pos = c("C","C","C"), Number = rep("", 3), stringsAsFactors = FALSE
+    Pos = c("C","C","C"), Number = rep("", 3), Bats = rep("", 3), Throws = rep("", 3), stringsAsFactors = FALSE
   )
   roster_infielders <- data.frame(
     Name = c("Dalton Wentz","Brendan Lawson","Pete Daniel","Nicholas Partida",
              "Will Moore","Dane Harvey","Petey Craska","Jamie Laskofski",
              "Landon Penfield","Jacob Lambdin","Jett Kenady","Alexander Peck"),
     Pos = c("MINF","SS","SS","SS","INF","1B","1B","SS","3B","SS","SS","SS"),
-    Number = rep("", 12), stringsAsFactors = FALSE
+    Number = rep("", 12), Bats = rep("", 12), Throws = rep("", 12), stringsAsFactors = FALSE
   )
   roster_outfielders <- data.frame(
     Name = c("Adam Magpoc","Brody DeLamielleure","Michael Torres","Frank Carney",
              "Terrence Kiel II","Jay Abernathy","Blaine Brown","Cash Strayer","Eric Hines"),
-    Pos = rep("OF", 9), Number = rep("", 9), stringsAsFactors = FALSE
+    Pos = rep("OF", 9), Number = rep("", 9), Bats = rep("", 9), Throws = rep("", 9), stringsAsFactors = FALSE
   )
 }
 
@@ -3477,6 +3481,7 @@ home_tab_ui <- function() {
         display: flex; align-items: center; justify-content: center; flex-shrink: 0;
       }
       #caps-home .p-name { font-size: 12px; font-weight: 600; color: #16161B; }
+      #caps-home .p-info { font-size: 10px; color: #8B8B96; margin-top: 2px; }
       .tab-content > .tab-pane { padding: 0; }
       .tab-pane[data-value='tab_leaderboards'] .navbar { display: none !important; }
       .tab-pane[data-value='tab_leaderboards'] .navbar-default { display: none !important; }
@@ -4859,13 +4864,29 @@ server <- function(input, output, session) {
     trimws(ifelse(is.null(number), "", as.character(number)))
   }
 
-  make_player_card <- function(name, pos, number, group, visible) {
+  make_handedness_label <- function(bats, throws) {
+    bats <- trimws(ifelse(is.null(bats), "", as.character(bats)))
+    throws <- trimws(ifelse(is.null(throws), "", as.character(throws)))
+
+    if (!nzchar(bats) && !nzchar(throws)) {
+      return("")
+    }
+
+    paste0(bats, "/", throws)
+  }
+
+  make_player_card <- function(name, pos, number, bats, throws, group, visible) {
     tags$div(
       class        = "player-card",
       `data-group` = group,
       style        = if (!visible) "display:none;" else "",
       tags$div(class = "p-init", make_roster_badge(number)),
-      tags$div(class = "p-name", name)
+      tags$div(
+        tags$div(class = "p-name", name),
+        if (nzchar(make_handedness_label(bats, throws))) {
+          tags$div(class = "p-info", make_handedness_label(bats, throws))
+        }
+      )
     )
   }
 
@@ -4873,10 +4894,10 @@ server <- function(input, output, session) {
     tags$div(
       class = "roster-grid",
       tagList(
-        mapply(make_player_card, roster_pitchers$Name,    roster_pitchers$Pos,    roster_pitchers$Number,    "Pitchers",    TRUE,  SIMPLIFY = FALSE),
-        mapply(make_player_card, roster_catchers$Name,    roster_catchers$Pos,    roster_catchers$Number,    "Catchers",    FALSE, SIMPLIFY = FALSE),
-        mapply(make_player_card, roster_infielders$Name,  roster_infielders$Pos,  roster_infielders$Number,  "Infielders",  FALSE, SIMPLIFY = FALSE),
-        mapply(make_player_card, roster_outfielders$Name, roster_outfielders$Pos, roster_outfielders$Number, "Outfielders", FALSE, SIMPLIFY = FALSE)
+        mapply(make_player_card, roster_pitchers$Name,    roster_pitchers$Pos,    roster_pitchers$Number,    roster_pitchers$Bats,    roster_pitchers$Throws,    "Pitchers",    TRUE,  SIMPLIFY = FALSE),
+        mapply(make_player_card, roster_catchers$Name,    roster_catchers$Pos,    roster_catchers$Number,    roster_catchers$Bats,    roster_catchers$Throws,    "Catchers",    FALSE, SIMPLIFY = FALSE),
+        mapply(make_player_card, roster_infielders$Name,  roster_infielders$Pos,  roster_infielders$Number,  roster_infielders$Bats,  roster_infielders$Throws,  "Infielders",  FALSE, SIMPLIFY = FALSE),
+        mapply(make_player_card, roster_outfielders$Name, roster_outfielders$Pos, roster_outfielders$Number, roster_outfielders$Bats, roster_outfielders$Throws, "Outfielders", FALSE, SIMPLIFY = FALSE)
       )
     )
   })
