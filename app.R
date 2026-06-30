@@ -660,6 +660,7 @@ pitcher_summary <- function(tmilb){
       HorzBreak = suppressWarnings(as.numeric(HorzBreak)),
       SpinAxis = suppressWarnings(as.numeric(SpinAxis)),
       PitchofPA = suppressWarnings(as.numeric(PitchofPA)),
+      OutsOnPlay = suppressWarnings(as.numeric(OutsOnPlay)),
       is_strike_swinging = ifelse(PitchCall == "StrikeSwinging", TRUE, FALSE)
     ) %>%
     mutate("Hit" = case_when(PlayResult %in% c("Single","Double","Triple","HomeRun") ~ TRUE,TRUE ~ FALSE),
@@ -1956,6 +1957,7 @@ pitcher_card_server <- function(input, output, session) {
       displaylogo = FALSE,
       modeBarButtonsToRemove = c("autoScale2d","hoverClosestCartesian",
                                  "hoverCompareCartesian","toggleSpikelines")
+      ) %>% plotly::event_register("plotly_selected")
     )
   })
 
