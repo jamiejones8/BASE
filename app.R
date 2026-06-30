@@ -3984,11 +3984,6 @@ acq_board_ui <- function() {
                   )
               )
           ),
-          div(class = "sidebar-bottom",
-    div(id = "nav_run_updates", class = "sidebar-action",
-        tags$i(class = "ti ti-refresh"), "Run updates"
-    ),
-
           # ── Main area ───────────────────────────────────────────────────────
           div(class = "main-area",
               div(class = "main-header",
