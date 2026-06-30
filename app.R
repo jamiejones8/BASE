@@ -3471,13 +3471,12 @@ home_tab_ui <- function() {
         display: flex; align-items: center; gap: 10px;
       }
       #caps-home .p-init {
-        width: 32px; height: 32px; border-radius: 50%;
+        width: 44px; height: 44px; border-radius: 50%;
         background: #E6F1FB; color: #185FA5;
-        font-size: 11px; font-weight: 700;
+        font-size: 14px; font-weight: 700;
         display: flex; align-items: center; justify-content: center; flex-shrink: 0;
       }
       #caps-home .p-name { font-size: 12px; font-weight: 600; color: #16161B; }
-      #caps-home .p-info { font-size: 10px; color: #8B8B96; margin-top: 2px; }
       .tab-content > .tab-pane { padding: 0; }
       .tab-pane[data-value='tab_leaderboards'] .navbar { display: none !important; }
       .tab-pane[data-value='tab_leaderboards'] .navbar-default { display: none !important; }
@@ -4856,12 +4855,8 @@ server <- function(input, output, session) {
   })
 
   # Roster grid
-  make_init <- function(name) {
-    parts <- strsplit(trimws(name), "\\s+")[[1]]
-    paste0(
-      toupper(substr(parts[1], 1, 1)),
-      if (length(parts) >= 2) toupper(substr(parts[length(parts)], 1, 1)) else ""
-    )
+  make_roster_badge <- function(number) {
+    trimws(ifelse(is.null(number), "", as.character(number)))
   }
 
   make_player_card <- function(name, pos, number, group, visible) {
@@ -4869,11 +4864,8 @@ server <- function(input, output, session) {
       class        = "player-card",
       `data-group` = group,
       style        = if (!visible) "display:none;" else "",
-      tags$div(class = "p-init", make_init(name)),
-      tags$div(
-        tags$div(class = "p-name", name),
-        tags$div(class = "p-info", paste0(pos, ifelse(nzchar(number), paste0(" #", number), "")))
-      )
+      tags$div(class = "p-init", make_roster_badge(number)),
+      tags$div(class = "p-name", name)
     )
   }
 
