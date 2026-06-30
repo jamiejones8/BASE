@@ -1958,7 +1958,6 @@ pitcher_card_server <- function(input, output, session) {
       modeBarButtonsToRemove = c("autoScale2d","hoverClosestCartesian",
                                  "hoverCompareCartesian","toggleSpikelines")
       ) %>% plotly::event_register("plotly_selected")
-    )
   })
 
   observe({
