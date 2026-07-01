@@ -3809,7 +3809,7 @@ invisible(pull_file_from_hf("ineligible_pitchers.csv", ACQ_INELIG_FILE))
 invisible(pull_file_from_hf("ineligible_hitters.csv",  ACQ_INELIG_FILE_H))
 
 
-source("acq_update_helpers.R")
+source("acq_helpers.R")
       
 
 acq_load_ineligible <- function() {
