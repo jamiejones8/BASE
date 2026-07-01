@@ -4053,9 +4053,10 @@ acq_board_ui <- function() {
               actionButton("nav_ineligible", tagList(tags$i(class="ti ti-ban"),           " Ineligible"),
                            class = "nav-item"),
               div(class = "sidebar-bottom",
-                  div(id = "nav_run_updates", class = "sidebar-action",
-                      tags$i(class = "ti ti-refresh"), "Run updates"
-                  )
+    actionButton("open_run_updates",
+                 tagList(tags$i(class = "ti ti-refresh"), " Run updates"),
+                 class = "sidebar-action")
+)
               )
           ),
           # ── Main area ───────────────────────────────────────────────────────
