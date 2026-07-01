@@ -2906,13 +2906,6 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
                                 active_models = sd_models) {
   hitter_name <- format_name(selected_hitter)
 
-  dedup <- function(df) {
-    key_cols <- intersect(c("GameID","Batter","Inning","Balls","Strikes","Outs",
-                            "PitchCall","TaggedPitchType","PlateLocHeight","PlateLocSide"), names(df))
-    df %>% distinct(across(all_of(key_cols)), .keep_all = TRUE)
-  }
-
-  
   coerce_numerics <- function(df) {
     df %>% mutate(
       PlateLocSide   = suppressWarnings(as.numeric(PlateLocSide)),
@@ -2924,17 +2917,27 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       OutsOnPlay     = suppressWarnings(as.numeric(OutsOnPlay))
     )
   }
-  # ------------------------------------------------------------------------
 
+  # Overwrite the parameters in-place so every downstream call
+  # (make_split_stats_hitter, make_density_plots_hitter, etc.)
+  # sees numeric columns — not just the per-batter slices.
+  game_data   <- coerce_numerics(game_data)
+  season_data <- coerce_numerics(season_data)
+
+  dedup <- function(df) {
+    key_cols <- intersect(c("GameID","Batter","Inning","Balls","Strikes","Outs",
+                            "PitchCall","TaggedPitchType","PlateLocHeight","PlateLocSide"), names(df))
+    df %>% distinct(across(all_of(key_cols)), .keep_all = TRUE)
+  }
+
+  # No coerce_numerics() needed here anymore — game_data/season_data already coerced above
   game_hitter   <- game_data   %>% filter(Batter == selected_hitter) %>%
-                   dedup() %>% coerce_numerics() %>%           # <--
+                   dedup() %>%
                    score_pitches_xrv(models = active_models)
 
   season_hitter <- season_data %>% filter(Batter == selected_hitter) %>%
-                   dedup() %>% coerce_numerics() %>%           # <--
+                   dedup() %>%
                    score_pitches_xrv(models = active_models)
-  
-  # rest of function unchanged ...
 
   logo_grob <- tryCatch({
     img <- magick::image_read("www/logo1.png")
