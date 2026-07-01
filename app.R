@@ -3808,322 +3808,9 @@ ACQ_INELIG_FILE_H <- "ineligible_hitters.csv"
 invisible(pull_file_from_hf("ineligible_pitchers.csv", ACQ_INELIG_FILE))
 invisible(pull_file_from_hf("ineligible_hitters.csv",  ACQ_INELIG_FILE_H))
 
-# ══════════════════════════════════════════════════════════════════════════════
-# MLB API HELPERS
-# ══════════════════════════════════════════════════════════════════════════════
 
-safe1_mlb <- function(x) {
-  if (is.null(x) || length(x) == 0) return(NA_character_)
-  as.character(x[1])
-}
-
-fetch_player_bio_mlb <- function(player_id) {
-  resp <- httr::GET(
-    paste0("https://statsapi.mlb.com/api/v1/people/", player_id),
-    query = list(hydrate = "education"),
-    httr::add_headers("User-Agent" = "Mozilla/5.0"),
-    httr::timeout(10)
-  )
-  if (httr::status_code(resp) != 200) return(NULL)
-  raw <- httr::content(resp, as = "text", encoding = "UTF-8") %>%
-    jsonlite::fromJSON(flatten = TRUE)
-  p <- raw$people
-  if (is.null(p) || nrow(p) == 0) return(NULL)
-  college_name  <- safe1_mlb(tryCatch(p$`education.colleges`[[1]]$name[1],      error = function(e) NULL))
-  college_state <- safe1_mlb(tryCatch(p$`education.colleges`[[1]]$stateProv[1], error = function(e) NULL))
-  hs_name       <- safe1_mlb(tryCatch(p$`education.highschools`[[1]]$name[1],   error = function(e) NULL))
-  tibble::tibble(
-    player_id     = as.integer(player_id),
-    full_name     = as.character(p$fullName[1]),
-    first_name    = as.character(p$firstName[1]),
-    last_name     = as.character(p$lastName[1]),
-    birth_date    = as.character(p$birthDate[1]),
-    age           = as.integer(p$currentAge[1]),
-    birth_city    = as.character(p$birthCity[1]),
-    birth_country = as.character(p$birthCountry[1]),
-    height        = as.character(p$height[1]),
-    weight        = as.character(p$weight[1]),
-    throws        = as.character(p$pitchHand.code[1]),
-    bats          = as.character(p$batSide.code[1]),
-    position      = as.character(p$primaryPosition.abbreviation[1]),
-    college       = college_name,
-    college_state = college_state,
-    hs_name       = hs_name
-  )
-}
-
-flatten_game_pbp_mlb <- function(gamePk) {
-  resp <- httr::GET(
-    paste0("https://statsapi.mlb.com/api/v1/game/", gamePk, "/playByPlay"),
-    httr::add_headers("User-Agent" = "Mozilla/5.0")
-  )
-  raw   <- httr::content(resp, as = "text", encoding = "UTF-8") %>%
-    jsonlite::fromJSON(flatten = TRUE)
-  plays <- raw$allPlays
-  if (is.null(plays) || nrow(plays) == 0) return(NULL)
-  purrr::map_dfr(seq_len(nrow(plays)), function(i) {
-    events <- plays$playEvents[[i]]
-    if (is.null(events) || nrow(events) == 0) return(NULL)
-    events %>%
-      mutate(
-        gamePk            = gamePk,
-        atBatIndex        = plays$atBatIndex[i],
-        inning            = plays$about.inning[i],
-        halfInning        = plays$about.halfInning[i],
-        batter_id         = plays$matchup.batter.id[i],
-        batter_name       = plays$matchup.batter.fullName[i],
-        bat_side          = plays$matchup.batSide.code[i],
-        pitcher_id        = plays$matchup.pitcher.id[i],
-        pitcher_name      = plays$matchup.pitcher.fullName[i],
-        pitch_hand        = plays$matchup.pitchHand.code[i],
-        result_event      = plays$result.event[i],
-        result_event_type = plays$result.eventType[i],
-        result_rbi        = plays$result.rbi[i],
-        is_out            = plays$result.isOut[i],
-        is_scoring_play   = plays$about.isScoringPlay[i],
-        end_count_balls   = plays$count.balls[i],
-        end_count_strikes = plays$count.strikes[i],
-        end_count_outs    = plays$count.outs[i],
-        men_on_base       = plays$matchup.splits.menOnBase[i]
-      )
-  })
-}
-
-fetch_schedule_mlb <- function(league_id,
-                               start = "2026-06-01",
-                               end   = format(Sys.Date(), "%Y-%m-%d")) {
-  resp <- httr::GET(
-    "https://statsapi.mlb.com/api/v1/schedule",
-    query = list(leagueId = league_id, season = 2026, gameType = "R",
-                 startDate = start, endDate = end, sportId = 22),
-    httr::add_headers("User-Agent" = "Mozilla/5.0")
-  )
-  raw <- httr::content(resp, as = "text", encoding = "UTF-8") %>%
-    jsonlite::fromJSON(flatten = TRUE)
-  if (is.null(raw$dates) || length(raw$dates) == 0) return(tibble::tibble())
-  dplyr::bind_rows(raw$dates$games) %>%
-    dplyr::filter(status.detailedState %in% c("Final", "Completed Early",
-                                               "Game Over", "Postponed"))
-}
-
-fetch_pitching_mlb <- function(league_id, season = 2026) {
-  resp <- httr::GET(
-    "https://statsapi.mlb.com/api/v1/stats",
-    query = list(stats = "season", leagueId = league_id, season = season,
-                 group = "pitching", gameType = "R", playerPool = "ALL", limit = 500),
-    httr::add_headers("User-Agent" = "Mozilla/5.0")
-  )
-  httr::content(resp, as = "text", encoding = "UTF-8") %>%
-    jsonlite::fromJSON(flatten = TRUE) %>%
-    .$stats %>% .$splits %>% .[[1]] %>%
-    dplyr::mutate(league_id = league_id)
-}
-
-fetch_hitting_mlb <- function(league_id, season = 2026) {
-  resp <- httr::GET(
-    "https://statsapi.mlb.com/api/v1/stats",
-    query = list(stats = "season", leagueId = league_id, season = season,
-                 group = "hitting", gameType = "R", playerPool = "ALL", limit = 500),
-    httr::add_headers("User-Agent" = "Mozilla/5.0")
-  )
-  httr::content(resp, as = "text", encoding = "UTF-8") %>%
-    jsonlite::fromJSON(flatten = TRUE) %>%
-    .$stats %>% .$splits %>% .[[1]] %>%
-    dplyr::mutate(league_id = league_id)
-}
-
-clean_pitching_mlb <- function(df) {
-  df %>%
-    dplyr::select(
-      player_id = player.id, player_name = player.fullName,
-      team_name = team.name, league_name = league.name, league_id,
-      position = position.abbreviation,
-      G = stat.gamesPlayed, GS = stat.gamesStarted,
-      IP = stat.inningsPitched, ERA = stat.era, WHIP = stat.whip,
-      K9 = stat.strikeoutsPer9Inn, BB9 = stat.walksPer9Inn,
-      KBB = stat.strikeoutWalkRatio, HR9 = stat.homeRunsPer9,
-      K = stat.strikeOuts, BB = stat.baseOnBalls,
-      H = stat.hits, HR = stat.homeRuns, ER = stat.earnedRuns,
-      HBP = stat.hitBatsmen, BF = stat.battersFaced
-    ) %>%
-    dplyr::mutate(
-      across(c(G, GS, K, BB, H, HR, ER, HBP, BF), as.integer),
-      across(c(ERA, WHIP, K9, BB9, KBB, HR9), as.numeric),
-      IP = as.numeric(IP)
-    )
-}
-
-clean_hitting_mlb <- function(df) {
-  df %>%
-    dplyr::select(
-      player_id = player.id, player_name = player.fullName,
-      team_name = team.name, league_name = league.name, league_id,
-      position = position.abbreviation,
-      G = stat.gamesPlayed, AB = stat.atBats, H = stat.hits,
-      R = stat.runs, `2B` = stat.doubles, `3B` = stat.triples,
-      HR = stat.homeRuns, RBI = stat.rbi, BB = stat.baseOnBalls,
-      SO = stat.strikeOuts, HBP = stat.hitByPitch, SF = stat.sacFlies,
-      SB = stat.stolenBases, CS = stat.caughtStealing,
-      TB = stat.totalBases, AVG = stat.avg, OBP = stat.obp,
-      SLG = stat.slg, OPS = stat.ops
-    ) %>%
-    dplyr::mutate(
-      across(c(G, AB, H, R, `2B`, `3B`, HR, RBI, BB,
-               SO, HBP, SF, SB, CS, TB), as.integer),
-      across(c(AVG, OBP, SLG, OPS), as.numeric)
-    )
-}
-
-build_pitch_level_mlb <- function(pbp) {
-  pl <- pbp %>%
-    dplyr::filter(isPitch == TRUE, !is.na(pitcher_id)) %>%
-    dplyr::mutate(
-      pitch_type = details.type.code,
-      velo       = as.numeric(pitchData.startSpeed),
-      ivb        = as.numeric(pitchData.breaks.breakVerticalInduced),
-      hb_pov     = as.numeric(pitchData.breaks.breakHorizontal),
-      rel_height = as.numeric(pitchData.coordinates.z0),
-      rel_side   = as.numeric(pitchData.coordinates.x0),
-      extension  = as.numeric(pitchData.extension),
-      is_strike  = details.isStrike == TRUE | details.isInPlay == TRUE,
-      is_swing   = details.call.description %in% c(
-                     "Swinging Strike", "Foul", "In Play, Out(s)",
-                     "In Play, Run(s)", "In Play, No Out",
-                     "Swinging Strike (Blocked)", "Foul Tip"),
-      is_whiff   = details.call.description %in% c(
-                     "Swinging Strike", "Swinging Strike (Blocked)")
-    )
-
-  first_pitches <- pl %>%
-    dplyr::group_by(gamePk, atBatIndex, pitcher_id) %>%
-    dplyr::slice_min(pitchNumber, n = 1, with_ties = FALSE) %>%
-    dplyr::ungroup() %>%
-    dplyr::select(gamePk, atBatIndex, pitcher_id) %>%
-    dplyr::mutate(is_fps = TRUE)
-
-  pl %>%
-    dplyr::left_join(first_pitches, by = c("gamePk", "atBatIndex", "pitcher_id")) %>%
-    dplyr::mutate(
-      is_fps        = dplyr::coalesce(is_fps, FALSE),
-      is_fps_strike = is_fps & is_strike
-    )
-}
-
-build_pa_results_mlb <- function(pbp) {
-  pbp %>%
-    dplyr::filter(!is.na(pitcher_id)) %>%
-    dplyr::group_by(gamePk, atBatIndex, pitcher_id, pitcher_name, pitch_hand) %>%
-    dplyr::slice_tail(n = 1) %>%
-    dplyr::ungroup() %>%
-    dplyr::select(gamePk, atBatIndex, pitcher_id, pitcher_name, pitch_hand,
-                  result_event_type, result_rbi, is_out)
-}
-
-build_pitcher_season_mlb <- function(pa_results, pitcher_teams, player_bios) {
-  outs_df <- pa_results %>%
-    dplyr::group_by(pitcher_id) %>%
-    dplyr::summarise(total_outs = sum(as.integer(is_out), na.rm = TRUE), .groups = "drop")
-
-  pa_results %>%
-    dplyr::group_by(pitcher_id, pitcher_name, pitch_hand) %>%
-    dplyr::summarise(
-      G   = dplyr::n_distinct(gamePk),
-      K   = sum(result_event_type == "strikeout",    na.rm = TRUE),
-      BB  = sum(result_event_type == "walk",         na.rm = TRUE),
-      HBP = sum(result_event_type == "hit_by_pitch", na.rm = TRUE),
-      H   = sum(result_event_type %in% c("single","double","triple","home_run"), na.rm = TRUE),
-      HR  = sum(result_event_type == "home_run",     na.rm = TRUE),
-      ER  = sum(result_rbi,                          na.rm = TRUE),
-      .groups = "drop"
-    ) %>%
-    dplyr::left_join(outs_df, by = "pitcher_id") %>%
-    dplyr::mutate(
-      IP_dec = total_outs / 3,
-      IP     = floor(IP_dec) + (total_outs %% 3) / 10,
-      ERA    = round(ifelse(IP_dec > 0, (ER  / IP_dec) * 9,  NA), 2),
-      WHIP   = round(ifelse(IP_dec > 0, (BB + H) / IP_dec,   NA), 2),
-      FIP    = round(ifelse(IP_dec > 0, ((13*HR + 3*(BB+HBP) - 2*K) / IP_dec) + 3.10, NA), 2),
-      K9     = round(ifelse(IP_dec > 0, (K  / IP_dec) * 9,   NA), 1),
-      BB9    = round(ifelse(IP_dec > 0, (BB / IP_dec) * 9,   NA), 1),
-      KBB    = round(ifelse(BB > 0,      K / BB,             NA), 2),
-      HR9    = round(ifelse(IP_dec > 0, (HR / IP_dec) * 9,   NA), 1)
-    ) %>%
-    dplyr::left_join(
-      pitcher_teams %>%
-        dplyr::select(pitcher_id, team_name, league_name) %>%
-        dplyr::distinct(pitcher_id, .keep_all = TRUE),
-      by = "pitcher_id"
-    ) %>%
-    dplyr::left_join(
-      player_bios %>%
-        dplyr::transmute(pitcher_id = as.integer(player_id), age, college) %>%
-        dplyr::distinct(pitcher_id, .keep_all = TRUE),
-      by = "pitcher_id"
-    )
-}
-
-build_pitch_metrics_mlb <- function(pitch_level) {
-  fps <- pitch_level %>%
-    dplyr::filter(is_fps == TRUE, !is.na(pitch_type), pitch_type != "") %>%
-    dplyr::group_by(pitcher_id, pitch_type) %>%
-    dplyr::summarise(
-      FPS_pct = round(sum(is_strike, na.rm = TRUE) / n() * 100, 1),
-      .groups = "drop"
-    )
-
-  pitch_level %>%
-    dplyr::filter(!is.na(pitch_type), pitch_type != "") %>%
-    dplyr::group_by(pitcher_id, pitcher_name, pitch_type) %>%
-    dplyr::summarise(
-      N          = n(),
-      Velo       = round(mean(velo,       na.rm = TRUE), 1),
-      iVB        = round(mean(ivb,        na.rm = TRUE), 1),
-      HB         = round(mean(hb_pov,     na.rm = TRUE), 1),
-      Strike_pct = round(mean(is_strike,  na.rm = TRUE) * 100, 1),
-      Whiff_pct  = round(sum(is_whiff,    na.rm = TRUE) /
-                         max(sum(is_swing), 1) * 100, 1),
-      Rel_Ht     = round(mean(rel_height, na.rm = TRUE), 2),
-      Rel_Side   = round(mean(rel_side,   na.rm = TRUE), 2),
-      Ext        = round(mean(extension,  na.rm = TRUE), 2),
-      .groups    = "drop"
-    ) %>%
-    dplyr::left_join(fps, by = c("pitcher_id", "pitch_type"))
-}
-
-build_movement_avg_mlb <- function(pitch_level) {
-  pitch_level %>%
-    dplyr::filter(!is.na(hb_pov), !is.na(ivb), !is.na(pitch_type), pitch_type != "") %>%
-    dplyr::group_by(pitcher_id, pitch_type) %>%
-    dplyr::filter(n() >= 5) %>%
-    dplyr::summarise(
-      pfx_x = mean(hb_pov, na.rm = TRUE),
-      pfx_z = mean(ivb,    na.rm = TRUE),
-      velo  = round(mean(velo, na.rm = TRUE), 1),
-      N     = n(),
-      .groups = "drop"
-    )
-}
-
-build_pitcher_teams_mlb <- function(pitch_level, all_games) {
-  pitch_level %>%
-    dplyr::filter(!is.na(pitcher_id)) %>%
-    dplyr::distinct(gamePk, pitcher_id, pitcher_name, halfInning) %>%
-    dplyr::left_join(
-      all_games %>% dplyr::select(gamePk,
-                                   home_team     = teams.home.team.name,
-                                   away_team     = teams.away.team.name,
-                                   source_league),
-      by = "gamePk"
-    ) %>%
-    dplyr::mutate(team_name = ifelse(halfInning == "top", away_team, home_team)) %>%
-    dplyr::group_by(pitcher_id, pitcher_name) %>%
-    dplyr::summarise(
-      team_name   = names(sort(table(team_name),     decreasing = TRUE))[1],
-      league_name = names(sort(table(source_league), decreasing = TRUE))[1],
-      .groups     = "drop"
-    ) %>%
-    dplyr::distinct(pitcher_id, .keep_all = TRUE)
-}                       
+source("acq_update_helpers.R")
+      
 
 acq_load_ineligible <- function() {
   if (!file.exists(ACQ_INELIG_FILE)) return(character(0))
@@ -4606,9 +4293,35 @@ acq_board_ui <- function() {
                            DTOutput("top10m_pitching_table")
                   )
       )
+    ),
+
+    bsModal(
+      id = "run_updates_modal", title = "Run Updates",
+      trigger = NULL, size = "medium",
+
+      tags$p(
+        "Pulls fresh stats from MLB, NECBL, and Northwoods League and rebuilds all data.",
+        style = "color:#8BAAC8; font-size:13px; margin-bottom:16px;"
+      ),
+
+      tags$div(
+        style = "margin-bottom:16px;",
+        tags$p(
+          "NECBL pitching CSV — download from necbl.com first, then upload here:",
+          style = "font-size:12px; color:#8BAAC8; margin-bottom:4px;"
+        ),
+        fileInput("necbl_csv_upload", NULL,
+                  accept      = ".csv",
+                  buttonLabel = "Browse",
+                  placeholder = "No file selected")
+      ),
+
+      actionButton("run_updates_btn", "Start Update",
+                   class = "btn-apply", style = "width:100%;")
     )
-  )
-}
+
+  ) 
+} 
 
 # ── 6. Server module ─────────────────────────────────────────────────────────
 acq_board_server <- function(input, output, session) {
@@ -4687,7 +4400,80 @@ acq_board_server <- function(input, output, session) {
   observeEvent(input$nav_hitters,    { switch_page("hitters") },    ignoreInit = TRUE)
   observeEvent(input$nav_top10,      { switch_page("top10") },      ignoreInit = TRUE)
   observeEvent(input$nav_ineligible, { switch_page("ineligible") }, ignoreInit = TRUE)
+  observeEvent(input$open_run_updates, {
+  toggleModal(session, "run_updates_modal", toggle = "open")
+})
 
+observeEvent(input$open_run_updates, {
+  toggleModal(session, "run_updates_modal", toggle = "open")
+})
+
+observeEvent(input$run_updates_btn, {
+
+  showModal(modalDialog(
+    title = "Updating data...",
+    tags$div(
+      tags$p("This will take 1-3 minutes. Please don't close this window.",
+             style = "margin-bottom:12px;"),
+      tags$p("Starting...")
+    ),
+    footer = NULL,
+    size = "m"
+  ))
+
+  result <- tryCatch({
+
+    update_progress <- function(msg) {
+      removeModal()
+      showModal(modalDialog(
+        title = "Updating data...",
+        tags$div(
+          tags$p("This will take 1-3 minutes. Please don't close this window.",
+                 style = "margin-bottom:12px;"),
+          tags$p(msg)
+        ),
+        footer = NULL,
+        size = "m"
+      ))
+    }
+
+    necbl_csv_path <- if (!is.null(input$necbl_csv_upload)) {
+      input$necbl_csv_upload$datapath
+    } else {
+      NULL
+    }
+
+    update_progress("Step 1/3: Updating MLB Draft League + Appalachian League...")
+    run_mlb_update()
+
+    update_progress("Step 2/3: Updating NECBL...")
+    run_necbl_update(necbl_csv_path)
+
+    update_progress("Step 3/3: Updating Northwoods League...")
+    run_nwl_update()
+
+    list(success = TRUE)
+
+  }, error = function(e) {
+    list(success = FALSE, message = e$message)
+  })
+
+  removeModal()
+
+  if (isTRUE(result$success)) {
+    showModal(modalDialog(
+      title = "Update complete",
+      tags$p("Data has been refreshed. Reload the app to see the latest numbers."),
+      footer = modalButton("Close")
+    ))
+  } else {
+    showModal(modalDialog(
+      title = "Update failed",
+      tags$p(paste("Error:", result$message)),
+      footer = modalButton("Close")
+    ))
+  }
+})
   observeEvent(input$open_top10,   { toggleModal(session, "top10_modal", toggle = "open") })
   observeEvent(input$open_top10_h, { toggleModal(session, "top10_modal", toggle = "open") })
 
