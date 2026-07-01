@@ -2912,8 +2912,29 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     df %>% distinct(across(all_of(key_cols)), .keep_all = TRUE)
   }
 
-  game_hitter   <- game_data   %>% filter(Batter == selected_hitter) %>% dedup() %>% score_pitches_xrv(models=active_models)
-  season_hitter <- season_data %>% filter(Batter == selected_hitter) %>% dedup() %>% score_pitches_xrv(models=active_models)
+  
+  coerce_numerics <- function(df) {
+    df %>% mutate(
+      PlateLocSide   = suppressWarnings(as.numeric(PlateLocSide)),
+      PlateLocHeight = suppressWarnings(as.numeric(PlateLocHeight)),
+      ExitSpeed      = suppressWarnings(as.numeric(ExitSpeed)),
+      Angle          = suppressWarnings(as.numeric(Angle)),
+      Balls          = suppressWarnings(as.integer(Balls)),
+      Strikes        = suppressWarnings(as.integer(Strikes)),
+      OutsOnPlay     = suppressWarnings(as.numeric(OutsOnPlay))
+    )
+  }
+  # ------------------------------------------------------------------------
+
+  game_hitter   <- game_data   %>% filter(Batter == selected_hitter) %>%
+                   dedup() %>% coerce_numerics() %>%           # <--
+                   score_pitches_xrv(models = active_models)
+
+  season_hitter <- season_data %>% filter(Batter == selected_hitter) %>%
+                   dedup() %>% coerce_numerics() %>%           # <--
+                   score_pitches_xrv(models = active_models)
+  
+  # rest of function unchanged ...
 
   logo_grob <- tryCatch({
     img <- magick::image_read("www/logo1.png")
