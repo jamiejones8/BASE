@@ -2907,16 +2907,17 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
   hitter_name <- format_name(selected_hitter)
 
   coerce_numerics <- function(df) {
-    df %>% mutate(
-      PlateLocSide   = suppressWarnings(as.numeric(PlateLocSide)),
-      PlateLocHeight = suppressWarnings(as.numeric(PlateLocHeight)),
-      ExitSpeed      = suppressWarnings(as.numeric(ExitSpeed)),
-      Angle          = suppressWarnings(as.numeric(Angle)),
-      Balls          = suppressWarnings(as.integer(Balls)),
-      Strikes        = suppressWarnings(as.integer(Strikes)),
-      OutsOnPlay     = suppressWarnings(as.numeric(OutsOnPlay))
-    )
-  }
+  df %>% mutate(
+    PlateLocSide   = suppressWarnings(as.numeric(PlateLocSide)),
+    PlateLocHeight = suppressWarnings(as.numeric(PlateLocHeight)),
+    ExitSpeed      = suppressWarnings(as.numeric(ExitSpeed)),
+    Angle          = suppressWarnings(as.numeric(Angle)),
+    Balls          = suppressWarnings(as.integer(Balls)),
+    Strikes        = suppressWarnings(as.integer(Strikes)),
+    OutsOnPlay     = suppressWarnings(as.numeric(OutsOnPlay)),
+    PitchofPA      = suppressWarnings(as.integer(PitchofPA))   # <-- add
+  )
+}
 
   # Overwrite the parameters in-place so every downstream call
   # (make_split_stats_hitter, make_density_plots_hitter, etc.)
@@ -3064,8 +3065,11 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     geom_polygon(data=hitter_home_plate, aes(x=x,y=y), fill="white", color="black", linewidth=0.8) +
     geom_path(data=hitter_strike_zone, aes(x=PlateLocSide,y=PlateLocHeight), color="black", linewidth=1) +
     geom_point(data=zone_hitter,
-               aes(x=PlateLocSide,y=PlateLocHeight,fill=TaggedPitchType_clean,shape=ContactType),
-               size=3, alpha=0.90, color="black", stroke=0.8) +
+               aes(x=PlateLocSide, y=PlateLocHeight, fill=TaggedPitchType_clean, shape=ContactType),
+               size=5, alpha=0.90, color="black", stroke=0.8) +
+    geom_text(data=zone_hitter,
+              aes(x=PlateLocSide, y=PlateLocHeight, label=PitchofPA),
+              size=2.4, color="white", fontface="bold") +
     scale_fill_manual(values=hitter_pitch_colors, drop=TRUE) +
     scale_shape_manual(values=contact_shapes, drop=FALSE) +
     facet_wrap(~TaggedPitchType_clean, nrow=1) +
