@@ -1,6 +1,10 @@
-# acq_update_helpers.R
-# Sources into app.R — contains MLB API helpers and run update functions
+# acq_helpers.R
+# Sourced into app.R (with local = TRUE) — contains MLB API helpers, NECBL
+# scraper helpers, NWL scraper helpers, and the three run_*_update() functions
+# that back the "Run updates" button on the Acquisitions Board.
 # ══════════════════════════════════════════════════════════════════════════════
+
+library(rvest)
 
 # ── MLB API helpers ───────────────────────────────────────────────────────────
 
@@ -320,6 +324,195 @@ build_pitcher_teams_mlb <- function(pitch_level, all_games) {
       .groups     = "drop"
     ) %>%
     dplyr::distinct(pitcher_id, .keep_all = TRUE)
+}
+
+# ── NECBL scraper helpers ──────────────────────────────────────────────────────
+# Recovered from update_necbl.R (previously a standalone local script, run
+# manually to regenerate necbl_pitching.parquet / necbl_hitting.parquet).
+# Wired in here so the "Run updates" button can call it live.
+
+clean_val <- function(x) {
+  x <- as.character(x)
+  x[stringr::str_detect(x, "^-$|^'?-'?$")] <- NA_character_
+  x
+}
+
+clean_name <- function(x) {
+  stringr::str_trim(stringr::str_replace_all(x, "[\r\n\\s]+", " ")) %>%
+    stringr::str_replace("^[A-Z]\\s+", "") %>%
+    stringr::str_trim()
+}
+
+normalize_team <- function(x) {
+  stringr::str_to_lower(stringr::str_trim(x)) %>%
+    stringr::str_replace_all("[^a-z]", "")
+}
+
+fetch_necbl_hitting <- function() {
+  resp <- httr::GET(
+    "https://necbl.com/sports/bsb/2026/players?pos=h&sort=avg",
+    httr::add_headers(
+      "User-Agent"      = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept"          = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language" = "en-US,en;q=0.5",
+      "Referer"         = "https://necbl.com/sports/bsb/2026/players"
+    )
+  )
+
+  page <- httr::content(resp, as = "text", encoding = "UTF-8") %>% rvest::read_html()
+
+  page %>%
+    rvest::html_nodes("table") %>% .[[1]] %>%
+    rvest::html_table(fill = TRUE, convert = FALSE) %>%
+    dplyr::rename(player_name = Name) %>%
+    dplyr::mutate(
+      league_name = "NECBL",
+      player_name = clean_name(player_name),
+      dplyr::across(c(gp, ab, h, rbi, bb, `2b`, `3b`, hr, xbh,
+                      k, hbp, sf, sh, hdp, go, fo, pa),
+                    ~ suppressWarnings(as.integer(clean_val(.)))),
+      dplyr::across(c(avg, obp, slg),
+                    ~ suppressWarnings(as.numeric(clean_val(.))))
+    ) %>%
+    dplyr::filter(!is.na(player_name), player_name != "",
+                  player_name != "Name", !is.na(ab), ab > 0)
+}
+
+read_necbl_pitching <- function(path) {
+  if (is.null(path) || !file.exists(path)) {
+    message("NECBL pitching CSV not found: ", path)
+    return(tibble::tibble())
+  }
+
+  raw <- readr::read_csv(path, show_col_types = FALSE,
+                          col_types = readr::cols(.default = "c"))
+
+  names(raw) <- stringr::str_to_lower(names(raw)) %>%
+    stringr::str_replace_all("[^a-z0-9]", "_")
+  names(raw)[names(raw) == "k_9"] <- "k9"
+
+  raw %>%
+    dplyr::rename(player_name = name) %>%
+    dplyr::mutate(
+      league_name = "NECBL",
+      player_name = clean_name(player_name),
+      dplyr::across(dplyr::any_of(c("w","l","app","gs","sv","h","r","er",
+                                     "bb","k","hr","bf","wp","hbp")),
+                    ~ suppressWarnings(as.integer(clean_val(.)))),
+      dplyr::across(dplyr::any_of(c("era","ip","k9","whip")),
+                    ~ suppressWarnings(as.numeric(clean_val(.))))
+    ) %>%
+    dplyr::filter(!is.na(player_name), player_name != "",
+                  player_name != "name", !is.na(app))
+}
+
+fetch_necbl_team_slugs <- function() {
+  page <- httr::content(
+    httr::GET("https://necbl.com/sports/bsb/2026/teams",
+              httr::add_headers("User-Agent" = "Mozilla/5.0")),
+    as = "text", encoding = "UTF-8"
+  ) %>% rvest::read_html()
+
+  page %>%
+    rvest::html_nodes("a") %>% rvest::html_attr("href") %>%
+    .[stringr::str_detect(., "/sports/bsb/2026/teams/[^?]+$")] %>%
+    unique() %>% stringr::str_remove("^/")
+}
+
+fetch_necbl_roster <- function(team_slug) {
+  resp <- httr::GET(
+    paste0("https://necbl.com/", team_slug),
+    query = list(view = "roster"),
+    httr::add_headers("User-Agent" = "Mozilla/5.0"),
+    httr::timeout(10)
+  )
+  if (httr::status_code(resp) != 200) return(NULL)
+
+  page <- httr::content(resp, as = "text", encoding = "UTF-8") %>% rvest::read_html()
+
+  table <- tryCatch(
+    page %>% rvest::html_nodes("table") %>% .[[2]] %>% rvest::html_table(fill = TRUE),
+    error = function(e) NULL
+  )
+  if (is.null(table) || nrow(table) == 0) return(NULL)
+
+  team_name <- team_slug %>% stringr::str_extract("[^/]+$") %>% stringr::str_to_title()
+
+  table %>%
+    dplyr::mutate(
+      team_name   = team_name,
+      league_name = "NECBL",
+      school      = stringr::str_extract(Hometown, "(?<=/ ).*$") %>% stringr::str_trim(),
+      hometown    = stringr::str_extract(Hometown, "^[^/]+") %>% stringr::str_trim(),
+      dplyr::across(dplyr::everything(), as.character)
+    ) %>%
+    dplyr::select(
+      number = `#`, name = Name, position = Position,
+      year = Year, status = Status, height = Height,
+      weight = Weight, bats = Bats, throws = Throws,
+      dob = DOB, hometown, school, team_name, league_name
+    )
+}
+
+# ── NWL scraper helpers ─────────────────────────────────────────────────────────
+# Recovered from update_nwl.R (previously a standalone local script, run
+# manually to regenerate nwl_hitting.parquet / nwl_pitching.parquet / nwl_bios.parquet).
+# Wired in here so the "Run updates" button can call it live.
+
+NWL_SEASON_ID <- 26
+
+fetch_nwl_hitting <- function(season_id = NWL_SEASON_ID) {
+  resp <- httr::GET(
+    paste0("https://scorebook.northwoodsleague.com/api/statistics/batting/", season_id),
+    httr::add_headers("User-Agent" = "Mozilla/5.0",
+                       "Referer"    = "https://northwoodsleague.com/"),
+    httr::timeout(15)
+  )
+  raw   <- httr::content(resp, as = "text", encoding = "UTF-8") %>%
+    jsonlite::fromJSON(flatten = TRUE)
+  stats <- raw$statistics$types$batting$stats
+  tibble::as_tibble(stats) %>%
+    dplyr::mutate(league_name = "Northwoods League", league_id = season_id)
+}
+
+fetch_nwl_pitching <- function(season_id = NWL_SEASON_ID) {
+  resp <- httr::GET(
+    paste0("https://scorebook.northwoodsleague.com/api/statistics/pitching/", season_id),
+    httr::add_headers("User-Agent" = "Mozilla/5.0",
+                       "Referer"    = "https://northwoodsleague.com/"),
+    httr::timeout(15)
+  )
+  raw   <- httr::content(resp, as = "text", encoding = "UTF-8") %>%
+    jsonlite::fromJSON(flatten = TRUE)
+  stats <- raw$statistics$types$pitching$stats
+  tibble::as_tibble(stats) %>%
+    dplyr::mutate(league_name = "Northwoods League", league_id = season_id)
+}
+
+fetch_nwl_bio <- function(player_id) {
+  resp <- httr::GET(
+    paste0("https://scorebook.northwoodsleague.com/api/player/", player_id),
+    httr::add_headers("User-Agent" = "Mozilla/5.0",
+                       "Referer"    = "https://northwoodsleague.com/"),
+    httr::timeout(10)
+  )
+  if (httr::status_code(resp) != 200) return(NULL)
+  p <- httr::content(resp, as = "text", encoding = "UTF-8") %>%
+    jsonlite::fromJSON(flatten = TRUE) %>% .$player
+  if (is.null(p)) return(NULL)
+  tibble::tibble(
+    player_id   = as.integer(player_id),
+    full_name   = paste(p$firstname, p$lastname),
+    first_name  = as.character(p$firstname),
+    last_name   = as.character(p$lastname),
+    position    = as.character(p$position),
+    bats_throws = as.character(p$bats_throws),
+    height      = as.character(p$height),
+    weight      = as.integer(p$weight),
+    college     = as.character(p$college),
+    class       = as.character(p$class),
+    hometown    = as.character(p$hometown)
+  )
 }
 
 # ── Run update functions ──────────────────────────────────────────────────────
