@@ -1,8 +1,4 @@
-# acq_helpers.R
-# Sourced into app.R (with local = TRUE) — contains MLB API helpers, NECBL
-# scraper helpers, NWL scraper helpers, and the three run_*_update() functions
-# that back the "Run updates" button on the Acquisitions Board.
-# ══════════════════════════════════════════════════════════════════════════════
+
 
 library(rvest)
 
