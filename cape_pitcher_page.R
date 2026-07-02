@@ -12,6 +12,62 @@ cape_pitcher_count_levels <- c(
   "3-0", "3-1", "3-2"
 )
 
+cape_pitcher_pitch_pal <- c(
+  "Four-Seam" = "#D94A3F",
+  "Two-Seam Fastball" = "#B83A95",
+  "Sinker" = "#D17A2A",
+  "Cutter" = "#C9A82E",
+  "Splitter" = "#7FD9A2",
+  "Changeup" = "#3DA84B",
+  "Slider" = "#2C7AB8",
+  "Sweeper" = "#B566B5",
+  "Curveball" = "#8E2EA0",
+  "Knuckle Curve" = "#7A2A52",
+  "Slurve" = "#3F8A66",
+  "Knuckle Ball" = "#3FA3A3",
+  "Eephus" = "#9A9AA0",
+  "Fastball" = "#5FA8C9",
+  "Slow Curve" = "#B8B8BE",
+  "Screwball" = "#C96A95"
+)
+
+cape_pitcher_format_name <- function(name) {
+  name <- as.character(name)
+  if (length(name) == 0 || is.na(name) || !grepl(",", name, fixed = TRUE)) {
+    return(name)
+  }
+  parts <- strsplit(name, ",\\s*")[[1]]
+  if (length(parts) == 2) paste(trimws(parts[2]), trimws(parts[1])) else name
+}
+
+cape_pitcher_format_pitcher_name <- function(nm) {
+  vapply(as.character(nm), cape_pitcher_format_name, character(1), USE.NAMES = FALSE)
+}
+
+cape_pitcher_canonicalize_pitch <- function(x) {
+  dplyr::case_when(
+    x %in% c("Fastball", "FourSeamFastBall", "FF", "FastBall") ~ "Four-Seam",
+    x %in% c("TwoSeamFastBall", "OneSeamFastBall", "Sinker", "SI") ~ "Sinker",
+    x %in% c("ChangeUp", "CH") ~ "Changeup",
+    x %in% c("KnuckleCurve", "KC") ~ "Curveball",
+    x %in% c("CutFastBall", "FC") ~ "Cutter",
+    x %in% c("SL") ~ "Slider",
+    x %in% c("CU") ~ "Curveball",
+    x %in% c("FS") ~ "Splitter",
+    TRUE ~ x
+  )
+}
+
+cape_pitcher_pal_for <- function(types, palette = cape_pitcher_pitch_pal, default = "#888888") {
+  types <- unique(as.character(types))
+  types <- types[!is.na(types)]
+  unknown <- setdiff(types, names(palette))
+  if (length(unknown)) {
+    palette <- c(palette, stats::setNames(rep(default, length(unknown)), unknown))
+  }
+  palette
+}
+
 cape_pitcher_ccbl_name <- function(team_code) {
   map <- c(
     BRE_WHI = "Brewster Whitecaps",
@@ -92,15 +148,15 @@ cape_pitcher_read_parquet <- function(path = "CapeCod26.parquet") {
 cape_pitcher_prepare_view <- function(raw_df) {
   prep_pitches(raw_df) %>%
     mutate(
-      TaggedPitchType = canonicalize_pitch(as.character(TaggedPitchType)),
-      PitchType = canonicalize_pitch(as.character(PitchType)),
+      TaggedPitchType = cape_pitcher_canonicalize_pitch(as.character(TaggedPitchType)),
+      PitchType = cape_pitcher_canonicalize_pitch(as.character(PitchType)),
       Count = dplyr::if_else(
         !is.na(Balls) & !is.na(Strikes),
         paste0(as.integer(Balls), "-", as.integer(Strikes)),
         NA_character_
       ),
-      PitcherDisplay = format_pitcher_name(Pitcher),
-      BatterDisplay = vapply(as.character(Batter), format_name, character(1)),
+      PitcherDisplay = cape_pitcher_format_pitcher_name(Pitcher),
+      BatterDisplay = vapply(as.character(Batter), cape_pitcher_format_name, character(1)),
       TeamDisplay = cape_pitcher_ccbl_name(PitcherTeam),
       CSW = PitchCall %in% c("StrikeCalled", "StrikeSwinging")
     )
@@ -235,7 +291,7 @@ cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), sour
     x = ~HorzBreak,
     y = ~InducedVertBreak,
     color = ~PitchType,
-    colors = pal_for(side_data$PitchType),
+    colors = cape_pitcher_pal_for(side_data$PitchType),
     type = "scatter",
     mode = "markers",
     text = hover_text,
@@ -590,7 +646,7 @@ cape_pitcher_player_page_server <- function(input, output, session) {
     }
     selected <- if (!is.null(current) && current %in% ch$Pitcher) current else default_pitcher
     labels <- paste0(
-      format_pitcher_name(ch$Pitcher),
+      cape_pitcher_format_pitcher_name(ch$Pitcher),
       " - ",
       cape_pitcher_ccbl_name(ch$PitcherTeam)
     )
@@ -651,7 +707,7 @@ cape_pitcher_player_page_server <- function(input, output, session) {
     }
 
     tags$div(
-      tags$div(class = "cpp-meta-name", format_pitcher_name(input$cpp_pitcher)),
+      tags$div(class = "cpp-meta-name", cape_pitcher_format_pitcher_name(input$cpp_pitcher)),
       tags$div(
         class = "cpp-meta-line",
         paste(
@@ -769,9 +825,13 @@ cape_pitcher_player_page_server <- function(input, output, session) {
   })
 
   observeEvent(
-    plotly::event_data("plotly_selected", source = "cpp_mov_lhh_src", priority = "event"),
+    suppressWarnings(
+      plotly::event_data("plotly_selected", source = "cpp_mov_lhh_src", priority = "event")
+    ),
     {
-      ed <- plotly::event_data("plotly_selected", source = "cpp_mov_lhh_src", priority = "event")
+      ed <- suppressWarnings(
+        plotly::event_data("plotly_selected", source = "cpp_mov_lhh_src", priority = "event")
+      )
       ids <- suppressWarnings(as.integer(ed$customdata))
       ids <- ids[!is.na(ids)]
       selected_rows(ids)
@@ -780,9 +840,13 @@ cape_pitcher_player_page_server <- function(input, output, session) {
   )
 
   observeEvent(
-    plotly::event_data("plotly_selected", source = "cpp_mov_rhh_src", priority = "event"),
+    suppressWarnings(
+      plotly::event_data("plotly_selected", source = "cpp_mov_rhh_src", priority = "event")
+    ),
     {
-      ed <- plotly::event_data("plotly_selected", source = "cpp_mov_rhh_src", priority = "event")
+      ed <- suppressWarnings(
+        plotly::event_data("plotly_selected", source = "cpp_mov_rhh_src", priority = "event")
+      )
       ids <- suppressWarnings(as.integer(ed$customdata))
       ids <- ids[!is.na(ids)]
       selected_rows(ids)

@@ -1996,7 +1996,7 @@ pitcher_card_server <- function(input, output, session) {
   })
 
   observe({
-    ed <- tryCatch(plotly::event_data("plotly_selected", source = "pc_retagplot"),
+    ed <- tryCatch(suppressWarnings(plotly::event_data("plotly_selected", source = "pc_retagplot")),
                    error = function(e) NULL)
     if (is.null(ed) || !is.data.frame(ed) || nrow(ed) == 0 || is.null(ed$customdata)) {
       selected_points(NULL); return()
