@@ -4053,9 +4053,9 @@ acq_board_ui <- function() {
               actionButton("nav_ineligible", tagList(tags$i(class="ti ti-ban"),           " Ineligible"),
                            class = "nav-item"),
               div(class = "sidebar-bottom",
-    actionButton("open_run_updates",
-                 tagList(tags$i(class = "ti ti-refresh"), " Run updates"),
-                 class = "sidebar-action")
+                  actionButton("open_run_updates",
+                               tagList(tags$i(class = "ti ti-refresh"), " Run updates"),
+                               class = "sidebar-action")
               )
           ),
           # ── Main area ───────────────────────────────────────────────────────
@@ -4401,12 +4401,8 @@ acq_board_server <- function(input, output, session) {
   observeEvent(input$nav_top10,      { switch_page("top10") },      ignoreInit = TRUE)
   observeEvent(input$nav_ineligible, { switch_page("ineligible") }, ignoreInit = TRUE)
   observeEvent(input$open_run_updates, {
-  toggleModal(session, "run_updates_modal", toggle = "open")
-})
-
-observeEvent(input$open_run_updates, {
-  toggleModal(session, "run_updates_modal", toggle = "open")
-})
+    toggleModal(session, "run_updates_modal", toggle = "open")
+  })
 
 observeEvent(input$run_updates_btn, {
 
