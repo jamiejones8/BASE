@@ -4056,7 +4056,6 @@ acq_board_ui <- function() {
     actionButton("open_run_updates",
                  tagList(tags$i(class = "ti ti-refresh"), " Run updates"),
                  class = "sidebar-action")
-)
               )
           ),
           # ── Main area ───────────────────────────────────────────────────────
