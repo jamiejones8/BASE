@@ -31,6 +31,7 @@ last     <- dplyr::last
 
 source("scout_app.R")
 source("leaderboards_embed.R")
+source("cape_pitcher_page.R")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HF HUB WRITE-BACK HELPER — now points at a Dataset repo, not the Space repo
@@ -40,9 +41,13 @@ source("leaderboards_embed.R")
 
 HF_DATA_REPO_ID   <- "BrewsterWhitecapsMAC/acq-board-data"
 HF_DATA_REPO_TYPE <- "dataset"
+SEASON_DATA_FILE      <- "CapeCod26.parquet"
+SEASON_DATA_REPO_ID   <- Sys.getenv("CAPE_DATA_REPO_ID", unset = HF_DATA_REPO_ID)
+SEASON_DATA_REPO_PATH <- Sys.getenv("CAPE_DATA_REPO_PATH", unset = SEASON_DATA_FILE)
 
 push_file_to_hf <- function(local_path, repo_path,
-                            commit_message = paste("Update", repo_path)) {
+                            commit_message = paste("Update", repo_path),
+                            repo_id = HF_DATA_REPO_ID) {
 
   token <- Sys.getenv("write_token")
   if (!nzchar(token)) {
@@ -59,7 +64,7 @@ push_file_to_hf <- function(local_path, repo_path,
   encoded      <- base64enc::base64encode(file_content)
 
   url <- glue::glue(
-    "https://huggingface.co/api/datasets/{HF_DATA_REPO_ID}/commit/main"
+    "https://huggingface.co/api/datasets/{repo_id}/commit/main"
   )
 
   body <- list(
@@ -93,31 +98,61 @@ push_file_to_hf <- function(local_path, repo_path,
   }
 }
 
-pull_file_from_hf <- function(repo_path, local_path) {
-
+pull_file_from_hf <- function(repo_path, local_path, repo_id = HF_DATA_REPO_ID) {
   token <- Sys.getenv("write_token")
-
   url <- glue::glue(
-    "https://huggingface.co/datasets/{HF_DATA_REPO_ID}/resolve/main/{repo_path}"
+    "https://huggingface.co/datasets/{repo_id}/resolve/main/{repo_path}"
   )
+  tmp_path <- tempfile(tmpdir = dirname(local_path),
+                       pattern = "hf_pull_",
+                       fileext = paste0(".", tools::file_ext(local_path)))
 
-  resp <- tryCatch(
-    httr::GET(
-      url,
-      httr::add_headers(Authorization = paste("Bearer", token)),
-      httr::write_disk(local_path, overwrite = TRUE),
-      httr::timeout(15)
-    ),
-    error = function(e) NULL
-  )
+  resp <- tryCatch({
+    if (nzchar(token)) {
+      httr::GET(
+        url,
+        httr::add_headers(Authorization = paste("Bearer", token)),
+        httr::write_disk(tmp_path, overwrite = TRUE),
+        httr::timeout(15)
+      )
+    } else {
+      httr::GET(
+        url,
+        httr::write_disk(tmp_path, overwrite = TRUE),
+        httr::timeout(15)
+      )
+    }
+  }, error = function(e) NULL)
 
   if (is.null(resp) || httr::http_error(resp)) {
+    if (file.exists(tmp_path)) unlink(tmp_path)
     message("HF pull failed for ", repo_path, " — using local fallback if present.")
+    return(invisible(FALSE))
+  }
+
+  ok <- file.rename(tmp_path, local_path)
+  if (!ok) {
+    ok <- file.copy(tmp_path, local_path, overwrite = TRUE)
+    unlink(tmp_path)
+  }
+  if (!ok) {
+    message("HF pull succeeded but could not update local file for ", repo_path)
     return(invisible(FALSE))
   }
 
   message("Pulled from HF dataset: ", repo_path)
   return(invisible(TRUE))
+}
+
+pull_season_data_from_hf <- function() {
+  pull_file_from_hf(SEASON_DATA_REPO_PATH, SEASON_DATA_FILE, repo_id = SEASON_DATA_REPO_ID)
+}
+
+push_season_data_to_hf <- function(local_path = SEASON_DATA_FILE,
+                                   commit_message = paste("Update", SEASON_DATA_REPO_PATH)) {
+  push_file_to_hf(local_path, SEASON_DATA_REPO_PATH,
+                  commit_message = commit_message,
+                  repo_id = SEASON_DATA_REPO_ID)
 }
 
 
@@ -2580,14 +2615,16 @@ read_data_file <- function(path) {
 }
 
 message("Loading master game data...")
-# Season data source: CapeCod26.parquet, read from the app dir (committed alongside
-# the app on the Space, like College26Heights.csv / percentile_table.csv).
+# Pull the latest deployed season parquet from the configured dataset repo,
+# then fall back to the local copy if the remote fetch is unavailable.
+invisible(pull_season_data_from_hf())
+
 season_data <- tryCatch({
-  df <- arrow::read_parquet("CapeCod26.parquet")
-  message("Loaded CapeCod26.parquet — rows: ", nrow(df))
+  df <- arrow::read_parquet(SEASON_DATA_FILE)
+  message("Loaded ", SEASON_DATA_FILE, " — rows: ", nrow(df))
   df
 }, error = function(e) {
-  message("CapeCod26.parquet load failed: ", e$message)
+  message(SEASON_DATA_FILE, " load failed: ", e$message)
   NULL
 })
 
@@ -3326,6 +3363,7 @@ apps <- list(
   list(id = "catcher",          title = "Catcher Reports",          page = "catcher",        status = "live"),
   list(id = "hitter",           title = "Postgame Hitter Reports",  page = "hitter",         status = "live"),
   list(id = "pitcher",          title = "Postgame Pitcher Reports", page = "pitcher",        status = "live"),
+  list(id = "pitcher_player",   title = "Cape Pitcher Player Page", page = "pitcher_player", status = "live", image_src = "pitcher_scouting.png"),
   list(id = "pitcher_scouting", title = "Pitcher Scouting",         page = "scout_pitching", status = "live"),
   list(id = "hitter_scouting",  title = "Hitter Scouting",          page = "scout_hitting",  status = "live"),
   list(id = "acquisitions",     title = "Acquisitions",             page = "scout_acq",      status = "live"),
@@ -4902,6 +4940,7 @@ ui <- navbarPage(
   tabPanel("Catcher Reports",  value = "tab_catcher",        catcher_ui()),
   tabPanel("Hitter Reports",   value = "tab_hitter",         hitter_ui()),
   tabPanel("Pitcher Reports",  value = "tab_pitcher",        pitcher_card_ui()),
+  tabPanel("Pitcher Player Page", value = "tab_pitcher_player", cape_pitcher_player_page_ui()),
   tabPanel("Pitcher Scouting", value = "tab_scout_pitching", scout_pitching_ui()),
   tabPanel("Hitter Scouting",  value = "tab_scout_hitting",  scout_hitting_ui()),
   tabPanel("Acquisitions",     value = "tab_scout_acq",      scout_acq_ui()),
@@ -4924,6 +4963,7 @@ server <- function(input, output, session) {
     catcher        = "tab_catcher",
     hitter         = "tab_hitter",
     pitcher        = "tab_pitcher",
+    pitcher_player = "tab_pitcher_player",
     scout_pitching = "tab_scout_pitching",
     scout_hitting  = "tab_scout_hitting",
     scout_acq      = "tab_scout_acq",
@@ -5396,6 +5436,11 @@ server <- function(input, output, session) {
       zip(file, files = out_files, flags = "-j")
     }
   )
+
+  # ==========================================
+  # CAPE PITCHER PLAYER PAGE
+  # ==========================================
+  cape_pitcher_player_page_server(input, output, session)
 
   # ==========================================
   # PITCHER SERVER LOGIC -> BrewSummaryCard
