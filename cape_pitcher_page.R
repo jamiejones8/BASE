@@ -553,8 +553,9 @@ cape_pitcher_player_page_ui <- function() {
 }
 
 cape_pitcher_player_page_server <- function(input, output, session) {
-  raw_data <- reactiveVal(cape_pitcher_read_parquet())
-  loaded_snapshot <- reactiveVal(raw_data())
+  initial_data <- cape_pitcher_read_parquet()
+  raw_data <- reactiveVal(initial_data)
+  loaded_snapshot <- reactiveVal(initial_data)
   status_message <- reactiveVal("Retags are temporary and apply only to this session.")
   status_class <- reactiveVal("clean")
   selected_rows <- reactiveVal(integer(0))
