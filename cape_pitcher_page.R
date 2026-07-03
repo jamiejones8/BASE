@@ -127,6 +127,53 @@ cape_pitcher_format_pct <- function(x, digits = 1) {
   paste0(formatC(100 * x, format = "f", digits = digits), "%")
 }
 
+cape_pitcher_height_to_feet <- function(height_ft, height_in) {
+  if (length(height_ft) == 0 || length(height_in) == 0 ||
+      is.na(height_ft) || is.na(height_in)) {
+    return(NA_real_)
+  }
+  as.numeric(height_ft) + (as.numeric(height_in) / 12)
+}
+
+cape_pitcher_arm_angle_value <- function(rel_height, rel_side, pitcher_throws,
+                                         height_feet, set_position = 0) {
+  if (length(rel_height) == 0 || length(rel_side) == 0 || length(pitcher_throws) == 0 ||
+      is.na(rel_height) || is.na(rel_side) || is.na(height_feet) || !nzchar(pitcher_throws)) {
+    return(NA_real_)
+  }
+
+  shoulder_height <- height_feet * 0.7
+  adjusted_rel_side <- rel_side - set_position
+  side_eff <- if (identical(pitcher_throws, "Left")) {
+    -adjusted_rel_side
+  } else {
+    adjusted_rel_side
+  }
+
+  atan2(rel_height - shoulder_height, side_eff) * (180 / pi)
+}
+
+cape_pitcher_arm_angle_summary <- function(d, height_feet, set_position = 0) {
+  if (is.null(d) || nrow(d) == 0 || is.na(height_feet)) {
+    return(list(angle = NA_real_, rel_height = NA_real_, rel_side = NA_real_, throws = NA_character_))
+  }
+
+  rel_height <- mean(d$RelHeight, na.rm = TRUE)
+  rel_side <- mean(d$RelSide, na.rm = TRUE)
+  if (!is.finite(rel_height)) rel_height <- NA_real_
+  if (!is.finite(rel_side)) rel_side <- NA_real_
+
+  throws_vals <- as.character(d$PitcherThrows[!is.na(d$PitcherThrows) & nzchar(d$PitcherThrows)])
+  throws <- if (length(throws_vals)) throws_vals[1] else NA_character_
+
+  list(
+    angle = cape_pitcher_arm_angle_value(rel_height, rel_side, throws, height_feet, set_position = set_position),
+    rel_height = rel_height,
+    rel_side = rel_side,
+    throws = throws
+  )
+}
+
 cape_pitcher_quick_btn <- function(id, label) {
   actionButton(
     id,
@@ -279,7 +326,8 @@ cape_pitcher_hover_text <- function(d) {
   )
 }
 
-cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), source_id) {
+cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), source_id,
+                                       arm_angle = NA_real_) {
   batter_side <- match.arg(batter_side)
   side_short <- if (batter_side == "Left") "LHH" else "RHH"
   side_data <- d %>% filter(BatterSide == batter_side)
@@ -295,7 +343,7 @@ cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), sour
 
   hover_text <- cape_pitcher_hover_text(side_data)
 
-  plotly::plot_ly(
+  p <- plotly::plot_ly(
     data = side_data,
     x = ~HorzBreak,
     y = ~InducedVertBreak,
@@ -322,6 +370,9 @@ cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), sour
       ),
       yaxis = list(
         title = "Induced Vertical Break (in)",
+        range = c(-25, 25),
+        zeroline = TRUE,
+        zerolinewidth = 1.2,
         zerolinecolor = "rgba(12,35,64,0.25)",
         scaleanchor = "x",
         scaleratio = 1
@@ -339,6 +390,35 @@ cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), sour
       )
     ) %>%
     plotly::event_register("plotly_selected")
+
+  p <- p %>%
+    plotly::layout(
+      xaxis = list(
+        title = "Horizontal Break (in)",
+        range = c(-25, 25),
+        zeroline = TRUE,
+        zerolinewidth = 1.2,
+        zerolinecolor = "rgba(12,35,64,0.25)"
+      )
+    )
+
+  if (is.finite(arm_angle)) {
+    theta <- arm_angle * pi / 180
+    line_extent <- 25
+    p <- p %>%
+      plotly::add_trace(
+        inherit = FALSE,
+        x = c(-line_extent * cos(theta), line_extent * cos(theta)),
+        y = c(-line_extent * sin(theta), line_extent * sin(theta)),
+        type = "scatter",
+        mode = "lines",
+        line = list(color = "rgba(12,35,64,0.75)", width = 1.25, dash = "dash"),
+        hovertemplate = paste0("Arm angle: ", formatC(arm_angle, format = "f", digits = 1), "°<extra></extra>"),
+        showlegend = FALSE
+      )
+  }
+
+  p
 }
 
 cape_pitcher_player_page_ui <- function() {
@@ -455,6 +535,19 @@ cape_pitcher_player_page_ui <- function() {
             line-height: 1.4;
             margin-bottom: 8px;
           }
+          #cpp-page .cpp-armangle-box {
+            border-top: 1px solid rgba(12, 35, 64, 0.10);
+            margin-top: 12px;
+            padding-top: 12px;
+          }
+          #cpp-page .cpp-subhead {
+            color: #0C2340;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+          }
           #cpp-page .cpp-retag-card .cpp-status {
             margin-top: 6px;
           }
@@ -497,7 +590,7 @@ cape_pitcher_player_page_ui <- function() {
         )
       ),
       tags$h2(
-        "Cape Cod Pitcher Player Page",
+        "Cape Pitcher Scout",
         style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 10px;"
       ),
       tags$p(
@@ -622,7 +715,36 @@ cape_pitcher_player_page_ui <- function() {
                 class = "cpp-retag-meta",
                 textOutput("cpp_selection_info", inline = TRUE)
               ),
-              uiOutput("cpp_save_status")
+              uiOutput("cpp_save_status"),
+              tags$div(
+                class = "cpp-armangle-box",
+                tags$div(class = "cpp-subhead", "Arm Angle Overlay"),
+                fluidRow(
+                  column(
+                    6,
+                    numericInput("cpp_height_ft", "Height (ft)", value = NA,
+                                 min = 4, max = 8, step = 1)
+                  ),
+                  column(
+                    6,
+                    numericInput("cpp_height_in", "Height (in)", value = NA,
+                                 min = 0, max = 11, step = 1)
+                  )
+                ),
+                actionButton(
+                  "cpp_save_height",
+                  "Save Height For Pitcher",
+                  class = "btn btn-default btn-sm btn-block"
+                ),
+                tags$p(
+                  "Uses the current pitcher's average release height and release side with shoulder height set to 70% of the entered height.",
+                  class = "cpp-retag-note"
+                ),
+                tags$div(
+                  class = "cpp-retag-meta",
+                  textOutput("cpp_arm_angle_info", inline = TRUE)
+                )
+              )
             )
           )
         ),
@@ -745,6 +867,13 @@ cape_pitcher_player_page_server <- function(input, output, session,
   loaded_snapshot <- reactiveVal(NULL)
   data_loaded <- reactiveVal(FALSE)
   data_loading <- reactiveVal(FALSE)
+  manual_heights <- reactiveVal(
+    tibble::tibble(
+      pitcher_key = character(),
+      height_ft = numeric(),
+      height_in = numeric()
+    )
+  )
   status_message <- reactiveVal("Pitcher page data will load when this tab is opened.")
   status_class <- reactiveVal("clean")
   selected_rows <- reactiveVal(integer(0))
@@ -848,12 +977,34 @@ cape_pitcher_player_page_server <- function(input, output, session,
     )
   })
 
+  current_pitcher_key <- reactive({
+    req(input$cpp_team, input$cpp_pitcher)
+    paste(input$cpp_team, input$cpp_pitcher, sep = "::")
+  })
+
+  observeEvent(current_pitcher_key(), {
+    saved <- manual_heights() %>%
+      filter(pitcher_key == current_pitcher_key())
+
+    updateNumericInput(
+      session,
+      "cpp_height_ft",
+      value = if (nrow(saved)) saved$height_ft[[1]] else NA
+    )
+    updateNumericInput(
+      session,
+      "cpp_height_in",
+      value = if (nrow(saved)) saved$height_in[[1]] else NA
+    )
+  }, ignoreInit = FALSE)
+
   pitcher_full <- reactive({
     req(input$cpp_team, input$cpp_pitcher)
     page_data() %>% filter(PitcherTeam == input$cpp_team, Pitcher == input$cpp_pitcher)
   })
 
   current_pending_changes <- reactive({
+    req(isTRUE(data_loaded()))
     current <- raw_data()
     snapshot <- loaded_snapshot()
     req(nrow(current) == nrow(snapshot))
@@ -874,6 +1025,61 @@ cape_pitcher_player_page_server <- function(input, output, session,
       status_class("clean")
       status_message("Retags are temporary and apply only to this session.")
     }
+  })
+
+  observeEvent(input$cpp_save_height, {
+    req(input$cpp_team, input$cpp_pitcher)
+
+    if (is.null(input$cpp_height_ft) || is.null(input$cpp_height_in) ||
+        is.na(input$cpp_height_ft) || is.na(input$cpp_height_in)) {
+      showNotification("Enter both height fields before saving.", type = "warning")
+      return()
+    }
+
+    heights <- manual_heights()
+    key <- current_pitcher_key()
+    new_row <- tibble::tibble(
+      pitcher_key = key,
+      height_ft = as.numeric(input$cpp_height_ft),
+      height_in = as.numeric(input$cpp_height_in)
+    )
+
+    heights <- heights %>%
+      filter(pitcher_key != key) %>%
+      bind_rows(new_row)
+
+    manual_heights(heights)
+    showNotification(
+      paste0(
+        "Saved manual height for ",
+        cape_pitcher_format_pitcher_name(input$cpp_pitcher),
+        ": ",
+        input$cpp_height_ft, "'",
+        input$cpp_height_in, "\"."
+      ),
+      type = "message"
+    )
+  })
+
+  current_manual_height <- reactive({
+    saved <- manual_heights() %>%
+      filter(pitcher_key == current_pitcher_key())
+
+    if (!nrow(saved)) {
+      return(list(height_ft = NA_real_, height_in = NA_real_, height_feet = NA_real_))
+    }
+
+    list(
+      height_ft = saved$height_ft[[1]],
+      height_in = saved$height_in[[1]],
+      height_feet = cape_pitcher_height_to_feet(saved$height_ft[[1]], saved$height_in[[1]])
+    )
+  })
+
+  current_arm_angle <- reactive({
+    h <- current_manual_height()
+    summary <- cape_pitcher_arm_angle_summary(pitcher_full(), h$height_feet)
+    c(summary, h)
   })
 
   output$cpp_pitcher_meta <- renderUI({
@@ -915,6 +1121,25 @@ cape_pitcher_player_page_server <- function(input, output, session,
 
   output$cpp_statline_tiles <- renderUI({
     cape_pitcher_statline_ui(cape_pitcher_statline(pitcher_full()))
+  })
+
+  output$cpp_arm_angle_info <- renderText({
+    arm <- current_arm_angle()
+
+    if (!is.finite(arm$height_feet)) {
+      return("No manual height saved for this pitcher yet. Save a height to draw the dashed arm-angle overlay.")
+    }
+    if (!is.finite(arm$angle)) {
+      return("A height is saved, but release data is missing for the current pitcher so the overlay could not be computed.")
+    }
+
+    paste0(
+      "Overlay using saved height ",
+      arm$height_ft, "'", arm$height_in, "\"",
+      ": ",
+      formatC(arm$angle, format = "f", digits = 1),
+      "° arm angle."
+    )
   })
 
   observe({
@@ -1006,11 +1231,21 @@ cape_pitcher_player_page_server <- function(input, output, session,
   })
 
   output$cpp_mov_lhh <- plotly::renderPlotly({
-    cape_pitcher_movement_plot(pitcher_visual(), "Left", "cpp_mov_lhh_src")
+    cape_pitcher_movement_plot(
+      pitcher_visual(),
+      "Left",
+      "cpp_mov_lhh_src",
+      arm_angle = current_arm_angle()$angle
+    )
   })
 
   output$cpp_mov_rhh <- plotly::renderPlotly({
-    cape_pitcher_movement_plot(pitcher_visual(), "Right", "cpp_mov_rhh_src")
+    cape_pitcher_movement_plot(
+      pitcher_visual(),
+      "Right",
+      "cpp_mov_rhh_src",
+      arm_angle = current_arm_angle()$angle
+    )
   })
 
   observeEvent(
