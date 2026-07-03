@@ -143,7 +143,17 @@ cape_pitcher_quick_btn <- function(id, label) {
 
 cape_pitcher_read_parquet <- function(path = "CapeCod26.parquet") {
   arrow::read_parquet(path) %>%
-    tibble::as_tibble() %>%
+    tibble::as_tibble()
+}
+
+cape_pitcher_init_data <- function(source_df = NULL, path = "CapeCod26.parquet") {
+  base_df <- if (!is.null(source_df) && NROW(source_df) > 0) {
+    tibble::as_tibble(source_df)
+  } else {
+    cape_pitcher_read_parquet(path)
+  }
+
+  base_df %>%
     mutate(
       caps_row_id = dplyr::row_number(),
       TaggedPitchType = as.character(TaggedPitchType)
@@ -351,12 +361,21 @@ cape_pitcher_player_page_ui <- function() {
           #cpp-page .cpp-control-stack .form-group {
             margin-bottom: 12px;
           }
+          #cpp-page,
+          #cpp-page .card,
+          #cpp-page .card-body,
+          #cpp-page .bslib-grid,
+          #cpp-page .bslib-grid-item {
+            overflow: visible !important;
+          }
           #cpp-page .selectize-control,
-          #cpp-page .selectize-dropdown {
+          #cpp-page .selectize-input {
+            position: relative;
             z-index: 2500;
           }
-          #cpp-page .selectize-dropdown {
-            z-index: 3000 !important;
+          #cpp-page .selectize-dropdown,
+          body > .selectize-dropdown {
+            z-index: 5000 !important;
           }
           #cpp-page .cpp-helper {
             color: #5F6B7A;
@@ -526,6 +545,7 @@ cape_pitcher_player_page_ui <- function() {
                 width = "100%",
                 options = list(
                   plugins = list("remove_button"),
+                  dropdownParent = "body",
                   placeholder = "All pitch types"
                 )
               ),
@@ -537,6 +557,7 @@ cape_pitcher_player_page_ui <- function() {
                 width = "100%",
                 options = list(
                   plugins = list("remove_button"),
+                  dropdownParent = "body",
                   placeholder = "All counts"
                 )
               ),
@@ -692,8 +713,8 @@ cape_pitcher_player_page_ui <- function() {
   )
 }
 
-cape_pitcher_player_page_server <- function(input, output, session) {
-  initial_data <- cape_pitcher_read_parquet()
+cape_pitcher_player_page_server <- function(input, output, session, source_data = NULL) {
+  initial_data <- cape_pitcher_init_data(source_data)
   raw_data <- reactiveVal(initial_data)
   loaded_snapshot <- reactiveVal(initial_data)
   status_message <- reactiveVal("Retags are temporary and apply only to this session.")
