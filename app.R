@@ -4436,12 +4436,14 @@ acq_board_ui <- function() {
                                                actionButton("prole_RP", "RP", class="pos-btn")
                                            ),
                                            div(style = "margin-bottom:10px;",
-                                               tags$p("Hand:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
-                                               actionButton("phand_All","All", class="pos-btn active"),
-                                               actionButton("phand_R",  "RHP", class="pos-btn"),
-                                               actionButton("phand_L",  "LHP", class="pos-btn")
-                                           ),
-                                           DTOutput("top10_pitching_table")
+    tags$p("Hand:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
+    actionButton("phand_All","All", class="pos-btn active"),
+    actionButton("phand_R",  "RHP", class="pos-btn"),
+    actionButton("phand_L",  "LHP", class="pos-btn")
+),
+tags$p("Click a pitcher's row to view profile.",
+       style = "color:#6B8CAE; font-size:11px; margin-bottom:8px;"),
+DTOutput("top10_pitching_table")
                                   )
                       )
                   ),
@@ -4904,42 +4906,46 @@ observeEvent(input$run_updates_btn, {
   })
 
   # ── Top 10 ──────────────────────────────────────────────────────────────
-  top10_pitcher_dt <- function(league_in, min_ip, max_age, stat, role, hand) {
-    df <- acq_all_pitchers %>%
-      filter(!source_key %in% ineligible()) %>%
-      filter(!is.na(ERA), !is.na(IP), IP >= min_ip)
+  top10_pitcher_data <- function(league_in, min_ip, max_age, stat, role, hand) {
+  df <- acq_all_pitchers %>%
+    filter(!source_key %in% ineligible()) %>%
+    filter(!is.na(ERA), !is.na(IP), IP >= min_ip)
 
-    if (league_in != "All") df <- df %>% filter(league_name == league_in)
-    if (!is.na(max_age) && max_age < 99)
-      df <- df %>% filter(is.na(age) | age <= max_age)
+  if (league_in != "All") df <- df %>% filter(league_name == league_in)
+  if (!is.na(max_age) && max_age < 99)
+    df <- df %>% filter(is.na(age) | age <= max_age)
 
-    if (role %in% c("SP","RP")) {
-      gs_join <- acq_pitching_all %>%
-        select(player_id, GS) %>% distinct(player_id, .keep_all=TRUE) %>%
-        mutate(source_key = as.character(player_id))
-      df <- df %>% left_join(gs_join %>% select(source_key, GS), by="source_key")
-      if (role == "SP") df <- df %>% filter(!is.na(GS), GS/G >= 0.5)
-      else              df <- df %>% filter(is.na(GS) | GS/G < 0.5)
-    }
-
-    if (hand != "All") df <- df %>% filter(pitch_hand == hand)
-
-    asc_stats <- c("ERA","FIP","WHIP","BB9")
-    df <- if (stat %in% asc_stats) arrange(df, .data[[stat]]) else
-      arrange(df, desc(.data[[stat]]))
-
-    df %>%
-      slice_head(n = 10) %>%
-      mutate(Rank = row_number(), `Age/Yr` = acq_age_or_class(age, class_year)) %>%
-      select(Rank, Name=pitcher_name, Hand=pitch_hand,
-             Team=team_name, League=league_name, `Age/Yr`,
-             School=college, G, IP, ERA, FIP, WHIP,
-             `K/9`=K9, `BB/9`=BB9, `K/BB`=KBB) %>%
-      datatable(rownames=FALSE,
-                options=list(dom="t", pageLength=10, initComplete=acq_dt_header_js()),
-                class="display compact") %>%
-      formatRound(c("ERA","FIP","WHIP","K/9","BB/9","K/BB"), 2)
+  if (role %in% c("SP","RP")) {
+    gs_join <- acq_pitching_all %>%
+      select(player_id, GS) %>% distinct(player_id, .keep_all=TRUE) %>%
+      mutate(source_key = as.character(player_id))
+    df <- df %>% left_join(gs_join %>% select(source_key, GS), by="source_key")
+    if (role == "SP") df <- df %>% filter(!is.na(GS), GS/G >= 0.5)
+    else              df <- df %>% filter(is.na(GS) | GS/G < 0.5)
   }
+
+  if (hand != "All") df <- df %>% filter(pitch_hand == hand)
+
+  asc_stats <- c("ERA","FIP","WHIP","BB9")
+  df <- if (stat %in% asc_stats) arrange(df, .data[[stat]]) else
+    arrange(df, desc(.data[[stat]]))
+
+  df %>%
+    slice_head(n = 10) %>%
+    mutate(Rank = row_number(), `Age/Yr` = acq_age_or_class(age, class_year))
+}
+
+render_top10_pitcher_dt <- function(data) {
+  data %>%
+    select(Rank, Name=pitcher_name, Hand=pitch_hand,
+           Team=team_name, League=league_name, `Age/Yr`,
+           School=college, G, IP, ERA, FIP, WHIP,
+           `K/9`=K9, `BB/9`=BB9, `K/BB`=KBB) %>%
+    datatable(selection = "single", rownames=FALSE,
+              options=list(dom="t", pageLength=10, initComplete=acq_dt_header_js()),
+              class="display compact") %>%
+    formatRound(c("ERA","FIP","WHIP","K/9","BB/9","K/BB"), 2)
+}
 
   top10_hitter_dt <- function(league_in, min_ab, max_age, stat, pos) {
     df <- acq_all_hitters %>%
@@ -4964,19 +4970,41 @@ observeEvent(input$run_updates_btn, {
       formatRound(c("AVG","OBP","SLG","OPS"), 3)
   }
 
-  output$top10_hitting_table  <- renderDT(top10_hitter_dt(
+output$top10_hitting_table  <- renderDT(top10_hitter_dt(
     input$top10_league_h, input$top10_min_ab, input$top10_max_age_h,
     input$top10_stat_h, h_pos()))
-  output$top10_pitching_table <- renderDT(top10_pitcher_dt(
-    input$top10_league_p, input$top10_min_ip, input$top10_max_age_p,
-    input$top10_stat_p, p_role(), p_hand()))
 
   output$top10m_hitting_table  <- renderDT(top10_hitter_dt(
     input$top10m_league_h, input$top10m_min_ab, input$top10m_max_age_h,
     input$top10m_stat_h, h_pos_m()))
-  output$top10m_pitching_table <- renderDT(top10_pitcher_dt(
-    input$top10m_league_p, input$top10m_min_ip, input$top10m_max_age_p,
-    input$top10m_stat_p, p_role_m(), p_hand_m()))
+
+  top10_pitchers_inline <- reactive({
+    top10_pitcher_data(input$top10_league_p, input$top10_min_ip, input$top10_max_age_p,
+                        input$top10_stat_p, p_role(), p_hand())
+  })
+  top10_pitchers_modal <- reactive({
+    top10_pitcher_data(input$top10m_league_p, input$top10m_min_ip, input$top10m_max_age_p,
+                        input$top10m_stat_p, p_role_m(), p_hand_m())
+  })
+
+  output$top10_pitching_table  <- renderDT(render_top10_pitcher_dt(top10_pitchers_inline()))
+  output$top10m_pitching_table <- renderDT(render_top10_pitcher_dt(top10_pitchers_modal()))
+
+  # Click a row -> open profile directly, no button needed
+  observeEvent(input$top10_pitching_table_rows_selected, {
+    row <- input$top10_pitching_table_rows_selected
+    req(row)
+    selected_key(top10_pitchers_inline()$source_key[row[1]])
+    toggleModal(session, "pitcher_modal", toggle = "open")
+  }, ignoreNULL = TRUE)
+
+  observeEvent(input$top10m_pitching_table_rows_selected, {
+    row <- input$top10m_pitching_table_rows_selected
+    req(row)
+    selected_key(top10_pitchers_modal()$source_key[row[1]])
+    toggleModal(session, "top10_modal", toggle = "close")
+    toggleModal(session, "pitcher_modal", toggle = "open")
+  }, ignoreNULL = TRUE)
 
   # ── Modal ───────────────────────────────────────────────────────────────
   output$modal_info <- renderUI({
