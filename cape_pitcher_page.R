@@ -127,6 +127,24 @@ cape_pitcher_format_pct <- function(x, digits = 1) {
   paste0(formatC(100 * x, format = "f", digits = digits), "%")
 }
 
+cape_pitcher_clean_pitch_type <- function(x) {
+  x <- cape_pitcher_canonicalize_pitch(as.character(x))
+  x <- trimws(x)
+  x[x %in% c("", "Undefined", "NA")] <- NA_character_
+  x
+}
+
+cape_pitcher_resolve_pitch_type <- function(tagged, auto, original_tagged) {
+  tagged <- cape_pitcher_clean_pitch_type(tagged)
+  auto <- cape_pitcher_clean_pitch_type(auto)
+  original_tagged <- cape_pitcher_clean_pitch_type(original_tagged)
+
+  retagged <- (!is.na(tagged) | !is.na(original_tagged)) &
+    ((is.na(tagged) != is.na(original_tagged)) | (tagged != original_tagged))
+
+  ifelse(retagged & !is.na(tagged), tagged, dplyr::coalesce(auto, tagged))
+}
+
 cape_pitcher_height_to_feet <- function(height_ft, height_in) {
   if (length(height_ft) == 0 || length(height_in) == 0 ||
       is.na(height_ft) || is.na(height_in)) {
@@ -197,15 +215,22 @@ cape_pitcher_init_data <- function(path = "CapeCod26.parquet") {
   cape_pitcher_read_parquet(path) %>%
     mutate(
       caps_row_id = dplyr::row_number(),
-      TaggedPitchType = as.character(TaggedPitchType)
+      TaggedPitchType = as.character(TaggedPitchType),
+      OriginalTaggedPitchType = as.character(TaggedPitchType)
     )
 }
 
 cape_pitcher_prepare_view <- function(raw_df) {
   prep_pitches(raw_df) %>%
     mutate(
-      TaggedPitchType = cape_pitcher_canonicalize_pitch(as.character(TaggedPitchType)),
-      PitchType = cape_pitcher_canonicalize_pitch(as.character(PitchType)),
+      TaggedPitchType = cape_pitcher_clean_pitch_type(TaggedPitchType),
+      AutoPitchType = cape_pitcher_clean_pitch_type(AutoPitchType),
+      OriginalTaggedPitchType = cape_pitcher_clean_pitch_type(OriginalTaggedPitchType),
+      PitchType = cape_pitcher_resolve_pitch_type(
+        TaggedPitchType,
+        AutoPitchType,
+        OriginalTaggedPitchType
+      ),
       Count = dplyr::if_else(
         !is.na(Balls) & !is.na(Strikes),
         paste0(as.integer(Balls), "-", as.integer(Strikes)),
