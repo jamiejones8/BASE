@@ -2804,22 +2804,22 @@ message("Season data rows: ", if (!is.null(season_data)) nrow(season_data) else 
 
 # ----------------------------------------------------------------------------
 # College26 season pitch data (large) for the Season Pitcher Card tab. Pulled
-# once at startup from the acq-board-data dataset, then read from the local
-# copy — same pull-then-fallback pattern as the CapeCod26 season above.
+# once at startup straight from the private acq-board-data HF dataset (to a
+# tempfile, Bearer-auth) and read from there — no local copy is kept.
 # ----------------------------------------------------------------------------
-COLLEGE26_FILE      <- "college26.parquet"
+COLLEGE26_FILE      <- "College26.parquet"
 COLLEGE26_REPO_ID   <- Sys.getenv("COLLEGE26_REPO_ID",   unset = HF_DATA_REPO_ID)
 COLLEGE26_REPO_PATH <- Sys.getenv("COLLEGE26_REPO_PATH", unset = COLLEGE26_FILE)
 
-message("Loading College26 season data...")
-invisible(pull_file_from_hf(COLLEGE26_REPO_PATH, COLLEGE26_FILE, repo_id = COLLEGE26_REPO_ID))
-
+message("Loading College26 season data from HF dataset ", COLLEGE26_REPO_ID, "...")
 college26_data <- tryCatch({
-  df <- arrow::read_parquet(COLLEGE26_FILE)
-  message("Loaded ", COLLEGE26_FILE, " — rows: ", nrow(df))
+  path <- download_from_hf_dataset(COLLEGE26_REPO_ID, COLLEGE26_REPO_PATH,
+                                   Sys.getenv("write_token"))
+  df <- arrow::read_parquet(path)
+  message("Loaded ", COLLEGE26_REPO_PATH, " from HF — rows: ", nrow(df))
   df
 }, error = function(e) {
-  message(COLLEGE26_FILE, " load failed: ", e$message)
+  message(COLLEGE26_REPO_PATH, " HF load failed: ", e$message)
   NULL
 })
 
@@ -5633,7 +5633,7 @@ server <- function(input, output, session) {
   # ==========================================
   # CAPE PITCHER PLAYER PAGE
   # ==========================================
-  cape_pitcher_player_page_server(input, output, session)
+  cape_pitcher_player_page_server(input, output, session, source_data = season_data)
 
   # ==========================================
   # PITCHER SERVER LOGIC -> BrewSummaryCard
