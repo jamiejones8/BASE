@@ -146,14 +146,8 @@ cape_pitcher_read_parquet <- function(path = "CapeCod26.parquet") {
     tibble::as_tibble()
 }
 
-cape_pitcher_init_data <- function(source_df = NULL, path = "CapeCod26.parquet") {
-  base_df <- if (!is.null(source_df) && NROW(source_df) > 0) {
-    tibble::as_tibble(source_df)
-  } else {
-    cape_pitcher_read_parquet(path)
-  }
-
-  base_df %>%
+cape_pitcher_init_data <- function(path = "CapeCod26.parquet") {
+  cape_pitcher_read_parquet(path) %>%
     mutate(
       caps_row_id = dplyr::row_number(),
       TaggedPitchType = as.character(TaggedPitchType)
@@ -422,6 +416,18 @@ cape_pitcher_player_page_ui <- function() {
             font-size: 13px;
             line-height: 1.45;
           }
+          #cpp-page .cpp-section-label {
+            color: #0C2340;
+            font-size: 18px;
+            font-weight: 700;
+            margin: 22px 0 10px 0;
+          }
+          #cpp-page .cpp-section-copy {
+            color: #5F6B7A;
+            font-size: 12px;
+            line-height: 1.45;
+            margin: -2px 0 12px 0;
+          }
           #cpp-page .cpp-quick-row {
             display: flex;
             flex-wrap: wrap;
@@ -451,6 +457,16 @@ cape_pitcher_player_page_ui <- function() {
           }
           #cpp-page .cpp-retag-card .cpp-status {
             margin-top: 6px;
+          }
+          #cpp-page .cpp-heatmap-controls {
+            background: linear-gradient(180deg, #F7FAFC 0%, #EEF3F8 100%);
+            border: 1px solid rgba(12, 35, 64, 0.08);
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+          }
+          #cpp-page .cpp-heatmap-controls .form-group {
+            margin-bottom: 8px;
           }
           #cpp-page .cpp-status {
             border-radius: 12px;
@@ -532,8 +548,13 @@ cape_pitcher_player_page_ui <- function() {
           card_header("Season Statline"),
           card_body(uiOutput("cpp_statline_tiles"))
         ),
+        tags$div(class = "cpp-section-label", "Visual Analysis"),
+        tags$p(
+          "Shared filters, movement plots, and session retagging live together here so the scouting workflow stays in one place.",
+          class = "cpp-section-copy"
+        ),
         layout_columns(
-          col_widths = c(5, 4, 3),
+          col_widths = c(8, 4),
           card(
             card_header("Visual Filters"),
             card_body(
@@ -588,6 +609,11 @@ cape_pitcher_player_page_ui <- function() {
                 "Apply Retag",
                 class = "btn btn-primary btn-sm btn-block"
               ),
+              actionButton(
+                "cpp_clear_selection",
+                "Clear Plot Selection",
+                class = "btn btn-default btn-sm btn-block"
+              ),
               tags$p(
                 "Session only. Retags stay on this page until refresh.",
                 class = "cpp-retag-note"
@@ -597,27 +623,6 @@ cape_pitcher_player_page_ui <- function() {
                 textOutput("cpp_selection_info", inline = TRUE)
               ),
               uiOutput("cpp_save_status")
-            )
-          ),
-          card(
-            card_header("Heatmap Side"),
-            card_body(
-              radioButtons(
-                "cpp_heat_side",
-                "Batter side",
-                choices = c("All" = "ALL", "vs LHH" = "L", "vs RHH" = "R"),
-                selected = "ALL",
-                inline = TRUE
-              ),
-              tags$p(
-                "The pitch-type and count filters above drive both the movement plots and the heatmaps. Statline and summary tables stay season-level.",
-                style = "color:#5F6B7A; font-size:12px; margin:8px 0 0 0;"
-              ),
-              actionButton(
-                "cpp_clear_selection",
-                "Clear Plot Selection",
-                class = "btn btn-default btn-sm"
-              )
             )
           )
         ),
@@ -631,6 +636,61 @@ cape_pitcher_player_page_ui <- function() {
             card_header("Movement vs RHH"),
             card_body(plotlyOutput("cpp_mov_rhh", height = "560px"))
           )
+        ),
+        card(
+          card_header("Heatmaps"),
+          card_body(
+            tags$div(
+              class = "cpp-heatmap-controls",
+              radioButtons(
+                "cpp_heat_side",
+                "Heatmap batter side",
+                choices = c("All" = "ALL", "vs LHH" = "L", "vs RHH" = "R"),
+                selected = "ALL",
+                inline = TRUE
+              ),
+              tags$p(
+                "Pitch type and count filters from the visual analysis section also apply here.",
+                class = "cpp-section-copy",
+                style = "margin: 0;"
+              )
+            ),
+            tags$p(
+              "Use the filters above to narrow by pitch type and count. Quick buttons make two-strike heatmap views one click away.",
+              style = "color:#5F6B7A; font-size:12px; margin-bottom:12px;"
+            ),
+            layout_columns(
+              col_widths = c(4, 4, 4),
+              card(
+                card_header("Location - where he lives"),
+                card_body(uiOutput("cpp_pitch_zone"))
+              ),
+              card(
+                card_header("Whiff Zone - where he misses bats"),
+                card_body(uiOutput("cpp_pitch_whiff_zone"))
+              ),
+              card(
+                card_header("Damage Zone - exit velo allowed"),
+                card_body(uiOutput("cpp_pitch_dmg_zone"))
+              )
+            ),
+            layout_columns(
+              col_widths = c(6, 6),
+              card(
+                card_header("xwOBAcon Zone - contact quality allowed"),
+                card_body(uiOutput("cpp_pitch_xwc_zone"))
+              ),
+              card(
+                card_header("xwOBA Zone - expected outcome allowed"),
+                card_body(uiOutput("cpp_pitch_xwf_zone"))
+              )
+            )
+          )
+        ),
+        tags$div(class = "cpp-section-label", "Performance Tables"),
+        tags$p(
+          "Pitch shape, split performance, usage, and expected outcomes are grouped below for report-building.",
+          class = "cpp-section-copy"
         ),
         layout_columns(
           col_widths = c(6, 6),
@@ -668,41 +728,6 @@ cape_pitcher_player_page_ui <- function() {
         card(
           card_header("xwOBA / xwOBAcon - by pitch"),
           card_body(reactableOutput("cpp_pitch_xw_table"))
-        ),
-        card(
-          card_header("Heatmaps"),
-          card_body(
-            tags$p(
-              "Use the visual filters above to narrow by pitch type and count. Quick buttons make two-strike views one click away.",
-              style = "color:#5F6B7A; font-size:12px; margin-bottom:12px;"
-            ),
-            layout_columns(
-              col_widths = c(4, 4, 4),
-              card(
-                card_header("Location - where he lives"),
-                card_body(uiOutput("cpp_pitch_zone"))
-              ),
-              card(
-                card_header("Whiff Zone - where he misses bats"),
-                card_body(uiOutput("cpp_pitch_whiff_zone"))
-              ),
-              card(
-                card_header("Damage Zone - exit velo allowed"),
-                card_body(uiOutput("cpp_pitch_dmg_zone"))
-              )
-            ),
-            layout_columns(
-              col_widths = c(6, 6),
-              card(
-                card_header("xwOBAcon Zone - contact quality allowed"),
-                card_body(uiOutput("cpp_pitch_xwc_zone"))
-              ),
-              card(
-                card_header("xwOBA Zone - expected outcome allowed"),
-                card_body(uiOutput("cpp_pitch_xwf_zone"))
-              )
-            )
-          )
         )
       )
     ),
@@ -713,15 +738,42 @@ cape_pitcher_player_page_ui <- function() {
   )
 }
 
-cape_pitcher_player_page_server <- function(input, output, session, source_data = NULL) {
-  initial_data <- cape_pitcher_init_data(source_data)
-  raw_data <- reactiveVal(initial_data)
-  loaded_snapshot <- reactiveVal(initial_data)
-  status_message <- reactiveVal("Retags are temporary and apply only to this session.")
+cape_pitcher_player_page_server <- function(input, output, session, data_path = "CapeCod26.parquet") {
+  raw_data <- reactiveVal(NULL)
+  loaded_snapshot <- reactiveVal(NULL)
+  data_loaded <- reactiveVal(FALSE)
+  data_loading <- reactiveVal(FALSE)
+  status_message <- reactiveVal("Pitcher page data will load when this tab is opened.")
   status_class <- reactiveVal("clean")
   selected_rows <- reactiveVal(integer(0))
 
+  observeEvent(input$caps_nav, {
+    if (!identical(input$caps_nav, "tab_pitcher_player") || isTRUE(data_loaded()) || isTRUE(data_loading())) {
+      return()
+    }
+
+    data_loading(TRUE)
+    status_class("clean")
+    status_message("Loading pitcher page data...")
+
+    tryCatch({
+      initial_data <- cape_pitcher_init_data(path = data_path)
+      raw_data(initial_data)
+      loaded_snapshot(initial_data)
+      data_loaded(TRUE)
+      selected_rows(integer(0))
+    }, error = function(e) {
+      status_class("error")
+      status_message(paste("Pitcher page load failed:", e$message))
+      showNotification(paste("Pitcher page load failed:", e$message), type = "error")
+    })
+
+    data_loading(FALSE)
+  }, ignoreInit = FALSE)
+
   page_data <- reactive({
+    req(isTRUE(data_loaded()))
+    req(!is.null(raw_data()))
     cape_pitcher_prepare_view(raw_data())
   })
 

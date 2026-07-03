@@ -5633,7 +5633,7 @@ server <- function(input, output, session) {
   # ==========================================
   # CAPE PITCHER PLAYER PAGE
   # ==========================================
-  cape_pitcher_player_page_server(input, output, session, source_data = season_data)
+  cape_pitcher_player_page_server(input, output, session)
 
   # ==========================================
   # PITCHER SERVER LOGIC -> BrewSummaryCard
