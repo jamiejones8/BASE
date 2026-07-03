@@ -547,6 +547,9 @@ cape_pitcher_player_page_ui <- function() {
           #cpp-page .cpp-retag-card .form-group {
             margin-bottom: 10px;
           }
+          #cpp-page .cpp-armangle-card .form-group {
+            margin-bottom: 10px;
+          }
           #cpp-page .cpp-retag-card .btn {
             font-weight: 600;
           }
@@ -670,13 +673,95 @@ cape_pitcher_player_page_ui <- function() {
         ),
         tags$div(class = "cpp-section-label", "Visual Analysis"),
         tags$p(
-          "Shared filters, movement plots, and session retagging live together here so the scouting workflow stays in one place.",
+          "Movement plots, session retagging, and arm-angle overlay tools are grouped here for pitch-shape review.",
+          class = "cpp-section-copy"
+        ),
+        layout_columns(
+          col_widths = c(6, 6),
+          card(
+            card_header("Movement vs LHH"),
+            card_body(plotlyOutput("cpp_mov_lhh", height = "560px"))
+          ),
+          card(
+            card_header("Movement vs RHH"),
+            card_body(plotlyOutput("cpp_mov_rhh", height = "560px"))
+          )
+        ),
+        layout_columns(
+          col_widths = c(6, 6),
+          card(
+            card_header("Retag Selection"),
+            card_body(
+              class = "cpp-retag-card",
+              selectInput(
+                "cpp_new_pitch_type",
+                "Retag selected pitches as",
+                choices = cape_pitcher_tag_choices,
+                selected = "Slider",
+                selectize = FALSE
+              ),
+              actionButton(
+                "cpp_apply_retag",
+                "Apply Retag",
+                class = "btn btn-primary btn-sm btn-block"
+              ),
+              actionButton(
+                "cpp_clear_selection",
+                "Clear Plot Selection",
+                class = "btn btn-default btn-sm btn-block"
+              ),
+              tags$p(
+                "Session only. Retags stay on this page until refresh.",
+                class = "cpp-retag-note"
+              ),
+              tags$div(
+                class = "cpp-retag-meta",
+                textOutput("cpp_selection_info", inline = TRUE)
+              ),
+              uiOutput("cpp_save_status")
+            )
+          ),
+          card(
+            card_header("Arm Angle Overlay"),
+            card_body(
+              class = "cpp-armangle-card",
+              fluidRow(
+                column(
+                  6,
+                  numericInput("cpp_height_ft", "Height (ft)", value = NA,
+                               min = 4, max = 8, step = 1)
+                ),
+                column(
+                  6,
+                  numericInput("cpp_height_in", "Height (in)", value = NA,
+                               min = 0, max = 11, step = 1)
+                )
+              ),
+              actionButton(
+                "cpp_save_height",
+                "Save Height For Pitcher",
+                class = "btn btn-default btn-sm btn-block"
+              ),
+              tags$p(
+                "Uses the current pitcher's average release height and release side with shoulder height set to 70% of the entered height.",
+                class = "cpp-retag-note"
+              ),
+              tags$div(
+                class = "cpp-retag-meta",
+                textOutput("cpp_arm_angle_info", inline = TRUE)
+              )
+            )
+          )
+        ),
+        tags$div(class = "cpp-section-label", "Heatmap Analysis"),
+        tags$p(
+          "Pitch-type and count filters sit directly above the heatmaps they control.",
           class = "cpp-section-copy"
         ),
         layout_columns(
           col_widths = c(8, 4),
           card(
-            card_header("Visual Filters"),
+            card_header("Heatmap Filters"),
             card_body(
               selectizeInput(
                 "cpp_pitch_filter",
@@ -714,83 +799,8 @@ cape_pitcher_player_page_ui <- function() {
             )
           ),
           card(
-            card_header("Retag Selection"),
+            card_header("Heatmap Side"),
             card_body(
-              class = "cpp-retag-card",
-              selectInput(
-                "cpp_new_pitch_type",
-                "Retag selected pitches as",
-                choices = cape_pitcher_tag_choices,
-                selected = "Slider",
-                selectize = FALSE
-              ),
-              actionButton(
-                "cpp_apply_retag",
-                "Apply Retag",
-                class = "btn btn-primary btn-sm btn-block"
-              ),
-              actionButton(
-                "cpp_clear_selection",
-                "Clear Plot Selection",
-                class = "btn btn-default btn-sm btn-block"
-              ),
-              tags$p(
-                "Session only. Retags stay on this page until refresh.",
-                class = "cpp-retag-note"
-              ),
-              tags$div(
-                class = "cpp-retag-meta",
-                textOutput("cpp_selection_info", inline = TRUE)
-              ),
-              uiOutput("cpp_save_status"),
-              tags$div(
-                class = "cpp-armangle-box",
-                tags$div(class = "cpp-subhead", "Arm Angle Overlay"),
-                fluidRow(
-                  column(
-                    6,
-                    numericInput("cpp_height_ft", "Height (ft)", value = NA,
-                                 min = 4, max = 8, step = 1)
-                  ),
-                  column(
-                    6,
-                    numericInput("cpp_height_in", "Height (in)", value = NA,
-                                 min = 0, max = 11, step = 1)
-                  )
-                ),
-                actionButton(
-                  "cpp_save_height",
-                  "Save Height For Pitcher",
-                  class = "btn btn-default btn-sm btn-block"
-                ),
-                tags$p(
-                  "Uses the current pitcher's average release height and release side with shoulder height set to 70% of the entered height.",
-                  class = "cpp-retag-note"
-                ),
-                tags$div(
-                  class = "cpp-retag-meta",
-                  textOutput("cpp_arm_angle_info", inline = TRUE)
-                )
-              )
-            )
-          )
-        ),
-        layout_columns(
-          col_widths = c(6, 6),
-          card(
-            card_header("Movement vs LHH"),
-            card_body(plotlyOutput("cpp_mov_lhh", height = "560px"))
-          ),
-          card(
-            card_header("Movement vs RHH"),
-            card_body(plotlyOutput("cpp_mov_rhh", height = "560px"))
-          )
-        ),
-        card(
-          card_header("Heatmaps"),
-          card_body(
-            tags$div(
-              class = "cpp-heatmap-controls",
               radioButtons(
                 "cpp_heat_side",
                 "Heatmap batter side",
@@ -799,13 +809,18 @@ cape_pitcher_player_page_ui <- function() {
                 inline = TRUE
               ),
               tags$p(
-                "Pitch type and count filters from the visual analysis section also apply here.",
+                "These controls affect the heatmaps below.",
                 class = "cpp-section-copy",
                 style = "margin: 0;"
               )
-            ),
+            )
+          )
+        ),
+        card(
+          card_header("Heatmaps"),
+          card_body(
             tags$p(
-              "Use the filters above to narrow by pitch type and count. Quick buttons make two-strike heatmap views one click away.",
+              "Use the heatmap filters above to narrow by pitch type and count. Quick buttons make two-strike heatmap views one click away.",
               style = "color:#5F6B7A; font-size:12px; margin-bottom:12px;"
             ),
             layout_columns(
@@ -1224,7 +1239,13 @@ cape_pitcher_player_page_server <- function(input, output, session,
     updateSelectizeInput(session, "cpp_count_filter", selected = intersect("3-2", count_choices_current()))
   })
 
-  pitcher_visual <- reactive({
+  movement_data <- reactive({
+    d <- pitcher_full()
+    req(nrow(d) > 0)
+    d
+  })
+
+  heatmap_filtered <- reactive({
     d <- pitcher_full()
     req(nrow(d) > 0)
 
@@ -1238,7 +1259,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
   })
 
   observeEvent(
-    list(input$cpp_team, input$cpp_pitcher, input$cpp_pitch_filter, input$cpp_count_filter),
+    list(input$cpp_team, input$cpp_pitcher),
     {
       selected_rows(integer(0))
     },
@@ -1246,7 +1267,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
   )
 
   heatmap_data <- reactive({
-    d <- pitcher_visual()
+    d <- heatmap_filtered()
     req(nrow(d) > 0)
 
     if (identical(input$cpp_heat_side, "L")) {
@@ -1260,7 +1281,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
   output$cpp_mov_lhh <- plotly::renderPlotly({
     arm <- current_arm_angle()
     cape_pitcher_movement_plot(
-      pitcher_visual(),
+      movement_data(),
       "Left",
       "cpp_mov_lhh_src",
       arm_angle = arm$angle,
@@ -1271,7 +1292,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
   output$cpp_mov_rhh <- plotly::renderPlotly({
     arm <- current_arm_angle()
     cape_pitcher_movement_plot(
-      pitcher_visual(),
+      movement_data(),
       "Right",
       "cpp_mov_rhh_src",
       arm_angle = arm$angle,
