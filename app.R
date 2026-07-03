@@ -5081,7 +5081,7 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
            y="Induced Vertical Break (in)") +
       theme_minimal(base_size=13) +
       theme(
-        plot.background  = element_rect(fill=ACQ_NAVY,  color=NA),
+        plot.background  = element_rect(fill="white",  color=NA),
         panel.background = element_rect(fill="#0F3366", color=NA),
         panel.grid.major = element_line(color="#1A4080", linewidth=0.4),
         panel.grid.minor = element_blank(),
