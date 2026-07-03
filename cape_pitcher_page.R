@@ -327,7 +327,8 @@ cape_pitcher_hover_text <- function(d) {
 }
 
 cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), source_id,
-                                       arm_angle = NA_real_) {
+                                       arm_angle = NA_real_,
+                                       arm_throws = NA_character_) {
   batter_side <- match.arg(batter_side)
   side_short <- if (batter_side == "Left") "LHH" else "RHH"
   side_data <- d %>% filter(BatterSide == batter_side)
@@ -403,13 +404,14 @@ cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), sour
     )
 
   if (is.finite(arm_angle)) {
-    theta <- arm_angle * pi / 180
+    theta <- abs(arm_angle) * pi / 180
     line_extent <- 25
+    x_direction <- if (identical(arm_throws, "Left")) -1 else 1
     p <- p %>%
       plotly::add_trace(
         inherit = FALSE,
-        x = c(-line_extent * cos(theta), line_extent * cos(theta)),
-        y = c(-line_extent * sin(theta), line_extent * sin(theta)),
+        x = c(0, x_direction * line_extent * cos(theta)),
+        y = c(0, line_extent * sin(theta)),
         type = "scatter",
         mode = "lines",
         line = list(color = "rgba(12,35,64,0.75)", width = 1.25, dash = "dash"),
@@ -1231,20 +1233,24 @@ cape_pitcher_player_page_server <- function(input, output, session,
   })
 
   output$cpp_mov_lhh <- plotly::renderPlotly({
+    arm <- current_arm_angle()
     cape_pitcher_movement_plot(
       pitcher_visual(),
       "Left",
       "cpp_mov_lhh_src",
-      arm_angle = current_arm_angle()$angle
+      arm_angle = arm$angle,
+      arm_throws = arm$throws
     )
   })
 
   output$cpp_mov_rhh <- plotly::renderPlotly({
+    arm <- current_arm_angle()
     cape_pitcher_movement_plot(
       pitcher_visual(),
       "Right",
       "cpp_mov_rhh_src",
-      arm_angle = current_arm_angle()$angle
+      arm_angle = arm$angle,
+      arm_throws = arm$throws
     )
   })
 
