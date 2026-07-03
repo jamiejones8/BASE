@@ -30,9 +30,9 @@ between  <- dplyr::between
 first    <- dplyr::first
 last     <- dplyr::last
 
+source("scout_app.R")
 source("leaderboards_embed.R")
 source("cape_pitcher_page.R")
-
 # ══════════════════════════════════════════════════════════════════════════════
 # HF HUB WRITE-BACK HELPER — now points at a Dataset repo, not the Space repo
 # Dataset repos don't trigger Space rebuilds on commit, so ineligible list
