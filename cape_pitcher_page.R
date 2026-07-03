@@ -351,6 +351,13 @@ cape_pitcher_player_page_ui <- function() {
           #cpp-page .cpp-control-stack .form-group {
             margin-bottom: 12px;
           }
+          #cpp-page .selectize-control,
+          #cpp-page .selectize-dropdown {
+            z-index: 2500;
+          }
+          #cpp-page .selectize-dropdown {
+            z-index: 3000 !important;
+          }
           #cpp-page .cpp-helper {
             color: #5F6B7A;
             font-size: 12px;
@@ -405,6 +412,27 @@ cape_pitcher_player_page_ui <- function() {
           #cpp-page .cpp-quick-row .btn {
             margin: 0;
           }
+          #cpp-page .cpp-retag-card .form-group {
+            margin-bottom: 10px;
+          }
+          #cpp-page .cpp-retag-card .btn {
+            font-weight: 600;
+          }
+          #cpp-page .cpp-retag-note {
+            color: #5F6B7A;
+            font-size: 11px;
+            line-height: 1.4;
+            margin: 6px 0 8px 0;
+          }
+          #cpp-page .cpp-retag-meta {
+            color: #344054;
+            font-size: 12px;
+            line-height: 1.4;
+            margin-bottom: 8px;
+          }
+          #cpp-page .cpp-retag-card .cpp-status {
+            margin-top: 6px;
+          }
           #cpp-page .cpp-status {
             border-radius: 12px;
             padding: 10px 12px;
@@ -444,7 +472,7 @@ cape_pitcher_player_page_ui <- function() {
       tags$div(
         id = "cpp-page",
         layout_columns(
-          col_widths = c(5, 4, 3),
+          col_widths = c(5, 7),
           card(
             card_header("Select Team & Pitcher"),
             card_body(
@@ -454,13 +482,15 @@ cape_pitcher_player_page_ui <- function() {
                   "cpp_team",
                   "Cape Cod League team",
                   choices = NULL,
-                  width = "100%"
+                  width = "100%",
+                  selectize = FALSE
                 ),
                 selectInput(
                   "cpp_pitcher",
                   "Pitcher",
                   choices = NULL,
-                  width = "100%"
+                  width = "100%",
+                  selectize = FALSE
                 ),
                 tags$p(
                   "Pick a team first, then choose from the pitchers currently available for that club.",
@@ -477,29 +507,6 @@ cape_pitcher_player_page_ui <- function() {
                 uiOutput("cpp_pitcher_meta")
               )
             )
-          ),
-          card(
-            card_header("Retag (Session Only)"),
-            card_body(
-              selectInput(
-                "cpp_new_pitch_type",
-                "Retag selected pitches as",
-                choices = cape_pitcher_tag_choices,
-                selected = "Slider"
-              ),
-              actionButton(
-                "cpp_apply_retag",
-                "Retag Selected Pitches",
-                class = "btn btn-primary btn-block"
-              ),
-              br(),
-              tags$p(
-                "Retags are temporary and will last until this app session ends or the page is refreshed.",
-                style = "color:#5F6B7A; font-size:12px; margin-bottom:10px;"
-              ),
-              textOutput("cpp_selection_info"),
-              uiOutput("cpp_save_status")
-            )
           )
         ),
         card(
@@ -507,7 +514,7 @@ cape_pitcher_player_page_ui <- function() {
           card_body(uiOutput("cpp_statline_tiles"))
         ),
         layout_columns(
-          col_widths = c(8, 4),
+          col_widths = c(5, 4, 3),
           card(
             card_header("Visual Filters"),
             card_body(
@@ -542,6 +549,33 @@ cape_pitcher_player_page_ui <- function() {
                 cape_pitcher_quick_btn("cpp_counts_22", "2-2"),
                 cape_pitcher_quick_btn("cpp_counts_32", "3-2")
               )
+            )
+          ),
+          card(
+            card_header("Retag Selection"),
+            card_body(
+              class = "cpp-retag-card",
+              selectInput(
+                "cpp_new_pitch_type",
+                "Retag selected pitches as",
+                choices = cape_pitcher_tag_choices,
+                selected = "Slider",
+                selectize = FALSE
+              ),
+              actionButton(
+                "cpp_apply_retag",
+                "Apply Retag",
+                class = "btn btn-primary btn-sm btn-block"
+              ),
+              tags$p(
+                "Session only. Retags stay on this page until refresh.",
+                class = "cpp-retag-note"
+              ),
+              tags$div(
+                class = "cpp-retag-meta",
+                textOutput("cpp_selection_info", inline = TRUE)
+              ),
+              uiOutput("cpp_save_status")
             )
           ),
           card(
