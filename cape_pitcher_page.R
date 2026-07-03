@@ -453,7 +453,7 @@ cape_pitcher_heatmap_y_breaks <- c(1.5, 2.17, 2.83, 3.5)
 
 cape_pitcher_home_plate <- tibble::tibble(
   x = c(-0.708, 0.708, 0.708, 0, -0.708),
-  y = c(0, 0, 0.25, 0.5, 0.25)
+  y = c(0.5, 0.5, 0.25, 0, 0.25)
 )
 
 cape_pitcher_batter_outline <- local({
