@@ -12,6 +12,11 @@ cape_pitcher_count_levels <- c(
   "3-0", "3-1", "3-2"
 )
 
+cape_pitcher_team_levels <- c(
+  "BRE_WHI", "BOU_BRA", "CHA_ANG", "COT_KET", "FAL_COM",
+  "HAR_MAR", "HYA_HAR", "ORL_FIR", "WAR_GAT", "YAR_RED"
+)
+
 cape_pitcher_pitch_pal <- c(
   "Four-Seam" = "#D94A3F",
   "Two-Seam Fastball" = "#B83A95",
@@ -343,6 +348,22 @@ cape_pitcher_player_page_ui <- function() {
             grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
             gap: 12px;
           }
+          #cpp-page .cpp-control-stack .form-group {
+            margin-bottom: 12px;
+          }
+          #cpp-page .cpp-helper {
+            color: #5F6B7A;
+            font-size: 12px;
+            line-height: 1.45;
+            margin: 4px 0 0 0;
+          }
+          #cpp-page .cpp-meta-card {
+            background: linear-gradient(180deg, #F7FAFC 0%, #EEF3F8 100%);
+            border: 1px solid rgba(12, 35, 64, 0.08);
+            border-radius: 14px;
+            padding: 16px 18px;
+            min-height: 132px;
+          }
           #cpp-page .cpp-stat-tile {
             background: linear-gradient(180deg, #0C2340 0%, #14355F 100%);
             border-radius: 14px;
@@ -374,6 +395,15 @@ cape_pitcher_player_page_ui <- function() {
             color: #5F6B7A;
             font-size: 13px;
             line-height: 1.45;
+          }
+          #cpp-page .cpp-quick-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 6px;
+          }
+          #cpp-page .cpp-quick-row .btn {
+            margin: 0;
           }
           #cpp-page .cpp-status {
             border-radius: 12px;
@@ -408,24 +438,44 @@ cape_pitcher_player_page_ui <- function() {
         style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 10px;"
       ),
       tags$p(
-        "Search any pitcher, inspect movement by handedness, and retag pitches for the current session.",
+        "Choose a Cape team, load a pitcher, and work through movement, tables, and heatmaps in one place.",
         style = "color:#5F6B7A; font-size:14px; margin-bottom:20px;"
       ),
       tags$div(
         id = "cpp-page",
         layout_columns(
-          col_widths = c(8, 4),
+          col_widths = c(5, 4, 3),
           card(
-            card_header("Pitcher Lookup"),
+            card_header("Select Team & Pitcher"),
             card_body(
-              selectizeInput(
-                "cpp_pitcher",
-                "Search pitcher",
-                choices = NULL,
-                width = "100%",
-                options = list(placeholder = "Start typing a pitcher name")
-              ),
-              uiOutput("cpp_pitcher_meta")
+              tags$div(
+                class = "cpp-control-stack",
+                selectInput(
+                  "cpp_team",
+                  "Cape Cod League team",
+                  choices = NULL,
+                  width = "100%"
+                ),
+                selectInput(
+                  "cpp_pitcher",
+                  "Pitcher",
+                  choices = NULL,
+                  width = "100%"
+                ),
+                tags$p(
+                  "Pick a team first, then choose from the pitchers currently available for that club.",
+                  class = "cpp-helper"
+                )
+              )
+            )
+          ),
+          card(
+            card_header("Pitcher Snapshot"),
+            card_body(
+              tags$div(
+                class = "cpp-meta-card",
+                uiOutput("cpp_pitcher_meta")
+              )
             )
           ),
           card(
@@ -484,7 +534,7 @@ cape_pitcher_player_page_ui <- function() {
                 )
               ),
               tags$div(
-                style = "margin-top: 6px;",
+                class = "cpp-quick-row",
                 cape_pitcher_quick_btn("cpp_counts_all", "All Counts"),
                 cape_pitcher_quick_btn("cpp_counts_two_strike", "All 2-Strike"),
                 cape_pitcher_quick_btn("cpp_counts_02", "0-2"),
@@ -620,48 +670,78 @@ cape_pitcher_player_page_server <- function(input, output, session) {
     cape_pitcher_prepare_view(raw_data())
   })
 
-  pitcher_choices <- reactive({
+  pitcher_catalog <- reactive({
     d <- page_data()
     req(nrow(d) > 0)
 
     d %>%
-      filter(!is.na(Pitcher), nzchar(Pitcher)) %>%
-      group_by(Pitcher) %>%
-      summarise(
-        PitcherTeam = {
-          vals <- PitcherTeam[!is.na(PitcherTeam)]
-          if (length(vals)) vals[1] else PitcherTeam[1]
-        },
-        .groups = "drop"
+      filter(
+        !is.na(PitcherTeam), nzchar(PitcherTeam),
+        !is.na(Pitcher), nzchar(Pitcher)
       ) %>%
-      arrange(Pitcher)
+      transmute(
+        PitcherTeam = as.character(PitcherTeam),
+        Pitcher = as.character(Pitcher)
+      ) %>%
+      distinct() %>%
+      mutate(
+        TeamDisplay = cape_pitcher_ccbl_name(PitcherTeam),
+        PitcherDisplay = cape_pitcher_format_pitcher_name(Pitcher),
+        TeamOrder = match(PitcherTeam, cape_pitcher_team_levels),
+        TeamOrder = ifelse(is.na(TeamOrder), 999, TeamOrder)
+      ) %>%
+      arrange(TeamOrder, TeamDisplay, PitcherDisplay, Pitcher)
   })
 
   observe({
-    ch <- pitcher_choices()
-    current <- isolate(input$cpp_pitcher)
-    default_pitcher <- ch$Pitcher[grepl("^BRE_", ch$PitcherTeam)][1]
-    if (is.na(default_pitcher) || !nzchar(default_pitcher)) {
-      default_pitcher <- ch$Pitcher[1]
+    tc <- pitcher_catalog() %>%
+      distinct(PitcherTeam, TeamDisplay, TeamOrder) %>%
+      arrange(TeamOrder, TeamDisplay)
+
+    current_team <- isolate(input$cpp_team)
+    default_team <- if ("BRE_WHI" %in% tc$PitcherTeam) "BRE_WHI" else tc$PitcherTeam[1]
+    selected_team <- if (!is.null(current_team) && current_team %in% tc$PitcherTeam) {
+      current_team
+    } else {
+      default_team
     }
-    selected <- if (!is.null(current) && current %in% ch$Pitcher) current else default_pitcher
-    labels <- paste0(
-      cape_pitcher_format_pitcher_name(ch$Pitcher),
-      " - ",
-      cape_pitcher_ccbl_name(ch$PitcherTeam)
+
+    updateSelectInput(
+      session,
+      "cpp_team",
+      choices = stats::setNames(tc$PitcherTeam, tc$TeamDisplay),
+      selected = selected_team
     )
-    updateSelectizeInput(
+  })
+
+  team_pitchers <- reactive({
+    req(input$cpp_team)
+    pitcher_catalog() %>%
+      filter(PitcherTeam == input$cpp_team)
+  })
+
+  observe({
+    ch <- team_pitchers()
+    req(nrow(ch) > 0)
+
+    current_pitcher <- isolate(input$cpp_pitcher)
+    selected_pitcher <- if (!is.null(current_pitcher) && current_pitcher %in% ch$Pitcher) {
+      current_pitcher
+    } else {
+      ch$Pitcher[1]
+    }
+
+    updateSelectInput(
       session,
       "cpp_pitcher",
-      choices = stats::setNames(ch$Pitcher, labels),
-      selected = selected,
-      server = TRUE
+      choices = stats::setNames(ch$Pitcher, ch$PitcherDisplay),
+      selected = selected_pitcher
     )
   })
 
   pitcher_full <- reactive({
-    req(input$cpp_pitcher)
-    page_data() %>% filter(Pitcher == input$cpp_pitcher)
+    req(input$cpp_team, input$cpp_pitcher)
+    page_data() %>% filter(PitcherTeam == input$cpp_team, Pitcher == input$cpp_pitcher)
   })
 
   current_pending_changes <- reactive({
@@ -797,7 +877,7 @@ cape_pitcher_player_page_server <- function(input, output, session) {
   })
 
   observeEvent(
-    list(input$cpp_pitcher, input$cpp_pitch_filter, input$cpp_count_filter),
+    list(input$cpp_team, input$cpp_pitcher, input$cpp_pitch_filter, input$cpp_count_filter),
     {
       selected_rows(integer(0))
     },
