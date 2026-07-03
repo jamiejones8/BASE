@@ -2117,6 +2117,177 @@ pitcher_card_server <- function(input, output, session) {
   )
 }
 
+# ============================================================================
+# SEASON PITCHER SUMMARY CARD tab (College26)
+# ============================================================================
+# Full-season summary card built from college26.parquet (loaded in
+# preprocessing above as `college26_data`). Reuses the BrewSummaryCard engine
+# (build_pitcher_card_page / draw_card_to_png / draw_cards_to_pdf). No date
+# selector or retag flow — the card aggregates every pitch the selected pitcher
+# threw in the College26 season. All IDs are prefixed `spc_`.
+#   season_pitcher_card_ui()                         -> the page UI
+#   season_pitcher_card_server(input, output, session) -> the server logic
+# ============================================================================
+season_pitcher_card_ui <- function() {
+  tagList(
+    tags$div(
+      class = "hub-main",
+      tags$div(
+        style = "margin-bottom: 16px;",
+        tags$button("← Back to Hub",
+                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
+                    class = "btn btn-outline-secondary btn-sm")
+      ),
+      tags$h2("Season Pitcher Summary Card",
+              style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 16px;"),
+      if (is.null(college26_data))
+        tags$div(class = "alert alert-warning",
+                 "College26 season data is unavailable — check that college26.parquet ",
+                 "loaded from the acq-board-data dataset at startup."),
+      sidebarLayout(
+        sidebarPanel(
+          width = 3,
+          uiOutput("spc_team_ui"),
+          uiOutput("spc_pitcher_ui"),
+          radioButtons("spc_pitch_src", "Pitch Type Source:",
+                       choices = c("Tagged" = "tagged", "Auto (backup)" = "auto"),
+                       selected = "tagged", inline = TRUE),
+          tags$label("Enter Pitcher Height (only used for pitchers not in the height CSV)",
+                     style = "font-weight:bold; margin-top:8px;"),
+          helpText("Arm angle = atan2(RelHeight - shoulder, RelSide), shoulder = 70% of height. ",
+                   "Without a height the arm-angle estimate (and Stuff+) can't be computed, so set ",
+                   "it here for pitchers missing from the height CSV."),
+          fluidRow(
+            column(6, numericInput("spc_height_ft", "ft", value = NA,
+                                   min = 4, max = 8, step = 1)),
+            column(6, numericInput("spc_height_in", "in", value = NA,
+                                   min = 0, max = 11, step = 1))
+          ),
+          tags$label("Set Position on Rubber (overrides height CSV)",
+                     style = "font-weight:bold; margin-top:8px;"),
+          helpText("Feet from rubber center: -1 = toward 1B, 0 = middle, +1 = toward 3B. ",
+                   "Leave at 0 to use the coded value (if any)."),
+          sliderInput("spc_set_pos", NULL, min = -1, max = 1, value = 0, step = 0.1,
+                      ticks = FALSE),
+          actionButton("spc_update1", "Make/Update Card", icon("plus"),
+                       class = "btn-success btn-block"),
+          downloadButton("spc_downloadPng", "Download PNG (1:1)",
+                         class = "btn-info btn-block"),
+          downloadButton("spc_downloadPdf", "Download PDF",
+                         class = "btn-info btn-block")
+        ),
+        mainPanel(
+          div(style = "max-width: 900px; width: 100%; margin: 0 auto;",
+              imageOutput("spc_combinedPlot", width = "100%", height = "auto"))
+        )
+      )
+    ),
+    tags$div(class = "hub-footer",
+             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+  )
+}
+
+season_pitcher_card_server <- function(input, output, session) {
+
+  spc_card_page <- reactiveVal(NULL)
+
+  # ft + in -> decimal feet; NULL when both blank so the override is skipped.
+  height_override_dec <- reactive({
+    ft   <- suppressWarnings(as.numeric(input$spc_height_ft))
+    inch <- suppressWarnings(as.numeric(input$spc_height_in))
+    if (is.na(ft) && is.na(inch)) return(NULL)
+    if (is.na(ft)) ft <- 0
+    if (is.na(inch)) inch <- 0
+    val <- ft + inch / 12
+    if (!is.finite(val) || val <= 0) NULL else val
+  })
+
+  set_override_val <- reactive({
+    v <- suppressWarnings(as.numeric(input$spc_set_pos))
+    if (length(v) == 0 || is.na(v) || !is.finite(v) || v == 0) NULL else v
+  })
+
+  output$spc_team_ui <- renderUI({
+    req(!is.null(college26_data))
+    teams <- sort(unique(college26_data$PitcherTeam))
+    req(length(teams) > 0)
+    selectInput("spc_team", "Select Team:",
+                choices  = setNames(teams, team_display_name(teams)),
+                selected = teams[grepl("BRE|Brewster", teams, ignore.case = TRUE)][1])
+  })
+
+  output$spc_pitcher_ui <- renderUI({
+    req(!is.null(college26_data), input$spc_team)
+    pitchers <- college26_data %>%
+      filter(PitcherTeam == input$spc_team) %>%
+      pull(Pitcher) %>% unique() %>% sort()
+    req(length(pitchers) > 0)
+    selectInput("spc_pitcher", "Select Pitcher:",
+                choices = setNames(pitchers, format_pitcher_name(pitchers)))
+  })
+
+  # Every College26 pitch for the selected pitcher, run through the same
+  # preprocessing the game card uses.
+  load_pitcher_pitches_season <- function() {
+    req(!is.null(college26_data), input$spc_team, input$spc_pitcher)
+    college26_data %>%
+      filter(PitcherTeam == input$spc_team, Pitcher == input$spc_pitcher) %>%
+      apply_pitch_source(input$spc_pitch_src) %>%
+      pitcher_summary() %>%
+      mutate(TaggedPitchType = canonicalize_pitch(TaggedPitchType),
+             row_id = row_number())
+  }
+
+  observeEvent(input$spc_update1, {
+    game <- tryCatch(load_pitcher_pitches_season(), error = function(e) NULL)
+    if (is.null(game) || nrow(game) == 0) {
+      showNotification("No data available for the selected pitcher.", type = "warning"); return()
+    }
+    pitcher_display <- format_pitcher_name(input$spc_pitcher)
+    page <- tryCatch(
+      build_pitcher_card_page(game, pitcher_display,
+                              height_override = height_override_dec(),
+                              set_override    = set_override_val()),
+      error = function(e) {
+        showNotification(paste("Card error:", e$message), type = "error"); NULL
+      }
+    )
+    spc_card_page(page)
+  })
+
+  output$spc_combinedPlot <- renderImage({
+    req(spc_card_page())
+    outfile <- tempfile(fileext = ".png")
+    draw_card_to_png(spc_card_page(), outfile,
+                     width = 1200, height = 1200, units = "px", res = 96, dpi = 96)
+    list(src = outfile, contentType = "image/png",
+         width = "100%", height = "auto", alt = "Season Pitching Summary Card")
+  }, deleteFile = TRUE)
+
+  output$spc_downloadPng <- downloadHandler(
+    filename = function() {
+      if (is.null(input$spc_pitcher)) return("Season Pitcher Card.png")
+      paste0(format_name(input$spc_pitcher), " - Season (Pitcher) Report.png")
+    },
+    content = function(file) {
+      req(spc_card_page())
+      draw_card_to_png(spc_card_page(), file,
+                       width = 12.5, height = 12.5, units = "in", res = 300, dpi = 300)
+    }
+  )
+
+  output$spc_downloadPdf <- downloadHandler(
+    filename = function() {
+      if (is.null(input$spc_pitcher)) return("Season Pitcher Card.pdf")
+      paste0(format_name(input$spc_pitcher), " - Season (Pitcher) Report.pdf")
+    },
+    content = function(file) {
+      req(spc_card_page())
+      draw_cards_to_pdf(list(spc_card_page()), file, width = 12.5, height = 12.5, dpi = 300)
+    }
+  )
+}
+
 
 standings <- tryCatch(fetch_standings(), error = function(e) NULL)
 
@@ -2630,6 +2801,27 @@ season_data <- tryCatch({
 
 master_last_updated <- if (!is.null(season_data)) format(Sys.time(), "%b %d, %Y at %I:%M %p") else "unavailable"
 message("Season data rows: ", if (!is.null(season_data)) nrow(season_data) else 0)
+
+# ----------------------------------------------------------------------------
+# College26 season pitch data (large) for the Season Pitcher Card tab. Pulled
+# once at startup from the acq-board-data dataset, then read from the local
+# copy — same pull-then-fallback pattern as the CapeCod26 season above.
+# ----------------------------------------------------------------------------
+COLLEGE26_FILE      <- "college26.parquet"
+COLLEGE26_REPO_ID   <- Sys.getenv("COLLEGE26_REPO_ID",   unset = HF_DATA_REPO_ID)
+COLLEGE26_REPO_PATH <- Sys.getenv("COLLEGE26_REPO_PATH", unset = COLLEGE26_FILE)
+
+message("Loading College26 season data...")
+invisible(pull_file_from_hf(COLLEGE26_REPO_PATH, COLLEGE26_FILE, repo_id = COLLEGE26_REPO_ID))
+
+college26_data <- tryCatch({
+  df <- arrow::read_parquet(COLLEGE26_FILE)
+  message("Loaded ", COLLEGE26_FILE, " — rows: ", nrow(df))
+  df
+}, error = function(e) {
+  message(COLLEGE26_FILE, " load failed: ", e$message)
+  NULL
+})
 
 # ----------------------------------------------------------------------------
 # Manual single-game CSV support. Each report page has a toggle + uploader; when
@@ -4940,6 +5132,7 @@ ui <- navbarPage(
   tabPanel("Catcher Reports",  value = "tab_catcher",        catcher_ui()),
   tabPanel("Hitter Reports",   value = "tab_hitter",         hitter_ui()),
   tabPanel("Pitcher Reports",  value = "tab_pitcher",        pitcher_card_ui()),
+  tabPanel("Season Pitcher Card", value = "tab_season_pitcher", season_pitcher_card_ui()),
   tabPanel("Pitcher Player Page", value = "tab_pitcher_player", cape_pitcher_player_page_ui()),
   tabPanel("Pitcher Scouting", value = "tab_scout_pitching", scout_pitching_ui()),
   tabPanel("Hitter Scouting",  value = "tab_scout_hitting",  scout_hitting_ui()),
@@ -5446,6 +5639,11 @@ server <- function(input, output, session) {
   # PITCHER SERVER LOGIC -> BrewSummaryCard
   # ==========================================
   pitcher_card_server(input, output, session)
+
+  # ==========================================
+  # SEASON PITCHER CARD SERVER (College26)
+  # ==========================================
+  season_pitcher_card_server(input, output, session)
 
   # ==========================================
   # ACQUISITIONS BOARD SERVER (AcquisitionsApp3)
