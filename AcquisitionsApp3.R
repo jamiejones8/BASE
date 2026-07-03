@@ -845,11 +845,28 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$view_pitcher, {
-    row <- input$pbp_pitcher_table_rows_selected
-    if (length(row) == 0) { showNotification("Select a pitcher first.", type="warning"); return() }
-    selected_key(filtered_pitchers()$source_key[row[1]])
-    toggleModal(session, "pitcher_modal", toggle = "open")
-  })
+  row <- input$pbp_pitcher_table_rows_selected
+  if (length(row) == 0) { showNotification("Select a pitcher first.", type="warning"); return() }
+  selected_key(filtered_pitchers()$source_key[row[1]])
+  toggleModal(session, "pitcher_modal", toggle = "open")
+})
+
+# ── NEW: Top 10 inline page ─────────────────────────────────────────────
+observeEvent(input$view_pitcher_top10, {
+  row <- input$top10_pitching_table_rows_selected
+  if (length(row) == 0) { showNotification("Select a pitcher first.", type="warning"); return() }
+  selected_key(top10_pitchers_inline()$source_key[row[1]])
+  toggleModal(session, "pitcher_modal", toggle = "open")
+})
+
+# ── NEW: Top 10 modal (stacked on top of top10_modal) ───────────────────
+observeEvent(input$view_pitcher_top10m, {
+  row <- input$top10m_pitching_table_rows_selected
+  if (length(row) == 0) { showNotification("Select a pitcher first.", type="warning"); return() }
+  selected_key(top10_pitchers_modal()$source_key[row[1]])
+  toggleModal(session, "top10_modal", toggle = "close")
+  toggleModal(session, "pitcher_modal", toggle = "open")
+})
   
   observeEvent(input$remove_pitcher, {
     rows <- input$pbp_pitcher_table_rows_selected
