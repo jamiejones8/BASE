@@ -5076,7 +5076,7 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
                  size=10, alpha=0.95) +
       geom_text(data=mean_data,
                 aes(x=pfx_x, y=pfx_z, label=velo),
-                color=ACQ_WHITE, size=3.5, fontface="bold") +
+                color="black", size=3.5, fontface="bold") +
       scale_color_manual(values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_fill_manual( values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       xlim(-lim, lim) + ylim(-lim, lim) + coord_fixed() +
@@ -5096,7 +5096,7 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
                                         hjust=0.5, margin=margin(b=10)),
         legend.position  = "none"
       )
-  }, bg=ACQ_NAVY)
+  }, bg="white")
 
   output$pitch_metrics_table <- renderDT({
     key <- selected_key(); req(key)
