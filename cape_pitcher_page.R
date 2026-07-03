@@ -448,6 +448,334 @@ cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), sour
   p
 }
 
+cape_pitcher_heatmap_x_breaks <- c(-0.83, -0.277, 0.277, 0.83)
+cape_pitcher_heatmap_y_breaks <- c(1.5, 2.17, 2.83, 3.5)
+
+cape_pitcher_home_plate <- tibble::tibble(
+  x = c(-0.708, 0.708, 0.708, 0, -0.708),
+  y = c(0, 0, 0.25, 0.5, 0.25)
+)
+
+cape_pitcher_batter_outline <- local({
+  cache <- new.env(parent = emptyenv())
+
+  grow_mask <- function(mask) {
+    mask |
+      rbind(FALSE, mask[-nrow(mask), , drop = FALSE]) |
+      rbind(mask[-1, , drop = FALSE], FALSE) |
+      cbind(FALSE, mask[, -ncol(mask), drop = FALSE]) |
+      cbind(mask[, -1, drop = FALSE], FALSE)
+  }
+
+  function(side = c("L", "R")) {
+    side <- match.arg(side)
+    if (exists(side, envir = cache, inherits = FALSE)) {
+      return(get(side, envir = cache, inherits = FALSE))
+    }
+
+    obj_name <- if (identical(side, "L")) "left_batter" else "right_batter"
+    img <- NULL
+
+    if (exists(obj_name, inherits = TRUE)) {
+      img <- get(obj_name, inherits = TRUE)
+    } else {
+      img_path <- if (identical(side, "L")) "left_batter.png" else "right_batter.png"
+      if (file.exists(img_path)) {
+        img <- png::readPNG(img_path)
+      }
+    }
+
+    if (is.null(img) || length(dim(img)) < 3 || dim(img)[3] < 4) {
+      return(NULL)
+    }
+
+    alpha <- img[, , 4] > 0.05
+    boundary <- alpha & !(
+      rbind(FALSE, alpha[-nrow(alpha), , drop = FALSE]) &
+        rbind(alpha[-1, , drop = FALSE], FALSE) &
+        cbind(FALSE, alpha[, -ncol(alpha), drop = FALSE]) &
+        cbind(alpha[, -1, drop = FALSE], FALSE)
+    )
+    boundary <- grow_mask(grow_mask(boundary))
+
+    outline <- array(0, dim = dim(img))
+    outline[, , 1] <- 12 / 255
+    outline[, , 2] <- 35 / 255
+    outline[, , 3] <- 64 / 255
+    outline[, , 4] <- ifelse(boundary, 0.22, 0)
+
+    assign(side, outline, envir = cache)
+    outline
+  }
+})
+
+cape_pitcher_heatmap_value <- function(iz, sel, mode) {
+  if (mode == "freq") {
+    return(length(sel) / nrow(iz))
+  }
+  if (mode == "whiff") {
+    swings <- sum(iz$Swing[sel], na.rm = TRUE)
+    whiffs <- sum(iz$WhiffP[sel], na.rm = TRUE)
+    return(if (swings > 0) whiffs / swings else NA_real_)
+  }
+  if (mode == "xwoba") {
+    xwoba_con <- iz$xwOBA[sel][iz$BBE[sel] %in% TRUE]
+    return(if (sum(!is.na(xwoba_con)) > 0) mean(xwoba_con, na.rm = TRUE) else NA_real_)
+  }
+  if (mode == "xwobafull") {
+    pa_woba <- iz$paWOBA[sel]
+    return(if (sum(!is.na(pa_woba)) > 0) mean(pa_woba, na.rm = TRUE) else NA_real_)
+  }
+  exit_velo <- iz$ExitSpeed[sel][iz$BBE[sel] %in% TRUE]
+  if (sum(!is.na(exit_velo)) > 0) mean(exit_velo, na.rm = TRUE) else NA_real_
+}
+
+cape_pitcher_heatmap_fill_color <- function(value, mode, values) {
+  rgb_hex <- function(r, g, b) {
+    grDevices::rgb(r, g, b, maxColorValue = 255)
+  }
+
+  if (is.na(value)) {
+    return("#EEF2F6")
+  }
+
+  if (mode == "damage") {
+    norm_value <- pmin(pmax((value - 75) / 25, 0), 1)
+  } else if (mode == "xwoba") {
+    norm_value <- pmin(pmax((value - 0.250) / 0.300, 0), 1)
+  } else if (mode == "xwobafull") {
+    norm_value <- pmin(pmax((value - 0.200) / 0.250, 0), 1)
+  } else {
+    max_value <- suppressWarnings(max(values, na.rm = TRUE))
+    if (!is.finite(max_value) || max_value == 0) {
+      max_value <- 1
+    }
+    norm_value <- value / max_value
+  }
+
+  if (mode == "freq") {
+    return(rgb_hex(
+      round(235 - 225 * norm_value),
+      round(238 - 203 * norm_value),
+      round(242 - 176 * norm_value)
+    ))
+  }
+
+  if (mode == "whiff") {
+    return(rgb_hex(
+      round(235 - 209 * norm_value),
+      round(238 - 75 * norm_value),
+      round(242 - 61 * norm_value)
+    ))
+  }
+
+  rgb_hex(235, round(238 - 188 * norm_value), round(242 - 202 * norm_value))
+}
+
+cape_pitcher_heatmap_text_color <- function(value, mode, values) {
+  if (is.na(value)) {
+    return("#10233A")
+  }
+
+  if (mode == "damage") {
+    norm_value <- pmin(pmax((value - 75) / 25, 0), 1)
+  } else if (mode == "xwoba") {
+    norm_value <- pmin(pmax((value - 0.250) / 0.300, 0), 1)
+  } else if (mode == "xwobafull") {
+    norm_value <- pmin(pmax((value - 0.200) / 0.250, 0), 1)
+  } else {
+    max_value <- suppressWarnings(max(values, na.rm = TRUE))
+    if (!is.finite(max_value) || max_value == 0) {
+      max_value <- 1
+    }
+    norm_value <- value / max_value
+  }
+
+  if (norm_value > 0.5) "#FFFFFF" else "#10233A"
+}
+
+cape_pitcher_heatmap_label <- function(value, mode) {
+  if (is.na(value)) {
+    return("")
+  }
+  if (mode == "damage") {
+    return(as.character(round(value)))
+  }
+  if (mode %in% c("xwoba", "xwobafull")) {
+    return(sub("^0", "", sprintf("%.3f", value)))
+  }
+  paste0(round(100 * value), "%")
+}
+
+cape_pitcher_heatmap_cells <- function(d, mode = c("freq", "whiff", "damage", "xwoba", "xwobafull")) {
+  mode <- match.arg(mode)
+  in_zone <- d %>%
+    dplyr::filter(!is.na(PlateLocSide), !is.na(PlateLocHeight), InZone)
+
+  if (nrow(in_zone) == 0) {
+    return(NULL)
+  }
+
+  col_idx <- cut(
+    in_zone$PlateLocSide,
+    cape_pitcher_heatmap_x_breaks,
+    labels = FALSE,
+    include.lowest = TRUE
+  )
+  row_idx <- cut(
+    in_zone$PlateLocHeight,
+    cape_pitcher_heatmap_y_breaks,
+    labels = FALSE,
+    include.lowest = TRUE
+  )
+
+  values <- matrix(NA_real_, 3, 3)
+  for (row in 1:3) {
+    for (col in 1:3) {
+      selected <- which(row_idx == row & col_idx == col)
+      values[row, col] <- cape_pitcher_heatmap_value(in_zone, selected, mode)
+    }
+  }
+
+  cells <- tidyr::expand_grid(row = 1:3, col = 1:3) %>%
+    dplyr::mutate(
+      xmin_raw = cape_pitcher_heatmap_x_breaks[col],
+      xmax_raw = cape_pitcher_heatmap_x_breaks[col + 1],
+      xmin = -xmax_raw,
+      xmax = -xmin_raw,
+      ymin = cape_pitcher_heatmap_y_breaks[row],
+      ymax = cape_pitcher_heatmap_y_breaks[row + 1],
+      x = (xmin + xmax) / 2,
+      y = (ymin + ymax) / 2,
+      value = purrr::map2_dbl(row, col, ~ values[.x, .y])
+    )
+
+  all_values <- as.numeric(values)
+  cells %>%
+    dplyr::mutate(
+      fill_color = vapply(value, cape_pitcher_heatmap_fill_color, character(1), mode = mode, values = all_values),
+      text_color = vapply(value, cape_pitcher_heatmap_text_color, character(1), mode = mode, values = all_values),
+      label = vapply(value, cape_pitcher_heatmap_label, character(1), mode = mode)
+    )
+}
+
+cape_pitcher_empty_heatmap_plot <- function(message) {
+  ggplot2::ggplot() +
+    ggplot2::annotate(
+      "text",
+      x = 0,
+      y = 0.5,
+      label = message,
+      colour = "#5F6B7A",
+      size = 4.2,
+      fontface = "bold"
+    ) +
+    ggplot2::xlim(-1, 1) +
+    ggplot2::ylim(0, 1) +
+    ggplot2::theme_void()
+}
+
+cape_pitcher_zone_heat_plot <- function(d,
+                                        mode = c("freq", "whiff", "damage", "xwoba", "xwobafull"),
+                                        batter_side = c("ALL", "L", "R")) {
+  mode <- match.arg(mode)
+  batter_side <- match.arg(batter_side)
+  cells <- cape_pitcher_heatmap_cells(d, mode)
+
+  if (is.null(cells)) {
+    return(cape_pitcher_empty_heatmap_plot("No in-zone pitches for this selection."))
+  }
+
+  strike_zone <- tibble::tibble(
+    x = c(-0.83, -0.83, 0.83, 0.83, -0.83),
+    y = c(1.5, 3.5, 3.5, 1.5, 1.5)
+  )
+
+  plot_obj <- ggplot2::ggplot() +
+    ggplot2::geom_rect(
+      data = cells,
+      ggplot2::aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill_color),
+      colour = "#D7DEE7",
+      linewidth = 0.7
+    ) +
+    ggplot2::geom_path(
+      data = strike_zone,
+      ggplot2::aes(x = x, y = y),
+      colour = "#10233A",
+      linewidth = 1.0
+    ) +
+    ggplot2::geom_polygon(
+      data = cape_pitcher_home_plate,
+      ggplot2::aes(x = x, y = y),
+      fill = "#FFFFFF",
+      colour = "#10233A",
+      linewidth = 0.9
+    ) +
+    ggplot2::geom_text(
+      data = cells,
+      ggplot2::aes(x = x, y = y, label = label, colour = text_color),
+      size = 5.2,
+      fontface = "bold"
+    ) +
+    ggplot2::scale_fill_identity() +
+    ggplot2::scale_colour_identity() +
+    ggplot2::coord_fixed(xlim = c(-2.45, 2.45), ylim = c(0, 5), clip = "off") +
+    ggplot2::theme_void() +
+    ggplot2::theme(
+      plot.margin = ggplot2::margin(6, 12, 6, 12),
+      panel.background = ggplot2::element_rect(fill = "#FFFFFF", colour = NA),
+      plot.background = ggplot2::element_rect(fill = "#FFFFFF", colour = NA)
+    )
+
+  if (!identical(batter_side, "ALL")) {
+    batter_outline <- cape_pitcher_batter_outline(batter_side)
+    if (!is.null(batter_outline)) {
+      if (identical(batter_side, "L")) {
+        plot_obj <- plot_obj +
+          ggplot2::annotation_custom(
+            grob = grid::rasterGrob(batter_outline, interpolate = TRUE),
+            xmin = 0.95, xmax = 2.85, ymin = 0.35, ymax = 4.95
+          )
+      } else {
+        plot_obj <- plot_obj +
+          ggplot2::annotation_custom(
+            grob = grid::rasterGrob(batter_outline, interpolate = TRUE),
+            xmin = -2.85, xmax = -0.95, ymin = 0.35, ymax = 4.95
+          )
+      }
+
+      plot_obj <- plot_obj +
+        ggplot2::geom_rect(
+          data = cells,
+          ggplot2::aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill_color),
+          colour = "#D7DEE7",
+          linewidth = 0.7
+        ) +
+        ggplot2::geom_path(
+          data = strike_zone,
+          ggplot2::aes(x = x, y = y),
+          colour = "#10233A",
+          linewidth = 1.0
+        ) +
+        ggplot2::geom_polygon(
+          data = cape_pitcher_home_plate,
+          ggplot2::aes(x = x, y = y),
+          fill = "#FFFFFF",
+          colour = "#10233A",
+          linewidth = 0.9
+        ) +
+        ggplot2::geom_text(
+          data = cells,
+          ggplot2::aes(x = x, y = y, label = label, colour = text_color),
+          size = 5.2,
+          fontface = "bold"
+        )
+    }
+  }
+
+  plot_obj
+}
+
 cape_pitcher_player_page_ui <- function() {
   tagList(
     tags$div(
@@ -827,26 +1155,26 @@ cape_pitcher_player_page_ui <- function() {
               col_widths = c(4, 4, 4),
               card(
                 card_header("Location - where he lives"),
-                card_body(uiOutput("cpp_pitch_zone"))
+                card_body(plotOutput("cpp_pitch_zone", height = "320px"))
               ),
               card(
                 card_header("Whiff Zone - where he misses bats"),
-                card_body(uiOutput("cpp_pitch_whiff_zone"))
+                card_body(plotOutput("cpp_pitch_whiff_zone", height = "320px"))
               ),
               card(
                 card_header("Damage Zone - exit velo allowed"),
-                card_body(uiOutput("cpp_pitch_dmg_zone"))
+                card_body(plotOutput("cpp_pitch_dmg_zone", height = "320px"))
               )
             ),
             layout_columns(
               col_widths = c(6, 6),
               card(
                 card_header("xwOBAcon Zone - contact quality allowed"),
-                card_body(uiOutput("cpp_pitch_xwc_zone"))
+                card_body(plotOutput("cpp_pitch_xwc_zone", height = "320px"))
               ),
               card(
                 card_header("xwOBA Zone - expected outcome allowed"),
-                card_body(uiOutput("cpp_pitch_xwf_zone"))
+                card_body(plotOutput("cpp_pitch_xwf_zone", height = "320px"))
               )
             )
           )
@@ -1434,43 +1762,43 @@ cape_pitcher_player_page_server <- function(input, output, session,
     )
   })
 
-  output$cpp_pitch_zone <- renderUI({
+  output$cpp_pitch_zone <- renderPlot({
     d <- heatmap_data()
     if (nrow(d) == 0) {
-      return(div("No pitches match the current heatmap filter.", style = "color:#888;padding:10px;"))
+      return(cape_pitcher_empty_heatmap_plot("No pitches match the current heatmap filter."))
     }
-    zone_heat(d, "freq")
-  })
+    cape_pitcher_zone_heat_plot(d, "freq", input$cpp_heat_side %||% "ALL")
+  }, res = 96)
 
-  output$cpp_pitch_whiff_zone <- renderUI({
+  output$cpp_pitch_whiff_zone <- renderPlot({
     d <- heatmap_data()
     if (nrow(d) == 0) {
-      return(div("No pitches match the current heatmap filter.", style = "color:#888;padding:10px;"))
+      return(cape_pitcher_empty_heatmap_plot("No pitches match the current heatmap filter."))
     }
-    zone_heat(d, "whiff")
-  })
+    cape_pitcher_zone_heat_plot(d, "whiff", input$cpp_heat_side %||% "ALL")
+  }, res = 96)
 
-  output$cpp_pitch_dmg_zone <- renderUI({
+  output$cpp_pitch_dmg_zone <- renderPlot({
     d <- heatmap_data()
     if (nrow(d) == 0) {
-      return(div("No pitches match the current heatmap filter.", style = "color:#888;padding:10px;"))
+      return(cape_pitcher_empty_heatmap_plot("No pitches match the current heatmap filter."))
     }
-    zone_heat(d, "damage")
-  })
+    cape_pitcher_zone_heat_plot(d, "damage", input$cpp_heat_side %||% "ALL")
+  }, res = 96)
 
-  output$cpp_pitch_xwc_zone <- renderUI({
+  output$cpp_pitch_xwc_zone <- renderPlot({
     d <- heatmap_data()
     if (nrow(d) == 0) {
-      return(div("No pitches match the current heatmap filter.", style = "color:#888;padding:10px;"))
+      return(cape_pitcher_empty_heatmap_plot("No pitches match the current heatmap filter."))
     }
-    zone_heat(d, "xwoba")
-  })
+    cape_pitcher_zone_heat_plot(d, "xwoba", input$cpp_heat_side %||% "ALL")
+  }, res = 96)
 
-  output$cpp_pitch_xwf_zone <- renderUI({
+  output$cpp_pitch_xwf_zone <- renderPlot({
     d <- heatmap_data()
     if (nrow(d) == 0) {
-      return(div("No pitches match the current heatmap filter.", style = "color:#888;padding:10px;"))
+      return(cape_pitcher_empty_heatmap_plot("No pitches match the current heatmap filter."))
     }
-    zone_heat(d, "xwobafull")
-  })
+    cape_pitcher_zone_heat_plot(d, "xwobafull", input$cpp_heat_side %||% "ALL")
+  }, res = 96)
 }
