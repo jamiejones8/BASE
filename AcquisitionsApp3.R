@@ -550,32 +550,37 @@ ui <- fluidPage(
                               ),
                               
                               tabPanel("Pitching",
-                                       br(),
-                                       fluidRow(
-                                         column(3, selectInput("top10_league_p", "League:", choices = ALL_LEAGUES,
-                                                               selected = "All", width = "100%")),
-                                         column(3, numericInput("top10_min_ip", "Min IP:", value = 5,
-                                                                min = 0, step = 1, width = "100%")),
-                                         column(3, selectInput("top10_stat_p", "Sort by:",
-                                                               choices = c("ERA","FIP","WHIP","K9","BB9","KBB"),
-                                                               selected = "ERA", width = "100%")),
-                                         column(3, numericInput("top10_max_age_p", "Max Age:", value = 99,
-                                                                min = 18, step = 1, width = "100%"))
-                                       ),
-                                       div(style = "margin-bottom:6px;",
-                                           tags$p("Role:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
-                                           actionButton("prole_All","All",class="pos-btn active"),
-                                           actionButton("prole_SP", "SP", class="pos-btn"),
-                                           actionButton("prole_RP", "RP", class="pos-btn")
-                                       ),
-                                       div(style = "margin-bottom:10px;",
-                                           tags$p("Hand:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
-                                           actionButton("phand_All","All", class="pos-btn active"),
-                                           actionButton("phand_R",  "RHP", class="pos-btn"),
-                                           actionButton("phand_L",  "LHP", class="pos-btn")
-                                       ),
-                                       DTOutput("top10_pitching_table")
-                              )
+         br(),
+         fluidRow(
+           column(3, selectInput("top10_league_p", "League:", choices = ALL_LEAGUES,
+                                 selected = "All", width = "100%")),
+           column(3, numericInput("top10_min_ip", "Min IP:", value = 5,
+                                  min = 0, step = 1, width = "100%")),
+           column(3, selectInput("top10_stat_p", "Sort by:",
+                                 choices = c("ERA","FIP","WHIP","K9","BB9","KBB"),
+                                 selected = "ERA", width = "100%")),
+           column(3, numericInput("top10_max_age_p", "Max Age:", value = 99,
+                                  min = 18, step = 1, width = "100%"))
+         ),
+         div(style = "margin-bottom:6px;",
+             tags$p("Role:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
+             actionButton("prole_All","All",class="pos-btn active"),
+             actionButton("prole_SP", "SP", class="pos-btn"),
+             actionButton("prole_RP", "RP", class="pos-btn")
+         ),
+         div(style = "margin-bottom:10px;",
+             tags$p("Hand:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
+             actionButton("phand_All","All", class="pos-btn active"),
+             actionButton("phand_R",  "RHP", class="pos-btn"),
+             actionButton("phand_L",  "LHP", class="pos-btn")
+         ),
+         div(class = "action-bar",
+             actionButton("view_pitcher_top10",
+                          tagList(tags$i(class="ti ti-chart-line"), " View profile"),
+                          class = "btn-action")
+         ),
+         DTOutput("top10_pitching_table")
+)
                   )
               ),
               
@@ -657,30 +662,35 @@ ui <- fluidPage(
                 ),
                 
                 tabPanel("Pitching",
-                         br(),
-                         fluidRow(
-                           column(3, selectInput("top10m_league_p", "League:", choices = ALL_LEAGUES,
-                                                 selected = "All", width = "100%")),
-                           column(3, numericInput("top10m_min_ip", "Min IP:", value = 5,
-                                                  min = 0, step = 1, width = "100%")),
-                           column(3, selectInput("top10m_stat_p", "Sort by:",
-                                                 choices = c("ERA","FIP","WHIP","K9","BB9","KBB"),
-                                                 selected = "ERA", width = "100%")),
-                           column(3, numericInput("top10m_max_age_p", "Max Age:", value = 99,
-                                                  min = 18, step = 1, width = "100%"))
-                         ),
-                         div(style = "margin-bottom:6px;",
-                             actionButton("prole_m_All","All",class="pos-btn active"),
-                             actionButton("prole_m_SP", "SP", class="pos-btn"),
-                             actionButton("prole_m_RP", "RP", class="pos-btn")
-                         ),
-                         div(style = "margin-bottom:10px;",
-                             actionButton("phand_m_All","All", class="pos-btn active"),
-                             actionButton("phand_m_R",  "RHP", class="pos-btn"),
-                             actionButton("phand_m_L",  "LHP", class="pos-btn")
-                         ),
-                         DTOutput("top10m_pitching_table")
-                )
+         br(),
+         fluidRow(
+           column(3, selectInput("top10m_league_p", "League:", choices = ALL_LEAGUES,
+                                 selected = "All", width = "100%")),
+           column(3, numericInput("top10m_min_ip", "Min IP:", value = 5,
+                                  min = 0, step = 1, width = "100%")),
+           column(3, selectInput("top10m_stat_p", "Sort by:",
+                                 choices = c("ERA","FIP","WHIP","K9","BB9","KBB"),
+                                 selected = "ERA", width = "100%")),
+           column(3, numericInput("top10m_max_age_p", "Max Age:", value = 99,
+                                  min = 18, step = 1, width = "100%"))
+         ),
+         div(style = "margin-bottom:6px;",
+             actionButton("prole_m_All","All",class="pos-btn active"),
+             actionButton("prole_m_SP", "SP", class="pos-btn"),
+             actionButton("prole_m_RP", "RP", class="pos-btn")
+         ),
+         div(style = "margin-bottom:10px;",
+             actionButton("phand_m_All","All", class="pos-btn active"),
+             actionButton("phand_m_R",  "RHP", class="pos-btn"),
+             actionButton("phand_m_L",  "LHP", class="pos-btn")
+         ),
+         div(class = "action-bar",
+             actionButton("view_pitcher_top10m",
+                          tagList(tags$i(class="ti ti-chart-line"), " View profile"),
+                          class = "btn-action")
+         ),
+         DTOutput("top10m_pitching_table")
+)
     )
   )
 )
@@ -951,43 +961,46 @@ server <- function(input, output, session) {
     showNotification(glue("{name} restored."), type="message", duration=4)
   })
   
-  # ── Top 10 (inline page) ──────────────────────────────────────────────────
-  top10_pitcher_dt <- function(league_in, min_ip, max_age, stat, role, hand) {
-    df <- all_pitchers %>%
-      filter(!source_key %in% ineligible()) %>%
-      filter(!is.na(ERA), !is.na(IP), IP >= min_ip)
-    
-    if (league_in != "All") df <- df %>% filter(league_name == league_in)
-    if (!is.na(max_age) && max_age < 99)
-      df <- df %>% filter(is.na(age) | age <= max_age)
-    
-    if (role %in% c("SP","RP")) {
-      gs_join <- pitching_all %>%
-        select(player_id, GS) %>% distinct(player_id, .keep_all=TRUE) %>%
-        mutate(source_key = as.character(player_id))
-      df <- df %>% left_join(gs_join %>% select(source_key, GS), by="source_key")
-      if (role == "SP") df <- df %>% filter(!is.na(GS), GS/G >= 0.5)
-      else              df <- df %>% filter(is.na(GS) | GS/G < 0.5)
-    }
-    
-    if (hand != "All") df <- df %>% filter(pitch_hand == hand)
-    
-    asc_stats <- c("ERA","FIP","WHIP","BB9")
-    df <- if (stat %in% asc_stats) arrange(df, .data[[stat]]) else
-      arrange(df, desc(.data[[stat]]))
-    
-    df %>%
-      slice_head(n = 10) %>%
-      mutate(Rank = row_number(), `Age/Yr` = age_or_class(age, class_year)) %>%
-      select(Rank, Name=pitcher_name, Hand=pitch_hand,
-             Team=team_name, League=league_name, `Age/Yr`,
-             School=college, G, IP, ERA, FIP, WHIP,
-             `K/9`=K9, `BB/9`=BB9, `K/BB`=KBB) %>%
-      datatable(rownames=FALSE,
-                options=list(dom="t", pageLength=10, initComplete=dt_header_js()),
-                class="display compact") %>%
-      formatRound(c("ERA","FIP","WHIP","K/9","BB/9","K/BB"), 2)
+  top10_pitcher_data <- function(league_in, min_ip, max_age, stat, role, hand) {
+  df <- all_pitchers %>%
+    filter(!source_key %in% ineligible()) %>%
+    filter(!is.na(ERA), !is.na(IP), IP >= min_ip)
+
+  if (league_in != "All") df <- df %>% filter(league_name == league_in)
+  if (!is.na(max_age) && max_age < 99)
+    df <- df %>% filter(is.na(age) | age <= max_age)
+
+  if (role %in% c("SP","RP")) {
+    gs_join <- pitching_all %>%
+      select(player_id, GS) %>% distinct(player_id, .keep_all=TRUE) %>%
+      mutate(source_key = as.character(player_id))
+    df <- df %>% left_join(gs_join %>% select(source_key, GS), by="source_key")
+    if (role == "SP") df <- df %>% filter(!is.na(GS), GS/G >= 0.5)
+    else              df <- df %>% filter(is.na(GS) | GS/G < 0.5)
   }
+
+  if (hand != "All") df <- df %>% filter(pitch_hand == hand)
+
+  asc_stats <- c("ERA","FIP","WHIP","BB9")
+  df <- if (stat %in% asc_stats) arrange(df, .data[[stat]]) else
+    arrange(df, desc(.data[[stat]]))
+
+  df %>%
+    slice_head(n = 10) %>%
+    mutate(Rank = row_number(), `Age/Yr` = age_or_class(age, class_year))
+}
+
+render_top10_pitcher_dt <- function(data) {
+  data %>%
+    select(Rank, Name=pitcher_name, Hand=pitch_hand,
+           Team=team_name, League=league_name, `Age/Yr`,
+           School=college, G, IP, ERA, FIP, WHIP,
+           `K/9`=K9, `BB/9`=BB9, `K/BB`=KBB) %>%
+    datatable(selection = "single", rownames=FALSE,
+              options=list(dom="t", pageLength=10, initComplete=dt_header_js()),
+              class="display compact") %>%
+    formatRound(c("ERA","FIP","WHIP","K/9","BB/9","K/BB"), 2)
+}
   
   top10_hitter_dt <- function(league_in, min_ab, max_age, stat, pos) {
     df <- all_hitters %>%
@@ -1015,17 +1028,23 @@ server <- function(input, output, session) {
   output$top10_hitting_table  <- renderDT(top10_hitter_dt(
     input$top10_league_h, input$top10_min_ab, input$top10_max_age_h,
     input$top10_stat_h, h_pos()))
-  output$top10_pitching_table <- renderDT(top10_pitcher_dt(
-    input$top10_league_p, input$top10_min_ip, input$top10_max_age_p,
-    input$top10_stat_p, p_role(), p_hand()))
   
   output$top10m_hitting_table  <- renderDT(top10_hitter_dt(
     input$top10m_league_h, input$top10m_min_ab, input$top10m_max_age_h,
     input$top10m_stat_h, h_pos_m()))
-  output$top10m_pitching_table <- renderDT(top10_pitcher_dt(
-    input$top10m_league_p, input$top10m_min_ip, input$top10m_max_age_p,
-    input$top10m_stat_p, p_role_m(), p_hand_m()))
-  
+
+
+  top10_pitchers_inline <- reactive({
+  top10_pitcher_data(input$top10_league_p, input$top10_min_ip, input$top10_max_age_p,
+                      input$top10_stat_p, p_role(), p_hand())
+})
+top10_pitchers_modal <- reactive({
+  top10_pitcher_data(input$top10m_league_p, input$top10m_min_ip, input$top10m_max_age_p,
+                      input$top10m_stat_p, p_role_m(), p_hand_m())
+})
+
+output$top10_pitching_table  <- renderDT(render_top10_pitcher_dt(top10_pitchers_inline()))
+output$top10m_pitching_table <- renderDT(render_top10_pitcher_dt(top10_pitchers_modal()))
   # ── Modal ─────────────────────────────────────────────────────────────────
   output$modal_info <- renderUI({
     key <- selected_key(); req(key)
