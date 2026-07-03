@@ -22,6 +22,7 @@ library(DT)
 library(glue)
 library(stringr)
 library(tibble)
+library(reactable)
 
 combine  <- dplyr::combine
 slice    <- dplyr::slice
