@@ -2208,22 +2208,19 @@ season_pitcher_card_server <- function(input, output, session) {
   })
 
   output$spc_team_ui <- renderUI({
-    req(!is.null(college26_data))
-    teams <- sort(unique(college26_data$PitcherTeam))
-    req(length(teams) > 0)
+    req(length(college26_team_choices) > 0)
+    brew <- college26_team_choices[grepl("BRE|Brewster", college26_team_choices,
+                                         ignore.case = TRUE)]
     selectInput("spc_team", "Select Team:",
-                choices  = setNames(teams, team_display_name(teams)),
-                selected = teams[grepl("BRE|Brewster", teams, ignore.case = TRUE)][1])
+                choices  = college26_team_choices,
+                selected = if (length(brew)) unname(brew[1]) else unname(college26_team_choices[1]))
   })
 
   output$spc_pitcher_ui <- renderUI({
-    req(!is.null(college26_data), input$spc_team)
-    pitchers <- college26_data %>%
-      filter(PitcherTeam == input$spc_team) %>%
-      pull(Pitcher) %>% unique() %>% sort()
+    req(input$spc_team)
+    pitchers <- college26_pitchers_by_team[[input$spc_team]]
     req(length(pitchers) > 0)
-    selectInput("spc_pitcher", "Select Pitcher:",
-                choices = setNames(pitchers, format_pitcher_name(pitchers)))
+    selectInput("spc_pitcher", "Select Pitcher:", choices = pitchers)
   })
 
   # Every College26 pitch for the selected pitcher, run through the same
@@ -2822,6 +2819,30 @@ college26_data <- tryCatch({
   message(COLLEGE26_REPO_PATH, " HF load failed: ", e$message)
   NULL
 })
+
+# Precompute the Season Pitcher Card selector choices once, at startup, so the
+# renderUI selectors never re-scan the large College26 table:
+#   college26_team_choices     : named vector (display name -> team abbr)
+#   college26_pitchers_by_team : list keyed by team abbr, each a named vector
+#                                (formatted pitcher name -> raw Pitcher value)
+college26_team_choices     <- character(0)
+college26_pitchers_by_team <- list()
+if (!is.null(college26_data)) {
+  .c26_teams <- sort(unique(college26_data$PitcherTeam))
+  .c26_teams <- .c26_teams[!is.na(.c26_teams)]
+  college26_team_choices <- setNames(.c26_teams, unname(team_display_name(.c26_teams)))
+
+  .c26_tp <- college26_data %>%
+    filter(!is.na(PitcherTeam), !is.na(Pitcher)) %>%
+    distinct(PitcherTeam, Pitcher) %>%
+    arrange(Pitcher)
+  college26_pitchers_by_team <- lapply(
+    split(.c26_tp$Pitcher, .c26_tp$PitcherTeam),
+    function(p) setNames(p, format_pitcher_name(p))
+  )
+  rm(.c26_teams, .c26_tp)
+  message("College26 selectors ready: ", length(college26_team_choices), " teams")
+}
 
 # ----------------------------------------------------------------------------
 # Manual single-game CSV support. Each report page has a toggle + uploader; when
@@ -5633,7 +5654,7 @@ server <- function(input, output, session) {
   # ==========================================
   # CAPE PITCHER PLAYER PAGE
   # ==========================================
-  cape_pitcher_player_page_server(input, output, session)
+  cape_pitcher_player_page_server(input, output, session, source_data = season_data)
 
   # ==========================================
   # PITCHER SERVER LOGIC -> BrewSummaryCard
