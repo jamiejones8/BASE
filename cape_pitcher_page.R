@@ -738,7 +738,9 @@ cape_pitcher_player_page_ui <- function() {
   )
 }
 
-cape_pitcher_player_page_server <- function(input, output, session, data_path = "CapeCod26.parquet") {
+cape_pitcher_player_page_server <- function(input, output, session,
+                                            data_path = "CapeCod26.parquet",
+                                            source_data = NULL) {
   raw_data <- reactiveVal(NULL)
   loaded_snapshot <- reactiveVal(NULL)
   data_loaded <- reactiveVal(FALSE)
