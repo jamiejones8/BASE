@@ -29,7 +29,6 @@ between  <- dplyr::between
 first    <- dplyr::first
 last     <- dplyr::last
 
-source("scout_app.R")
 source("leaderboards_embed.R")
 source("cape_pitcher_page.R")
 
@@ -3577,10 +3576,6 @@ apps <- list(
   list(id = "hitter",           title = "Postgame Hitter Reports",  page = "hitter",         status = "live"),
   list(id = "pitcher",          title = "Postgame Pitcher Reports", page = "pitcher",        status = "live"),
   list(id = "pitcher_player",   title = "Cape Pitcher Scout", page = "pitcher_player", status = "live", image_src = "pitcher_scouting.png"),
-  list(id = "pitcher_scouting", title = "Pitcher Scouting",         page = "scout_pitching", status = "live"),
-  list(id = "hitter_scouting",  title = "Hitter Scouting",          page = "scout_hitting",  status = "live"),
-  list(id = "acquisitions",     title = "Acquisitions",             page = "scout_acq",      status = "live"),
-  list(id = "player_grades",    title = "Player Grades",            page = "scout_grades",   status = "live"),
   whitecaps_hub_card(),
   list(id = "umpire",           title = "Umpire Reports",           page = NULL,             status = "live")
 )
@@ -5206,10 +5201,6 @@ server <- function(input, output, session) {
     hitter         = "tab_hitter",
     pitcher        = "tab_pitcher",
     pitcher_player = "tab_pitcher_player",
-    scout_pitching = "tab_scout_pitching",
-    scout_hitting  = "tab_scout_hitting",
-    scout_acq      = "tab_scout_acq",
-    scout_grades   = "tab_scout_grades",
     whitecaps_app  = "tab_leaderboards"
   )
 
