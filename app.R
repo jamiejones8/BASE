@@ -5077,7 +5077,7 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
       scale_fill_manual( values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       xlim(-lim, lim) + ylim(-lim, lim) + coord_fixed() +
       labs(title="Pitch Movement",
-           x="Horizontal Break (in) — Pitcher's POV",
+           x="Horizontal Break (in)",
            y="Induced Vertical Break (in)") +
       theme_minimal(base_size=13) +
       theme(
