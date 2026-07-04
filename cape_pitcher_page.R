@@ -211,8 +211,14 @@ cape_pitcher_read_parquet <- function(path = "CapeCod26.parquet") {
     tibble::as_tibble()
 }
 
-cape_pitcher_init_data <- function(path = "CapeCod26.parquet") {
-  cape_pitcher_read_parquet(path) %>%
+cape_pitcher_init_data <- function(path = "CapeCod26.parquet", raw_df = NULL) {
+  source_df <- if (!is.null(raw_df)) {
+    tibble::as_tibble(raw_df)
+  } else {
+    cape_pitcher_read_parquet(path)
+  }
+
+  source_df %>%
     mutate(
       caps_row_id = dplyr::row_number(),
       TaggedPitchType = as.character(TaggedPitchType),
@@ -1258,7 +1264,22 @@ cape_pitcher_player_page_server <- function(input, output, session,
     status_message("Loading pitcher page data...")
 
     tryCatch({
-      initial_data <- cape_pitcher_init_data(path = data_path)
+      source_snapshot <- NULL
+
+      if (!is.null(source_data)) {
+        source_snapshot <- if (shiny::is.reactive(source_data)) {
+          source_data()
+        } else if (is.function(source_data)) {
+          source_data()
+        } else {
+          source_data
+        }
+      }
+
+      initial_data <- cape_pitcher_init_data(
+        path = data_path,
+        raw_df = source_snapshot
+      )
       raw_data(initial_data)
       loaded_snapshot(initial_data)
       data_loaded(TRUE)
