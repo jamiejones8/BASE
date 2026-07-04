@@ -5072,7 +5072,7 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
                  size=10, alpha=0.95) +
       geom_text(data=mean_data,
                 aes(x=pfx_x, y=pfx_z, label=velo),
-                color="black", size=3.5, fontface="bold") +
+                color="#FFFFFF", size=3.5, fontface="bold") +
       scale_color_manual(values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_fill_manual( values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       xlim(-lim, lim) + ylim(-lim, lim) + coord_fixed() +
@@ -5082,12 +5082,12 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
       theme_minimal(base_size=13) +
       theme(
         plot.background  = element_rect(fill="white",  color=NA),
-        panel.background = element_rect(fill="white", color=NA),
-        panel.grid.major = element_line(color="#1A4080", linewidth=0.4),
+        panel.background = element_rect(fill="#F7FAF8", color=NA),
+        panel.grid.major = element_line(color="#DCE8DF", linewidth=0.4),
         panel.grid.minor = element_blank(),
         text             = element_text(color=ACQ_WHITE),
-        axis.text        = element_text(color="#CCCCCC"),
-        axis.title       = element_text(color="#AAAAAA", size=11),
+        axis.text        = element_text(color="#444444"),
+        axis.title       = element_text(color="#666666", size=11),
         plot.title       = element_text(color=ACQ_TEAL, face="bold", size=16,
                                         hjust=0.5, margin=margin(b=10)),
         legend.position  = "none"
