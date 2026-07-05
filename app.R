@@ -3913,114 +3913,120 @@ acq_nwl_hitting    <- read_parquet("nwl_hitting.parquet")
 message("[acq] Data loaded.")
 
 # ── 2. Harmonize data ────────────────────────────────────────────────────────
-acq_pitcher_season_tagged <- acq_pitcher_season %>%
-  mutate(
-    has_pbp    = TRUE,
-    source_key = as.character(pitcher_id),
-    class_year = NA_character_
+# Wrapped in a function so it can be re-run after "Run updates" refreshes the
+# raw tables (acq_pitch_level, acq_necbl_pitching, etc. via <<-). Without this,
+# the combined acq_all_pitchers/acq_all_hitters tables the UI actually reads
+# from only ever get built once, at app startup.
+acq_rebuild_combined <- function() {
+
+  acq_pitcher_season_tagged <- acq_pitcher_season %>%
+    mutate(
+      has_pbp    = TRUE,
+      source_key = as.character(pitcher_id),
+      class_year = NA_character_
+    )
+  acq_necbl_pitchers_clean <- acq_necbl_pitching %>%
+    mutate(source_key = paste(player_name, team, "NECBL")) %>%
+    mutate(
+      pitcher_name = coalesce(full_name, player_name),
+      pitch_hand   = throws,
+      team_name    = team,
+      IP_dec       = suppressWarnings(as.numeric(ip)),
+      K9           = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (k  / IP_dec) * 9, NA), 1),
+      BB9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (bb / IP_dec) * 9, NA), 1),
+      KBB          = round(ifelse(!is.na(bb) & bb > 0, k / bb, NA), 2),
+      HR9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (coalesce(hr,0L) / IP_dec) * 9, NA), 1),
+      FIP          = round(ifelse(!is.na(IP_dec) & IP_dec > 0,
+                                  ((13*coalesce(hr,0L) + 3*(coalesce(bb,0L)+coalesce(hbp,0L)) -
+                                     2*coalesce(k,0L)) / IP_dec) + 3.10, NA), 2),
+      ERA          = suppressWarnings(as.numeric(era)),
+      WHIP         = suppressWarnings(as.numeric(whip)),
+      IP           = IP_dec,
+      age          = NA_integer_,
+      college      = school,
+      class_year   = year,
+      has_pbp      = FALSE
+    ) %>%
+    select(pitcher_name, pitch_hand, age, class_year, college,
+           team_name, league_name, G = app, IP, ERA, FIP, WHIP,
+           K9, BB9, KBB, HR9, has_pbp, source_key)
+  acq_nwl_pitchers_clean <- acq_nwl_pitching %>%
+    mutate(
+      pitcher_name = paste(firstname, lastname),
+      pitch_hand   = str_extract(coalesce(bats_throws, ""), "(?<=/).$"),
+      team_name    = team_abv,
+      IP_dec       = suppressWarnings(as.numeric(IP)),
+      ERA_num      = suppressWarnings(as.numeric(ERA)),
+      WHIP_num     = suppressWarnings(as.numeric(WHIP)),
+      K9_num       = suppressWarnings(as.numeric(`K/9`)),
+      BB9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (BB / IP_dec) * 9, NA), 1),
+      KBB          = round(ifelse(!is.na(BB) & BB > 0, K / BB, NA), 2),
+      HR9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (HR / IP_dec) * 9, NA), 1),
+      FIP          = round(ifelse(!is.na(IP_dec) & IP_dec > 0,
+                                  ((13*coalesce(HR,0L) + 3*(coalesce(BB,0L)+coalesce(HB,0L)) -
+                                      2*coalesce(K,0L)) / IP_dec) + 3.10, NA), 2),
+      age          = NA_integer_,
+      class_year   = class,
+      has_pbp      = FALSE,
+      source_key   = paste(pitcher_name, team_abv, "Northwoods League")
+    ) %>%
+    select(pitcher_name, pitch_hand, age, class_year, college,
+           team_name, league_name, G, IP = IP_dec,
+           ERA = ERA_num, FIP, WHIP = WHIP_num,
+           K9 = K9_num, BB9, KBB, HR9, has_pbp, source_key)
+
+  acq_all_pitchers <<- bind_rows(
+    acq_pitcher_season_tagged %>%
+      select(pitcher_name, pitch_hand, age, class_year, college,
+             team_name, league_name, G, IP, ERA, FIP, WHIP,
+             K9, BB9, KBB, HR9, has_pbp, source_key),
+    acq_necbl_pitchers_clean,
+    acq_nwl_pitchers_clean
   )
 
-acq_necbl_pitchers_clean <- acq_necbl_pitching %>%
-  mutate(source_key = paste(player_name, team, "NECBL")) %>%
-  mutate(
-    pitcher_name = coalesce(full_name, player_name),
-    pitch_hand   = throws,
-    team_name    = team,
-    IP_dec       = suppressWarnings(as.numeric(ip)),
-    K9           = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (k  / IP_dec) * 9, NA), 1),
-    BB9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (bb / IP_dec) * 9, NA), 1),
-    KBB          = round(ifelse(!is.na(bb) & bb > 0, k / bb, NA), 2),
-    HR9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (coalesce(hr,0L) / IP_dec) * 9, NA), 1),
-    FIP          = round(ifelse(!is.na(IP_dec) & IP_dec > 0,
-                                ((13*coalesce(hr,0L) + 3*(coalesce(bb,0L)+coalesce(hbp,0L)) -
-                                   2*coalesce(k,0L)) / IP_dec) + 3.10, NA), 2),
-    ERA          = suppressWarnings(as.numeric(era)),
-    WHIP         = suppressWarnings(as.numeric(whip)),
-    IP           = IP_dec,
-    age          = NA_integer_,
-    college      = school,
-    class_year   = year,
-    has_pbp      = FALSE
-  ) %>%
-  select(pitcher_name, pitch_hand, age, class_year, college,
-         team_name, league_name, G = app, IP, ERA, FIP, WHIP,
-         K9, BB9, KBB, HR9, has_pbp, source_key)
+  acq_hitting_all_clean <- acq_hitting_all %>%
+    mutate(source_key = as.character(player_id), class_year = NA_character_, K = SO) %>%
+    select(player_name, position, age, class_year, college,
+           team_name, league_name, G, AB, H, R,
+           `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, source_key)
+  acq_necbl_hitting_clean <- acq_necbl_hitting %>%
+    mutate(source_key = paste(player_name, Team, "NECBL")) %>%
+    mutate(
+      player_name = coalesce(full_name, player_name),
+      team_name   = Team,
+      age         = NA_integer_,
+      class_year  = year,
+      college     = school,
+      R           = NA_integer_,
+      SB          = NA_integer_,
+      OPS         = round(coalesce(obp, 0) + coalesce(slg, 0), 3),
+      AVG         = avg,
+      OBP         = obp,
+      SLG         = slg
+    ) %>%
+    select(player_name, position, age, class_year, college,
+           team_name, league_name, G = gp, AB = ab, H = h, R,
+           `2B` = `2b`, `3B` = `3b`, HR = hr, RBI = rbi,
+           BB = bb, K = k, SB, AVG, OBP, SLG, OPS, source_key)
+  acq_nwl_hitting_clean <- acq_nwl_hitting %>%
+    mutate(
+      player_name = paste(firstname, lastname), team_name = team_abv,
+      age = NA_integer_, class_year = class,
+      AVG = suppressWarnings(as.numeric(AVG)),
+      OBP = suppressWarnings(as.numeric(OBP)),
+      SLG = suppressWarnings(as.numeric(SLG)),
+      OPS = suppressWarnings(as.numeric(OPS)),
+      source_key  = paste(player_name, team_abv, "Northwoods League")
+    ) %>%
+    select(player_name, position, age, class_year, college,
+           team_name, league_name, G, AB, H, R,
+           `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, source_key)
 
-acq_nwl_pitchers_clean <- acq_nwl_pitching %>%
-  mutate(
-    pitcher_name = paste(firstname, lastname),
-    pitch_hand   = str_extract(coalesce(bats_throws, ""), "(?<=/).$"),
-    team_name    = team_abv,
-    IP_dec       = suppressWarnings(as.numeric(IP)),
-    ERA_num      = suppressWarnings(as.numeric(ERA)),
-    WHIP_num     = suppressWarnings(as.numeric(WHIP)),
-    K9_num       = suppressWarnings(as.numeric(`K/9`)),
-    BB9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (BB / IP_dec) * 9, NA), 1),
-    KBB          = round(ifelse(!is.na(BB) & BB > 0, K / BB, NA), 2),
-    HR9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (HR / IP_dec) * 9, NA), 1),
-    FIP          = round(ifelse(!is.na(IP_dec) & IP_dec > 0,
-                                ((13*coalesce(HR,0L) + 3*(coalesce(BB,0L)+coalesce(HB,0L)) -
-                                    2*coalesce(K,0L)) / IP_dec) + 3.10, NA), 2),
-    age          = NA_integer_,
-    class_year   = class,
-    has_pbp      = FALSE,
-    source_key   = paste(pitcher_name, team_abv, "Northwoods League")
-  ) %>%
-  select(pitcher_name, pitch_hand, age, class_year, college,
-         team_name, league_name, G, IP = IP_dec,
-         ERA = ERA_num, FIP, WHIP = WHIP_num,
-         K9 = K9_num, BB9, KBB, HR9, has_pbp, source_key)
+  acq_all_hitters <<- bind_rows(acq_hitting_all_clean, acq_necbl_hitting_clean, acq_nwl_hitting_clean)
 
-acq_all_pitchers <- bind_rows(
-  acq_pitcher_season_tagged %>%
-    select(pitcher_name, pitch_hand, age, class_year, college,
-           team_name, league_name, G, IP, ERA, FIP, WHIP,
-           K9, BB9, KBB, HR9, has_pbp, source_key),
-  acq_necbl_pitchers_clean,
-  acq_nwl_pitchers_clean
-)
-
-acq_hitting_all_clean <- acq_hitting_all %>%
-  mutate(source_key = as.character(player_id), class_year = NA_character_, K = SO) %>%
-  select(player_name, position, age, class_year, college,
-         team_name, league_name, G, AB, H, R,
-         `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, source_key)
-
-acq_necbl_hitting_clean <- acq_necbl_hitting %>%
-  mutate(source_key = paste(player_name, Team, "NECBL")) %>%
-  mutate(
-    player_name = coalesce(full_name, player_name),
-    team_name   = Team,
-    age         = NA_integer_,
-    class_year  = year,
-    college     = school,
-    R           = NA_integer_,
-    SB          = NA_integer_,
-    OPS         = round(coalesce(obp, 0) + coalesce(slg, 0), 3),
-    AVG         = avg,
-    OBP         = obp,
-    SLG         = slg
-  ) %>%
-  select(player_name, position, age, class_year, college,
-         team_name, league_name, G = gp, AB = ab, H = h, R,
-         `2B` = `2b`, `3B` = `3b`, HR = hr, RBI = rbi,
-         BB = bb, K = k, SB, AVG, OBP, SLG, OPS, source_key)
-
-acq_nwl_hitting_clean <- acq_nwl_hitting %>%
-  mutate(
-    player_name = paste(firstname, lastname), team_name = team_abv,
-    age = NA_integer_, class_year = class,
-    AVG = suppressWarnings(as.numeric(AVG)),
-    OBP = suppressWarnings(as.numeric(OBP)),
-    SLG = suppressWarnings(as.numeric(SLG)),
-    OPS = suppressWarnings(as.numeric(OPS)),
-    source_key  = paste(player_name, team_abv, "Northwoods League")
-  ) %>%
-  select(player_name, position, age, class_year, college,
-         team_name, league_name, G, AB, H, R,
-         `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, source_key)
-
-acq_all_hitters <- bind_rows(acq_hitting_all_clean, acq_necbl_hitting_clean, acq_nwl_hitting_clean)
+  message("[acq] Rebuilt combined tables — ", nrow(acq_all_pitchers), " pitchers, ",
+          nrow(acq_all_hitters), " hitters.")
+}
 
 acq_age_or_class <- function(age, class_year) {
   dplyr::case_when(
@@ -4030,8 +4036,8 @@ acq_age_or_class <- function(age, class_year) {
   )
 }
 
-message("[acq] Total pitchers: ", nrow(acq_all_pitchers))
-message("[acq] Total hitters:  ", nrow(acq_all_hitters))
+acq_rebuild_combined()
+
 
 # ── 3. Constants ─────────────────────────────────────────────────────────────
 ACQ_NAVY  <- "#0D2B56"
@@ -4575,6 +4581,7 @@ DTOutput("top10_pitching_table")
 # ── 6. Server module ─────────────────────────────────────────────────────────
 acq_board_server <- function(input, output, session) {
 
+  data_version <- reactiveVal(0)
   ineligible   <- reactiveVal(acq_load_ineligible())
   ineligible_h <- reactiveVal(acq_load_ineligible_h())
   selected_key <- reactiveVal(NULL)
@@ -4697,6 +4704,10 @@ observeEvent(input$run_updates_btn, {
     update_progress("Step 3/3: Updating Northwoods League...")
     run_nwl_update()
 
+    update_progress("Rebuilding combined tables...")
+    acq_rebuild_combined()
+    data_version(data_version() + 1)
+
     list(success = TRUE)
 
   }, error = function(e) {
@@ -4767,7 +4778,7 @@ observeEvent(input$run_updates_btn, {
       df <- df %>% filter(is.na(age) | age <= input$max_age_p)
 
     df %>% arrange(ERA)
-  }) %>% bindEvent(input$apply_pbp_filter, ineligible(), ignoreNULL = FALSE)
+  }) %>% bindEvent(input$apply_pbp_filter, ineligible(), data_version(), ignoreNULL = FALSE)
 
   output$pbp_subtitle <- renderText(glue("{nrow(filtered_pitchers())} pitchers"))
 
@@ -4813,7 +4824,7 @@ observeEvent(input$run_updates_btn, {
       df <- df %>% filter(is.na(age) | age <= input$max_age_h)
 
     df %>% filter(!is.na(AB), AB >= input$min_ab) %>% arrange(desc(OPS))
-  }) %>% bindEvent(input$apply_season_h, ineligible_h(), ignoreNULL = FALSE)
+  }) %>% bindEvent(input$apply_season_h, ineligible_h(), data_version(), ignoreNULL = FALSE)
 
   output$season_h_subtitle <- renderText(glue("{nrow(filtered_hitters())} hitters"))
 
@@ -4903,6 +4914,7 @@ observeEvent(input$run_updates_btn, {
 
   # ── Top 10 ──────────────────────────────────────────────────────────────
   top10_pitcher_data <- function(league_in, min_ip, max_age, stat, role, hand) {
+  data_version()  
   df <- acq_all_pitchers %>%
     filter(!source_key %in% ineligible()) %>%
     filter(!is.na(ERA), !is.na(IP), IP >= min_ip)
@@ -4944,6 +4956,7 @@ render_top10_pitcher_dt <- function(data) {
 }
 
   top10_hitter_dt <- function(league_in, min_ab, max_age, stat, pos) {
+    data_version()  
     df <- acq_all_hitters %>%
       filter(!source_key %in% ineligible_h()) %>%
       filter(position != "P", !is.na(OPS), !is.na(AB), AB >= min_ab)
