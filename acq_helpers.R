@@ -82,7 +82,7 @@ flatten_game_pbp_mlb <- function(gamePk) {
 }
 
 fetch_schedule_mlb <- function(league_id,
-                               start = "2026-06-01",
+                               start = "2026-05-01",
                                end   = format(Sys.Date(), "%Y-%m-%d")) {
   resp <- httr::GET(
     "https://statsapi.mlb.com/api/v1/schedule",
@@ -451,9 +451,6 @@ fetch_necbl_roster <- function(team_slug) {
 }
 
 # ── NWL scraper helpers ─────────────────────────────────────────────────────────
-# Recovered from update_nwl.R (previously a standalone local script, run
-# manually to regenerate nwl_hitting.parquet / nwl_pitching.parquet / nwl_bios.parquet).
-# Wired in here so the "Run updates" button can call it live.
 
 NWL_SEASON_ID <- 26
 
