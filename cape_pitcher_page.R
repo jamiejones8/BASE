@@ -249,69 +249,219 @@ cape_pitcher_prepare_view <- function(raw_df) {
     )
 }
 
+cape_pitcher_pa_index <- function(d) {
+  if (is.null(d) || nrow(d) == 0) {
+    return(d)
+  }
+
+  if (!"Top/Bottom" %in% names(d)) {
+    d[["Top/Bottom"]] <- NA_character_
+  }
+
+  d %>%
+    mutate(
+      Inning = suppressWarnings(as.integer(Inning)),
+      `Top/Bottom` = as.character(`Top/Bottom`),
+      PAofInning = suppressWarnings(as.integer(PAofInning)),
+      PitchofPA = suppressWarnings(as.integer(PitchofPA)),
+      cape_row_order = if ("caps_row_id" %in% names(d)) {
+        dplyr::coalesce(cape_pitcher_safe_num(caps_row_id), seq_len(n()))
+      } else {
+        seq_len(n())
+      }
+    ) %>%
+    arrange(
+      dplyr::coalesce(as.character(GameID), ""),
+      dplyr::coalesce(Inning, 0L),
+      dplyr::coalesce(as.character(`Top/Bottom`), ""),
+      dplyr::coalesce(PAofInning, 0L),
+      dplyr::coalesce(PitchofPA, 0L),
+      cape_row_order
+    ) %>%
+    mutate(pa_index = cumsum(dplyr::coalesce(PitchofPA == 1L, FALSE))) %>%
+    select(-cape_row_order)
+}
+
+cape_pitcher_pa_last <- function(d) {
+  indexed <- cape_pitcher_pa_index(d)
+  if (is.null(indexed) || nrow(indexed) == 0) {
+    return(indexed)
+  }
+
+  indexed %>%
+    filter(pa_index > 0) %>%
+    group_by(pa_index) %>%
+    slice_max(dplyr::coalesce(PitchofPA, 0L), n = 1, with_ties = FALSE) %>%
+    ungroup()
+}
+
+cape_pitcher_summary <- function(d) {
+  empty_summary <- list(
+    Games = 0L,
+    Pitches = 0L,
+    PA = 0L,
+    Outs = 0L,
+    Hits = 0L,
+    Runs = 0,
+    Walks = 0L,
+    Strikeouts = 0L,
+    Homers = 0L,
+    AVG = NA_real_,
+    OBP = NA_real_,
+    SLG = NA_real_,
+    OPS = NA_real_,
+    WHIP = NA_real_,
+    CSW = NA_real_,
+    Whiff = NA_real_,
+    Chase = NA_real_,
+    KRate = NA_real_,
+    BBRate = NA_real_,
+    KMinusBB = NA_real_,
+    xwOBA = NA_real_
+  )
+
+  if (is.null(d) || nrow(d) == 0) {
+    return(empty_summary)
+  }
+
+  pa_last <- cape_pitcher_pa_last(d)
+  if (is.null(pa_last) || nrow(pa_last) == 0) {
+    empty_summary$Games <- if ("GameUID" %in% names(d)) {
+      length(unique(d$GameUID[!is.na(d$GameUID)]))
+    } else {
+      length(unique(d$Date[!is.na(d$Date)]))
+    }
+    empty_summary$Pitches <- nrow(d)
+    empty_summary$CSW <- cape_pitcher_rate(sum(d$CSW, na.rm = TRUE), nrow(d))
+    empty_summary$Whiff <- cape_pitcher_rate(sum(d$WhiffP, na.rm = TRUE), sum(d$Swing, na.rm = TRUE))
+    empty_summary$Chase <- cape_pitcher_rate(sum(d$Chase, na.rm = TRUE), sum(d$OutZone, na.rm = TRUE))
+    return(empty_summary)
+  }
+
+  outs_on_play <- suppressWarnings(as.integer(pa_last$OutsOnPlay))
+  outs_on_play[is.na(outs_on_play)] <- 0L
+
+  is_strikeout <- as.character(pa_last$KorBB) == "Strikeout"
+  is_walk <- as.character(pa_last$KorBB) == "Walk"
+  is_hbp <- as.character(pa_last$PitchCall) == "HitByPitch"
+  is_single <- as.character(pa_last$PlayResult) == "Single"
+  is_double <- as.character(pa_last$PlayResult) == "Double"
+  is_triple <- as.character(pa_last$PlayResult) == "Triple"
+  is_homer <- as.character(pa_last$PlayResult) == "HomeRun"
+
+  outs_recorded <- ifelse(is_strikeout & outs_on_play < 1L, 1L, outs_on_play)
+  pa_total <- nrow(pa_last)
+  hits <- sum(is_single | is_double | is_triple | is_homer, na.rm = TRUE)
+  walks <- sum(is_walk, na.rm = TRUE)
+  hbp <- sum(is_hbp, na.rm = TRUE)
+  strikeouts <- sum(is_strikeout, na.rm = TRUE)
+  homers <- sum(is_homer, na.rm = TRUE)
+  outs_total <- sum(outs_recorded, na.rm = TRUE)
+  ab <- max(pa_total - walks - hbp, 0L)
+  total_bases <- sum(is_single, na.rm = TRUE) +
+    2L * sum(is_double, na.rm = TRUE) +
+    3L * sum(is_triple, na.rm = TRUE) +
+    4L * sum(is_homer, na.rm = TRUE)
+
+  avg_against <- cape_pitcher_rate(hits, ab)
+  obp_against <- cape_pitcher_rate(hits + walks + hbp, pa_total)
+  slg_against <- cape_pitcher_rate(total_bases, ab)
+  ops_against <- if (is.na(obp_against) || is.na(slg_against)) NA_real_ else obp_against + slg_against
+  whip <- cape_pitcher_rate(hits + walks, outs_total / 3)
+  csw_rate <- cape_pitcher_rate(sum(d$CSW, na.rm = TRUE), nrow(d))
+  whiff_rate <- cape_pitcher_rate(sum(d$WhiffP, na.rm = TRUE), sum(d$Swing, na.rm = TRUE))
+  chase_rate <- cape_pitcher_rate(sum(d$Chase, na.rm = TRUE), sum(d$OutZone, na.rm = TRUE))
+  k_rate <- cape_pitcher_rate(strikeouts, pa_total)
+  bb_rate <- cape_pitcher_rate(walks, pa_total)
+  k_minus_bb <- cape_pitcher_rate(strikeouts - walks, pa_total)
+  xwoba <- if ("paWOBA" %in% names(pa_last)) mean(pa_last$paWOBA, na.rm = TRUE) else NA_real_
+  if (!is.finite(xwoba)) xwoba <- NA_real_
+
+  list(
+    Games = if ("GameUID" %in% names(d)) {
+      length(unique(d$GameUID[!is.na(d$GameUID)]))
+    } else {
+      length(unique(d$Date[!is.na(d$Date)]))
+    },
+    Pitches = nrow(d),
+    PA = pa_total,
+    Outs = outs_total,
+    Hits = hits,
+    Runs = sum(cape_pitcher_safe_num(d$RunsScored), na.rm = TRUE),
+    Walks = walks,
+    Strikeouts = strikeouts,
+    Homers = homers,
+    AVG = avg_against,
+    OBP = obp_against,
+    SLG = slg_against,
+    OPS = ops_against,
+    WHIP = whip,
+    CSW = csw_rate,
+    Whiff = whiff_rate,
+    Chase = chase_rate,
+    KRate = k_rate,
+    BBRate = bb_rate,
+    KMinusBB = k_minus_bb,
+    xwOBA = xwoba
+  )
+}
+
 cape_pitcher_statline <- function(d) {
   if (is.null(d) || nrow(d) == 0) {
     return(list())
   }
 
-  pa_rows <- d %>% filter(PACheck)
-  outs_on_play <- cape_pitcher_safe_num(pa_rows$OutsOnPlay)
-  outs_on_play[is.na(outs_on_play)] <- 0
-  outs_recorded <- sum(ifelse(pa_rows$K %in% TRUE, 1, outs_on_play), na.rm = TRUE)
-  innings_pitched <- outs_recorded / 3
-
-  games <- if ("GameUID" %in% names(d)) {
-    length(unique(d$GameUID[!is.na(d$GameUID)]))
-  } else {
-    length(unique(d$Date[!is.na(d$Date)]))
-  }
-
-  bf <- sum(pa_rows$PACheck, na.rm = TRUE)
-  hits <- sum(pa_rows$Hit, na.rm = TRUE)
-  runs <- sum(cape_pitcher_safe_num(d$RunsScored), na.rm = TRUE)
-  walks <- sum(pa_rows$BB, na.rm = TRUE)
-  strikeouts <- sum(pa_rows$K, na.rm = TRUE)
-  homers <- sum(pa_rows$HR, na.rm = TRUE)
-  hbp <- sum(pa_rows$HBP, na.rm = TRUE)
-  sf <- sum(pa_rows$SF, na.rm = TRUE)
-  ab <- sum(pa_rows$AB, na.rm = TRUE)
-  total_bases <- sum(pa_rows$X1B, na.rm = TRUE) +
-    2 * sum(pa_rows$X2B, na.rm = TRUE) +
-    3 * sum(pa_rows$X3B, na.rm = TRUE) +
-    4 * sum(pa_rows$HR, na.rm = TRUE)
-
-  avg_against <- cape_pitcher_rate(hits, ab)
-  obp_against <- cape_pitcher_rate(hits + walks + hbp, ab + walks + hbp + sf)
-  slg_against <- cape_pitcher_rate(total_bases, ab)
-  ops_against <- if (is.na(obp_against) || is.na(slg_against)) NA_real_ else obp_against + slg_against
-  whip <- cape_pitcher_rate(hits + walks, innings_pitched)
-  csw_rate <- cape_pitcher_rate(sum(d$CSW, na.rm = TRUE), nrow(d))
-  whiff_rate <- cape_pitcher_rate(sum(d$WhiffP, na.rm = TRUE), sum(d$Swing, na.rm = TRUE))
-  k_rate <- cape_pitcher_rate(strikeouts, bf)
-  bb_rate <- cape_pitcher_rate(walks, bf)
-  k_minus_bb <- cape_pitcher_rate(strikeouts - walks, bf)
-  xwoba <- mean(pa_rows$paWOBA, na.rm = TRUE)
-  if (!is.finite(xwoba)) xwoba <- NA_real_
+  summary <- cape_pitcher_summary(d)
 
   list(
-    Games = as.character(games),
-    IP = cape_pitcher_format_ip(outs_recorded),
-    BF = as.character(bf),
-    H = as.character(hits),
-    R = as.character(runs),
-    BB = as.character(walks),
-    K = as.character(strikeouts),
-    HR = as.character(homers),
-    WHIP = cape_pitcher_format_num(whip, 2),
-    AVG = cape_pitcher_format_rate(avg_against, 3),
-    OBP = cape_pitcher_format_rate(obp_against, 3),
-    SLG = cape_pitcher_format_rate(slg_against, 3),
-    OPS = cape_pitcher_format_rate(ops_against, 3),
-    `CSW%` = cape_pitcher_format_pct(csw_rate, 1),
-    `Whiff%` = cape_pitcher_format_pct(whiff_rate, 1),
-    `K-BB%` = cape_pitcher_format_pct(k_minus_bb, 1),
-    xwOBA = cape_pitcher_format_rate(xwoba, 3)
+    Games = as.character(summary$Games),
+    IP = cape_pitcher_format_ip(summary$Outs),
+    BF = as.character(summary$PA),
+    H = as.character(summary$Hits),
+    R = as.character(summary$Runs),
+    BB = as.character(summary$Walks),
+    K = as.character(summary$Strikeouts),
+    HR = as.character(summary$Homers),
+    WHIP = cape_pitcher_format_num(summary$WHIP, 2),
+    AVG = cape_pitcher_format_rate(summary$AVG, 3),
+    OBP = cape_pitcher_format_rate(summary$OBP, 3),
+    SLG = cape_pitcher_format_rate(summary$SLG, 3),
+    OPS = cape_pitcher_format_rate(summary$OPS, 3),
+    `CSW%` = cape_pitcher_format_pct(summary$CSW, 1),
+    `Whiff%` = cape_pitcher_format_pct(summary$Whiff, 1),
+    `K-BB%` = cape_pitcher_format_pct(summary$KMinusBB, 1),
+    xwOBA = cape_pitcher_format_rate(summary$xwOBA, 3)
   )
+}
+
+cape_pitcher_split_table <- function(d) {
+  if (is.null(d) || nrow(d) == 0) {
+    return(tibble::tibble())
+  }
+
+  d %>%
+    filter(!is.na(BatSide)) %>%
+    group_by(BatSide) %>%
+    group_split() %>%
+    purrr::map_dfr(function(g) {
+      summary <- cape_pitcher_summary(g)
+
+      tibble::tibble(
+        Split = ifelse(g$BatSide[1] == "L", "vs LHH", "vs RHH"),
+        `Stuff+` = round(mnn(g$StuffPlus)),
+        `Pitch+` = round(mnn(g$PitchingPlus)),
+        PA = summary$PA,
+        AVG = summary$AVG,
+        OPS = summary$OPS,
+        OBP = summary$OBP,
+        SLG = summary$SLG,
+        `Whiff%` = summary$Whiff,
+        `Chase%` = summary$Chase,
+        `K%` = summary$KRate,
+        `BB%` = summary$BBRate
+      )
+    }) %>%
+    arrange(Split)
 }
 
 cape_pitcher_statline_ui <- function(statline) {
@@ -1740,7 +1890,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
 
   output$cpp_psplit <- renderReactable({
     make_table(
-      pitcher_split(pitcher_full()),
+      cape_pitcher_split_table(pitcher_full()),
       pct = c("Whiff%", "Chase%", "K%", "BB%"),
       d3 = c("AVG", "OPS", "OBP", "SLG"),
       int = c("PA", "Stuff+", "Pitch+")
