@@ -228,6 +228,16 @@ cape_pitcher_init_data <- function(path = "CapeCod26.parquet", raw_df = NULL) {
 
 cape_pitcher_prepare_view <- function(raw_df) {
   prep_pitches(raw_df) %>%
+    {
+      if (!"Top/Bottom" %in% names(.)) {
+        if ("Top.Bottom" %in% names(.)) {
+          .[["Top/Bottom"]] <- as.character(.[["Top.Bottom"]])
+        } else {
+          .[["Top/Bottom"]] <- NA_character_
+        }
+      }
+      .
+    } %>%
     mutate(
       TaggedPitchType = cape_pitcher_clean_pitch_type(TaggedPitchType),
       AutoPitchType = cape_pitcher_clean_pitch_type(AutoPitchType),
@@ -242,57 +252,40 @@ cape_pitcher_prepare_view <- function(raw_df) {
         paste0(as.integer(Balls), "-", as.integer(Strikes)),
         NA_character_
       ),
+      `Top/Bottom` = as.character(`Top/Bottom`),
       PitcherDisplay = cape_pitcher_format_pitcher_name(Pitcher),
       BatterDisplay = vapply(as.character(Batter), cape_pitcher_format_name, character(1)),
       TeamDisplay = cape_pitcher_ccbl_name(PitcherTeam),
       CSW = PitchCall %in% c("StrikeCalled", "StrikeSwinging")
-    )
-}
-
-cape_pitcher_pa_index <- function(d) {
-  if (is.null(d) || nrow(d) == 0) {
-    return(d)
-  }
-
-  if (!"Top/Bottom" %in% names(d)) {
-    d[["Top/Bottom"]] <- NA_character_
-  }
-
-  d %>%
+    ) %>%
+    group_by(GameID, Inning, `Top/Bottom`, PAofInning) %>%
     mutate(
-      Inning = suppressWarnings(as.integer(Inning)),
-      `Top/Bottom` = as.character(`Top/Bottom`),
-      PAofInning = suppressWarnings(as.integer(PAofInning)),
-      PitchofPA = suppressWarnings(as.integer(PitchofPA)),
-      cape_row_order = if ("caps_row_id" %in% names(d)) {
-        dplyr::coalesce(cape_pitcher_safe_num(caps_row_id), seq_len(n()))
-      } else {
-        seq_len(n())
+      PACheck = dplyr::row_number() == dplyr::n(),
+      BB = PACheck & KorBB %in% c("Walk", "IntentionalWalk"),
+      K = PACheck & KorBB == "Strikeout",
+      HBP = PACheck & (PlayResult == "HitByPitch" | PitchCall == "HitByPitch"),
+      SF = PACheck & PlayResult %in% c("Sacrifice", "SacFly"),
+      X1B = PACheck & PlayResult == "Single",
+      X2B = PACheck & PlayResult == "Double",
+      X3B = PACheck & PlayResult == "Triple",
+      HR = PACheck & PlayResult == "HomeRun",
+      Hit = X1B | X2B | X3B | HR,
+      AB = PACheck & !BB & !HBP & !SF,
+      paval_tmp = dplyr::case_when(
+        KorBB == "Strikeout" ~ 0,
+        KorBB == "Walk" ~ WOBA_BB,
+        KorBB == "IntentionalWalk" ~ NA_real_,
+        HBP ~ WOBA_HBP,
+        PitchCall == "InPlay" ~ xwOBA,
+        TRUE ~ NA_real_
+      ),
+      paWOBA = {
+        v <- paval_tmp[!is.na(paval_tmp)]
+        if (length(v)) v[[1]] else NA_real_
       }
     ) %>%
-    arrange(
-      dplyr::coalesce(as.character(GameID), ""),
-      dplyr::coalesce(Inning, 0L),
-      dplyr::coalesce(as.character(`Top/Bottom`), ""),
-      dplyr::coalesce(PAofInning, 0L),
-      dplyr::coalesce(PitchofPA, 0L),
-      cape_row_order
-    ) %>%
-    mutate(pa_index = cumsum(dplyr::coalesce(PitchofPA == 1L, FALSE))) %>%
-    select(-cape_row_order)
-}
-
-cape_pitcher_pa_last <- function(d) {
-  indexed <- cape_pitcher_pa_index(d)
-  if (is.null(indexed) || nrow(indexed) == 0) {
-    return(indexed)
-  }
-
-  indexed %>%
-    filter(pa_index > 0) %>%
-    group_by(pa_index) %>%
-    slice_max(dplyr::coalesce(PitchofPA, 0L), n = 1, with_ties = FALSE) %>%
-    ungroup()
+    ungroup() %>%
+    select(-paval_tmp)
 }
 
 cape_pitcher_summary <- function(d) {
@@ -324,8 +317,8 @@ cape_pitcher_summary <- function(d) {
     return(empty_summary)
   }
 
-  pa_last <- cape_pitcher_pa_last(d)
-  if (is.null(pa_last) || nrow(pa_last) == 0) {
+  pa_rows <- d %>% filter(PACheck %in% TRUE)
+  if (nrow(pa_rows) == 0) {
     empty_summary$Games <- if ("GameUID" %in% names(d)) {
       length(unique(d$GameUID[!is.na(d$GameUID)]))
     } else {
@@ -338,19 +331,19 @@ cape_pitcher_summary <- function(d) {
     return(empty_summary)
   }
 
-  outs_on_play <- suppressWarnings(as.integer(pa_last$OutsOnPlay))
+  outs_on_play <- suppressWarnings(as.integer(pa_rows$OutsOnPlay))
   outs_on_play[is.na(outs_on_play)] <- 0L
 
-  is_strikeout <- as.character(pa_last$KorBB) == "Strikeout"
-  is_walk <- as.character(pa_last$KorBB) == "Walk"
-  is_hbp <- as.character(pa_last$PitchCall) == "HitByPitch"
-  is_single <- as.character(pa_last$PlayResult) == "Single"
-  is_double <- as.character(pa_last$PlayResult) == "Double"
-  is_triple <- as.character(pa_last$PlayResult) == "Triple"
-  is_homer <- as.character(pa_last$PlayResult) == "HomeRun"
+  is_strikeout <- pa_rows$K %in% TRUE
+  is_walk <- pa_rows$BB %in% TRUE
+  is_hbp <- pa_rows$HBP %in% TRUE
+  is_single <- pa_rows$X1B %in% TRUE
+  is_double <- pa_rows$X2B %in% TRUE
+  is_triple <- pa_rows$X3B %in% TRUE
+  is_homer <- pa_rows$HR %in% TRUE
 
   outs_recorded <- ifelse(is_strikeout & outs_on_play < 1L, 1L, outs_on_play)
-  pa_total <- nrow(pa_last)
+  pa_total <- nrow(pa_rows)
   hits <- sum(is_single | is_double | is_triple | is_homer, na.rm = TRUE)
   walks <- sum(is_walk, na.rm = TRUE)
   hbp <- sum(is_hbp, na.rm = TRUE)
@@ -374,7 +367,7 @@ cape_pitcher_summary <- function(d) {
   k_rate <- cape_pitcher_rate(strikeouts, pa_total)
   bb_rate <- cape_pitcher_rate(walks, pa_total)
   k_minus_bb <- cape_pitcher_rate(strikeouts - walks, pa_total)
-  xwoba <- if ("paWOBA" %in% names(pa_last)) mean(pa_last$paWOBA, na.rm = TRUE) else NA_real_
+  xwoba <- if ("paWOBA" %in% names(pa_rows)) mean(pa_rows$paWOBA, na.rm = TRUE) else NA_real_
   if (!is.finite(xwoba)) xwoba <- NA_real_
 
   list(
