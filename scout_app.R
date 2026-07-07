@@ -216,6 +216,7 @@ debug_inputs <- function(d) {
 prep_pitches <- function(df) {
   need_chr <- c("Pitcher","Batter","PitcherThrows","BatterSide","PitcherTeam",
                 "BatterTeam","TaggedPitchType","AutoPitchType","PitchCall",
+                "Top/Bottom",
                 "KorBB","PlayResult")
   need_num <- c("RelSpeed","SpinRate","InducedVertBreak","HorzBreak","RelHeight",
                 "RelSide","Extension","PlateLocSide","PlateLocHeight","ExitSpeed",
@@ -248,8 +249,8 @@ prep_pitches <- function(df) {
                           PitcherThrows %in% c("Right","R") ~ "R", TRUE ~ NA_character_))
 
   df <- df %>%
-    arrange(GameID, Inning, PAofInning, PitchofPA) %>%
-    group_by(GameID, Inning, PAofInning) %>%
+    arrange(GameID, Inning, `Top/Bottom`, PAofInning, PitchofPA) %>%
+    group_by(GameID, Inning, `Top/Bottom`, PAofInning) %>%
     mutate(lastPitch = dplyr::row_number() == dplyr::n()) %>%
     ungroup()
 
@@ -278,7 +279,7 @@ prep_pitches <- function(df) {
       BBE     = PitchCall == "InPlay" & !is.na(ExitSpeed),
       FirstPitch = Balls == 0 & Strikes == 0,
       TwoStrike  = Strikes == 2) %>%
-    group_by(GameID, Inning, PAofInning) %>%
+    group_by(GameID, Inning, `Top/Bottom`, PAofInning) %>%
     mutate(paval_tmp = dplyr::case_when(
              KorBB == "Strikeout"        ~ 0,
              KorBB == "Walk"             ~ WOBA_BB,
@@ -1190,4 +1191,3 @@ scout_server <- function(input, output, session) {
     grade_react(grade_board(pool, input$grade_type, input$minp, pop = plus_pop()), GCOLS)
   })
 }
-

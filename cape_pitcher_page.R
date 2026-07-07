@@ -226,6 +226,16 @@ cape_pitcher_init_data <- function(path = "CapeCod26.parquet", raw_df = NULL) {
     )
 }
 
+cape_pitcher_tag_snapshot <- function(d) {
+  if (is.null(d) || !"TaggedPitchType" %in% names(d)) {
+    return(character())
+  }
+
+  tags <- as.character(d$TaggedPitchType)
+  tags[is.na(tags)] <- "__NA__"
+  tags
+}
+
 cape_pitcher_prepare_view <- function(raw_df) {
   prep_pitches(raw_df) %>%
     {
@@ -257,35 +267,7 @@ cape_pitcher_prepare_view <- function(raw_df) {
       BatterDisplay = vapply(as.character(Batter), cape_pitcher_format_name, character(1)),
       TeamDisplay = cape_pitcher_ccbl_name(PitcherTeam),
       CSW = PitchCall %in% c("StrikeCalled", "StrikeSwinging")
-    ) %>%
-    group_by(GameID, Inning, `Top/Bottom`, PAofInning) %>%
-    mutate(
-      PACheck = dplyr::row_number() == dplyr::n(),
-      BB = PACheck & KorBB %in% c("Walk", "IntentionalWalk"),
-      K = PACheck & KorBB == "Strikeout",
-      HBP = PACheck & (PlayResult == "HitByPitch" | PitchCall == "HitByPitch"),
-      SF = PACheck & PlayResult %in% c("Sacrifice", "SacFly"),
-      X1B = PACheck & PlayResult == "Single",
-      X2B = PACheck & PlayResult == "Double",
-      X3B = PACheck & PlayResult == "Triple",
-      HR = PACheck & PlayResult == "HomeRun",
-      Hit = X1B | X2B | X3B | HR,
-      AB = PACheck & !BB & !HBP & !SF,
-      paval_tmp = dplyr::case_when(
-        KorBB == "Strikeout" ~ 0,
-        KorBB == "Walk" ~ WOBA_BB,
-        KorBB == "IntentionalWalk" ~ NA_real_,
-        HBP ~ WOBA_HBP,
-        PitchCall == "InPlay" ~ xwOBA,
-        TRUE ~ NA_real_
-      ),
-      paWOBA = {
-        v <- paval_tmp[!is.na(paval_tmp)]
-        if (length(v)) v[[1]] else NA_real_
-      }
-    ) %>%
-    ungroup() %>%
-    select(-paval_tmp)
+    )
 }
 
 cape_pitcher_summary <- function(d) {
@@ -1383,7 +1365,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
                                             data_path = "CapeCod26.parquet",
                                             source_data = NULL) {
   raw_data <- reactiveVal(NULL)
-  loaded_snapshot <- reactiveVal(NULL)
+  loaded_tags <- reactiveVal(character())
   data_loaded <- reactiveVal(FALSE)
   data_loading <- reactiveVal(FALSE)
   manual_heights <- reactiveVal(
@@ -1424,7 +1406,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
         raw_df = source_snapshot
       )
       raw_data(initial_data)
-      loaded_snapshot(initial_data)
+      loaded_tags(cape_pitcher_tag_snapshot(initial_data))
       data_loaded(TRUE)
       selected_rows(integer(0))
     }, error = function(e) {
@@ -1436,14 +1418,10 @@ cape_pitcher_player_page_server <- function(input, output, session,
     data_loading(FALSE)
   }, ignoreInit = FALSE)
 
-  page_data <- reactive({
-    req(isTRUE(data_loaded()))
-    req(!is.null(raw_data()))
-    cape_pitcher_prepare_view(raw_data())
-  })
-
   pitcher_catalog <- reactive({
-    d <- page_data()
+    req(isTRUE(data_loaded()))
+    d <- raw_data()
+    req(!is.null(d))
     req(nrow(d) > 0)
 
     d %>%
@@ -1516,6 +1494,14 @@ cape_pitcher_player_page_server <- function(input, output, session,
     paste(input$cpp_team, input$cpp_pitcher, sep = "::")
   })
 
+  pitcher_raw <- reactive({
+    req(input$cpp_team, input$cpp_pitcher)
+    d <- raw_data()
+    req(!is.null(d))
+
+    d %>% filter(PitcherTeam == input$cpp_team, Pitcher == input$cpp_pitcher)
+  })
+
   observeEvent(current_pitcher_key(), {
     saved <- manual_heights() %>%
       filter(pitcher_key == current_pitcher_key())
@@ -1533,20 +1519,17 @@ cape_pitcher_player_page_server <- function(input, output, session,
   }, ignoreInit = FALSE)
 
   pitcher_full <- reactive({
-    req(input$cpp_team, input$cpp_pitcher)
-    page_data() %>% filter(PitcherTeam == input$cpp_team, Pitcher == input$cpp_pitcher)
+    d <- pitcher_raw()
+    req(nrow(d) > 0)
+    cape_pitcher_prepare_view(d)
   })
 
   current_pending_changes <- reactive({
     req(isTRUE(data_loaded()))
     current <- raw_data()
-    snapshot <- loaded_snapshot()
-    req(nrow(current) == nrow(snapshot))
-
-    current_tags <- as.character(current$TaggedPitchType)
-    snapshot_tags <- as.character(snapshot$TaggedPitchType)
-    current_tags[is.na(current_tags)] <- "__NA__"
-    snapshot_tags[is.na(snapshot_tags)] <- "__NA__"
+    snapshot_tags <- loaded_tags()
+    current_tags <- cape_pitcher_tag_snapshot(current)
+    req(length(current_tags) == length(snapshot_tags))
     sum(current_tags != snapshot_tags)
   })
 
