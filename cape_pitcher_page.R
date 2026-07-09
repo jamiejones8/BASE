@@ -139,10 +139,9 @@ cape_pitcher_resolve_pitch_type <- function(tagged, auto, original_tagged) {
   auto <- cape_pitcher_clean_pitch_type(auto)
   original_tagged <- cape_pitcher_clean_pitch_type(original_tagged)
 
-  retagged <- (!is.na(tagged) | !is.na(original_tagged)) &
-    ((is.na(tagged) != is.na(original_tagged)) | (tagged != original_tagged))
-
-  ifelse(retagged & !is.na(tagged), tagged, dplyr::coalesce(auto, tagged))
+  # Keep the current tagged value sticky for the full session, even when a user
+  # retags back to the pitch's original manual label after trying another tag.
+  dplyr::coalesce(tagged, original_tagged, auto)
 }
 
 cape_pitcher_height_to_feet <- function(height_ft, height_in) {
@@ -1846,6 +1845,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
 
     updated$TaggedPitchType[rows] <- input$cpp_new_pitch_type
     raw_data(updated)
+    selected_rows(integer(0))
     status_class("dirty")
     status_message(paste0("Retagged ", length(rows), " pitch(es) for this session."))
     showNotification(
