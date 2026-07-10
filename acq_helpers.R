@@ -160,6 +160,11 @@ clean_hitting_mlb <- function(df) {
       SLG = stat.slg, OPS = stat.ops
     ) %>%
     dplyr::mutate(
+      league_name = dplyr::case_when(
+        league_name %in% c("MLBDL", "MLB Draft League") ~ "MLB Draft League",
+        league_name %in% c("Appy League", "Appalachian League") ~ "Appalachian League",
+        TRUE ~ league_name
+      ),
       dplyr::across(c(G, AB, H, R, `2B`, `3B`, HR, RBI, BB,
                       SO, HBP, SF, SB, CS, TB), as.integer),
       dplyr::across(c(AVG, OBP, SLG, OPS), as.numeric)
