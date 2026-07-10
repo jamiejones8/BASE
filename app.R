@@ -3984,11 +3984,13 @@ acq_rebuild_combined <- function() {
     acq_nwl_pitchers_clean
   )
 
-  acq_hitting_all_clean <- acq_hitting_all %>%
-    mutate(source_key = as.character(player_id), class_year = NA_character_, K = SO) %>%
+acq_hitting_all_clean <- acq_hitting_all %>%
+    mutate(source_key = as.character(player_id), class_year = NA_character_, K = SO,
+           Bats = if ("bats" %in% names(acq_hitting_all)) bats else NA_character_) %>%
     select(player_name, position, age, class_year, college,
            team_name, league_name, G, AB, H, R,
-           `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, source_key)
+           `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, Bats, source_key)
+
   acq_necbl_hitting_clean <- acq_necbl_hitting %>%
     mutate(source_key = paste(player_name, Team, "NECBL")) %>%
     mutate(
@@ -4002,12 +4004,14 @@ acq_rebuild_combined <- function() {
       OPS         = round(coalesce(obp, 0) + coalesce(slg, 0), 3),
       AVG         = avg,
       OBP         = obp,
-      SLG         = slg
+      SLG         = slg,
+      Bats        = if ("bats" %in% names(acq_necbl_hitting)) bats else NA_character_
     ) %>%
     select(player_name, position, age, class_year, college,
            team_name, league_name, G = gp, AB = ab, H = h, R,
            `2B` = `2b`, `3B` = `3b`, HR = hr, RBI = rbi,
-           BB = bb, K = k, SB, AVG, OBP, SLG, OPS, source_key)
+           BB = bb, K = k, SB, AVG, OBP, SLG, OPS, Bats, source_key)
+
   acq_nwl_hitting_clean <- acq_nwl_hitting %>%
     mutate(
       player_name = paste(firstname, lastname), team_name = team_abv,
@@ -4016,14 +4020,15 @@ acq_rebuild_combined <- function() {
       OBP = suppressWarnings(as.numeric(OBP)),
       SLG = suppressWarnings(as.numeric(SLG)),
       OPS = suppressWarnings(as.numeric(OPS)),
+      Bats = if ("bats_throws" %in% names(acq_nwl_hitting))
+               stringr::str_extract(coalesce(bats_throws, ""), "^[A-Za-z]") else NA_character_,
       source_key  = paste(player_name, team_abv, "Northwoods League")
     ) %>%
     select(player_name, position, age, class_year, college,
            team_name, league_name, G, AB, H, R,
-           `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, source_key)
+           `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, Bats, source_key)
 
   acq_all_hitters <<- bind_rows(acq_hitting_all_clean, acq_necbl_hitting_clean, acq_nwl_hitting_clean)
-
   message("[acq] Rebuilt combined tables — ", nrow(acq_all_pitchers), " pitchers, ",
           nrow(acq_all_hitters), " hitters.")
 }
@@ -4372,6 +4377,12 @@ acq_board_ui <- function() {
                                            width = "70px")
                           ),
                           div(class = "filter-group",
+                              div(class = "filter-label", "Bats"),
+                              selectInput("season_hand_h", NULL,
+                                          choices = c("All","R","L","S"), selected = "All",
+                                          width = "80px")
+                          ),
+                          div(class = "filter-group",
                               div(class = "filter-label", "Max Age"),
                               numericInput("max_age_h", NULL, value = 99, min = 18, step = 1,
                                            width = "70px")
@@ -4416,6 +4427,13 @@ acq_board_ui <- function() {
                                                actionButton("hpos_RF", "RF", class="pos-btn"),
                                                actionButton("hpos_DH", "DH", class="pos-btn")
                                            ),
+                                           div(style = "margin-bottom:10px;",
+                               tags$p("Bats:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
+                               actionButton("bats_All","All", class="pos-btn active"),
+                               actionButton("bats_R",  "R",   class="pos-btn"),
+                               actionButton("bats_L",  "L",   class="pos-btn"),
+                               actionButton("bats_S",  "S",   class="pos-btn")
+                           ),
                                            DTOutput("top10_hitting_table")
                                   ),
                                   tabPanel("Pitching",
@@ -4520,6 +4538,12 @@ DTOutput("top10_pitching_table")
                                actionButton("hpos_m_RF", "RF", class="pos-btn"),
                                actionButton("hpos_m_DH", "DH", class="pos-btn")
                            ),
+                           div(style = "margin-bottom:10px;",
+                               actionButton("bats_m_All","All", class="pos-btn active"),
+                               actionButton("bats_m_R",  "R",   class="pos-btn"),
+                               actionButton("bats_m_L",  "L",   class="pos-btn"),
+                               actionButton("bats_m_S",  "S",   class="pos-btn")
+                           ),
                            DTOutput("top10m_hitting_table")
                   ),
                   tabPanel("Pitching",
@@ -4593,6 +4617,8 @@ acq_board_server <- function(input, output, session) {
   h_pos_m  <- reactiveVal(c("All"))
   p_role_m <- reactiveVal("All")
   p_hand_m <- reactiveVal("All")
+  h_bats   <- reactiveVal("All")
+  h_bats_m <- reactiveVal("All")
 
   h_positions <- c("All","C","1B","2B","3B","SS","LF","CF","RF","DH")
   p_roles     <- c("All","SP","RP")
@@ -4663,6 +4689,16 @@ set_active_btns <- function(group, selected, ids) {
     }, ignoreInit = TRUE)
   })
 
+  h_bats_choices <- c("All","R","L","S")
+
+  lapply(h_bats_choices, function(b) {
+    observeEvent(input[[paste0("bats_", b)]], {
+      h_bats(b); set_active_btn("bats_", b, paste0("bats_", h_bats_choices))
+    }, ignoreInit = TRUE)
+    observeEvent(input[[paste0("bats_m_", b)]], {
+      h_bats_m(b); set_active_btn("bats_m_", b, paste0("bats_m_", h_bats_choices))
+    }, ignoreInit = TRUE)
+  })
   # ── Sidebar navigation ──────────────────────────────────────────────────
   nav_pages <- c("pitchers","hitters","top10","ineligible")
 
@@ -4842,13 +4878,15 @@ observeEvent(input$run_updates_btn, {
   })
 
   # ── Hitters ─────────────────────────────────────────────────────────────
-  filtered_hitters <- reactive({
+filtered_hitters <- reactive({
     df <- acq_all_hitters %>% filter(!source_key %in% ineligible_h())
 
     if (input$season_league_h != "All")
       df <- df %>% filter(league_name == input$season_league_h)
     if (!is.na(input$max_age_h) && input$max_age_h < 99)
       df <- df %>% filter(is.na(age) | age <= input$max_age_h)
+    if (input$season_hand_h != "All")
+      df <- df %>% filter(Bats == input$season_hand_h)          # NEW
 
     df %>% filter(!is.na(AB), AB >= input$min_ab) %>% arrange(desc(OPS))
   }) %>% bindEvent(input$apply_season_h, ineligible_h(), data_version(), ignoreNULL = FALSE)
@@ -4858,7 +4896,7 @@ observeEvent(input$run_updates_btn, {
   output$season_hitter_table <- renderDT({
     filtered_hitters() %>%
       mutate(`Age/Yr` = acq_age_or_class(age, class_year)) %>%
-      select(Name = player_name, `Age/Yr`, School = college,
+      select(Name = player_name, Bats, `Age/Yr`, School = college,     # Bats added
              Team = team_name, League = league_name, Pos = position,
              G, AB, H, R, `2B`, `3B`, HR, RBI, BB, K, SB,
              AVG, OBP, SLG, OPS) %>%
@@ -4982,7 +5020,7 @@ render_top10_pitcher_dt <- function(data) {
     formatRound(c("ERA","FIP","WHIP","K/9","BB/9","K/BB"), 2)
 }
 
-  top10_hitter_dt <- function(league_in, min_ab, max_age, stat, pos) {
+  top10_hitter_dt <- function(league_in, min_ab, max_age, stat, pos, hand) {
     data_version()  
     df <- acq_all_hitters %>%
       filter(!source_key %in% ineligible_h()) %>%
@@ -4991,13 +5029,14 @@ render_top10_pitcher_dt <- function(data) {
     if (league_in != "All") df <- df %>% filter(league_name == league_in)
     if (!is.na(max_age) && max_age < 99)
       df <- df %>% filter(is.na(age) | age <= max_age)
-    if (!("All" %in% pos)) df <- df %>% filter(position %in% pos)   
+    if (!("All" %in% pos)) df <- df %>% filter(position %in% pos)
+    if (hand != "All") df <- df %>% filter(Bats == hand)          # NEW
 
     df %>%
       arrange(desc(.data[[stat]])) %>%
       slice_head(n = 10) %>%
       mutate(Rank = row_number(), `Age/Yr` = acq_age_or_class(age, class_year)) %>%
-      select(Rank, Name=player_name, Pos=position,
+      select(Rank, Name=player_name, Pos=position, Bats,          # Bats added
              Team=team_name, League=league_name, `Age/Yr`,
              School=college, G, AB, AVG, OBP, SLG, OPS, HR, RBI, SB) %>%
       datatable(rownames=FALSE,
@@ -5008,11 +5047,11 @@ render_top10_pitcher_dt <- function(data) {
 
 output$top10_hitting_table  <- renderDT(top10_hitter_dt(
     input$top10_league_h, input$top10_min_ab, input$top10_max_age_h,
-    input$top10_stat_h, h_pos()))
+    input$top10_stat_h, h_pos(), h_bats()))
 
   output$top10m_hitting_table  <- renderDT(top10_hitter_dt(
     input$top10m_league_h, input$top10m_min_ab, input$top10m_max_age_h,
-    input$top10m_stat_h, h_pos_m()))
+    input$top10m_stat_h, h_pos_m(), h_bats_m()))
 
   top10_pitchers_inline <- reactive({
     top10_pitcher_data(input$top10_league_p, input$top10_min_ip, input$top10_max_age_p,
