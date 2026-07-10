@@ -4587,10 +4587,10 @@ acq_board_server <- function(input, output, session) {
   selected_key <- reactiveVal(NULL)
   current_page <- reactiveVal("pitchers")
 
-  h_pos    <- reactiveVal("All")
+  h_pos    <- reactiveVal(c("All"))
   p_role   <- reactiveVal("All")
   p_hand   <- reactiveVal("All")
-  h_pos_m  <- reactiveVal("All")
+  h_pos_m  <- reactiveVal(c("All"))
   p_role_m <- reactiveVal("All")
   p_hand_m <- reactiveVal("All")
 
@@ -4609,12 +4609,39 @@ acq_board_server <- function(input, output, session) {
     }
   }
 
+toggle_position <- function(current, clicked) {
+  if (clicked == "All") return("All")
+  current <- setdiff(current, "All")
+  if (clicked %in% current) {
+    current <- setdiff(current, clicked)
+  } else {
+    current <- c(current, clicked)
+  }
+  if (length(current) == 0) current <- "All"
+  current
+}
+
+set_active_btns <- function(group, selected, ids) {
+  for (id in ids) {
+    val <- sub(paste0("^", group), "", id)
+    if (val %in% selected) {
+      runjs(glue("$('#{id}').addClass('active').css({{'background-color':'{ACQ_TEAL}','color':'{ACQ_NAVY}','font-weight':'bold','border-color':'{ACQ_TEAL}'}});"))
+    } else {
+      runjs(glue("$('#{id}').removeClass('active').css({{'background-color':'#0F3366','color':'{ACQ_WHITE}','font-weight':'normal','border-color':'#1A3A5C'}});"))
+    }
+  }
+}
+  
   lapply(h_positions, function(pos) {
     observeEvent(input[[paste0("hpos_", pos)]], {
-      h_pos(pos); set_active_btn("hpos_", pos, paste0("hpos_", h_positions))
+      new_val <- toggle_position(h_pos(), pos)
+      h_pos(new_val)
+      set_active_btns("hpos_", new_val, paste0("hpos_", h_positions))
     }, ignoreInit = TRUE)
     observeEvent(input[[paste0("hpos_m_", pos)]], {
-      h_pos_m(pos); set_active_btn("hpos_m_", pos, paste0("hpos_m_", h_positions))
+      new_val <- toggle_position(h_pos_m(), pos)
+      h_pos_m(new_val)
+      set_active_btns("hpos_m_", new_val, paste0("hpos_m_", h_positions))
     }, ignoreInit = TRUE)
   })
 
@@ -4964,7 +4991,7 @@ render_top10_pitcher_dt <- function(data) {
     if (league_in != "All") df <- df %>% filter(league_name == league_in)
     if (!is.na(max_age) && max_age < 99)
       df <- df %>% filter(is.na(age) | age <= max_age)
-    if (pos != "All") df <- df %>% filter(position == pos)
+    if (!("All" %in% pos)) df <- df %>% filter(position %in% pos)   
 
     df %>%
       arrange(desc(.data[[stat]])) %>%
