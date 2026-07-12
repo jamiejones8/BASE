@@ -5497,11 +5497,11 @@ server <- function(input, output, session) {
 
   make_player_card <- function(name, pos, number, bats, throws, group, visible) {
     click_js <- if (group == "Pitchers") {
-  sprintf(
-    "Shiny.setInputValue('roster_pitcher_click', %s, {priority:'event'}); Shiny.setInputValue('nav_to', 'pitcher_mock', {priority:'event'});",
-    jsonlite::toJSON(name, auto_unbox = TRUE)
-  )
-} else NULL
+      sprintf(
+        "Shiny.setInputValue('roster_pitcher_click', %s, {priority:'event'});",
+        jsonlite::toJSON(name, auto_unbox = TRUE)
+      )
+    } else NULL
 
     tags$div(
       class        = "player-card",
@@ -5534,37 +5534,38 @@ server <- function(input, output, session) {
 pcard_selected <- reactiveVal(NULL)
 
   observeEvent(input$roster_pitcher_click, {
-    showNotification(paste("Click received:", input$roster_pitcher_click), type = "message", duration = 3) 
     req(!is.null(season_data), input$roster_pitcher_click)
     clicked_display <- input$roster_pitcher_click
 
-  brew_pitchers <- season_data %>%
-    filter(grepl("BRE|Brewster", PitcherTeam, ignore.case = TRUE)) %>%
-    distinct(Pitcher)
+    updateNavbarPage(session, "caps_nav", selected = "tab_pcard_mock")   # NEW — navigate immediately
 
-  norm_name <- function(x) trimws(tolower(x))
+    brew_pitchers <- season_data %>%
+      filter(grepl("BRE|Brewster", PitcherTeam, ignore.case = TRUE)) %>%
+      distinct(Pitcher)
 
-  matched <- brew_pitchers %>%
-    filter(norm_name(pcard_format_pitcher_name(Pitcher)) == norm_name(clicked_display))
+    norm_name <- function(x) trimws(tolower(x))
 
-  if (nrow(matched) == 0) {
-    showNotification(
-      paste0("No Trackman data found yet for ", clicked_display, "."),
-      type = "warning"
-    )
-    pcard_selected(NULL)
-    return()
-  }
+    matched <- brew_pitchers %>%
+      filter(norm_name(pcard_format_pitcher_name(Pitcher)) == norm_name(clicked_display))
 
-  pc <- tryCatch(
-    pcard_build_all(season_data, matched$Pitcher[1]),
-    error = function(e) {
-      showNotification(paste("Pitcher card build failed:", e$message), type = "error")
-      NULL
+    if (nrow(matched) == 0) {
+      showNotification(
+        paste0("No Trackman data found yet for ", clicked_display, "."),
+        type = "warning"
+      )
+      pcard_selected(NULL)
+      return()
     }
-  )
-  pcard_selected(pc)
-}, ignoreInit = TRUE)
+
+    pc <- tryCatch(
+      pcard_build_all(season_data, matched$Pitcher[1]),
+      error = function(e) {
+        showNotification(paste("Pitcher card build failed:", e$message), type = "error")
+        NULL
+      }
+    )
+    pcard_selected(pc)
+  }, ignoreInit = TRUE)
 
   output$pcard_missing_msg <- renderUI({
     if (is.null(pcard_selected())) {
