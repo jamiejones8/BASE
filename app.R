@@ -5534,15 +5534,22 @@ server <- function(input, output, session) {
 pcard_selected <- reactiveVal(NULL)
 
   observeEvent(input$roster_pitcher_click, {
-    req(!is.null(season_data), input$roster_pitcher_click)
-    clicked_display <- input$roster_pitcher_click
+  req(!is.null(season_data), input$roster_pitcher_click)
+  clicked_display <- input$roster_pitcher_click
 
-    brew_pitchers <- season_data %>%
-      filter(grepl("BRE|Brewster", PitcherTeam, ignore.case = TRUE)) %>%
-      distinct(Pitcher)
+  brew_pitchers <- season_data %>%
+    filter(grepl("BRE|Brewster", PitcherTeam, ignore.case = TRUE)) %>%
+    distinct(Pitcher)
 
-    matched <- brew_pitchers %>%
-      filter(pcard_format_pitcher_name(Pitcher) == clicked_display)
+  # ── TEMP DEBUG ──
+  message("clicked_display: '", clicked_display, "'")
+  message("brew_pitchers Pitcher values: ", paste(head(brew_pitchers$Pitcher, 20), collapse = " | "))
+  message("formatted versions: ", paste(head(pcard_format_pitcher_name(brew_pitchers$Pitcher), 20), collapse = " | "))
+  # ── END TEMP DEBUG ──
+
+  matched <- brew_pitchers %>%
+    filter(pcard_format_pitcher_name(Pitcher) == clicked_display)
+  ...
 
     if (nrow(matched) == 0) {
       showNotification(
