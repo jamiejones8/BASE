@@ -33,6 +33,7 @@ last     <- dplyr::last
 source("scout_app.R")
 source("leaderboards_embed.R")
 source("cape_pitcher_page.R")
+source("Pitcher_Card.R")
 # ══════════════════════════════════════════════════════════════════════════════
 # HF HUB WRITE-BACK HELPER — now points at a Dataset repo, not the Space repo
 # Dataset repos don't trigger Space rebuilds on commit, so ineligible list
@@ -2353,6 +2354,30 @@ if (!is.null(roster_raw)) {
   )
 }
 
+
+pcard_report_ui <- function() {
+  tagList(
+    tags$div(
+      class = "hub-main",
+      tags$div(
+        style = "margin-bottom: 16px;",
+        tags$button("← Back to Hub",
+                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
+                    class = "btn btn-outline-secondary btn-sm")
+      ),
+      uiOutput("pcard_missing_msg"),
+      plotOutput("pcard_header_plot", height = "110px"),
+      plotOutput("pcard_boxscore_plot", height = "110px"),
+      plotOutput("pcard_movement_plot", height = "500px"),
+      plotOutput("pcard_pitch_metrics_plot", height = "260px"),
+      plotOutput("pcard_location_plot", height = "420px"),
+      plotOutput("pcard_usage_plot", height = "260px"),
+      plotOutput("pcard_hit_metrics_plot", height = "260px")
+    ),
+    tags$div(class = "hub-footer",
+             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+  )
+}                      
 # ==========================================
 # SHARED HELPERS
 # ==========================================
@@ -3860,6 +3885,7 @@ home_tab_ui <- function() {
       .tab-content > .tab-pane { padding: 0; }
       .tab-pane[data-value='tab_leaderboards'] .navbar { display: none !important; }
       .tab-pane[data-value='tab_leaderboards'] .navbar-default { display: none !important; }
+      .navbar-nav > li > a[data-value='tab_pcard_mock'] { display: none !important; }
     "))),
     tags$div(
       id = "caps-home",
@@ -5265,7 +5291,8 @@ ui <- navbarPage(
   tabPanel("Umpire Reports",   value = "tab_umpire",
     tags$div(style = "padding: 40px 32px;",
       tags$h3("Umpire Reports", style = "color: #0C2340;"),
-      tags$p("Coming soon.", style = "color: #5F5F6B;")))
+      tags$p("Coming soon.", style = "color: #5F5F6B;"))),
+  tabPanel("Pitcher Card (Mock)", value = "tab_pcard_mock", pcard_report_ui())
 )
 
 # ==========================================
@@ -5279,6 +5306,7 @@ server <- function(input, output, session) {
     hitter         = "tab_hitter",
     pitcher        = "tab_pitcher",
     pitcher_player = "tab_pitcher_player",
+    pitcher_mock   = "tab_pcard_mock", 
     whitecaps_app  = "tab_leaderboards"
   )
 
@@ -5468,10 +5496,19 @@ server <- function(input, output, session) {
   }
 
   make_player_card <- function(name, pos, number, bats, throws, group, visible) {
+    click_js <- if (group == "Pitchers") {
+      sprintf(
+        "Shiny.setInputValue('roster_pitcher_click', %s, {priority:'event'}); Shiny.setInputValue('nav_to', 'pitcher_mock', {priority:'event'});",
+        jsonlite::toJSON(name, auto_unbox = TRUE)
+      )
+    } else NULL
+
     tags$div(
       class        = "player-card",
       `data-group` = group,
-      style        = if (!visible) "display:none;" else "",
+      style        = paste0(if (!visible) "display:none;" else "",
+                            if (!is.null(click_js)) "cursor:pointer;" else ""),
+      onclick      = click_js,
       tags$div(class = "p-init", make_roster_badge(number)),
       tags$div(
         tags$div(class = "p-name", name),
@@ -5494,6 +5531,82 @@ server <- function(input, output, session) {
     )
   })
 
+pcard_selected <- reactiveVal(NULL)
+
+  observeEvent(input$roster_pitcher_click, {
+    req(!is.null(season_data), input$roster_pitcher_click)
+    clicked_display <- input$roster_pitcher_click
+
+    brew_pitchers <- season_data %>%
+      filter(grepl("BRE|Brewster", PitcherTeam, ignore.case = TRUE)) %>%
+      distinct(Pitcher)
+
+    matched <- brew_pitchers %>%
+      filter(pcard_format_pitcher_name(Pitcher) == clicked_display)
+
+    if (nrow(matched) == 0) {
+      showNotification(
+        paste0("No Trackman data found yet for ", clicked_display, "."),
+        type = "warning"
+      )
+      pcard_selected(NULL)
+      return()
+    }
+
+    pc <- tryCatch(
+      pcard_build_all(season_data, matched$Pitcher[1]),
+      error = function(e) {
+        showNotification(paste("Pitcher card build failed:", e$message), type = "error")
+        NULL
+      }
+    )
+    pcard_selected(pc)
+  }, ignoreInit = TRUE)
+
+  output$pcard_missing_msg <- renderUI({
+    if (is.null(pcard_selected())) {
+      tags$p("Click a pitcher on the Home roster to load their card.",
+             style = "color:#8B8B96; font-size:13px;")
+    } else NULL
+  })
+
+  output$pcard_header_plot <- renderPlot({
+    req(pcard_selected())
+    pcard_draw_header_page(pcard_selected()$pitcher_raw)
+  })
+
+  output$pcard_boxscore_plot <- renderPlot({
+    req(pcard_selected())
+    pcard_draw_boxscore_page(pcard_selected()$box_stats)
+  })
+
+  output$pcard_movement_plot <- renderPlot({
+    req(pcard_selected())
+    pcard_draw_movement_page(pcard_selected()$p_movement)
+  })
+
+  output$pcard_pitch_metrics_plot <- renderPlot({
+    req(pcard_selected())
+    pcard_draw_pitch_metrics_page(pcard_selected()$pitch_metrics_tbl)
+  })
+
+  output$pcard_location_plot <- renderPlot({
+    req(pcard_selected())
+    pc <- pcard_selected()
+    pcard_draw_location_page(pc$p_location_lhh, pc$p_location_rhh)
+  })
+
+  output$pcard_usage_plot <- renderPlot({
+    req(pcard_selected())
+    pc <- pcard_selected()
+    pcard_draw_usage_page(pc$usage_total, pc$usage_rhh, pc$usage_lhh)
+  })
+
+  output$pcard_hit_metrics_plot <- renderPlot({
+    req(pcard_selected())
+    pcard_draw_hit_metrics_page(pcard_selected()$hit_metrics_tbl)
+  })
+          
   catcher_data <- reactive({
     combine_with_manual(season_data, input$catcher_manual_enabled, input$catcher_manual_csv)
   })
