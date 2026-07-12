@@ -5541,34 +5541,29 @@ pcard_selected <- reactiveVal(NULL)
     filter(grepl("BRE|Brewster", PitcherTeam, ignore.case = TRUE)) %>%
     distinct(Pitcher)
 
-  # ── TEMP DEBUG ──
-  message("clicked_display: '", clicked_display, "'")
-  message("brew_pitchers Pitcher values: ", paste(head(brew_pitchers$Pitcher, 20), collapse = " | "))
-  message("formatted versions: ", paste(head(pcard_format_pitcher_name(brew_pitchers$Pitcher), 20), collapse = " | "))
-  # ── END TEMP DEBUG ──
+  norm_name <- function(x) trimws(tolower(x))
 
   matched <- brew_pitchers %>%
-    filter(pcard_format_pitcher_name(Pitcher) == clicked_display)
-  ...
+    filter(norm_name(pcard_format_pitcher_name(Pitcher)) == norm_name(clicked_display))
 
-    if (nrow(matched) == 0) {
-      showNotification(
-        paste0("No Trackman data found yet for ", clicked_display, "."),
-        type = "warning"
-      )
-      pcard_selected(NULL)
-      return()
-    }
-
-    pc <- tryCatch(
-      pcard_build_all(season_data, matched$Pitcher[1]),
-      error = function(e) {
-        showNotification(paste("Pitcher card build failed:", e$message), type = "error")
-        NULL
-      }
+  if (nrow(matched) == 0) {
+    showNotification(
+      paste0("No Trackman data found yet for ", clicked_display, "."),
+      type = "warning"
     )
-    pcard_selected(pc)
-  }, ignoreInit = TRUE)
+    pcard_selected(NULL)
+    return()
+  }
+
+  pc <- tryCatch(
+    pcard_build_all(season_data, matched$Pitcher[1]),
+    error = function(e) {
+      showNotification(paste("Pitcher card build failed:", e$message), type = "error")
+      NULL
+    }
+  )
+  pcard_selected(pc)
+}, ignoreInit = TRUE)
 
   output$pcard_missing_msg <- renderUI({
     if (is.null(pcard_selected())) {
