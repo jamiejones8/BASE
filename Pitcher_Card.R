@@ -4,10 +4,12 @@ library(grid)
 library(gridExtra)
 library(gtable)
 
-# ── name formatting ──
 pcard_format_pitcher_name <- function(nm) {
-  parts <- strsplit(nm, ",\\s*")[[1]]
-  if (length(parts) >= 2) paste(trimws(parts[2]), trimws(parts[1])) else nm
+  vapply(as.character(nm), function(n) {
+    if (length(n) == 0 || is.na(n) || !grepl(",", n, fixed = TRUE)) return(as.character(n))
+    parts <- strsplit(n, ",\\s*")[[1]]
+    if (length(parts) >= 2) paste(trimws(parts[2]), trimws(parts[1])) else as.character(n)
+  }, character(1), USE.NAMES = FALSE)
 }
 
 # ── pitch type canonicalization + palette ──
