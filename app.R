@@ -5497,11 +5497,11 @@ server <- function(input, output, session) {
 
   make_player_card <- function(name, pos, number, bats, throws, group, visible) {
     click_js <- if (group == "Pitchers") {
-      sprintf(
-        "Shiny.setInputValue('roster_pitcher_click', %s, {priority:'event'}); Shiny.setInputValue('nav_to', 'pitcher_mock', {priority:'event'});",
-        jsonlite::toJSON(name, auto_unbox = TRUE)
-      )
-    } else NULL
+  sprintf(
+    "Shiny.setInputValue('roster_pitcher_click', %s, {priority:'event'}); Shiny.setInputValue('nav_to', 'pitcher_mock', {priority:'event'});",
+    jsonlite::toJSON(name, auto_unbox = TRUE)
+  )
+} else NULL
 
     tags$div(
       class        = "player-card",
@@ -5534,8 +5534,9 @@ server <- function(input, output, session) {
 pcard_selected <- reactiveVal(NULL)
 
   observeEvent(input$roster_pitcher_click, {
-  req(!is.null(season_data), input$roster_pitcher_click)
-  clicked_display <- input$roster_pitcher_click
+    showNotification(paste("Click received:", input$roster_pitcher_click), type = "message", duration = 3) 
+    req(!is.null(season_data), input$roster_pitcher_click)
+    clicked_display <- input$roster_pitcher_click
 
   brew_pitchers <- season_data %>%
     filter(grepl("BRE|Brewster", PitcherTeam, ignore.case = TRUE)) %>%
