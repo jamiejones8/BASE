@@ -2391,7 +2391,7 @@ pcard_report_ui <- function() {
                  plotOutput("pcard_movement_plot", height = "480px")),
 
         tags$div(class = "pcard-section-label", "Pitch Metrics"),
-        tags$div(class = "pcard-panel", plotOutput("pcard_pitch_metrics_plot", height = "220px")),
+        tags$div(class = "pcard-panel", plotOutput("pcard_pitch_metrics_plot", height = "320px")),
 
         tags$div(class = "pcard-section-label", "Pitch Location"),
         tags$div(class = "pcard-row",
@@ -2401,13 +2401,13 @@ pcard_report_ui <- function() {
 
         tags$div(class = "pcard-section-label", "Usage"),
         tags$div(class = "pcard-row",
-          tags$div(class = "pcard-panel", plotOutput("pcard_usage_overall_plot", height = "220px")),
-          tags$div(class = "pcard-panel", plotOutput("pcard_usage_rhh_plot", height = "220px")),
-          tags$div(class = "pcard-panel", plotOutput("pcard_usage_lhh_plot", height = "220px"))
+          tags$div(class = "pcard-panel", plotOutput("pcard_usage_overall_plot", height = "320px")),
+          tags$div(class = "pcard-panel", plotOutput("pcard_usage_rhh_plot", height = "320px")),
+          tags$div(class = "pcard-panel", plotOutput("pcard_usage_lhh_plot", height = "320px"))
         ),
 
         tags$div(class = "pcard-section-label", "Hit Metrics by Pitch"),
-        tags$div(class = "pcard-panel", plotOutput("pcard_hit_metrics_plot", height = "220px"))
+        tags$div(class = "pcard-panel", plotOutput("pcard_hit_metrics_plot", height = "320px"))
       )
     ),
     tags$div(class = "hub-footer",
