@@ -5356,6 +5356,14 @@ server <- function(input, output, session) {
     updateNavbarPage(session, "caps_nav", selected = "tab_home")
   })
 
+  catcher_data <- reactive({
+    combine_with_manual(season_data, input$catcher_manual_enabled, input$catcher_manual_csv)
+  })
+
+  hitter_data <- reactive({
+    combine_with_manual(season_data, input$hitter_manual_enabled, input$hitter_manual_csv)
+  })
+
   output$hub_header_ui <- renderUI({ NULL })
   output$page_content  <- renderUI({ NULL })
 
