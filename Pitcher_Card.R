@@ -350,10 +350,10 @@ pcard_draw_table <- function(tbl, title) {
               gp = gpar(fontsize = 11, col = "#5F5F6B", fontfamily = "sans"))
     return(invisible(NULL))
   }
-  
+
   n_rows <- nrow(tbl)
   n_cols <- ncol(tbl)
-  
+
   fg_mat <- matrix("#16161B", n_rows, n_cols)
   bg_mat <- matrix("#FAFAFB", n_rows, n_cols)
   for (i in seq_len(n_rows)) {
@@ -362,27 +362,36 @@ pcard_draw_table <- function(tbl, title) {
       fg_mat[i, 1] <- unname(pcard_pitch_colors[pitch_name])
     }
   }
-  
+
   tbl_theme <- ttheme_minimal(
     core = list(
       bg_params = list(fill = bg_mat, col = "#EAEAEE"),
-      fg_params = list(col = fg_mat, fontface = "bold", fontsize = 11, fontfamily = "sans")
+      fg_params = list(col = fg_mat, fontface = "bold", fontsize = 15, fontfamily = "sans")   # bumped from 11
     ),
     colhead = list(
       bg_params = list(fill = "#00827F", col = "#EAEAEE"),
-      fg_params = list(col = "white", fontface = "bold", fontsize = 10, fontfamily = "sans")
+      fg_params = list(col = "white", fontface = "bold", fontsize = 13, fontfamily = "sans")  # bumped from 10
     )
   )
-  
+
   tg <- tableGrob(tbl, rows = NULL, theme = tbl_theme)
-  
-  title_grob <- textGrob(title, gp = gpar(fontsize = 12, fontface = "bold",
+
+  # Make the table fill whatever canvas it's drawn on, instead of drawing at
+  # its natural (small) size — same trick as build_arsenal_grob() in app.R.
+  tg$widths  <- unit(rep(1, ncol(tg)), "null")
+  tg$heights <- unit(rep(1, nrow(tg)), "null")
+
+  title_grob <- textGrob(title, gp = gpar(fontsize = 14, fontface = "bold",     # bumped from 12
                                           col = "#0C2340", fontfamily = "sans"))
-  
-  tg <- gtable_add_rows(tg, heights = grobHeight(title_grob) + unit(6, "pt"), pos = 0)
+
+  tg <- gtable_add_rows(tg, heights = grobHeight(title_grob) + unit(10, "pt"), pos = 0)
   tg <- gtable_add_grob(tg, title_grob, t = 1, l = 1, r = ncol(tg), name = "title")
-  
+
+  # Draw the whole thing (title + table) filling the current viewport.
+  pushViewport(viewport(width = unit(1, "npc") - unit(4, "pt"),
+                        height = unit(1, "npc") - unit(4, "pt")))
   grid.draw(tg)
+  popViewport()
 }
 
 # ── standalone page wrappers — each takes explicit args, no globals ──
