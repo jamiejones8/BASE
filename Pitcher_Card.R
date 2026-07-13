@@ -421,6 +421,22 @@ pcard_draw_location_page <- function(p_location_lhh, p_location_rhh) {
   popViewport()
 }
 
+# ── single-panel page wrappers (finer-grained than the combined ones) ──
+pcard_draw_location_lhh_page <- function(p_location_lhh) {
+  grid.newpage()
+  print(p_location_lhh, newpage = FALSE)
+}
+
+pcard_draw_location_rhh_page <- function(p_location_rhh) {
+  grid.newpage()
+  print(p_location_rhh, newpage = FALSE)
+}
+
+pcard_draw_single_table_page <- function(tbl, title) {
+  grid.newpage()
+  pcard_draw_table(tbl, title)
+}
+
 pcard_draw_usage_page <- function(usage_total, usage_rhh, usage_lhh) {
   grid.newpage()
   pushViewport(viewport(layout = grid.layout(1, 3)))
