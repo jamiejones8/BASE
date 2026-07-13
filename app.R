@@ -2357,6 +2357,20 @@ if (!is.null(roster_raw)) {
 
 pcard_report_ui <- function() {
   tagList(
+    tags$head(tags$style(HTML("
+      #pcard-page { max-width: 1100px; margin: 0 auto; padding: 0 24px 40px; }
+      #pcard-page .pcard-panel {
+        background: #fff; border: 1px solid #EAEAEE; border-radius: 10px;
+        padding: 12px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(12,35,64,0.04);
+      }
+      #pcard-page .pcard-panel img { width: 100%; height: auto; display: block; }
+      #pcard-page .pcard-row { display: flex; gap: 20px; margin-bottom: 0; }
+      #pcard-page .pcard-row .pcard-panel { flex: 1; margin-bottom: 20px; min-width: 0; }
+      #pcard-page .pcard-section-label {
+        font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+        color: #5F5F6B; margin: 4px 0 10px;
+      }
+    "))),
     tags$div(
       class = "hub-main",
       tags$div(
@@ -2365,19 +2379,41 @@ pcard_report_ui <- function() {
                     onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
                     class = "btn btn-outline-secondary btn-sm")
       ),
-      uiOutput("pcard_missing_msg"),
-      plotOutput("pcard_header_plot", height = "110px"),
-      plotOutput("pcard_boxscore_plot", height = "110px"),
-      plotOutput("pcard_movement_plot", height = "500px"),
-      plotOutput("pcard_pitch_metrics_plot", height = "260px"),
-      plotOutput("pcard_location_plot", height = "420px"),
-      plotOutput("pcard_usage_plot", height = "260px"),
-      plotOutput("pcard_hit_metrics_plot", height = "260px")
+      tags$div(
+        id = "pcard-page",
+        uiOutput("pcard_missing_msg"),
+
+        tags$div(class = "pcard-panel", plotOutput("pcard_header_plot", height = "100px")),
+        tags$div(class = "pcard-panel", plotOutput("pcard_boxscore_plot", height = "100px")),
+
+        tags$div(class = "pcard-section-label", "Pitch Movement"),
+        tags$div(class = "pcard-panel", style = "max-width: 520px; margin-left: auto; margin-right: auto;",
+                 plotOutput("pcard_movement_plot", height = "480px")),
+
+        tags$div(class = "pcard-section-label", "Pitch Metrics"),
+        tags$div(class = "pcard-panel", plotOutput("pcard_pitch_metrics_plot", height = "220px")),
+
+        tags$div(class = "pcard-section-label", "Pitch Location"),
+        tags$div(class = "pcard-row",
+          tags$div(class = "pcard-panel", plotOutput("pcard_location_lhh_plot", height = "420px")),
+          tags$div(class = "pcard-panel", plotOutput("pcard_location_rhh_plot", height = "420px"))
+        ),
+
+        tags$div(class = "pcard-section-label", "Usage"),
+        tags$div(class = "pcard-row",
+          tags$div(class = "pcard-panel", plotOutput("pcard_usage_overall_plot", height = "220px")),
+          tags$div(class = "pcard-panel", plotOutput("pcard_usage_rhh_plot", height = "220px")),
+          tags$div(class = "pcard-panel", plotOutput("pcard_usage_lhh_plot", height = "220px"))
+        ),
+
+        tags$div(class = "pcard-section-label", "Hit Metrics by Pitch"),
+        tags$div(class = "pcard-panel", plotOutput("pcard_hit_metrics_plot", height = "220px"))
+      )
     ),
     tags$div(class = "hub-footer",
              paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
   )
-}                      
+}                   
 # ==========================================
 # SHARED HELPERS
 # ==========================================
@@ -5594,29 +5630,29 @@ pcard_selected <- reactiveVal(NULL)
     pcard_draw_pitch_metrics_page(pcard_selected()$pitch_metrics_tbl)
   })
 
-  output$pcard_location_plot <- renderPlot({
+  output$pcard_location_lhh_plot <- renderPlot({
     req(pcard_selected())
-    pc <- pcard_selected()
-    pcard_draw_location_page(pc$p_location_lhh, pc$p_location_rhh)
+    pcard_draw_location_lhh_page(pcard_selected()$p_location_lhh)
   })
 
-  output$pcard_usage_plot <- renderPlot({
+  output$pcard_location_rhh_plot <- renderPlot({
     req(pcard_selected())
-    pc <- pcard_selected()
-    pcard_draw_usage_page(pc$usage_total, pc$usage_rhh, pc$usage_lhh)
+    pcard_draw_location_rhh_page(pcard_selected()$p_location_rhh)
   })
 
-  output$pcard_hit_metrics_plot <- renderPlot({
+  output$pcard_usage_overall_plot <- renderPlot({
     req(pcard_selected())
-    pcard_draw_hit_metrics_page(pcard_selected()$hit_metrics_tbl)
-  })
-          
-  catcher_data <- reactive({
-    combine_with_manual(season_data, input$catcher_manual_enabled, input$catcher_manual_csv)
+    pcard_draw_single_table_page(pcard_selected()$usage_total, "Overall")
   })
 
-  hitter_data <- reactive({
-    combine_with_manual(season_data, input$hitter_manual_enabled, input$hitter_manual_csv)
+  output$pcard_usage_rhh_plot <- renderPlot({
+    req(pcard_selected())
+    pcard_draw_single_table_page(pcard_selected()$usage_rhh, "RHH")
+  })
+
+  output$pcard_usage_lhh_plot <- renderPlot({
+    req(pcard_selected())
+    pcard_draw_single_table_page(pcard_selected()$usage_lhh, "LHH")
   })
 
   # ==========================================
