@@ -5654,6 +5654,16 @@ pcard_selected <- reactiveVal(NULL)
     req(pcard_selected())
     pcard_draw_single_table_page(pcard_selected()$usage_lhh, "LHH")
   })
+  output$pcard_hit_metrics_plot <- renderPlot({
+    req(pcard_selected())
+    tryCatch({
+      pcard_draw_hit_metrics_page(pcard_selected()$hit_metrics_tbl)
+    }, error = function(e) {
+      grid::grid.newpage()
+      grid::grid.text(paste("Hit metrics error:", e$message),
+                      gp = grid::gpar(col = "red", fontsize = 12))
+    })
+  })
 
   # ==========================================
   # CATCHER SERVER LOGIC
