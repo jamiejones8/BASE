@@ -50,7 +50,6 @@ pcard_format_rate <- function(x, digits = 3) {
          sub("^0", "", formatC(x, format = "f", digits = digits)))
 }
 
-# ── PA-level boxscore derivation ──
 pcard_pitcher_boxscore <- function(df, pitcher_raw) {
   d <- df %>% filter(Pitcher == pitcher_raw)
   d <- d %>%
@@ -58,45 +57,27 @@ pcard_pitcher_boxscore <- function(df, pitcher_raw) {
       IsHit      = PlayResult %in% c("Single","Double","Triple","HomeRun"),
       IsWalk     = KorBB == "Walk",
       IsK        = KorBB == "Strikeout",
+      IsHBP      = PitchCall == "HitByPitch",
+      IsHR       = PlayResult == "HomeRun",
       OutsOnPlay = suppressWarnings(as.numeric(OutsOnPlay))
     )
+
   outs <- sum(d$OutsOnPlay, na.rm = TRUE) + sum(d$IsK, na.rm = TRUE)
+  ip_dec <- outs / 3
   hits <- sum(d$IsHit, na.rm = TRUE)
   bb   <- sum(d$IsWalk, na.rm = TRUE)
   k    <- sum(d$IsK, na.rm = TRUE)
-  whip <- if (outs > 0) (hits + bb) / (outs / 3) else NA_real_
-  
+  hbp  <- sum(d$IsHBP, na.rm = TRUE)
+  hr   <- sum(d$IsHR, na.rm = TRUE)
+
+  whip <- if (ip_dec > 0) (hits + bb) / ip_dec else NA_real_
+  fip  <- if (ip_dec > 0) ((13*hr + 3*(bb+hbp) - 2*k) / ip_dec) + 3.87 else NA_real_
+
   list(
     IP = pcard_format_ip(outs), H = as.character(hits), BB = as.character(bb),
-    K = as.character(k), HR = as.character(sum(d$PlayResult == "HomeRun", na.rm = TRUE)),
-    WHIP = pcard_format_num(whip, 2)
+    K = as.character(k), HR = as.character(hr),
+    WHIP = pcard_format_num(whip, 2), FIP = pcard_format_num(fip, 2)
   )
-}
-
-# ── pitch metrics table (velo/movement/release shape) ──
-pcard_pitch_metrics_table <- function(pitcher_data) {
-  d <- pitcher_data %>%
-    mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
-    filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
-  
-  d %>%
-    group_by(TaggedPitchType_clean) %>%
-    summarise(
-      `#`        = n(),
-      Velo       = pcard_format_num(mean(RelSpeed, na.rm = TRUE), 1),
-      `Max Velo` = pcard_format_num(suppressWarnings(max(RelSpeed, na.rm = TRUE)), 1),
-      Spin       = pcard_format_num(mean(SpinRate, na.rm = TRUE), 0),
-      iVB        = pcard_format_num(mean(InducedVertBreak, na.rm = TRUE), 1),
-      HB         = pcard_format_num(mean(HorzBreak, na.rm = TRUE), 1),
-      RelH       = pcard_format_num(mean(RelHeight, na.rm = TRUE), 1),
-      RelS       = pcard_format_num(mean(RelSide, na.rm = TRUE), 1),
-      Ext        = pcard_format_num(mean(Extension, na.rm = TRUE), 1),
-      VAA        = pcard_format_num(mean(VertApprAngle, na.rm = TRUE), 1),
-      HAA        = pcard_format_num(mean(HorzApprAngle, na.rm = TRUE), 1),
-      .groups    = "drop"
-    ) %>%
-    arrange(desc(`#`)) %>%
-    rename(Pitch = TaggedPitchType_clean)
 }
 
 # ── usage table data ──
@@ -129,12 +110,11 @@ pcard_usage_table <- function(pitcher_data, side = c("All", "Left", "Right")) {
     rename(Pitch = TaggedPitchType_clean)
 }
 
-# ── pitch-type hit metrics data ──
 pcard_pitch_hit_metrics <- function(pitcher_data) {
   d <- pitcher_data %>%
     mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
     filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
-  
+
   d <- d %>%
     mutate(
       IsSwing   = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable",
@@ -145,10 +125,9 @@ pcard_pitch_hit_metrics <- function(pitcher_data) {
       IsStrike  = PitchCall %in% c("StrikeCalled","StrikeSwinging","FoulBall",
                                    "FoulBallNotFieldable","FoulBallFieldable","FoulTip","InPlay"),
       InZone    = !is.na(PlateLocSide) & !is.na(PlateLocHeight) &
-        abs(PlateLocSide) <= 0.83 &
-        PlateLocHeight >= 1.5 & PlateLocHeight <= 3.5
+        abs(PlateLocSide) <= 0.83 & PlateLocHeight >= 1.5 & PlateLocHeight <= 3.5
     )
-  
+
   swing_summary <- d %>%
     group_by(TaggedPitchType_clean) %>%
     summarise(
@@ -162,11 +141,11 @@ pcard_pitch_hit_metrics <- function(pitcher_data) {
       Strike_pct  = mean(IsStrike, na.rm = TRUE),
       .groups     = "drop"
     )
-  
+
   pa_end <- d %>%
     filter(
       PlayResult %in% c("Single","Double","Triple","HomeRun","Out",
-                        "FieldersChoice","Error","Sacrifice") |
+                        "FieldersChoice","Error","Sacrifice", "Sacrificie") |
         KorBB %in% c("Strikeout","Walk") |
         PitchCall == "HitByPitch"
     ) %>%
@@ -184,19 +163,23 @@ pcard_pitch_hit_metrics <- function(pitcher_data) {
       IsSac  = PlayResult == "Sacrifice",
       IsAB   = !IsBB & !IsHBP & !IsSac
     )
-  
+
   outcome_summary <- pa_end %>%
     group_by(TaggedPitchType_clean) %>%
     summarise(
       PA          = n(),
       AB          = sum(IsAB),
       Hits        = sum(IsHit),
+      Walks       = sum(IsBB),
+      HBP         = sum(IsHBP),
       TotalBases  = sum(TB),
       AVG         = ifelse(AB > 0, Hits / AB, NA_real_),
+      OBP         = ifelse((AB+Walks+HBP) > 0, (Hits+Walks+HBP) / (AB+Walks+HBP), NA_real_),
       SLG         = ifelse(AB > 0, TotalBases / AB, NA_real_),
+      OPS         = ifelse(is.na(OBP) | is.na(SLG), NA_real_, OBP + SLG),
       .groups     = "drop"
     )
-  
+
   full_join(swing_summary, outcome_summary, by = "TaggedPitchType_clean") %>%
     mutate(
       `Whiff%`   = ifelse(is.na(Whiff_pct), "--", paste0(round(Whiff_pct * 100, 1), "%")),
@@ -207,12 +190,87 @@ pcard_pitch_hit_metrics <- function(pitcher_data) {
       `Avg LA`   = pcard_format_num(AvgLA, 1),
       AVG        = pcard_format_rate(AVG, 3),
       SLG        = pcard_format_rate(SLG, 3),
+      OPS        = pcard_format_rate(OPS, 3),
       BBE        = ifelse(is.na(BBE), 0L, BBE)
     ) %>%
-    select(Pitch = TaggedPitchType_clean, `#` = N, BBE, AVG, SLG,
+    select(Pitch = TaggedPitchType_clean, `#` = N, BBE, AVG, SLG, OPS,
            `Whiff%`, `HardHit%`, `Zone%`, `Strike%`, `Avg EV`, `Avg LA`) %>%
     arrange(desc(`#`))
 }
+
+
+pcard_count_bucket <- function(balls, strikes) {
+  count <- paste0(balls, "-", strikes)
+  case_when(
+    count == "3-2"                          ~ "3-2",
+    strikes == 2                            ~ "Kill/Putaway",
+    count == "0-0"                          ~ "Early",
+    count %in% c("0-1","0-2","1-2")         ~ "Ahead",
+    count %in% c("1-1","2-2")               ~ "Even",
+    TRUE                                    ~ "Other"
+  )
+}
+
+pcard_usage_by_count <- function(pitcher_data) {
+  d <- pitcher_data %>%
+    mutate(
+      TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType),
+      Bucket = pcard_count_bucket(Balls, Strikes)
+    ) %>%
+    filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined",
+           Bucket != "Other")
+
+  bucket_totals <- d %>% count(Bucket, name = "bucket_n")
+
+  d %>%
+    count(Bucket, TaggedPitchType_clean, name = "n") %>%
+    left_join(bucket_totals, by = "Bucket") %>%
+    mutate(pct = round(n / bucket_n * 100, 1)) %>%
+    select(Bucket, Pitch = TaggedPitchType_clean, `#` = n, `Usage%` = pct) %>%
+    mutate(`Usage%` = paste0(`Usage%`, "%")) %>%
+    arrange(factor(Bucket, levels = c("Early","Ahead","Even","3-2","Kill/Putaway")), desc(`#`))
+}
+
+pcard_strike_zone_box <- data.frame(
+  x = c(-0.83, -0.83, 0.83, 0.83, -0.83),
+  y = c(1.5, 3.5, 3.5, 1.5, 1.5)
+)
+
+pcard_density_heatmap <- function(pitcher_data, pitch_type = "All", side = "All") {
+  d <- pitcher_data %>%
+    mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
+    filter(!is.na(PlateLocSide), !is.na(PlateLocHeight))
+
+  if (pitch_type != "All") d <- d %>% filter(TaggedPitchType_clean == pitch_type)
+  if (side != "All")       d <- d %>% filter(BatterSide == side)
+
+  title_txt <- paste0(
+    if (pitch_type == "All") "All Pitches" else pitch_type,
+    " vs ",
+    if (side == "All") "All Hitters" else paste0(toupper(substr(side,1,1)), "HH")
+  )
+
+  if (nrow(d) < 5) {
+    return(ggplot() + theme_void() + labs(title = paste0(title_txt, " — insufficient data")))
+  }
+
+  ggplot(d, aes(x = -PlateLocSide, y = PlateLocHeight)) +
+    stat_density_2d(aes(fill = after_stat(density)), geom = "raster",
+                    contour = FALSE, interpolate = TRUE) +
+    scale_fill_gradient(low = "white", high = "#C8102E", guide = "none") +
+    geom_path(data = pcard_strike_zone_box, aes(x = x, y = y),
+              color = "#0C2340", linewidth = 1, inherit.aes = FALSE) +
+    geom_polygon(data = pcard_home_plate_shape, aes(x = x, y = y),
+                fill = "white", color = "#0C2340", linewidth = 0.8, inherit.aes = FALSE) +
+    coord_fixed() + xlim(-2.5, 2.5) + ylim(0, 5) +
+    labs(title = title_txt, x = NULL, y = NULL) +
+    theme_void() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 12, face = "bold", colour = "#0C2340"),
+      plot.background = element_rect(fill = "white", colour = NA)
+    )
+}
+
 
 # ── pitch location data + plot ──
 pcard_home_plate_shape <- data.frame(
@@ -415,6 +473,11 @@ pcard_draw_pitch_metrics_page <- function(pitch_metrics_tbl) {
   pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics")
 }
 
+pcard_draw_count_usage_page <- function(count_usage_tbl) {
+  grid.newpage()
+  pcard_draw_table(count_usage_tbl, "Usage by Count Situation")
+}
+
 pcard_draw_location_page <- function(p_location_lhh, p_location_rhh) {
   grid.newpage()
   pushViewport(viewport(layout = grid.layout(1, 2)))
@@ -473,7 +536,10 @@ pcard_draw_hit_metrics_page <- function(hit_metrics_tbl) {
 # ── convenience: build every data object for one pitcher in one call ──
 pcard_build_all <- function(df, pitcher_raw) {
   pitcher_data <- df %>% filter(Pitcher == pitcher_raw)
-  
+
+  pitch_types <- sort(unique(pcard_canonicalize_pitch(pitcher_data$TaggedPitchType)))
+  pitch_types <- pitch_types[!pitch_types %in% c("Undefined", NA)]
+
   list(
     pitcher_raw       = pitcher_raw,
     pitcher_data      = pitcher_data,
@@ -485,6 +551,8 @@ pcard_build_all <- function(df, pitcher_raw) {
     usage_total       = pcard_usage_table(pitcher_data, "All"),
     usage_rhh         = pcard_usage_table(pitcher_data, "Right"),
     usage_lhh         = pcard_usage_table(pitcher_data, "Left"),
-    hit_metrics_tbl   = pcard_pitch_hit_metrics(pitcher_data)
+    hit_metrics_tbl   = pcard_pitch_hit_metrics(pitcher_data),
+    count_usage_tbl   = pcard_usage_by_count(pitcher_data),   
+    pitch_types       = pitch_types                            
   )
 }
