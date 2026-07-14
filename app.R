@@ -2286,7 +2286,103 @@ season_pitcher_card_server <- function(input, output, session) {
   )
 }
 
+caps_media_server <- function(input, output, session) {
 
+  cm_selected <- reactiveVal(NULL)
+
+  output$cm_team_ui <- renderUI({
+    req(length(college26_team_choices) > 0)
+    selectInput("cm_team", "Team:",
+                choices = college26_team_choices, width = "100%")
+  })
+
+  output$cm_pitcher_ui <- renderUI({
+    req(input$cm_team)
+    pitchers <- college26_pitchers_by_team[[input$cm_team]]
+    req(length(pitchers) > 0)
+    selectInput("cm_pitcher", "Pitcher:", choices = pitchers, width = "100%")
+  })
+
+  observeEvent(input$cm_load, {
+    req(!is.null(college26_data), input$cm_team, input$cm_pitcher)
+
+    pc <- tryCatch(
+      pcard_build_all(
+        college26_data %>% filter(PitcherTeam == input$cm_team),
+        input$cm_pitcher
+      ),
+      error = function(e) {
+        showNotification(paste("Card build failed:", e$message), type = "error")
+        NULL
+      }
+    )
+    cm_selected(pc)
+  })
+
+  output$cm_missing_msg <- renderUI({
+    if (is.null(cm_selected())) {
+      tags$p("Select a team and pitcher, then click Load Player.",
+             style = "color:#8B8B96; font-size:13px;")
+    } else NULL
+  })
+
+  output$cm_header_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_header_page(cm_selected()$pitcher_raw)
+  })
+
+  output$cm_boxscore_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_boxscore_page(cm_selected()$box_stats)
+  })
+
+  output$cm_movement_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_movement_page(cm_selected()$p_movement)
+  })
+
+  output$cm_pitch_metrics_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_pitch_metrics_page(cm_selected()$pitch_metrics_tbl)
+  })
+
+  output$cm_location_lhh_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_location_lhh_page(cm_selected()$p_location_lhh)
+  })
+
+  output$cm_location_rhh_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_location_rhh_page(cm_selected()$p_location_rhh)
+  })
+
+  output$cm_usage_overall_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_single_table_page(cm_selected()$usage_total, "Overall")
+  })
+
+  output$cm_usage_rhh_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_single_table_page(cm_selected()$usage_rhh, "RHH")
+  })
+
+  output$cm_usage_lhh_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_single_table_page(cm_selected()$usage_lhh, "LHH")
+  })
+
+  output$cm_hit_metrics_plot <- renderPlot({
+    req(cm_selected())
+    tryCatch({
+      pcard_draw_hit_metrics_page(cm_selected()$hit_metrics_tbl)
+    }, error = function(e) {
+      grid::grid.newpage()
+      grid::grid.text(paste("Hit metrics error:", e$message),
+                      gp = grid::gpar(col = "red", fontsize = 12))
+    })
+  })
+}
+               
 standings <- tryCatch(fetch_standings(), error = function(e) NULL)
 
 fetch_whitecaps_roster <- function() {
@@ -3006,6 +3102,76 @@ report_viewer_ui <- function(png_paths, pdf_path, download_id_pdf, download_id_p
   )
 }
 
+caps_media_ui <- function() {
+  tagList(
+    tags$head(tags$style(HTML("
+      #cm-page { max-width: 1100px; margin: 0 auto; padding: 0 24px 40px; }
+      #cm-page .pcard-panel {
+        background: #fff; border: 1px solid #EAEAEE; border-radius: 10px;
+        padding: 12px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(12,35,64,0.04);
+      }
+      #cm-page .pcard-panel img { width: 100%; height: auto; display: block; }
+      #cm-page .pcard-row { display: flex; gap: 20px; }
+      #cm-page .pcard-row .pcard-panel { flex: 1; min-width: 0; }
+      #cm-page .pcard-section-label {
+        font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+        color: #5F5F6B; margin: 4px 0 10px;
+      }
+    "))),
+    tags$div(
+      class = "hub-main",
+      tags$div(
+        style = "margin-bottom: 16px;",
+        tags$button("← Back to Hub",
+                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
+                    class = "btn btn-outline-secondary btn-sm")
+      ),
+      tags$h2("CAPS Media",
+              style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 16px;"),
+      tags$p("Browse any pitcher in the College26 database.",
+             style = "color:#5F6B7A; font-size:14px; margin-bottom:20px;"),
+      tags$div(
+        style = "display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: end; margin-bottom: 24px;",
+        uiOutput("cm_team_ui"),
+        uiOutput("cm_pitcher_ui"),
+        actionButton("cm_load", "Load Player", class = "btn btn-primary")
+      ),
+      tags$div(
+        id = "cm-page",
+        uiOutput("cm_missing_msg"),
+
+        tags$div(class = "pcard-panel", plotOutput("cm_header_plot", height = "100px")),
+        tags$div(class = "pcard-panel", plotOutput("cm_boxscore_plot", height = "100px")),
+
+        tags$div(class = "pcard-section-label", "Pitch Movement"),
+        tags$div(class = "pcard-panel", style = "max-width: 520px; margin-left: auto; margin-right: auto;",
+                 plotOutput("cm_movement_plot", height = "480px")),
+
+        tags$div(class = "pcard-section-label", "Pitch Metrics"),
+        tags$div(class = "pcard-panel", plotOutput("cm_pitch_metrics_plot", height = "340px")),
+
+        tags$div(class = "pcard-section-label", "Pitch Location"),
+        tags$div(class = "pcard-row",
+          tags$div(class = "pcard-panel", plotOutput("cm_location_lhh_plot", height = "420px")),
+          tags$div(class = "pcard-panel", plotOutput("cm_location_rhh_plot", height = "420px"))
+        ),
+
+        tags$div(class = "pcard-section-label", "Usage"),
+        tags$div(class = "pcard-row",
+          tags$div(class = "pcard-panel", plotOutput("cm_usage_overall_plot", height = "220px")),
+          tags$div(class = "pcard-panel", plotOutput("cm_usage_rhh_plot", height = "220px")),
+          tags$div(class = "pcard-panel", plotOutput("cm_usage_lhh_plot", height = "220px"))
+        ),
+
+        tags$div(class = "pcard-section-label", "Hit Metrics by Pitch"),
+        tags$div(class = "pcard-panel", plotOutput("cm_hit_metrics_plot", height = "340px"))
+      )
+    ),
+    tags$div(class = "hub-footer",
+             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+  )
+}
+                              
 # ==========================================
 # HITTER CONSTANTS & HELPERS
 # ==========================================
@@ -5328,6 +5494,7 @@ ui <- navbarPage(
     tags$div(style = "padding: 40px 32px;",
       tags$h3("Umpire Reports", style = "color: #0C2340;"),
       tags$p("Coming soon.", style = "color: #5F5F6B;"))),
+  tabPanel("CAPS Media", value = "tab_caps_media", caps_media_ui()),
   tabPanel("Pitcher Card (Mock)", value = "tab_pcard_mock", pcard_report_ui())
 )
 
@@ -5939,6 +6106,8 @@ pcard_selected <- reactiveVal(NULL)
   # ==========================================
   acq_board_server(input, output, session)
 
-}
+  caps_media_server(input, output, session)
 
+
+      
 shinyApp(ui = ui, server = server)
