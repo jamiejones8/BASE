@@ -3164,7 +3164,7 @@ caps_media_ui <- function() {
                  plotOutput("cm_movement_plot", height = "480px")),
 
         tags$div(class = "pcard-section-label", "Pitch Metrics"),
-        tags$div(class = "pcard-panel", plotOutput("cm_pitch_metrics_plot", height = "340px")),
+        tags$div(class = "pcard-panel", plotOutput("cm_pitch_metrics_plot", height = "420px")),
 
         tags$div(class = "pcard-section-label", "Pitch Location"),
         tags$div(class = "pcard-row",
