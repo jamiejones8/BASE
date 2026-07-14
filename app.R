@@ -2381,6 +2381,25 @@ caps_media_server <- function(input, output, session) {
                       gp = grid::gpar(col = "red", fontsize = 12))
     })
   })
+  output$cm_count_usage_plot <- renderPlot({
+    req(cm_selected())
+    pcard_draw_count_usage_page(cm_selected()$count_usage_tbl)
+  })
+
+  output$cm_heatmap_pitch_ui <- renderUI({
+    req(cm_selected())
+    choices <- c("All", cm_selected()$pitch_types)
+    selectInput("cm_heatmap_pitch", "Pitch Type:", choices = choices, selected = "All", width = "220px")
+  })
+
+  output$cm_heatmap_plot <- renderPlot({
+    req(cm_selected(), input$cm_heatmap_pitch, input$cm_heatmap_side)
+    pcard_density_heatmap(
+      cm_selected()$pitcher_data,
+      pitch_type = input$cm_heatmap_pitch,
+      side       = input$cm_heatmap_side
+    )
+  })
 }
                
 standings <- tryCatch(fetch_standings(), error = function(e) NULL)
