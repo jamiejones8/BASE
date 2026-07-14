@@ -2487,23 +2487,20 @@ pcard_report_ui <- function() {
                  plotOutput("pcard_movement_plot", height = "480px")),
 
         tags$div(class = "pcard-section-label", "Pitch Metrics"),
-        tags$div(class = "pcard-panel", plotOutput("pcard_pitch_metrics_plot", height = "320px")),
+        tags$div(class = "pcard-panel", plotOutput("pcard_hit_metrics_plot", height = "320px")),
 
-        tags$div(class = "pcard-section-label", "Pitch Location"),
-        tags$div(class = "pcard-row",
-          tags$div(class = "pcard-panel", plotOutput("pcard_location_lhh_plot", height = "420px")),
-          tags$div(class = "pcard-panel", plotOutput("pcard_location_rhh_plot", height = "420px"))
+        tags$div(class = "pcard-section-label", "Usage by Count Situation"),
+        tags$div(class = "pcard-panel", plotOutput("pcard_count_usage_plot", height = "320px")),
+
+        tags$div(class = "pcard-section-label", "Pitch Location Density"),
+        tags$div(
+          class = "pcard-panel",
+          style = "display:flex; gap:16px; align-items:end; margin-bottom:16px;",
+          uiOutput("pcard_heatmap_pitch_ui"),
+          selectInput("pcard_heatmap_side", "Hitter Side:",
+                      choices = c("All","Left","Right"), selected = "All", width = "160px")
         ),
-
-        tags$div(class = "pcard-section-label", "Usage"),
-        tags$div(class = "pcard-row",
-          tags$div(class = "pcard-panel", plotOutput("pcard_usage_overall_plot", height = "320px")),
-          tags$div(class = "pcard-panel", plotOutput("pcard_usage_rhh_plot", height = "320px")),
-          tags$div(class = "pcard-panel", plotOutput("pcard_usage_lhh_plot", height = "320px"))
-        ),
-
-        tags$div(class = "pcard-section-label", "Hit Metrics by Pitch"),
-        tags$div(class = "pcard-panel", plotOutput("pcard_hit_metrics_plot", height = "320px"))
+        tags$div(class = "pcard-panel", plotOutput("pcard_heatmap_plot", height = "420px"))
       )
     ),
     tags$div(class = "hub-footer",
@@ -5838,6 +5835,26 @@ pcard_selected <- reactiveVal(NULL)
       grid::grid.text(paste("Hit metrics error:", e$message),
                       gp = grid::gpar(col = "red", fontsize = 12))
     })
+  })
+
+  output$pcard_count_usage_plot <- renderPlot({
+    req(pcard_selected())
+    pcard_draw_count_usage_page(pcard_selected()$count_usage_tbl)
+  })
+
+  output$pcard_heatmap_pitch_ui <- renderUI({
+    req(pcard_selected())
+    choices <- c("All", pcard_selected()$pitch_types)
+    selectInput("pcard_heatmap_pitch", "Pitch Type:", choices = choices, selected = "All", width = "220px")
+  })
+
+  output$pcard_heatmap_plot <- renderPlot({
+    req(pcard_selected(), input$pcard_heatmap_pitch, input$pcard_heatmap_side)
+    pcard_density_heatmap(
+      pcard_selected()$pitcher_data,
+      pitch_type = input$pcard_heatmap_pitch,
+      side       = input$pcard_heatmap_side
+    )
   })
 
   # ==========================================
