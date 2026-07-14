@@ -413,6 +413,8 @@ pcard_draw_header <- function(name) {
 
 pcard_draw_boxscore <- function(stats) {
   cols <- names(stats); vals <- unlist(stats); n <- length(cols); cell_w <- 1 / n
+  value_fontsize <- max(14, 26 - (n - 5) * 2)   # shrinks as n grows past 5 columns
+
   grid.rect(gp = gpar(fill = "#FAFAFB", col = "#EAEAEE"))
   for (i in seq_len(n)) {
     cx <- (i - 0.5) * cell_w
@@ -423,11 +425,10 @@ pcard_draw_boxscore <- function(stats) {
     grid.text(toupper(cols[i]), x = unit(cx, "npc"), y = unit(0.70, "npc"),
               gp = gpar(col = "#5F5F6B", fontsize = 11, fontfamily = "sans"))
     grid.text(vals[i], x = unit(cx, "npc"), y = unit(0.32, "npc"),
-              gp = gpar(col = "#16161B", fontsize = 24, fontface = "bold", fontfamily = "sans"))
+              gp = gpar(col = "#16161B", fontsize = value_fontsize, fontface = "bold", fontfamily = "sans"))
   }
 }
-
-pcard_draw_table <- function(tbl, title) {
+pcard_draw_table <- function(tbl, title, core_fontsize = 15, head_fontsize = 13) {
   if (nrow(tbl) == 0) {
     grid.text(paste0(title, ": no pitches"),
               gp = gpar(fontsize = 11, col = "#5F5F6B", fontfamily = "sans"))
@@ -449,28 +450,25 @@ pcard_draw_table <- function(tbl, title) {
   tbl_theme <- ttheme_minimal(
     core = list(
       bg_params = list(fill = bg_mat, col = "#EAEAEE"),
-      fg_params = list(col = fg_mat, fontface = "bold", fontsize = 15, fontfamily = "sans")   # bumped from 11
+      fg_params = list(col = fg_mat, fontface = "bold", fontsize = core_fontsize, fontfamily = "sans")
     ),
     colhead = list(
       bg_params = list(fill = "#00827F", col = "#EAEAEE"),
-      fg_params = list(col = "white", fontface = "bold", fontsize = 13, fontfamily = "sans")  # bumped from 10
+      fg_params = list(col = "white", fontface = "bold", fontsize = head_fontsize, fontfamily = "sans")
     )
   )
 
   tg <- tableGrob(tbl, rows = NULL, theme = tbl_theme)
 
-  # Make the table fill whatever canvas it's drawn on, instead of drawing at
-  # its natural (small) size — same trick as build_arsenal_grob() in app.R.
   tg$widths  <- unit(rep(1, ncol(tg)), "null")
   tg$heights <- unit(rep(1, nrow(tg)), "null")
 
-  title_grob <- textGrob(title, gp = gpar(fontsize = 14, fontface = "bold",     # bumped from 12
+  title_grob <- textGrob(title, gp = gpar(fontsize = 14, fontface = "bold",
                                           col = "#0C2340", fontfamily = "sans"))
 
   tg <- gtable_add_rows(tg, heights = grobHeight(title_grob) + unit(10, "pt"), pos = 0)
   tg <- gtable_add_grob(tg, title_grob, t = 1, l = 1, r = ncol(tg), name = "title")
 
-  # Draw the whole thing (title + table) filling the current viewport.
   pushViewport(viewport(width = unit(1, "npc") - unit(4, "pt"),
                         height = unit(1, "npc") - unit(4, "pt")))
   grid.draw(tg)
@@ -495,7 +493,7 @@ pcard_draw_movement_page <- function(p_movement) {
 
 pcard_draw_pitch_metrics_page <- function(pitch_metrics_tbl) {
   grid.newpage()
-  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics")
+  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics", core_fontsize = 11, head_fontsize = 10)
 }
 
 pcard_draw_count_usage_page <- function(count_usage_tbl) {
