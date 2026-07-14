@@ -5494,8 +5494,8 @@ ui <- navbarPage(
     tags$div(style = "padding: 40px 32px;",
       tags$h3("Umpire Reports", style = "color: #0C2340;"),
       tags$p("Coming soon.", style = "color: #5F5F6B;"))),
-  tabPanel("CAPS Media", value = "tab_caps_media", caps_media_ui()),
-  tabPanel("Pitcher Card (Mock)", value = "tab_pcard_mock", pcard_report_ui())
+  tabPanel("Pitcher Card (Mock)", value = "tab_pcard_mock", pcard_report_ui()),
+  tabPanel("CAPS Media", value = "tab_caps_media", caps_media_ui())
 )
 
 # ==========================================
@@ -6108,6 +6108,7 @@ pcard_selected <- reactiveVal(NULL)
 
   caps_media_server(input, output, session)
 
+}
 
       
 shinyApp(ui = ui, server = server)
