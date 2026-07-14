@@ -3180,7 +3180,19 @@ caps_media_ui <- function() {
         ),
 
         tags$div(class = "pcard-section-label", "Hit Metrics by Pitch"),
-        tags$div(class = "pcard-panel", plotOutput("cm_hit_metrics_plot", height = "340px"))
+        tags$div(class = "pcard-panel", plotOutput("cm_hit_metrics_plot", height = "340px")),
+        tags$div(class = "pcard-section-label", "Usage by Count Situation"),
+        tags$div(class = "pcard-panel", plotOutput("cm_count_usage_plot", height = "340px")),
+
+        tags$div(class = "pcard-section-label", "Pitch Location Density"),
+        tags$div(
+          class = "pcard-panel",
+          style = "display:flex; gap:16px; align-items:end; margin-bottom:16px;",
+          uiOutput("cm_heatmap_pitch_ui"),
+          selectInput("cm_heatmap_side", "Hitter Side:",
+                      choices = c("All","Left","Right"), selected = "All", width = "160px")
+        ),
+        tags$div(class = "pcard-panel", plotOutput("cm_heatmap_plot", height = "420px"))
       )
     ),
     tags$div(class = "hub-footer",
