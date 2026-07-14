@@ -110,6 +110,31 @@ pcard_usage_table <- function(pitcher_data, side = c("All", "Left", "Right")) {
     rename(Pitch = TaggedPitchType_clean)
 }
 
+pcard_pitch_metrics_table <- function(pitcher_data) {
+  d <- pitcher_data %>%
+    mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
+    filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
+
+  d %>%
+    group_by(TaggedPitchType_clean) %>%
+    summarise(
+      `#`        = n(),
+      Velo       = pcard_format_num(mean(RelSpeed, na.rm = TRUE), 1),
+      `Max Velo` = pcard_format_num(suppressWarnings(max(RelSpeed, na.rm = TRUE)), 1),
+      Spin       = pcard_format_num(mean(SpinRate, na.rm = TRUE), 0),
+      iVB        = pcard_format_num(mean(InducedVertBreak, na.rm = TRUE), 1),
+      HB         = pcard_format_num(mean(HorzBreak, na.rm = TRUE), 1),
+      RelH       = pcard_format_num(mean(RelHeight, na.rm = TRUE), 1),
+      RelS       = pcard_format_num(mean(RelSide, na.rm = TRUE), 1),
+      Ext        = pcard_format_num(mean(Extension, na.rm = TRUE), 1),
+      VAA        = pcard_format_num(mean(VertApprAngle, na.rm = TRUE), 1),
+      HAA        = pcard_format_num(mean(HorzApprAngle, na.rm = TRUE), 1),
+      .groups    = "drop"
+    ) %>%
+    arrange(desc(`#`)) %>%
+    rename(Pitch = TaggedPitchType_clean)
+}
+
 pcard_pitch_hit_metrics <- function(pitcher_data) {
   d <- pitcher_data %>%
     mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
