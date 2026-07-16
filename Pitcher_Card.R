@@ -493,7 +493,7 @@ pcard_draw_movement_page <- function(p_movement) {
 
 pcard_draw_pitch_metrics_page <- function(pitch_metrics_tbl) {
   grid.newpage()
-  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics", core_fontsize = 11, head_fontsize = 10)
+  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics", core_fontsize = 14, head_fontsize = 13)
 }
 
 pcard_draw_count_usage_page <- function(count_usage_tbl) {
