@@ -460,6 +460,7 @@ pcard_movement_plot <- function(pitcher_data) {
     filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
 
   ind_data <- pitcher_data %>%
+    filter(!is.na(HorzBreak), !is.na(InducedVertBreak)) %>%
     transmute(x = HorzBreak, y = InducedVertBreak, type = TaggedPitchType_clean)
 
   mean_data <- pitcher_data %>%
@@ -470,11 +471,11 @@ pcard_movement_plot <- function(pitcher_data) {
       velo = round(mean(RelSpeed, na.rm = TRUE), 1),
       .groups = "drop"
     ) %>%
-    rename(type = TaggedPitchType_clean)
+    rename(type = TaggedPitchType_clean) %>%
+    filter(!is.na(x), !is.na(y), is.finite(x), is.finite(y))   # NEW — drop any all-NA pitch types
 
   pcard_movement_plot_generic(ind_data, mean_data, palette = pcard_pitch_colors)
 }
-
 pcard_draw_boxscore <- function(stats) {
   cols <- names(stats); vals <- unlist(stats); n <- length(cols); cell_w <- 1 / n
   value_fontsize <- max(14, 26 - (n - 5) * 2)   # shrinks as n grows past 5 columns
