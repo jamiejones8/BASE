@@ -5386,47 +5386,33 @@ output$movement_plot <- renderPlot({
     key <- selected_key(); req(key)
     p   <- acq_all_pitchers %>% filter(source_key == key); req(p$has_pbp)
     pid <- as.integer(p$source_key)
-    ind_data  <- acq_pitch_level %>%
+
+    ind_raw  <- acq_pitch_level %>%
       filter(pitcher_id == pid, !is.na(hb_pov), !is.na(ivb),
              !is.na(pitch_type), pitch_type != "")
-    mean_data <- acq_movement_avg %>% filter(pitcher_id == pid)
-    req(nrow(ind_data) > 0)
-    lim <- max(abs(c(ind_data$hb_pov, ind_data$ivb)), na.rm=TRUE) + 4
-    lim <- max(lim, 22)
-    ggplot() +
-      geom_vline(xintercept=0, color="black", linewidth=0.6) +
-      geom_hline(yintercept=0, color="black", linewidth=0.6) +
-      geom_point(data=ind_data,
-                 aes(x=hb_pov, y=ivb, fill=pitch_type),
-                 size=3, alpha=0.75, shape=21, color="black", stroke=0.4) +
-      geom_point(data=mean_data,
-                 aes(x=pfx_x, y=pfx_z, color=pitch_type),
-                 size=12, alpha=0.95) +
-      geom_text(data=mean_data,
-                aes(x=pfx_x, y=pfx_z, label=round(velo)),
-                color="#FFFFFF", fontface="bold", size=3) +
-      scale_color_manual(values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
-      scale_fill_manual( values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
-      scale_x_continuous(breaks = seq(-20, 20, 10)) +
-      scale_y_continuous(breaks = seq(-20, 20, 10)) +
-      coord_fixed(xlim = c(-25, 25), ylim = c(-25, 25)) +
-      labs(title="Pitch Movement",
-           x="Horizontal Break (in)",
-           y="Induced Vertical Break (in)") +
-      theme_minimal(base_size=13) +
+    mean_raw <- acq_movement_avg %>% filter(pitcher_id == pid)
+    req(nrow(ind_raw) > 0)
+
+    ind_data  <- ind_raw  %>% transmute(x = hb_pov, y = ivb, type = pitch_type)
+    mean_data <- mean_raw %>% transmute(x = pfx_x, y = pfx_z, type = pitch_type, velo = velo)
+
+    pcard_movement_plot_generic(
+      ind_data, mean_data, palette = ACQ_PITCH_COLORS, na_color = "#AAAAAA",
+      point_size = 3, mean_size = 12, label_size = 3
+    ) +
       theme(
-        plot.background  = element_rect(fill="white",  color=NA),
-        panel.background = element_rect(fill="#F7FAF8", color=NA),
-        panel.grid.major = element_line(color="#DCE8DF", linewidth=0.4),
+        plot.background  = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "#F7FAF8", color = NA),
+        panel.grid.major = element_line(color = "#DCE8DF", linewidth = 0.4),
         panel.grid.minor = element_blank(),
-        text             = element_text(color=ACQ_WHITE),
-        axis.text        = element_text(color="#444444"),
-        axis.title       = element_text(color="#666666", size=11),
-        plot.title       = element_text(color=ACQ_TEAL, face="bold", size=16,
-                                        hjust=0.5, margin=margin(b=10)),
+        text             = element_text(color = ACQ_WHITE),
+        axis.text        = element_text(color = "#444444"),
+        axis.title       = element_text(color = "#666666", size = 11),
+        plot.title       = element_text(color = ACQ_TEAL, face = "bold", size = 16,
+                                        hjust = 0.5, margin = margin(b = 10)),
         legend.position  = "none"
       )
-  }, bg="white")
+  }, bg = "white")
 
   output$pitch_metrics_table <- renderDT({
     key <- selected_key(); req(key)
