@@ -437,7 +437,7 @@ pcard_draw_boxscore <- function(stats) {
               gp = gpar(col = "#16161B", fontsize = value_fontsize, fontface = "bold", fontfamily = "sans"))
   }
 }
-pcard_draw_table <- function(tbl, title, core_fontsize = 15, head_fontsize = 13) {
+pcard_draw_table <- function(tbl, title, core_fontsize = NULL, head_fontsize = NULL) {
   if (nrow(tbl) == 0) {
     grid.text(paste0(title, ": no pitches"),
               gp = gpar(fontsize = 11, col = "#5F5F6B", fontfamily = "sans"))
@@ -446,6 +446,20 @@ pcard_draw_table <- function(tbl, title, core_fontsize = 15, head_fontsize = 13)
 
   n_rows <- nrow(tbl)
   n_cols <- ncol(tbl)
+
+  # auto-scale font size down as column count grows, unless explicitly overridden
+  if (is.null(core_fontsize)) {
+    core_fontsize <- case_when(
+      n_cols <= 5  ~ 15,
+      n_cols <= 7  ~ 13,
+      n_cols <= 9  ~ 11,
+      n_cols <= 11 ~ 10,
+      TRUE         ~ 9
+    )
+  }
+  if (is.null(head_fontsize)) {
+    head_fontsize <- max(8, core_fontsize - 2)
+  }
 
   fg_mat <- matrix("#16161B", n_rows, n_cols)
   bg_mat <- matrix("#FAFAFB", n_rows, n_cols)
@@ -502,12 +516,12 @@ pcard_draw_movement_page <- function(p_movement) {
 
 pcard_draw_pitch_metrics_page <- function(pitch_metrics_tbl) {
   grid.newpage()
-  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics", core_fontsize = 14, head_fontsize = 13)
+  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics")   # no manual fontsize override
 }
 
 pcard_draw_count_usage_page <- function(count_usage_tbl) {
   grid.newpage()
-  pcard_draw_table(count_usage_tbl, "Usage by Count Situation", core_fontsize = 14, head_fontsize = 12)
+  pcard_draw_table(count_usage_tbl, "Usage by Count Situation")
 }
     
 pcard_draw_location_page <- function(p_location_lhh, p_location_rhh) {
