@@ -391,38 +391,88 @@ pcard_location_plot <- function(pitcher_data, side = c("Left", "Right")) {
 }
 
 
-pcard_movement_plot <- function(pitcher_data) {
-  pitcher_data <- pitcher_data %>%
-    mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
-    filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
-  movement_avg <- pitcher_data %>%
-    group_by(TaggedPitchType_clean) %>%
-    summarise(
-      HB   = round(mean(HorzBreak, na.rm = TRUE), 1),
-      iVB  = round(mean(InducedVertBreak, na.rm = TRUE), 1),
-      Velo = round(mean(RelSpeed, na.rm = TRUE), 1),
-      .groups = "drop"
-    )
+
+# simple collision-avoidance for overlapping mean-point labels, no ggrepel needed
+pcard_nudge_labels <- function(x, y, min_dist = 6) {
+  n <- length(x)
+  label_y <- y
+  placed  <- data.frame(x = numeric(0), y = numeric(0))
+
+  ord <- order(x)
+  for (i in ord) {
+    cx <- x[i]; cy <- y[i]
+    direction <- 1
+    tries <- 0
+    while (nrow(placed) > 0 &&
+           any(sqrt((placed$x - cx)^2 + (placed$y - cy)^2) < min_dist) &&
+           tries < 8) {
+      tries <- tries + 1
+      cy <- y[i] + direction * tries * (min_dist * 0.6)
+      direction <- -direction
+    }
+    label_y[i] <- cy
+    placed <- rbind(placed, data.frame(x = cx, y = cy))
+  }
+  label_y
+}
+
+# ── SINGLE SOURCE OF TRUTH for every pitch movement plot in the app ──
+# ind_data: data.frame with columns x, y, type (one row per pitch)
+# mean_data: data.frame with columns x, y, type, velo (one row per pitch type)
+pcard_movement_plot_generic <- function(ind_data, mean_data, palette,
+                                        na_color = "#888888",
+                                        title = "Pitch Movement",
+                                        xlab = "Horizontal Break (in)",
+                                        ylab = "Induced Vertical Break (in)",
+                                        point_size = 4, mean_size = 12, label_size = 3) {
+  mean_data$label_y <- pcard_nudge_labels(mean_data$x, mean_data$y, min_dist = 6)
+  mean_data$moved   <- abs(mean_data$label_y - mean_data$y) > 0.01
+
   ggplot() +
     geom_vline(xintercept = 0, color = "black") +
     geom_hline(yintercept = 0, color = "black") +
-    geom_point(data = pitcher_data,
-               aes(x = HorzBreak, y = InducedVertBreak, fill = TaggedPitchType_clean),
-               size = 4, alpha = 0.8, shape = 21, color = "black", stroke = 0.5) +
-    geom_point(data = movement_avg,
-               aes(x = HB, y = iVB, color = TaggedPitchType_clean),
-               size = 12, alpha = 0.9) +
-    geom_text(data = movement_avg, aes(x = HB, y = iVB, label = round(Velo)),
-              color = "white", fontface = "bold", size = 3) +
-    scale_color_manual(values = pcard_pitch_colors, na.value = "#888888") +
-    scale_fill_manual(values = pcard_pitch_colors, na.value = "#888888") +
-    labs(title = "Pitch Movement", x = "Horizontal Break (in)", y = "Induced Vertical Break (in)") +
+    geom_point(data = ind_data,
+               aes(x = x, y = y, fill = type),
+               size = point_size, alpha = 0.8, shape = 21, color = "black", stroke = 0.5) +
+    geom_segment(data = subset(mean_data, moved),
+                aes(x = x, y = y, xend = x, yend = label_y),
+                color = "grey45", linewidth = 0.4) +
+    geom_point(data = mean_data,
+               aes(x = x, y = y, color = type),
+               size = mean_size, alpha = 0.9) +
+    geom_text(data = mean_data,
+              aes(x = x, y = label_y, label = round(velo)),
+              color = "white", fontface = "bold", size = label_size) +
+    scale_color_manual(values = palette, na.value = na_color) +
+    scale_fill_manual(values = palette, na.value = na_color) +
+    labs(title = title, x = xlab, y = ylab) +
     scale_x_continuous(limits = c(-25, 25)) +
     scale_y_continuous(limits = c(-25, 25)) +
     coord_fixed(ratio = 1) +
     theme_minimal() +
     theme(legend.position = "none",
           plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
+}
+
+pcard_movement_plot <- function(pitcher_data) {
+  pitcher_data <- pitcher_data %>%
+    mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
+    filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
+
+  ind_data <- pitcher_data %>%
+    transmute(x = HorzBreak, y = InducedVertBreak, type = TaggedPitchType_clean)
+
+  mean_data <- pitcher_data %>%
+    group_by(TaggedPitchType_clean) %>%
+    summarise(
+      x    = mean(HorzBreak, na.rm = TRUE),
+      y    = mean(InducedVertBreak, na.rm = TRUE),
+      velo = round(mean(RelSpeed, na.rm = TRUE), 1),
+      .groups = "drop"
+    ) %>%
+    rename(type = TaggedPitchType_clean)
+
+  pcard_movement_plot_generic(ind_data, mean_data, palette = pcard_pitch_colors)
 }
 
 pcard_draw_boxscore <- function(stats) {
