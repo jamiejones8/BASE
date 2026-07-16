@@ -5382,20 +5382,17 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
     }
   })
 
- output$movement_plot <- renderPlot({
+output$movement_plot <- renderPlot({
     key <- selected_key(); req(key)
     p   <- acq_all_pitchers %>% filter(source_key == key); req(p$has_pbp)
     pid <- as.integer(p$source_key)
-
     ind_data  <- acq_pitch_level %>%
       filter(pitcher_id == pid, !is.na(hb_pov), !is.na(ivb),
              !is.na(pitch_type), pitch_type != "")
     mean_data <- acq_movement_avg %>% filter(pitcher_id == pid)
     req(nrow(ind_data) > 0)
-
     lim <- max(abs(c(ind_data$hb_pov, ind_data$ivb)), na.rm=TRUE) + 4
     lim <- max(lim, 22)
-
     ggplot() +
       geom_vline(xintercept=0, color="black", linewidth=0.6) +
       geom_hline(yintercept=0, color="black", linewidth=0.6) +
@@ -5407,7 +5404,7 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
                  size=12, alpha=0.95) +
       geom_text(data=mean_data,
                 aes(x=pfx_x, y=pfx_z, label=round(velo)),
-                color="#FFFFFF", fontface="bold", size=4) +
+                color="#FFFFFF", fontface="bold", size=3) +
       scale_color_manual(values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_fill_manual( values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_x_continuous(breaks = seq(-20, 20, 10)) +
