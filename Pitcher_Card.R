@@ -390,7 +390,6 @@ pcard_movement_plot <- function(pitcher_data) {
   pitcher_data <- pitcher_data %>%
     mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
     filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
-
   movement_avg <- pitcher_data %>%
     group_by(TaggedPitchType_clean) %>%
     summarise(
@@ -399,7 +398,6 @@ pcard_movement_plot <- function(pitcher_data) {
       Velo = round(mean(RelSpeed, na.rm = TRUE), 1),
       .groups = "drop"
     )
-
   ggplot() +
     geom_vline(xintercept = 0, color = "black") +
     geom_hline(yintercept = 0, color = "black") +
@@ -410,7 +408,7 @@ pcard_movement_plot <- function(pitcher_data) {
                aes(x = HB, y = iVB, color = TaggedPitchType_clean),
                size = 12, alpha = 0.9) +
     geom_text(data = movement_avg, aes(x = HB, y = iVB, label = round(Velo)),
-              color = "white", fontface = "bold", size = 4) +
+              color = "white", fontface = "bold", size = 3) +
     scale_color_manual(values = pcard_pitch_colors, na.value = "#888888") +
     scale_fill_manual(values = pcard_pitch_colors, na.value = "#888888") +
     labs(title = "Pitch Movement", x = "Horizontal Break (in)", y = "Induced Vertical Break (in)") +
@@ -420,13 +418,6 @@ pcard_movement_plot <- function(pitcher_data) {
     theme_minimal() +
     theme(legend.position = "none",
           plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
-}
-
-# ── header + boxscore + table draw functions ──
-pcard_draw_header <- function(name) {
-  grid.rect(gp = gpar(fill = "#0C2340", col = NA))
-  grid.text(name, x = 0.05, y = 0.5, just = "left",
-            gp = gpar(fontsize = 32, fontface = "bold", fontfamily = "Impact", col = "white"))
 }
 
 pcard_draw_boxscore <- function(stats) {
