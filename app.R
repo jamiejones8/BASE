@@ -5404,16 +5404,10 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
                  size=3, alpha=0.75, shape=21, color="black", stroke=0.4) +
       geom_point(data=mean_data,
                  aes(x=pfx_x, y=pfx_z, color=pitch_type),
-                 size=10, alpha=0.95) +
-      geom_label_repel(data=mean_data,
-                       aes(x=pfx_x, y=pfx_z, label=velo, fill=pitch_type),
-                       color="white", fontface="bold", size=3.5,
-                       label.padding = unit(0.15, "lines"),
-                       label.size = 0,
-                       segment.color = "grey40", segment.size = 0.3,
-                       min.segment.length = 0,
-                       show.legend = FALSE,
-                       seed = 42) +
+                 size=12, alpha=0.95) +
+      geom_text(data=mean_data,
+                aes(x=pfx_x, y=pfx_z, label=round(velo)),
+                color="#FFFFFF", fontface="bold", size=2.8) +
       scale_color_manual(values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_fill_manual( values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_x_continuous(breaks = seq(-20, 20, 10)) +
