@@ -5382,7 +5382,7 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
     }
   })
 
-  output$movement_plot <- renderPlot({
+ output$movement_plot <- renderPlot({
     key <- selected_key(); req(key)
     p   <- acq_all_pitchers %>% filter(source_key == key); req(p$has_pbp)
     pid <- as.integer(p$source_key)
@@ -5405,14 +5405,20 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
       geom_point(data=mean_data,
                  aes(x=pfx_x, y=pfx_z, color=pitch_type),
                  size=10, alpha=0.95) +
-      geom_text(data=mean_data,
-                aes(x=pfx_x, y=pfx_z, label=velo),
-                color="#FFFFFF", size=3.5, fontface="bold") +
+      geom_label_repel(data=mean_data,
+                       aes(x=pfx_x, y=pfx_z, label=velo, fill=pitch_type),
+                       color="white", fontface="bold", size=3.5,
+                       label.padding = unit(0.15, "lines"),
+                       label.size = 0,
+                       segment.color = "grey40", segment.size = 0.3,
+                       min.segment.length = 0,
+                       show.legend = FALSE,
+                       seed = 42) +
       scale_color_manual(values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_fill_manual( values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_x_continuous(breaks = seq(-20, 20, 10)) +
-    scale_y_continuous(breaks = seq(-20, 20, 10)) +
-    coord_fixed(xlim = c(-25, 25), ylim = c(-25, 25)) +
+      scale_y_continuous(breaks = seq(-20, 20, 10)) +
+      coord_fixed(xlim = c(-25, 25), ylim = c(-25, 25)) +
       labs(title="Pitch Movement",
            x="Horizontal Break (in)",
            y="Induced Vertical Break (in)") +
