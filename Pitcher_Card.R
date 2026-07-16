@@ -237,6 +237,8 @@ pcard_count_bucket <- function(balls, strikes) {
 }
 
 pcard_usage_by_count <- function(pitcher_data) {
+  bucket_order <- c("Early", "Ahead", "Even", "3-2", "Kill/Putaway")
+
   d <- pitcher_data %>%
     mutate(
       TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType),
@@ -245,15 +247,31 @@ pcard_usage_by_count <- function(pitcher_data) {
     filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined",
            Bucket != "Other")
 
+  if (nrow(d) == 0) {
+    return(tibble::tibble(Pitch = character()))
+  }
+
   bucket_totals <- d %>% count(Bucket, name = "bucket_n")
 
-  d %>%
+  wide <- d %>%
     count(Bucket, TaggedPitchType_clean, name = "n") %>%
     left_join(bucket_totals, by = "Bucket") %>%
-    mutate(pct = round(n / bucket_n * 100, 1)) %>%
-    select(Bucket, Pitch = TaggedPitchType_clean, `#` = n, `Usage%` = pct) %>%
-    mutate(`Usage%` = paste0(`Usage%`, "%")) %>%
-    arrange(factor(Bucket, levels = c("Early","Ahead","Even","3-2","Kill/Putaway")), desc(`#`))
+    mutate(pct = paste0(round(n / bucket_n * 100, 1), "%")) %>%
+    select(Pitch = TaggedPitchType_clean, Bucket, pct) %>%
+    tidyr::pivot_wider(names_from = Bucket, values_from = pct, values_fill = "--")
+
+  # order columns by bucket_order (only the ones actually present), Pitch first
+  present_buckets <- bucket_order[bucket_order %in% names(wide)]
+  wide <- wide %>% select(Pitch, all_of(present_buckets))
+
+  # order rows by total pitch count, descending
+  pitch_totals <- d %>% count(TaggedPitchType_clean, name = "total_n") %>%
+    rename(Pitch = TaggedPitchType_clean)
+
+  wide %>%
+    left_join(pitch_totals, by = "Pitch") %>%
+    arrange(desc(total_n)) %>%
+    select(-total_n)
 }
 
 pcard_strike_zone_box <- data.frame(
@@ -498,9 +516,9 @@ pcard_draw_pitch_metrics_page <- function(pitch_metrics_tbl) {
 
 pcard_draw_count_usage_page <- function(count_usage_tbl) {
   grid.newpage()
-  pcard_draw_table(count_usage_tbl, "Usage by Count Situation")
+  pcard_draw_table(count_usage_tbl, "Usage by Count Situation", core_fontsize = 14, head_fontsize = 12)
 }
-
+    
 pcard_draw_location_page <- function(p_location_lhh, p_location_rhh) {
   grid.newpage()
   pushViewport(viewport(layout = grid.layout(1, 2)))
