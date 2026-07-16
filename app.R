@@ -5407,7 +5407,7 @@ output$top10_hitting_table  <- renderDT(top10_hitter_dt(
                  size=12, alpha=0.95) +
       geom_text(data=mean_data,
                 aes(x=pfx_x, y=pfx_z, label=round(velo)),
-                color="#FFFFFF", fontface="bold", size=2.8) +
+                color="#FFFFFF", fontface="bold", size=4) +
       scale_color_manual(values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_fill_manual( values=ACQ_PITCH_COLORS, na.value="#AAAAAA") +
       scale_x_continuous(breaks = seq(-20, 20, 10)) +
