@@ -367,12 +367,13 @@ pcard_location_plot <- function(pitcher_data, side = c("Left", "Right")) {
     )
 }
 
-# ── movement plot ──
+library(ggrepel)
+
 pcard_movement_plot <- function(pitcher_data) {
   pitcher_data <- pitcher_data %>%
     mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
     filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
-  
+
   movement_avg <- pitcher_data %>%
     group_by(TaggedPitchType_clean) %>%
     summarise(
@@ -381,7 +382,7 @@ pcard_movement_plot <- function(pitcher_data) {
       Velo = round(mean(RelSpeed, na.rm = TRUE), 1),
       .groups = "drop"
     )
-  
+
   ggplot() +
     geom_vline(xintercept = 0, color = "black") +
     geom_hline(yintercept = 0, color = "black") +
@@ -391,8 +392,15 @@ pcard_movement_plot <- function(pitcher_data) {
     geom_point(data = movement_avg,
                aes(x = HB, y = iVB, color = TaggedPitchType_clean),
                size = 10, alpha = 0.9) +
-    geom_text(data = movement_avg, aes(x = HB, y = iVB, label = Velo),
-              color = "white", size = 3.5, fontface = "bold") +
+    geom_label_repel(data = movement_avg,
+                     aes(x = HB, y = iVB, label = Velo, fill = TaggedPitchType_clean),
+                     color = "white", fontface = "bold", size = 3.5,
+                     label.padding = unit(0.15, "lines"),
+                     label.size = 0,
+                     segment.color = "grey40", segment.size = 0.3,
+                     min.segment.length = 0,
+                     show.legend = FALSE,
+                     seed = 42) +
     scale_color_manual(values = pcard_pitch_colors, na.value = "#888888") +
     scale_fill_manual(values = pcard_pitch_colors, na.value = "#888888") +
     labs(title = "Pitch Movement", x = "Horizontal Break (in)", y = "Induced Vertical Break (in)") +
