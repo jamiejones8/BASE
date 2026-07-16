@@ -392,7 +392,7 @@ pcard_movement_plot <- function(pitcher_data) {
                aes(x = HB, y = iVB, color = TaggedPitchType_clean),
                size = 12, alpha = 0.9) +
     geom_text(data = movement_avg, aes(x = HB, y = iVB, label = round(Velo)),
-              color = "white", fontface = "bold", size = 2.8) +
+              color = "white", fontface = "bold", size = 4) +
     scale_color_manual(values = pcard_pitch_colors, na.value = "#888888") +
     scale_fill_manual(values = pcard_pitch_colors, na.value = "#888888") +
     labs(title = "Pitch Movement", x = "Horizontal Break (in)", y = "Induced Vertical Break (in)") +
