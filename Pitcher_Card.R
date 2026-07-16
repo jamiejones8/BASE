@@ -12,6 +12,11 @@ pcard_format_pitcher_name <- function(nm) {
   }, character(1), USE.NAMES = FALSE)
 }
 
+pcard_draw_header <- function(name) {
+  grid.rect(gp = gpar(fill = "#0C2340", col = NA))
+  grid.text(name, x = 0.05, y = 0.5, just = "left",
+            gp = gpar(fontsize = 32, fontface = "bold", fontfamily = "sans", col = "white"))
+}
 # ── pitch type canonicalization + palette ──
 pcard_canonicalize_pitch <- function(x) {
   dplyr::case_when(
