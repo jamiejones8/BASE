@@ -367,7 +367,6 @@ pcard_location_plot <- function(pitcher_data, side = c("Left", "Right")) {
     )
 }
 
-library(ggrepel)
 
 pcard_movement_plot <- function(pitcher_data) {
   pitcher_data <- pitcher_data %>%
@@ -391,16 +390,9 @@ pcard_movement_plot <- function(pitcher_data) {
                size = 4, alpha = 0.8, shape = 21, color = "black", stroke = 0.5) +
     geom_point(data = movement_avg,
                aes(x = HB, y = iVB, color = TaggedPitchType_clean),
-               size = 10, alpha = 0.9) +
-    geom_label_repel(data = movement_avg,
-                     aes(x = HB, y = iVB, label = Velo, fill = TaggedPitchType_clean),
-                     color = "white", fontface = "bold", size = 3.5,
-                     label.padding = unit(0.15, "lines"),
-                     label.size = 0,
-                     segment.color = "grey40", segment.size = 0.3,
-                     min.segment.length = 0,
-                     show.legend = FALSE,
-                     seed = 42) +
+               size = 12, alpha = 0.9) +
+    geom_text(data = movement_avg, aes(x = HB, y = iVB, label = round(Velo)),
+              color = "white", fontface = "bold", size = 2.8) +
     scale_color_manual(values = pcard_pitch_colors, na.value = "#888888") +
     scale_fill_manual(values = pcard_pitch_colors, na.value = "#888888") +
     labs(title = "Pitch Movement", x = "Horizontal Break (in)", y = "Induced Vertical Break (in)") +
