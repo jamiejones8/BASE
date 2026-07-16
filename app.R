@@ -3164,7 +3164,7 @@ caps_media_ui <- function() {
                  plotOutput("cm_movement_plot", height = "480px")),
 
         tags$div(class = "pcard-section-label", "Pitch Metrics"),
-        tags$div(class = "pcard-panel", plotOutput("cm_pitch_metrics_plot", height = "420px")),
+        tags$div(class = "pcard-panel", plotOutput("cm_pitch_metrics_plot", height = "320px")),
 
         tags$div(class = "pcard-section-label", "Pitch Location"),
         tags$div(class = "pcard-row",
@@ -3180,7 +3180,7 @@ caps_media_ui <- function() {
         ),
 
         tags$div(class = "pcard-section-label", "Hit Metrics by Pitch"),
-        tags$div(class = "pcard-panel", plotOutput("cm_hit_metrics_plot", height = "340px")),
+        tags$div(class = "pcard-panel", plotOutput("cm_hit_metrics_plot", height = "300px")),
         tags$div(class = "pcard-section-label", "Usage by Count Situation"),
         tags$div(class = "pcard-panel", plotOutput("cm_count_usage_plot", height = "340px")),
 
