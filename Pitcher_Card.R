@@ -1,9 +1,22 @@
 library(dplyr)
+library(tidyr)
 library(ggplot2)
 library(grid)
 library(gridExtra)
 library(gtable)
 
+# ============================================================================
+# PITCHER CARD MODULE — sourceable, single source of truth
+# All objects prefixed pcard_ to avoid collisions with app.R's existing
+# canonicalize_pitch(), pitch_pal, pal_for(), format_pitcher_name(), etc.
+# This file only DEFINES functions — no top-level execution.
+#
+# pcard_movement_plot_generic() is shared by BOTH the Acquisitions Board
+# (app.R output$movement_plot) and CAPS Media (pcard_movement_plot()) —
+# fix it once here, both surfaces update together.
+# ============================================================================
+
+# ── name formatting ──
 pcard_format_pitcher_name <- function(nm) {
   vapply(as.character(nm), function(n) {
     if (length(n) == 0 || is.na(n) || !grepl(",", n, fixed = TRUE)) return(as.character(n))
@@ -12,11 +25,6 @@ pcard_format_pitcher_name <- function(nm) {
   }, character(1), USE.NAMES = FALSE)
 }
 
-pcard_draw_header <- function(name) {
-  grid.rect(gp = gpar(fill = "#0C2340", col = NA))
-  grid.text(name, x = 0.05, y = 0.5, just = "left",
-            gp = gpar(fontsize = 32, fontface = "bold", fontfamily = "sans", col = "white"))
-}
 # ── pitch type canonicalization + palette ──
 pcard_canonicalize_pitch <- function(x) {
   dplyr::case_when(
@@ -55,6 +63,7 @@ pcard_format_rate <- function(x, digits = 3) {
          sub("^0", "", formatC(x, format = "f", digits = digits)))
 }
 
+# ── PA-level boxscore derivation (IP, H, BB, K, HR, WHIP, FIP) ──
 pcard_pitcher_boxscore <- function(df, pitcher_raw) {
   d <- df %>% filter(Pitcher == pitcher_raw)
   d <- d %>%
@@ -67,13 +76,13 @@ pcard_pitcher_boxscore <- function(df, pitcher_raw) {
       OutsOnPlay = suppressWarnings(as.numeric(OutsOnPlay))
     )
 
-  outs <- sum(d$OutsOnPlay, na.rm = TRUE) + sum(d$IsK, na.rm = TRUE)
+  outs   <- sum(d$OutsOnPlay, na.rm = TRUE) + sum(d$IsK, na.rm = TRUE)
   ip_dec <- outs / 3
-  hits <- sum(d$IsHit, na.rm = TRUE)
-  bb   <- sum(d$IsWalk, na.rm = TRUE)
-  k    <- sum(d$IsK, na.rm = TRUE)
-  hbp  <- sum(d$IsHBP, na.rm = TRUE)
-  hr   <- sum(d$IsHR, na.rm = TRUE)
+  hits   <- sum(d$IsHit, na.rm = TRUE)
+  bb     <- sum(d$IsWalk, na.rm = TRUE)
+  k      <- sum(d$IsK, na.rm = TRUE)
+  hbp    <- sum(d$IsHBP, na.rm = TRUE)
+  hr     <- sum(d$IsHR, na.rm = TRUE)
 
   whip <- if (ip_dec > 0) (hits + bb) / ip_dec else NA_real_
   fip  <- if (ip_dec > 0) ((13*hr + 3*(bb+hbp) - 2*k) / ip_dec) + 3.87 else NA_real_
@@ -85,36 +94,7 @@ pcard_pitcher_boxscore <- function(df, pitcher_raw) {
   )
 }
 
-# ── usage table data ──
-pcard_usage_table <- function(pitcher_data, side = c("All", "Left", "Right")) {
-  side <- match.arg(side)
-  d <- pitcher_data
-  
-  if (side != "All") {
-    d <- d %>% filter(BatterSide == side)
-  }
-  
-  d <- d %>% mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType))
-  total_n <- nrow(d)
-  
-  if (total_n == 0) {
-    return(tibble::tibble(Pitch = character(), `#` = character(),
-                          `Usage%` = character(), Velo = character()))
-  }
-  
-  d %>%
-    filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined") %>%
-    group_by(TaggedPitchType_clean) %>%
-    summarise(
-      `#`       = as.character(n()),
-      `Usage%`  = paste0(round(n() / total_n * 100, 1), "%"),
-      Velo      = pcard_format_num(mean(RelSpeed, na.rm = TRUE), 1),
-      .groups   = "drop"
-    ) %>%
-    arrange(desc(as.integer(`#`))) %>%
-    rename(Pitch = TaggedPitchType_clean)
-}
-
+# ── pitch metrics table (velo/movement/release shape/spin) ──
 pcard_pitch_metrics_table <- function(pitcher_data) {
   d <- pitcher_data %>%
     mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
@@ -140,6 +120,37 @@ pcard_pitch_metrics_table <- function(pitcher_data) {
     rename(Pitch = TaggedPitchType_clean)
 }
 
+# ── usage table (by hitter side) ──
+pcard_usage_table <- function(pitcher_data, side = c("All", "Left", "Right")) {
+  side <- match.arg(side)
+  d <- pitcher_data
+
+  if (side != "All") {
+    d <- d %>% filter(BatterSide == side)
+  }
+
+  d <- d %>% mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType))
+  total_n <- nrow(d)
+
+  if (total_n == 0) {
+    return(tibble::tibble(Pitch = character(), `#` = character(),
+                          `Usage%` = character(), Velo = character()))
+  }
+
+  d %>%
+    filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined") %>%
+    group_by(TaggedPitchType_clean) %>%
+    summarise(
+      `#`       = as.character(n()),
+      `Usage%`  = paste0(round(n() / total_n * 100, 1), "%"),
+      Velo      = pcard_format_num(mean(RelSpeed, na.rm = TRUE), 1),
+      .groups   = "drop"
+    ) %>%
+    arrange(desc(as.integer(`#`))) %>%
+    rename(Pitch = TaggedPitchType_clean)
+}
+
+# ── pitch-type hit metrics (AVG/SLG/OPS/Whiff%/HardHit%/Zone%/Strike%/EV/LA) ──
 pcard_pitch_hit_metrics <- function(pitcher_data) {
   d <- pitcher_data %>%
     mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
@@ -175,7 +186,7 @@ pcard_pitch_hit_metrics <- function(pitcher_data) {
   pa_end <- d %>%
     filter(
       PlayResult %in% c("Single","Double","Triple","HomeRun","Out",
-                        "FieldersChoice","Error","Sacrifice", "Sacrificie") |
+                        "FieldersChoice","Error","Sacrifice","Sacrificie") |
         KorBB %in% c("Strikeout","Walk") |
         PitchCall == "HitByPitch"
     ) %>%
@@ -228,7 +239,7 @@ pcard_pitch_hit_metrics <- function(pitcher_data) {
     arrange(desc(`#`))
 }
 
-
+# ── usage by count situation (pivoted wide: one row per pitch, one col per bucket) ──
 pcard_count_bucket <- function(balls, strikes) {
   count <- paste0(balls, "-", strikes)
   case_when(
@@ -265,11 +276,9 @@ pcard_usage_by_count <- function(pitcher_data) {
     select(Pitch = TaggedPitchType_clean, Bucket, pct) %>%
     tidyr::pivot_wider(names_from = Bucket, values_from = pct, values_fill = "--")
 
-  # order columns by bucket_order (only the ones actually present), Pitch first
   present_buckets <- bucket_order[bucket_order %in% names(wide)]
   wide <- wide %>% select(Pitch, all_of(present_buckets))
 
-  # order rows by total pitch count, descending
   pitch_totals <- d %>% count(TaggedPitchType_clean, name = "total_n") %>%
     rename(Pitch = TaggedPitchType_clean)
 
@@ -279,11 +288,82 @@ pcard_usage_by_count <- function(pitcher_data) {
     select(-total_n)
 }
 
+# ── pitch location scatter (whiffs/hard-hits called out), by hitter side ──
+pcard_home_plate_shape <- data.frame(
+  x = c(0.6, -0.6, -0.7083, 0, 0.7083),
+  y = c(0.5, 0.5, 0.25, 0, 0.25)
+)
+
 pcard_strike_zone_box <- data.frame(
   x = c(-0.83, -0.83, 0.83, 0.83, -0.83),
   y = c(1.5, 3.5, 3.5, 1.5, 1.5)
 )
 
+pcard_location_plot <- function(pitcher_data, side = c("Left", "Right")) {
+  side <- match.arg(side)
+  side_label <- if (side == "Left") "LHH" else "RHH"
+
+  d <- pitcher_data %>%
+    filter(BatterSide == side) %>%
+    mutate(
+      TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType),
+      IsWhiff   = PitchCall == "StrikeSwinging",
+      IsBBE     = PitchCall == "InPlay",
+      IsHardHit = IsBBE & !is.na(ExitSpeed) & ExitSpeed >= 95,
+      outcome   = factor(
+        case_when(
+          IsHardHit ~ "Hard Hit",
+          IsWhiff   ~ "Whiff",
+          TRUE      ~ "Other"
+        ),
+        levels = c("Other", "Whiff", "Hard Hit")
+      )
+    ) %>%
+    filter(!is.na(PlateLocSide), !is.na(PlateLocHeight),
+           !is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
+
+  if (nrow(d) == 0) {
+    return(
+      ggplot() + theme_void() +
+        labs(title = paste("No pitches vs", side_label))
+    )
+  }
+
+  ggplot(d, aes(x = -PlateLocSide, y = PlateLocHeight, fill = TaggedPitchType_clean)) +
+    geom_point(data = ~ dplyr::filter(.x, outcome == "Other"),
+               aes(shape = outcome, size = outcome, stroke = outcome),
+               colour = "black", alpha = 0.85) +
+    geom_polygon(data = pcard_home_plate_shape, aes(x = x, y = y),
+                 fill = NA, colour = "#5F5F6B", linewidth = 0.7, inherit.aes = FALSE) +
+    annotate("rect", xmin = -0.71, xmax = 0.71, ymin = 1.5, ymax = 3.6,
+             fill = NA, colour = "#36363F", linewidth = 0.8) +
+    geom_point(data = ~ dplyr::filter(.x, outcome %in% c("Whiff", "Hard Hit")),
+               aes(shape = outcome, size = outcome, stroke = outcome),
+               colour = "black", alpha = 0.9) +
+    scale_fill_manual(values = pcard_pitch_colors, na.value = "#888888") +
+    scale_shape_manual(values = c("Other" = 21, "Whiff" = 23, "Hard Hit" = 22),
+                       limits = c("Other", "Whiff", "Hard Hit"),
+                       breaks = c("Hard Hit", "Whiff"), name = NULL, drop = FALSE) +
+    scale_size_manual(values = c("Other" = 2.6, "Whiff" = 4.6, "Hard Hit" = 4.6),
+                      limits = c("Other", "Whiff", "Hard Hit"), guide = "none", drop = FALSE) +
+    scale_discrete_manual(aesthetics = "stroke",
+                          values = c("Other" = 0.4, "Whiff" = 0.8, "Hard Hit" = 0.8),
+                          limits = c("Other", "Whiff", "Hard Hit"), guide = "none", drop = FALSE) +
+    guides(fill = "none") +
+    coord_fixed() +
+    xlim(-2.5, 2.5) + ylim(0, 5) +
+    labs(title = paste("Location vs", side_label), subtitle = "Catcher's View",
+        x = NULL, y = NULL) +
+    theme_void(base_family = "sans") +
+    theme(
+      legend.position = "bottom",
+      legend.text = element_text(size = 8),
+      plot.title = element_text(hjust = 0.5, size = 12, face = "bold", colour = "#0C2340"),
+      plot.subtitle = element_text(hjust = 0.5, size = 9, colour = "#8B8B96", face = "italic")
+    )
+}
+
+# ── pitch location density heatmap (filterable by pitch type + hitter side) ──
 pcard_density_heatmap <- function(pitcher_data, pitch_type = "All", side = "All") {
   d <- pitcher_data %>%
     mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
@@ -319,92 +399,24 @@ pcard_density_heatmap <- function(pitcher_data, pitch_type = "All", side = "All"
     )
 }
 
-
-# ── pitch location data + plot ──
-pcard_home_plate_shape <- data.frame(
-  x = c(0.6, -0.6, -0.7083, 0, 0.7083),
-  y = c(0.5, 0.5, 0.25, 0, 0.25)
-)
-
-pcard_location_plot <- function(pitcher_data, side = c("Left", "Right")) {
-  side <- match.arg(side)
-  side_label <- if (side == "Left") "LHH" else "RHH"
-  
-  d <- pitcher_data %>%
-    filter(BatterSide == side) %>%
-    mutate(
-      TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType),
-      IsWhiff   = PitchCall == "StrikeSwinging",
-      IsBBE     = PitchCall == "InPlay",
-      IsHardHit = IsBBE & !is.na(ExitSpeed) & ExitSpeed >= 95,
-      outcome   = factor(
-        case_when(
-          IsHardHit ~ "Hard Hit",
-          IsWhiff   ~ "Whiff",
-          TRUE      ~ "Other"
-        ),
-        levels = c("Other", "Whiff", "Hard Hit")
-      )
-    ) %>%
-    filter(!is.na(PlateLocSide), !is.na(PlateLocHeight),
-           !is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined")
-  
-  if (nrow(d) == 0) {
-    return(
-      ggplot() + theme_void() +
-        labs(title = paste("No pitches vs", side_label))
-    )
-  }
-  
-  ggplot(d, aes(x = -PlateLocSide, y = PlateLocHeight, fill = TaggedPitchType_clean)) +
-    geom_point(data = ~ dplyr::filter(.x, outcome == "Other"),
-               aes(shape = outcome, size = outcome, stroke = outcome),
-               colour = "black", alpha = 0.85) +
-    geom_polygon(data = pcard_home_plate_shape, aes(x = x, y = y),
-                 fill = NA, colour = "#5F5F6B", linewidth = 0.7, inherit.aes = FALSE) +
-    annotate("rect", xmin = -0.71, xmax = 0.71, ymin = 1.5, ymax = 3.6,
-             fill = NA, colour = "#36363F", linewidth = 0.8) +
-    geom_point(data = ~ dplyr::filter(.x, outcome %in% c("Whiff", "Hard Hit")),
-               aes(shape = outcome, size = outcome, stroke = outcome),
-               colour = "black", alpha = 0.9) +
-    scale_fill_manual(values = pcard_pitch_colors, na.value = "#888888") +
-    scale_shape_manual(values = c("Other" = 21, "Whiff" = 23, "Hard Hit" = 22),
-                       limits = c("Other", "Whiff", "Hard Hit"),
-                       breaks = c("Hard Hit", "Whiff"), name = NULL, drop = FALSE) +
-    scale_size_manual(values = c("Other" = 2.6, "Whiff" = 4.6, "Hard Hit" = 4.6),
-                      limits = c("Other", "Whiff", "Hard Hit"), guide = "none", drop = FALSE) +
-    scale_discrete_manual(aesthetics = "stroke",
-                          values = c("Other" = 0.4, "Whiff" = 0.8, "Hard Hit" = 0.8),
-                          limits = c("Other", "Whiff", "Hard Hit"), guide = "none", drop = FALSE) +
-    guides(fill = "none") +
-    coord_fixed() +
-    xlim(-2.5, 2.5) + ylim(0, 5) +
-    labs(title = paste("Location vs", side_label), subtitle = "Catcher's View",
-         x = NULL, y = NULL) +
-    theme_void(base_family = "sans") +
-    theme(
-      legend.position = "bottom",
-      legend.text = element_text(size = 8),
-      plot.title = element_text(hjust = 0.5, size = 12, face = "bold", colour = "#0C2340"),
-      plot.subtitle = element_text(hjust = 0.5, size = 9, colour = "#8B8B96", face = "italic")
-    )
-}
-
-
-
-# simple collision-avoidance for overlapping mean-point labels, no ggrepel needed
+# ── movement plot: shared collision-avoidance + generic drawing engine ──
+# Single source of truth used by BOTH the Acquisitions Board (app.R) and
+# CAPS Media (pcard_movement_plot() below). Fix bugs here once.
 pcard_nudge_labels <- function(x, y, min_dist = 6) {
   n <- length(x)
   label_y <- y
   placed  <- data.frame(x = numeric(0), y = numeric(0))
 
-  ord <- order(x)
-  for (i in ord) {
+  valid <- !is.na(x) & !is.na(y) & is.finite(x) & is.finite(y)
+  ord <- order(x[valid])
+  valid_idx <- which(valid)[ord]
+
+  for (i in valid_idx) {
     cx <- x[i]; cy <- y[i]
     direction <- 1
     tries <- 0
     while (nrow(placed) > 0 &&
-           any(sqrt((placed$x - cx)^2 + (placed$y - cy)^2) < min_dist) &&
+           isTRUE(any(sqrt((placed$x - cx)^2 + (placed$y - cy)^2) < min_dist, na.rm = TRUE)) &&
            tries < 8) {
       tries <- tries + 1
       cy <- y[i] + direction * tries * (min_dist * 0.6)
@@ -416,7 +428,6 @@ pcard_nudge_labels <- function(x, y, min_dist = 6) {
   label_y
 }
 
-# ── SINGLE SOURCE OF TRUTH for every pitch movement plot in the app ──
 # ind_data: data.frame with columns x, y, type (one row per pitch)
 # mean_data: data.frame with columns x, y, type, velo (one row per pitch type)
 pcard_movement_plot_generic <- function(ind_data, mean_data, palette,
@@ -425,6 +436,10 @@ pcard_movement_plot_generic <- function(ind_data, mean_data, palette,
                                         xlab = "Horizontal Break (in)",
                                         ylab = "Induced Vertical Break (in)",
                                         point_size = 4, mean_size = 12, label_size = 3) {
+  ind_data  <- ind_data  %>% filter(!is.na(x), !is.na(y), is.finite(x), is.finite(y))
+  mean_data <- mean_data %>% filter(!is.na(x), !is.na(y), is.finite(x), is.finite(y),
+                                    !is.na(velo), is.finite(velo))
+
   mean_data$label_y <- pcard_nudge_labels(mean_data$x, mean_data$y, min_dist = 6)
   mean_data$moved   <- abs(mean_data$label_y - mean_data$y) > 0.01
 
@@ -440,9 +455,11 @@ pcard_movement_plot_generic <- function(ind_data, mean_data, palette,
     geom_point(data = mean_data,
                aes(x = x, y = y, color = type),
                size = mean_size, alpha = 0.9) +
-    geom_text(data = mean_data,
-              aes(x = x, y = label_y, label = round(velo)),
-              color = "white", fontface = "bold", size = label_size) +
+    geom_label(data = mean_data,
+              aes(x = x, y = label_y, label = round(velo), fill = type),
+              color = "white", fontface = "bold", size = label_size,
+              label.padding = unit(0.12, "lines"), label.size = 0,
+              show.legend = FALSE) +
     scale_color_manual(values = palette, na.value = na_color) +
     scale_fill_manual(values = palette, na.value = na_color) +
     labs(title = title, x = xlab, y = ylab) +
@@ -472,13 +489,21 @@ pcard_movement_plot <- function(pitcher_data) {
       .groups = "drop"
     ) %>%
     rename(type = TaggedPitchType_clean) %>%
-    filter(!is.na(x), !is.na(y), is.finite(x), is.finite(y))   # NEW — drop any all-NA pitch types
+    filter(!is.na(x), !is.na(y), is.finite(x), is.finite(y))
 
   pcard_movement_plot_generic(ind_data, mean_data, palette = pcard_pitch_colors)
 }
+
+# ── header + boxscore + generic table draw functions ──
+pcard_draw_header <- function(name) {
+  grid.rect(gp = gpar(fill = "#0C2340", col = NA))
+  grid.text(name, x = 0.05, y = 0.5, just = "left",
+            gp = gpar(fontsize = 32, fontface = "bold", fontfamily = "sans", col = "white"))
+}
+
 pcard_draw_boxscore <- function(stats) {
   cols <- names(stats); vals <- unlist(stats); n <- length(cols); cell_w <- 1 / n
-  value_fontsize <- max(14, 26 - (n - 5) * 2)   # shrinks as n grows past 5 columns
+  value_fontsize <- max(14, 26 - (n - 5) * 2)   # shrinks as column count grows past 5
 
   grid.rect(gp = gpar(fill = "#FAFAFB", col = "#EAEAEE"))
   for (i in seq_len(n)) {
@@ -493,6 +518,9 @@ pcard_draw_boxscore <- function(stats) {
               gp = gpar(col = "#16161B", fontsize = value_fontsize, fontface = "bold", fontfamily = "sans"))
   }
 }
+
+# Generic table drawer used by every *_page() wrapper below. Auto-scales font
+# size to column count unless explicit core_fontsize/head_fontsize are passed.
 pcard_draw_table <- function(tbl, title, core_fontsize = NULL, head_fontsize = NULL) {
   if (nrow(tbl) == 0) {
     grid.text(paste0(title, ": no pitches"),
@@ -503,25 +531,24 @@ pcard_draw_table <- function(tbl, title, core_fontsize = NULL, head_fontsize = N
   n_rows <- nrow(tbl)
   n_cols <- ncol(tbl)
 
-  # auto-scale font size down as column count grows, unless explicitly overridden
   if (is.null(core_fontsize)) {
     core_fontsize <- case_when(
-      n_cols <= 5  ~ 15,
-      n_cols <= 7  ~ 13,
-      n_cols <= 9  ~ 11,
-      n_cols <= 11 ~ 10,
-      TRUE         ~ 9
+      n_cols <= 5  ~ 17,
+      n_cols <= 7  ~ 15,
+      n_cols <= 9  ~ 14,
+      n_cols <= 11 ~ 13,
+      TRUE         ~ 12
     )
   }
   if (is.null(head_fontsize)) {
-    head_fontsize <- max(8, core_fontsize - 2)
+    head_fontsize <- max(10, core_fontsize - 2)
   }
 
   fg_mat <- matrix("#16161B", n_rows, n_cols)
   bg_mat <- matrix("#FAFAFB", n_rows, n_cols)
   for (i in seq_len(n_rows)) {
     pitch_name <- tbl$Pitch[i]
-    if (pitch_name %in% names(pcard_pitch_colors)) {
+    if (!is.null(pitch_name) && pitch_name %in% names(pcard_pitch_colors)) {
       fg_mat[i, 1] <- unname(pcard_pitch_colors[pitch_name])
     }
   }
@@ -575,32 +602,21 @@ pcard_draw_pitch_metrics_page <- function(pitch_metrics_tbl) {
   pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics", core_fontsize = 16, head_fontsize = 14)
 }
 
-pcard_draw_hit_metrics_page <- function(hit_metrics_tbl) {
-  grid.newpage()
-  pcard_draw_table(hit_metrics_tbl, "Hit Metrics by Pitch", core_fontsize = 16, head_fontsize = 14)
-}
-
-pcard_draw_count_usage_page <- function(count_usage_tbl) {
-  grid.newpage()
-  pcard_draw_table(count_usage_tbl, "Usage by Count Situation")
-}
-    
 pcard_draw_location_page <- function(p_location_lhh, p_location_rhh) {
   grid.newpage()
   pushViewport(viewport(layout = grid.layout(1, 2)))
-  
+
   pushViewport(viewport(layout.pos.col = 1))
   print(p_location_lhh, newpage = FALSE)
   popViewport()
-  
+
   pushViewport(viewport(layout.pos.col = 2))
   print(p_location_rhh, newpage = FALSE)
   popViewport()
-  
+
   popViewport()
 }
 
-# ── single-panel page wrappers (finer-grained than the combined ones) ──
 pcard_draw_location_lhh_page <- function(p_location_lhh) {
   grid.newpage()
   print(p_location_lhh, newpage = FALSE)
@@ -611,33 +627,38 @@ pcard_draw_location_rhh_page <- function(p_location_rhh) {
   print(p_location_rhh, newpage = FALSE)
 }
 
+pcard_draw_usage_page <- function(usage_total, usage_rhh, usage_lhh) {
+  grid.newpage()
+  pushViewport(viewport(layout = grid.layout(1, 3)))
+
+  pushViewport(viewport(layout.pos.col = 1))
+  pcard_draw_table(usage_total, "Overall")
+  popViewport()
+
+  pushViewport(viewport(layout.pos.col = 2))
+  pcard_draw_table(usage_rhh, "RHH")
+  popViewport()
+
+  pushViewport(viewport(layout.pos.col = 3))
+  pcard_draw_table(usage_lhh, "LHH")
+  popViewport()
+
+  popViewport()
+}
+
 pcard_draw_single_table_page <- function(tbl, title) {
   grid.newpage()
   pcard_draw_table(tbl, title)
 }
 
-pcard_draw_usage_page <- function(usage_total, usage_rhh, usage_lhh) {
-  grid.newpage()
-  pushViewport(viewport(layout = grid.layout(1, 3)))
-  
-  pushViewport(viewport(layout.pos.col = 1))
-  pcard_draw_table(usage_total, "Overall")
-  popViewport()
-  
-  pushViewport(viewport(layout.pos.col = 2))
-  pcard_draw_table(usage_rhh, "RHH")
-  popViewport()
-  
-  pushViewport(viewport(layout.pos.col = 3))
-  pcard_draw_table(usage_lhh, "LHH")
-  popViewport()
-  
-  popViewport()
-}
-
 pcard_draw_hit_metrics_page <- function(hit_metrics_tbl) {
   grid.newpage()
-  pcard_draw_table(hit_metrics_tbl, "Hit Metrics by Pitch")
+  pcard_draw_table(hit_metrics_tbl, "Hit Metrics by Pitch", core_fontsize = 16, head_fontsize = 14)
+}
+
+pcard_draw_count_usage_page <- function(count_usage_tbl) {
+  grid.newpage()
+  pcard_draw_table(count_usage_tbl, "Usage by Count Situation")
 }
 
 # ── convenience: build every data object for one pitcher in one call ──
@@ -659,7 +680,7 @@ pcard_build_all <- function(df, pitcher_raw) {
     usage_rhh         = pcard_usage_table(pitcher_data, "Right"),
     usage_lhh         = pcard_usage_table(pitcher_data, "Left"),
     hit_metrics_tbl   = pcard_pitch_hit_metrics(pitcher_data),
-    count_usage_tbl   = pcard_usage_by_count(pitcher_data),   
-    pitch_types       = pitch_types                            
+    count_usage_tbl   = pcard_usage_by_count(pitcher_data),
+    pitch_types       = pitch_types
   )
 }
