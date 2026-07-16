@@ -572,7 +572,12 @@ pcard_draw_movement_page <- function(p_movement) {
 
 pcard_draw_pitch_metrics_page <- function(pitch_metrics_tbl) {
   grid.newpage()
-  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics")   # no manual fontsize override
+  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics", core_fontsize = 16, head_fontsize = 14)
+}
+
+pcard_draw_hit_metrics_page <- function(hit_metrics_tbl) {
+  grid.newpage()
+  pcard_draw_table(hit_metrics_tbl, "Hit Metrics by Pitch", core_fontsize = 16, head_fontsize = 14)
 }
 
 pcard_draw_count_usage_page <- function(count_usage_tbl) {
