@@ -5387,14 +5387,6 @@ output$movement_plot <- renderPlot({
     p   <- acq_all_pitchers %>% filter(source_key == key); req(p$has_pbp)
     pid <- as.integer(p$source_key)
 
-  ind_data  <- ind_raw  %>%
-      filter(!is.na(hb_pov), !is.na(ivb)) %>%
-      transmute(x = hb_pov, y = ivb, type = pitch_type)
-
-    mean_data <- mean_raw %>%
-      filter(!is.na(pfx_x), !is.na(pfx_z)) %>%
-      transmute(x = pfx_x, y = pfx_z, type = pitch_type, velo = velo)
-
     ind_raw  <- acq_pitch_level %>%
       filter(pitcher_id == pid, !is.na(hb_pov), !is.na(ivb),
              !is.na(pitch_type), pitch_type != "")
