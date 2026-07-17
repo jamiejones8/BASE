@@ -22,7 +22,7 @@ RUN install2.r --error \
     base64enc pdftools \
     plotly gridExtra png sysfonts showtext rsvg \
     shinyBS glue tibble rvest
-RUN Rscript -e "install.packages(c('arrow','lightgbm'), repos='https://packagemanager.posit.co/cran/__linux__/jammy/latest')"
+RUN Rscript -e "install.packages(c('arrow','lightgbm'), repos='https://packagemanager.posit.co/cran/latest')"
 COPY . .
 RUN Rscript leaderboards/scripts/precompute_leaderboards_cache.R
 CMD ["R", "--quiet", "-e", "shiny::runApp(host='0.0.0.0', port=7860)"]
