@@ -435,13 +435,10 @@ pcard_movement_plot_generic <- function(ind_data, mean_data, palette,
                                         title = "Pitch Movement",
                                         xlab = "Horizontal Break (in)",
                                         ylab = "Induced Vertical Break (in)",
-                                        point_size = 4, mean_size = 12, label_size = 3) {
+                                        point_size = 4, mean_size = 12, label_size = 4.2) {
   ind_data  <- ind_data  %>% filter(!is.na(x), !is.na(y), is.finite(x), is.finite(y))
   mean_data <- mean_data %>% filter(!is.na(x), !is.na(y), is.finite(x), is.finite(y),
                                     !is.na(velo), is.finite(velo))
-
-  mean_data$label_y <- pcard_nudge_labels(mean_data$x, mean_data$y, min_dist = 6)
-  mean_data$moved   <- abs(mean_data$label_y - mean_data$y) > 0.01
 
   ggplot() +
     geom_vline(xintercept = 0, color = "black") +
@@ -449,17 +446,12 @@ pcard_movement_plot_generic <- function(ind_data, mean_data, palette,
     geom_point(data = ind_data,
                aes(x = x, y = y, fill = type),
                size = point_size, alpha = 0.8, shape = 21, color = "black", stroke = 0.5) +
-    geom_segment(data = subset(mean_data, moved),
-                aes(x = x, y = y, xend = x, yend = label_y),
-                color = "grey45", linewidth = 0.4) +
     geom_point(data = mean_data,
                aes(x = x, y = y, color = type),
                size = mean_size, alpha = 0.9) +
-    geom_label(data = mean_data,
-              aes(x = x, y = label_y, label = round(velo), fill = type),
-              color = "white", fontface = "bold", size = label_size,
-              label.padding = unit(0.12, "lines"), label.size = 0,
-              show.legend = FALSE) +
+    geom_text(data = mean_data,
+              aes(x = x, y = y, label = round(velo)),
+              color = "white", fontface = "bold", size = label_size) +
     scale_color_manual(values = palette, na.value = na_color) +
     scale_fill_manual(values = palette, na.value = na_color) +
     labs(title = title, x = xlab, y = ylab) +
