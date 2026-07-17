@@ -533,15 +533,15 @@ pcard_draw_table <- function(tbl, title, core_fontsize = NULL, head_fontsize = N
 
   if (is.null(core_fontsize)) {
     core_fontsize <- case_when(
-      n_cols <= 5  ~ 17,
-      n_cols <= 7  ~ 15,
-      n_cols <= 9  ~ 14,
-      n_cols <= 11 ~ 13,
-      TRUE         ~ 12
+      n_cols <= 5  ~ 12,
+      n_cols <= 7  ~ 12,
+      n_cols <= 9  ~ 11,
+      n_cols <= 11 ~ 10,
+      TRUE         ~ 10
     )
   }
   if (is.null(head_fontsize)) {
-    head_fontsize <- max(10, core_fontsize - 2)
+    head_fontsize <- max(9, core_fontsize - 2)
   }
 
   fg_mat <- matrix("#16161B", n_rows, n_cols)
@@ -599,7 +599,7 @@ pcard_draw_movement_page <- function(p_movement) {
 
 pcard_draw_pitch_metrics_page <- function(pitch_metrics_tbl) {
   grid.newpage()
-  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics", core_fontsize = 16, head_fontsize = 14)
+  pcard_draw_table(pitch_metrics_tbl, "Pitch Metrics", core_fontsize = 12, head_fontsize = 10)
 }
 
 pcard_draw_location_page <- function(p_location_lhh, p_location_rhh) {
@@ -646,14 +646,17 @@ pcard_draw_usage_page <- function(usage_total, usage_rhh, usage_lhh) {
   popViewport()
 }
 
-pcard_draw_single_table_page <- function(tbl, title) {
+pcard_draw_single_table_page <- function(tbl, title, core_fontsize = 10, head_fontsize = 9) {
+  # Used for the narrow, 3-across Usage panels (Overall/RHH/LHH), each only
+  # ~1/3 of the page width — needs a smaller explicit size, not the
+  # column-count-based auto-scale (which has no idea how narrow this panel is).
   grid.newpage()
-  pcard_draw_table(tbl, title)
+  pcard_draw_table(tbl, title, core_fontsize = core_fontsize, head_fontsize = head_fontsize)
 }
 
 pcard_draw_hit_metrics_page <- function(hit_metrics_tbl) {
   grid.newpage()
-  pcard_draw_table(hit_metrics_tbl, "Hit Metrics by Pitch", core_fontsize = 16, head_fontsize = 14)
+  pcard_draw_table(hit_metrics_tbl, "Hit Metrics by Pitch", core_fontsize = 12, head_fontsize = 10)
 }
 
 pcard_draw_count_usage_page <- function(count_usage_tbl) {
