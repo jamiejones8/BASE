@@ -4153,7 +4153,28 @@ home_tab_ui <- function() {
 # tab and called once from the main server.
 # ============================================================================
 
-# ── 1. Load data (bare filenames — files sit in the app working dir) ─────────
+# ── 1. Pull latest data from HF dataset repo, then load ────────────────────
+ACQ_DATA_FILES <- c(
+  "pitch_level.parquet", "pa_results.parquet", "pitcher_season.parquet",
+  "pitch_metrics.parquet", "movement_avg.parquet", "pitching_all.parquet",
+  "hitting_all.parquet", "player_bios.parquet",
+  "necbl_pitching.parquet", "necbl_hitting.parquet",
+  "nwl_pitching.parquet", "nwl_hitting.parquet"
+)
+
+pull_acq_data_from_hf <- function() {
+  for (f in ACQ_DATA_FILES) {
+    tryCatch({
+      pull_file_from_hf(f, f, repo_id = HF_DATA_REPO_ID)
+      message("[acq] Pulled latest ", f, " from HF dataset repo")
+    }, error = function(e) {
+      message("[acq] Pull failed for ", f, ", using bundled copy: ", e$message)
+    })
+  }
+}
+
+invisible(pull_acq_data_from_hf())
+
 acq_pitch_level    <- read_parquet("pitch_level.parquet")
 acq_pitcher_season <- read_parquet("pitcher_season.parquet")
 acq_pitch_metrics  <- read_parquet("pitch_metrics.parquet")
