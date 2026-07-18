@@ -5419,7 +5419,7 @@ output$movement_plot <- renderPlot({
 
     pcard_movement_plot_generic(
       ind_data, mean_data, palette = ACQ_PITCH_COLORS, na_color = "#AAAAAA",
-      point_size = 3, mean_size = 12, label_size = 3
+      point_size = 3, mean_size = 12, label_size = 4
     ) +
       theme(
         plot.background  = element_rect(fill = "white", color = NA),
