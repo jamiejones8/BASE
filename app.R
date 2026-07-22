@@ -4193,6 +4193,7 @@ message("[acq] Data loaded.")
 # Wrapped in a function so it can be re-run after "Run updates" refreshes the
 # raw tables (acq_pitch_level, acq_necbl_pitching, etc. via <<-). Without this,
 # the combined acq_all_pitchers/acq_all_hitters tables the UI actually reads
+
 # from only ever get built once, at app startup.
 acq_rebuild_combined <- function() {
 
@@ -4201,7 +4202,17 @@ acq_rebuild_combined <- function() {
       has_pbp    = TRUE,
       source_key = as.character(pitcher_id),
       class_year = NA_character_
-    )
+    ) %>%
+    rename(ERA_approx = ERA) %>%
+    left_join(
+      acq_pitching_all %>%
+        distinct(player_id, .keep_all = TRUE) %>%
+        select(player_id, ERA_real = ERA),
+      by = c("pitcher_id" = "player_id")
+    ) %>%
+    mutate(ERA = coalesce(ERA_real, ERA_approx)) %>%
+    select(-ERA_real, -ERA_approx)
+
   acq_necbl_pitchers_clean <- acq_necbl_pitching %>%
     mutate(source_key = paste(player_name, team, "NECBL")) %>%
     mutate(
