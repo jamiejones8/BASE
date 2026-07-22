@@ -553,9 +553,12 @@ run_mlb_update <- function() {
     if (nrow(new_pbp) > 0) {
       new_pitch_level <- build_pitch_level_mlb(new_pbp)
       new_pa_results  <- build_pa_results_mlb(new_pbp)
-      pitch_level     <- dplyr::bind_rows(existing_pitch_level, new_pitch_level)
-      pa_results      <- dplyr::bind_rows(existing_pa_results,  new_pa_results)
+      pitch_level     <- dplyr::bind_rows(existing_pitch_level, new_pitch_level) %>%
+        dplyr::distinct(gamePk, atBatIndex, pitchNumber, pitcher_id, .keep_all = TRUE)
+      pa_results      <- dplyr::bind_rows(existing_pa_results,  new_pa_results) %>%
+        dplyr::distinct(gamePk, atBatIndex, pitcher_id, .keep_all = TRUE)
 
+      
       new_player_ids <- new_pbp %>%
         dplyr::filter(isPitch == TRUE) %>%
         dplyr::select(player_id = pitcher_id) %>%
