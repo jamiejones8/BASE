@@ -4,17 +4,55 @@ library(ggplot2)
 library(grid)
 library(gridExtra)
 library(gtable)
+library(rsvg)
+library(png)
+library(readr)
 
-# ============================================================================
-# PITCHER CARD MODULE — sourceable, single source of truth
-# All objects prefixed pcard_ to avoid collisions with app.R's existing
-# canonicalize_pitch(), pitch_pal, pal_for(), format_pitcher_name(), etc.
-# This file only DEFINES functions — no top-level execution.
-#
-# pcard_movement_plot_generic() is shared by BOTH the Acquisitions Board
-# (app.R output$movement_plot) and CAPS Media (pcard_movement_plot()) —
-# fix it once here, both surfaces update together.
-# ============================================================================
+# ── school branding (colors + logo), sourced from NcaaColors.csv ──
+pcard_ncaa_colors <- tryCatch(
+  readr::read_csv("NcaaColors.csv", show_col_types = FALSE),
+  error = function(e) NULL
+)
+
+PCARD_DEFAULT_PRIMARY   <- "#0C2340"
+PCARD_DEFAULT_SECONDARY <- "#FFFFFF"
+
+pcard_get_school_theme <- function(team_abbr) {
+  default <- list(primary = PCARD_DEFAULT_PRIMARY, secondary = PCARD_DEFAULT_SECONDARY,
+                  logo_url = NA_character_, school = NA_character_)
+
+  if (is.null(pcard_ncaa_colors) || is.null(team_abbr) ||
+      is.na(team_abbr) || !nzchar(team_abbr)) return(default)
+
+  row <- pcard_ncaa_colors %>% dplyr::filter(team_abbr == !!team_abbr)
+  if (nrow(row) == 0) return(default)
+
+  list(
+    primary   = row$`Primary Color`[1],
+    secondary = row$`Secondary Color`[1],
+    logo_url  = row$NCAA_img[1],
+    school    = row$Team[1]
+  )
+}
+
+# fetch + cache logo raster (SVG -> PNG via rsvg), NULL on any failure
+pcard_logo_cache <- new.env(parent = emptyenv())
+
+pcard_get_logo_raster <- function(logo_url) {
+  if (is.null(logo_url) || is.na(logo_url) || !nzchar(logo_url)) return(NULL)
+  if (exists(logo_url, envir = pcard_logo_cache)) return(get(logo_url, envir = pcard_logo_cache))
+
+  raster_img <- tryCatch({
+    tmp_svg <- tempfile(fileext = ".svg")
+    tmp_png <- tempfile(fileext = ".png")
+    download.file(logo_url, tmp_svg, mode = "wb", quiet = TRUE)
+    rsvg::rsvg_png(tmp_svg, tmp_png, width = 300)
+    png::readPNG(tmp_png)
+  }, error = function(e) NULL)
+
+  assign(logo_url, raster_img, envir = pcard_logo_cache)
+  raster_img
+}
 
 # ── name formatting ──
 pcard_format_pitcher_name <- function(nm) {
@@ -532,11 +570,19 @@ pcard_datatable <- function(tbl) {
   dt
 }
     
-# ── header + boxscore + generic table draw functions ──
-pcard_draw_header <- function(name) {
-  grid.rect(gp = gpar(fill = "#0C2340", col = NA))
-  grid.text(name, x = 0.05, y = 0.5, just = "left",
-            gp = gpar(fontsize = 32, fontface = "bold", fontfamily = "sans", col = "white"))
+pcard_draw_header <- function(name, team_abbr = NA_character_) {
+  theme <- pcard_get_school_theme(team_abbr)
+  logo  <- pcard_get_logo_raster(theme$logo_url)
+
+  grid.rect(gp = gpar(fill = theme$primary, col = NA))
+
+  text_x <- if (!is.null(logo)) 0.16 else 0.05
+  grid.text(name, x = text_x, y = 0.5, just = "left",
+            gp = gpar(fontsize = 32, fontface = "bold", fontfamily = "sans", col = theme$secondary))
+
+  if (!is.null(logo)) {
+    grid.raster(logo, x = 0.07, y = 0.5, width = 0.09, height = 0.7)
+  }
 }
 
 pcard_draw_boxscore <- function(stats) {
@@ -619,10 +665,9 @@ pcard_draw_table <- function(tbl, title, core_fontsize = NULL, head_fontsize = N
   popViewport()
 }
 
-# ── standalone page wrappers — each takes explicit args, no globals ──
-pcard_draw_header_page <- function(pitcher_raw) {
+pcard_draw_header_page <- function(pitcher_raw, team_abbr = NA_character_) {
   grid.newpage()
-  pcard_draw_header(pcard_format_pitcher_name(pitcher_raw))
+  pcard_draw_header(pcard_format_pitcher_name(pitcher_raw), team_abbr)
 }
 
 pcard_draw_boxscore_page <- function(box_stats) {
@@ -705,7 +750,7 @@ pcard_draw_count_usage_page <- function(count_usage_tbl) {
 pcard_build_all <- function(df, pitcher_raw) {
   pitcher_data <- df %>%
     filter(Pitcher == pitcher_raw) %>%
-    mutate(pitch_uid = dplyr::row_number())   # NEW — stable ID for selection mapping
+    mutate(pitch_uid = dplyr::row_number())
 
   pitch_types <- sort(unique(pcard_canonicalize_pitch(pitcher_data$TaggedPitchType)))
   pitch_types <- pitch_types[!pitch_types %in% c("Undefined", NA)]
@@ -713,7 +758,8 @@ pcard_build_all <- function(df, pitcher_raw) {
   list(
     pitcher_raw       = pitcher_raw,
     pitcher_data      = pitcher_data,
-    box_stats         = pcard_pitcher_boxscore(df, pitcher_raw),   # unchanged — always full season
+    team_abbr         = if (nrow(pitcher_data) > 0) pitcher_data$PitcherTeam[1] else NA_character_,   # NEW
+    box_stats         = pcard_pitcher_boxscore(df, pitcher_raw),
     pitch_types       = pitch_types
   )
 }
