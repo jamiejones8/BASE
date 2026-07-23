@@ -2290,39 +2290,36 @@ caps_media_server <- function(input, output, session) {
 
   cm_selected <- reactiveVal(NULL)
 
-  output$cm_team_ui <- renderUI({
-    req(length(college26_team_choices) > 0)
-    selectInput("cm_team", "Team:",
-                choices = college26_team_choices, width = "100%")
-  })
-
-  output$cm_pitcher_ui <- renderUI({
-    req(input$cm_team)
-    pitchers <- college26_pitchers_by_team[[input$cm_team]]
-    req(length(pitchers) > 0)
-    selectInput("cm_pitcher", "Pitcher:", choices = pitchers, width = "100%")
+  observe({
+    req(!is.null(college26_data))
+    player_choices <- college26_data %>%
+      filter(!is.na(Pitcher), !is.na(PitcherTeam)) %>%
+      distinct(Pitcher, PitcherTeam) %>%
+      mutate(
+        display = paste0(pcard_format_pitcher_name(Pitcher), " — ", PitcherTeam),
+        value   = paste(Pitcher, PitcherTeam, sep = "||")
+      ) %>%
+      arrange(display)
+    choices_vec <- setNames(player_choices$value, player_choices$display)
+    updateSelectizeInput(session, "cm_player_search", choices = choices_vec, server = TRUE, selected = "")
   })
 
   observeEvent(input$cm_load, {
-    req(!is.null(college26_data), input$cm_team, input$cm_pitcher)
+    req(!is.null(college26_data), input$cm_player_search, nzchar(input$cm_player_search))
+    parts    <- strsplit(input$cm_player_search, "\\|\\|")[[1]]
+    raw_p    <- parts[1]
+    raw_team <- parts[2]
 
     pc <- tryCatch(
-      pcard_build_all(
-        college26_data %>% filter(PitcherTeam == input$cm_team),
-        input$cm_pitcher
-      ),
-      error = function(e) {
-        showNotification(paste("Card build failed:", e$message), type = "error")
-        NULL
-      }
+      pcard_build_all(college26_data %>% filter(PitcherTeam == raw_team), raw_p),
+      error = function(e) { showNotification(paste("Card build failed:", e$message), type = "error"); NULL }
     )
     cm_selected(pc)
   })
 
   output$cm_missing_msg <- renderUI({
     if (is.null(cm_selected())) {
-      tags$p("Select a team and pitcher, then click Load Player.",
-             style = "color:#8B8B96; font-size:13px;")
+      tags$p("Search for a player above, then click Load Player.", style = "color:#8B8B96; font-size:13px;")
     } else NULL
   })
 
@@ -2333,75 +2330,74 @@ caps_media_server <- function(input, output, session) {
 
   output$cm_boxscore_plot <- renderPlot({
     req(cm_selected())
-    pcard_draw_boxscore_page(cm_selected()$box_stats)
+    pcard_draw_boxscore_page(cm_selected()$box_stats)   # always full season, never reacts to selection
   })
 
-  output$cm_movement_plot <- renderPlot({
+  output$cm_movement_plotly <- renderPlotly({
     req(cm_selected())
-    pcard_draw_movement_page(cm_selected()$p_movement)
+    pcard_movement_plotly(cm_selected()$pitcher_data, palette = pcard_pitch_colors)
   })
 
-  output$cm_pitch_metrics_plot <- renderPlot({
+  observeEvent(input$cm_clear_selection, {
+    plotlyProxy("cm_movement_plotly", session) %>% plotlyProxyInvoke("deselect")
+  })
+
+  # the single source of truth every reactive table/plot below reads from
+  active_pitcher_data <- reactive({
     req(cm_selected())
-    pcard_draw_pitch_metrics_page(cm_selected()$pitch_metrics_tbl)
+    base <- cm_selected()$pitcher_data
+    sel  <- plotly::event_data("plotly_selected", source = "cm_movement_src")
+    if (is.null(sel) || nrow(sel) == 0) base else base %>% filter(pitch_uid %in% sel$customdata)
+  })
+
+  output$cm_pitch_metrics_dt <- renderDT({
+    pcard_datatable(pcard_pitch_metrics_table(active_pitcher_data()))
   })
 
   output$cm_location_lhh_plot <- renderPlot({
-    req(cm_selected())
-    pcard_draw_location_lhh_page(cm_selected()$p_location_lhh)
+    pcard_draw_location_lhh_page(pcard_location_plot(active_pitcher_data(), "Left"))
   })
 
   output$cm_location_rhh_plot <- renderPlot({
-    req(cm_selected())
-    pcard_draw_location_rhh_page(cm_selected()$p_location_rhh)
+    pcard_draw_location_rhh_page(pcard_location_plot(active_pitcher_data(), "Right"))
   })
 
-  output$cm_usage_overall_plot <- renderPlot({
-    req(cm_selected())
-    pcard_draw_single_table_page(cm_selected()$usage_total, "Overall")
+  output$cm_usage_overall_dt <- renderDT({
+    pcard_datatable(pcard_usage_table(active_pitcher_data(), "All"))
   })
 
-  output$cm_usage_rhh_plot <- renderPlot({
-    req(cm_selected())
-    pcard_draw_single_table_page(cm_selected()$usage_rhh, "RHH")
+  output$cm_usage_rhh_dt <- renderDT({
+    pcard_datatable(pcard_usage_table(active_pitcher_data(), "Right"))
   })
 
-  output$cm_usage_lhh_plot <- renderPlot({
-    req(cm_selected())
-    pcard_draw_single_table_page(cm_selected()$usage_lhh, "LHH")
+  output$cm_usage_lhh_dt <- renderDT({
+    pcard_datatable(pcard_usage_table(active_pitcher_data(), "Left"))
   })
 
-  output$cm_hit_metrics_plot <- renderPlot({
-    req(cm_selected())
-    tryCatch({
-      pcard_draw_hit_metrics_page(cm_selected()$hit_metrics_tbl)
-    }, error = function(e) {
-      grid::grid.newpage()
-      grid::grid.text(paste("Hit metrics error:", e$message),
-                      gp = grid::gpar(col = "red", fontsize = 12))
-    })
+  output$cm_hit_metrics_dt <- renderDT({
+    pcard_datatable(pcard_pitch_hit_metrics(active_pitcher_data()))
   })
-  output$cm_count_usage_plot <- renderPlot({
-    req(cm_selected())
-    pcard_draw_count_usage_page(cm_selected()$count_usage_tbl)
+
+  output$cm_count_usage_dt <- renderDT({
+    pcard_datatable(pcard_usage_by_count(active_pitcher_data()))
   })
 
   output$cm_heatmap_pitch_ui <- renderUI({
     req(cm_selected())
-    choices <- c("All", cm_selected()$pitch_types)
-    selectInput("cm_heatmap_pitch", "Pitch Type:", choices = choices, selected = "All", width = "220px")
+    selectInput("cm_heatmap_pitch", "Pitch Type:",
+                choices = c("All", cm_selected()$pitch_types), selected = "All", width = "220px")
   })
 
   output$cm_heatmap_plot <- renderPlot({
     req(cm_selected(), input$cm_heatmap_pitch, input$cm_heatmap_side)
-    pcard_density_heatmap(
-      cm_selected()$pitcher_data,
-      pitch_type = input$cm_heatmap_pitch,
-      side       = input$cm_heatmap_side
-    )
+    pcard_density_heatmap(active_pitcher_data(),
+                          pitch_type = input$cm_heatmap_pitch, side = input$cm_heatmap_side)
   })
 }
-               
+
+
+
+         
 standings <- tryCatch(fetch_standings(), error = function(e) NULL)
 
 fetch_whitecaps_roster <- function() {
@@ -3144,12 +3140,16 @@ caps_media_ui <- function() {
       ),
       tags$h2("CAPS Media",
               style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 16px;"),
-      tags$p("Browse any pitcher in the College26 database.",
+      tags$p("Search any pitcher in the College26 database.",
              style = "color:#5F6B7A; font-size:14px; margin-bottom:20px;"),
       tags$div(
-        style = "display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: end; margin-bottom: 24px;",
-        uiOutput("cm_team_ui"),
-        uiOutput("cm_pitcher_ui"),
+        style = "display: grid; grid-template-columns: 3fr 1fr; gap: 16px; align-items: end; margin-bottom: 24px;",
+        tags$div(
+          tags$label("Search Player:", style = "font-size:13px; font-weight:600; color:#5F5F6B;"),
+          selectizeInput("cm_player_search", NULL, choices = NULL,
+                        options = list(placeholder = "Type a name...", maxOptions = 15),
+                        width = "100%")
+        ),
         actionButton("cm_load", "Load Player", class = "btn btn-primary")
       ),
       tags$div(
@@ -3160,11 +3160,14 @@ caps_media_ui <- function() {
         tags$div(class = "pcard-panel", plotOutput("cm_boxscore_plot", height = "100px")),
 
         tags$div(class = "pcard-section-label", "Pitch Movement"),
-        tags$div(class = "pcard-panel", style = "max-width: 520px; margin-left: auto; margin-right: auto;",
-                 plotOutput("cm_movement_plot", height = "480px")),
+        tags$div(style = "display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;",
+                 tags$span("Box- or lasso-select pitches to filter every table and the heatmap below.",
+                           style = "font-size:12px; color:#8B8B96;"),
+                 actionButton("cm_clear_selection", "Clear Selection", class = "btn btn-sm btn-outline-secondary")),
+        tags$div(class = "pcard-panel", plotlyOutput("cm_movement_plotly", height = "480px")),
 
         tags$div(class = "pcard-section-label", "Pitch Metrics"),
-        tags$div(class = "pcard-panel", plotOutput("cm_pitch_metrics_plot", height = "320px")),
+        tags$div(class = "pcard-panel", DTOutput("cm_pitch_metrics_dt")),
 
         tags$div(class = "pcard-section-label", "Pitch Location"),
         tags$div(class = "pcard-row",
@@ -3174,15 +3177,16 @@ caps_media_ui <- function() {
 
         tags$div(class = "pcard-section-label", "Usage"),
         tags$div(class = "pcard-row",
-          tags$div(class = "pcard-panel", plotOutput("cm_usage_overall_plot", height = "220px")),
-          tags$div(class = "pcard-panel", plotOutput("cm_usage_rhh_plot", height = "220px")),
-          tags$div(class = "pcard-panel", plotOutput("cm_usage_lhh_plot", height = "220px"))
+          tags$div(class = "pcard-panel", DTOutput("cm_usage_overall_dt")),
+          tags$div(class = "pcard-panel", DTOutput("cm_usage_rhh_dt")),
+          tags$div(class = "pcard-panel", DTOutput("cm_usage_lhh_dt"))
         ),
 
         tags$div(class = "pcard-section-label", "Hit Metrics by Pitch"),
-        tags$div(class = "pcard-panel", plotOutput("cm_hit_metrics_plot", height = "300px")),
+        tags$div(class = "pcard-panel", DTOutput("cm_hit_metrics_dt")),
+
         tags$div(class = "pcard-section-label", "Usage by Count Situation"),
-        tags$div(class = "pcard-panel", plotOutput("cm_count_usage_plot", height = "340px")),
+        tags$div(class = "pcard-panel", DTOutput("cm_count_usage_dt")),
 
         tags$div(class = "pcard-section-label", "Pitch Location Density"),
         tags$div(
