@@ -2359,7 +2359,9 @@ caps_media_server <- function(input, output, session) {
   })
 
   observeEvent(input$cm_clear_selection, {
-    plotlyProxy("cm_movement_plotly", session) %>% plotlyProxyInvoke("deselect")
+    cm_selection_uids(NULL)
+    plotlyProxy("cm_movement_plotly", session) %>%
+      plotlyProxyInvoke("relayout", list(selections = list()))
   })
 
   # the single source of truth every reactive table/plot below reads from
