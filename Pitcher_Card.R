@@ -541,14 +541,15 @@ pcard_movement_plotly <- function(pitcher_data, palette, source_id = "cm_movemen
   ) %>%
     plotly::layout(
       dragmode = "select",
-      xaxis = list(title = "Horizontal Break (in)", range = c(-25, 25), zeroline = TRUE),
+      xaxis = list(title = "Horizontal Break (in)", range = c(-25, 25),
+                  fixedrange = TRUE, zeroline = TRUE),
       yaxis = list(title = "Induced Vertical Break (in)", range = c(-25, 25),
-                  zeroline = TRUE, scaleanchor = "x", scaleratio = 1),
+                  fixedrange = TRUE, zeroline = TRUE, scaleanchor = "x", scaleratio = 1),
       legend = list(orientation = "h", y = -0.15)
     ) %>%
     plotly::event_register("plotly_selected") %>%
     plotly::config(displaylogo = FALSE)
-}    
+}   
 
 pcard_datatable <- function(tbl) {
   if (nrow(tbl) == 0) {
