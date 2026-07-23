@@ -2289,7 +2289,6 @@ season_pitcher_card_server <- function(input, output, session) {
 caps_media_server <- function(input, output, session) {
 
   cm_selected <- reactiveVal(NULL)
-
   observe({
     req(!is.null(college26_data))
     player_choices <- college26_data %>%
@@ -2309,12 +2308,33 @@ caps_media_server <- function(input, output, session) {
     parts    <- strsplit(input$cm_player_search, "\\|\\|")[[1]]
     raw_p    <- parts[1]
     raw_team <- parts[2]
-
     pc <- tryCatch(
       pcard_build_all(college26_data %>% filter(PitcherTeam == raw_team), raw_p),
       error = function(e) { showNotification(paste("Card build failed:", e$message), type = "error"); NULL }
     )
     cm_selected(pc)
+    cm_selection_uids(NULL)   
+  })
+
+  cm_selection_uids <- reactiveVal(NULL)
+
+  observeEvent(plotly::event_data("plotly_selected", source = "cm_movement_src"),
+              ignoreNULL = FALSE, {
+    sel <- plotly::event_data("plotly_selected", source = "cm_movement_src")
+    cm_selection_uids(if (is.null(sel) || nrow(sel) == 0) NULL else sel$customdata)
+  })
+
+  observeEvent(input$cm_clear_selection, {
+    cm_selection_uids(NULL)
+    plotlyProxy("cm_movement_plotly", session) %>%
+      plotlyProxyInvoke("relayout", list(selections = list()))
+  })
+
+  active_pitcher_data <- reactive({
+    req(cm_selected())
+    base <- cm_selected()$pitcher_data
+    uids <- cm_selection_uids()
+    if (is.null(uids)) base else base %>% filter(pitch_uid %in% uids)
   })
 
   output$cm_missing_msg <- renderUI({
