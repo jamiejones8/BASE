@@ -486,6 +486,52 @@ pcard_movement_plot <- function(pitcher_data) {
   pcard_movement_plot_generic(ind_data, mean_data, palette = pcard_pitch_colors)
 }
 
+
+
+pcard_movement_plotly <- function(pitcher_data, palette, source_id = "cm_movement_src") {
+  d <- pitcher_data %>%
+    mutate(TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType)) %>%
+    filter(!is.na(TaggedPitchType_clean), TaggedPitchType_clean != "Undefined",
+           !is.na(HorzBreak), !is.na(InducedVertBreak))
+
+  plotly::plot_ly(
+    d, x = ~HorzBreak, y = ~InducedVertBreak, color = ~TaggedPitchType_clean,
+    colors = palette, customdata = ~pitch_uid,
+    type = "scatter", mode = "markers",
+    marker = list(size = 9, line = list(width = 1, color = "black")),
+    source = source_id
+  ) %>%
+    plotly::layout(
+      dragmode = "select",
+      xaxis = list(title = "Horizontal Break (in)", range = c(-25, 25), zeroline = TRUE),
+      yaxis = list(title = "Induced Vertical Break (in)", range = c(-25, 25),
+                  zeroline = TRUE, scaleanchor = "x", scaleratio = 1),
+      legend = list(orientation = "h", y = -0.15)
+    ) %>%
+    plotly::event_register("plotly_selected") %>%
+    plotly::config(displaylogo = FALSE)
+}    
+
+pcard_datatable <- function(tbl) {
+  if (nrow(tbl) == 0) {
+    return(DT::datatable(tibble::tibble(Message = "No data available"),
+                         rownames = FALSE, options = list(dom = "t")))
+  }
+  dt <- DT::datatable(
+    tbl, rownames = FALSE,
+    options = list(dom = "t", paging = FALSE, searching = FALSE, order = list(),
+                  columnDefs = list(list(className = "dt-center", targets = "_all"))),
+    class = "display compact"
+  )
+  if ("Pitch" %in% names(tbl)) {
+    pitch_vals <- unique(tbl$Pitch)
+    colors     <- unname(pcard_pitch_colors[pitch_vals])
+    colors[is.na(colors)] <- "#16161B"
+    dt <- dt %>% DT::formatStyle("Pitch", color = DT::styleEqual(pitch_vals, colors), fontWeight = "bold")
+  }
+  dt
+}
+    
 # ── header + boxscore + generic table draw functions ──
 pcard_draw_header <- function(name) {
   grid.rect(gp = gpar(fill = "#0C2340", col = NA))
@@ -656,9 +702,10 @@ pcard_draw_count_usage_page <- function(count_usage_tbl) {
   pcard_draw_table(count_usage_tbl, "Usage by Count Situation")
 }
 
-# ── convenience: build every data object for one pitcher in one call ──
 pcard_build_all <- function(df, pitcher_raw) {
-  pitcher_data <- df %>% filter(Pitcher == pitcher_raw)
+  pitcher_data <- df %>%
+    filter(Pitcher == pitcher_raw) %>%
+    mutate(pitch_uid = dplyr::row_number())   # NEW — stable ID for selection mapping
 
   pitch_types <- sort(unique(pcard_canonicalize_pitch(pitcher_data$TaggedPitchType)))
   pitch_types <- pitch_types[!pitch_types %in% c("Undefined", NA)]
@@ -666,16 +713,7 @@ pcard_build_all <- function(df, pitcher_raw) {
   list(
     pitcher_raw       = pitcher_raw,
     pitcher_data      = pitcher_data,
-    box_stats         = pcard_pitcher_boxscore(df, pitcher_raw),
-    p_movement        = pcard_movement_plot(pitcher_data),
-    pitch_metrics_tbl = pcard_pitch_metrics_table(pitcher_data),
-    p_location_lhh    = pcard_location_plot(pitcher_data, "Left"),
-    p_location_rhh    = pcard_location_plot(pitcher_data, "Right"),
-    usage_total       = pcard_usage_table(pitcher_data, "All"),
-    usage_rhh         = pcard_usage_table(pitcher_data, "Right"),
-    usage_lhh         = pcard_usage_table(pitcher_data, "Left"),
-    hit_metrics_tbl   = pcard_pitch_hit_metrics(pitcher_data),
-    count_usage_tbl   = pcard_usage_by_count(pitcher_data),
+    box_stats         = pcard_pitcher_boxscore(df, pitcher_raw),   # unchanged — always full season
     pitch_types       = pitch_types
   )
 }
