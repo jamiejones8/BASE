@@ -2345,7 +2345,7 @@ caps_media_server <- function(input, output, session) {
 
   output$cm_header_plot <- renderPlot({
     req(cm_selected())
-    pcard_draw_header_page(cm_selected()$pitcher_raw)
+    pcard_draw_header_page(cm_selected()$pitcher_raw, cm_selected()$team_abbr)
   })
 
   output$cm_boxscore_plot <- renderPlot({
