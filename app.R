@@ -15,7 +15,6 @@ library(xgboost)
 library(base64enc)
 library(ggridges)
 library(arrow)
-# --- Acquisitions Board (AcquisitionsApp3) deps ---
 library(shinyBS)
 library(shinyjs)
 library(DT)
@@ -2407,13 +2406,17 @@ caps_media_server <- function(input, output, session) {
   output$cm_heatmap_pitch_ui <- renderUI({
     req(cm_selected())
     selectInput("cm_heatmap_pitch", "Pitch Type:",
-                choices = c("All", cm_selected()$pitch_types), selected = "All", width = "220px")
+                choices = c("All", cm_selected()$pitch_types), selected = "All", width = "200px")
   })
 
-  output$cm_heatmap_plot <- renderPlot({
-    req(cm_selected(), input$cm_heatmap_pitch, input$cm_heatmap_side)
-    pcard_density_heatmap(active_pitcher_data(),
-                          pitch_type = input$cm_heatmap_pitch, side = input$cm_heatmap_side)
+  output$cm_heatmap_lhh_plot <- renderPlot({
+    req(cm_selected(), input$cm_heatmap_pitch)
+    pcard_density_heatmap(active_pitcher_data(), pitch_type = input$cm_heatmap_pitch, side = "Left")
+  })
+
+  output$cm_heatmap_rhh_plot <- renderPlot({
+    req(cm_selected(), input$cm_heatmap_pitch)
+    pcard_density_heatmap(active_pitcher_data(), pitch_type = input$cm_heatmap_pitch, side = "Right")
   })
 }
 
@@ -3181,12 +3184,21 @@ caps_media_ui <- function() {
         tags$div(class = "pcard-panel", plotOutput("cm_header_plot", height = "100px")),
         tags$div(class = "pcard-panel", plotOutput("cm_boxscore_plot", height = "100px")),
 
-        tags$div(class = "pcard-section-label", "Pitch Movement"),
+        tags$div(class = "pcard-section-label", "Pitch Movement & Location Density"),
         tags$div(style = "display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;",
-                 tags$span("Box- or lasso-select pitches to filter every table and the heatmap below.",
+                 tags$span("Box- or lasso-select pitches on the movement plot to filter every table below. Pitch type filter applies to the density maps.",
                            style = "font-size:12px; color:#8B8B96;"),
-                 actionButton("cm_clear_selection", "Clear Selection", class = "btn btn-sm btn-outline-secondary")),
-        tags$div(class = "pcard-panel", plotlyOutput("cm_movement_plotly", height = "480px")),
+                 tags$div(style = "display:flex; gap:10px; align-items:center;",
+                          uiOutput("cm_heatmap_pitch_ui"),
+                          actionButton("cm_clear_selection", "Clear Selection", class = "btn btn-sm btn-outline-secondary"))),
+        tags$div(class = "pcard-row",
+          tags$div(class = "pcard-panel", style = "flex:1;",
+                   plotOutput("cm_heatmap_lhh_plot", height = "420px")),
+          tags$div(class = "pcard-panel", style = "flex:1.3;",
+                   plotlyOutput("cm_movement_plotly", height = "420px")),
+          tags$div(class = "pcard-panel", style = "flex:1;",
+                   plotOutput("cm_heatmap_rhh_plot", height = "420px"))
+        ),
 
         tags$div(class = "pcard-section-label", "Pitch Metrics"),
         tags$div(class = "pcard-panel", DTOutput("cm_pitch_metrics_dt")),
@@ -3208,17 +3220,7 @@ caps_media_ui <- function() {
         tags$div(class = "pcard-panel", DTOutput("cm_hit_metrics_dt")),
 
         tags$div(class = "pcard-section-label", "Usage by Count Situation"),
-        tags$div(class = "pcard-panel", DTOutput("cm_count_usage_dt")),
-
-        tags$div(class = "pcard-section-label", "Pitch Location Density"),
-        tags$div(
-          class = "pcard-panel",
-          style = "display:flex; gap:16px; align-items:end; margin-bottom:16px;",
-          uiOutput("cm_heatmap_pitch_ui"),
-          selectInput("cm_heatmap_side", "Hitter Side:",
-                      choices = c("All","Left","Right"), selected = "All", width = "160px")
-        ),
-        tags$div(class = "pcard-panel", plotOutput("cm_heatmap_plot", height = "420px"))
+        tags$div(class = "pcard-panel", DTOutput("cm_count_usage_dt"))
       )
     ),
     tags$div(class = "hub-footer",
