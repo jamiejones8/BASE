@@ -2285,6 +2285,7 @@ season_pitcher_card_server <- function(input, output, session) {
   )
 }
 
+
 caps_media_server <- function(input, output, session) {
 
   cm_selected <- reactiveVal(NULL)
@@ -2333,87 +2334,134 @@ caps_media_server <- function(input, output, session) {
     pcard_draw_boxscore_page(cm_selected()$box_stats)
   })
 
-  # ── filter panel ──
   raw_prepped_data <- reactive({
     req(cm_selected())
     pcard_prep_filterable_data(cm_selected()$pitcher_data)
   })
 
-  output$cm_filter_pitch_type_ui <- renderUI({
-    d <- raw_prepped_data()
-    checkboxGroupInput("cm_filter_pitch_type", "Pitch Type:",
-                       choices = sort(unique(na.omit(d$TaggedPitchType_clean))), inline = TRUE)
+  CM_FILTER_CATALOG <- c(
+    "Pitch Type"            = "pitch_type",
+    "Previous Pitch Type"   = "prev_pitch",
+    "Count Situation"       = "count",
+    "Batted Ball"           = "batted_ball",
+    "Times Through Order"   = "tto",
+    "vs. Team"              = "vs_team",
+    "Velocity"              = "velo",
+    "Exit Velocity"         = "exit_velo",
+    "Inning"                = "inning",
+    "Date Range"            = "date"
+  )
+
+  cm_active_filter_keys <- reactiveVal(character(0))
+
+  observe({
+    remaining <- CM_FILTER_CATALOG[!CM_FILTER_CATALOG %in% cm_active_filter_keys()]
+    updateSelectizeInput(session, "cm_filter_picker", choices = c("" = "", remaining), selected = "")
   })
 
-  output$cm_filter_prev_pitch_ui <- renderUI({
-    d <- raw_prepped_data()
-    checkboxGroupInput("cm_filter_prev_pitch", "Previous Pitch Type:",
-                       choices = sort(unique(na.omit(d$PrevPitchType))), inline = TRUE)
+  observeEvent(input$cm_filter_picker, {
+    req(nzchar(input$cm_filter_picker))
+    cm_active_filter_keys(union(cm_active_filter_keys(), input$cm_filter_picker))
   })
 
-  output$cm_filter_vs_team_ui <- renderUI({
-    d <- raw_prepped_data()
-    if (!"BatterTeam" %in% names(d)) return(NULL)
-    checkboxGroupInput("cm_filter_vs_team", "vs. Team:",
-                       choices = sort(unique(na.omit(d$BatterTeam))), inline = TRUE)
+  observeEvent(input$cm_filter_remove_key, {
+    req(nzchar(input$cm_filter_remove_key))
+    cm_active_filter_keys(setdiff(cm_active_filter_keys(), input$cm_filter_remove_key))
   })
 
-  output$cm_filter_velo_ui <- renderUI({
+  output$cm_active_filters_ui <- renderUI({
+    keys <- cm_active_filter_keys()
+    if (length(keys) == 0) return(NULL)
     d <- raw_prepped_data()
-    rng <- range(d$RelSpeed, na.rm = TRUE)
-    sliderInput("cm_filter_velo", "Velocity (mph):", min = floor(rng[1]), max = ceiling(rng[2]),
-               value = c(floor(rng[1]), ceiling(rng[2])), width = "100%")
+
+    widget_for <- function(key) {
+      close_btn <- tags$span("✕",
+        onclick = sprintf("Shiny.setInputValue('cm_filter_remove_key', '%s', {priority:'event'})", key),
+        style = "cursor:pointer; color:#8B8B96; margin-left:8px; font-size:12px;")
+
+      wrap <- function(label_ui, input_ui) {
+        tags$div(style = "margin-top:14px; padding-top:12px; border-top:1px solid #F0F0F2;",
+                 tags$div(style = "display:flex; justify-content:space-between; align-items:center;",
+                          label_ui, close_btn),
+                 input_ui)
+      }
+
+      switch(key,
+        pitch_type = wrap(tags$b("Pitch Type"),
+          checkboxGroupInput("cm_filter_pitch_type", NULL,
+                             choices = sort(unique(na.omit(d$TaggedPitchType_clean))), inline = TRUE)),
+        prev_pitch = wrap(tags$b("Previous Pitch Type"),
+          checkboxGroupInput("cm_filter_prev_pitch", NULL,
+                             choices = sort(unique(na.omit(d$PrevPitchType))), inline = TRUE)),
+        count = wrap(tags$b("Count Situation"),
+          checkboxGroupInput("cm_filter_count", NULL,
+                             choices = c("Early","Ahead","Even","3-2","Kill/Putaway"), inline = TRUE)),
+        batted_ball = wrap(tags$b("Batted Ball"),
+          checkboxGroupInput("cm_filter_batted_ball", NULL,
+                             choices = c("Ground Ball","Line Drive","Fly Ball","Pop Up","Bunt"), inline = TRUE)),
+        tto = wrap(tags$b("Times Through Order"),
+          checkboxGroupInput("cm_filter_tto", NULL, choices = c("1st","2nd","3rd+"), inline = TRUE)),
+        vs_team = wrap(tags$b("vs. Team"),
+          if ("BatterTeam" %in% names(d))
+            checkboxGroupInput("cm_filter_vs_team", NULL,
+                               choices = sort(unique(na.omit(d$BatterTeam))), inline = TRUE)
+          else tags$p("Not available in this data.", style = "font-size:12px; color:#8B8B96;")),
+        velo = wrap(tags$b("Velocity (mph)"),
+          tags$div(style = "display:flex; gap:8px; align-items:center;",
+                   numericInput("cm_filter_velo_min", NULL, value = NA, width = "100px"),
+                   tags$span("to"),
+                   numericInput("cm_filter_velo_max", NULL, value = NA, width = "100px"))),
+        exit_velo = wrap(tags$b("Exit Velocity (mph)"),
+          tags$div(style = "display:flex; gap:8px; align-items:center;",
+                   numericInput("cm_filter_exit_velo_min", NULL, value = NA, width = "100px"),
+                   tags$span("to"),
+                   numericInput("cm_filter_exit_velo_max", NULL, value = NA, width = "100px"))),
+        inning = wrap(tags$b("Inning"),
+          tags$div(style = "display:flex; gap:8px; align-items:center;",
+                   numericInput("cm_filter_inning_min", NULL, value = NA, width = "80px"),
+                   tags$span("to"),
+                   numericInput("cm_filter_inning_max", NULL, value = NA, width = "80px"))),
+        date = wrap(tags$b("Date Range"),
+          if ("Date" %in% names(d)) dateRangeInput("cm_filter_date", NULL, width = "260px")
+          else tags$p("Not available in this data.", style = "font-size:12px; color:#8B8B96;"))
+      )
+    }
+
+    tagList(lapply(keys, widget_for))
   })
 
-  output$cm_filter_exit_velo_ui <- renderUI({
-    d <- raw_prepped_data()
-    if (all(is.na(d$ExitSpeed))) return(NULL)
-    rng <- range(d$ExitSpeed, na.rm = TRUE)
-    sliderInput("cm_filter_exit_velo", "Exit Velo (mph):", min = floor(rng[1]), max = ceiling(rng[2]),
-               value = c(floor(rng[1]), ceiling(rng[2])), width = "100%")
-  })
+  cm_applied_filters <- reactiveVal(list())
 
-  output$cm_filter_date_ui <- renderUI({
-    d <- raw_prepped_data()
-    if (!"Date" %in% names(d)) return(NULL)
-    rng <- range(as.Date(d$Date), na.rm = TRUE)
-    dateRangeInput("cm_filter_date", "Date Range:", start = rng[1], end = rng[2], min = rng[1], max = rng[2])
-  })
-
-  output$cm_filter_inning_ui <- renderUI({
-    d <- raw_prepped_data()
-    if (!"Inning" %in% names(d)) return(NULL)
-    rng <- range(d$Inning, na.rm = TRUE)
-    sliderInput("cm_filter_inning", "Inning:", min = floor(rng[1]), max = ceiling(rng[2]),
-               value = c(floor(rng[1]), ceiling(rng[2])), step = 1, width = "100%")
-  })
-
-  observeEvent(input$cm_filter_reset, {
-    updateCheckboxGroupInput(session, "cm_filter_pitch_type", selected = character(0))
-    updateCheckboxGroupInput(session, "cm_filter_prev_pitch", selected = character(0))
-    updateCheckboxGroupInput(session, "cm_filter_count", selected = character(0))
-    updateCheckboxGroupInput(session, "cm_filter_batted_ball", selected = character(0))
-    updateCheckboxGroupInput(session, "cm_filter_tto", selected = character(0))
-    updateCheckboxGroupInput(session, "cm_filter_vs_team", selected = character(0))
-  })
-
-  filtered_pitcher_data <- reactive({
-    d <- raw_prepped_data()
-    pcard_apply_filters(d, list(
+  observeEvent(input$cm_filter_apply, {
+    cm_applied_filters(list(
       pitch_type      = input$cm_filter_pitch_type,
       prev_pitch      = input$cm_filter_prev_pitch,
       count_bucket    = input$cm_filter_count,
       batted_ball     = input$cm_filter_batted_ball,
       tto             = input$cm_filter_tto,
       vs_team         = input$cm_filter_vs_team,
-      velo_range      = input$cm_filter_velo,
-      exit_velo_range = input$cm_filter_exit_velo,
-      inning_range    = input$cm_filter_inning,
+      velo_range      = if (!is.null(input$cm_filter_velo_min) && !is.na(input$cm_filter_velo_min) &&
+                            !is.null(input$cm_filter_velo_max) && !is.na(input$cm_filter_velo_max))
+                          c(input$cm_filter_velo_min, input$cm_filter_velo_max) else NULL,
+      exit_velo_range = if (!is.null(input$cm_filter_exit_velo_min) && !is.na(input$cm_filter_exit_velo_min) &&
+                            !is.null(input$cm_filter_exit_velo_max) && !is.na(input$cm_filter_exit_velo_max))
+                          c(input$cm_filter_exit_velo_min, input$cm_filter_exit_velo_max) else NULL,
+      inning_range    = if (!is.null(input$cm_filter_inning_min) && !is.na(input$cm_filter_inning_min) &&
+                            !is.null(input$cm_filter_inning_max) && !is.na(input$cm_filter_inning_max))
+                          c(input$cm_filter_inning_min, input$cm_filter_inning_max) else NULL,
       date_range      = input$cm_filter_date
     ))
   })
 
-  # ── movement plot + box-select on top of filters ──
+  observeEvent(input$cm_filter_reset, {
+    cm_active_filter_keys(character(0))
+    cm_applied_filters(list())
+  })
+
+  filtered_pitcher_data <- reactive({
+    pcard_apply_filters(raw_prepped_data(), cm_applied_filters())
+  })
+
   output$cm_movement_plotly <- renderPlotly({
     req(cm_selected())
     pcard_movement_plotly(filtered_pitcher_data(), palette = pcard_pitch_colors)
@@ -2437,7 +2485,6 @@ caps_media_server <- function(input, output, session) {
     if (is.null(uids)) d else d %>% filter(pitch_uid %in% uids)
   })
 
-  # ── every table + plot below reads from active_pitcher_data() ──
   output$cm_pitch_metrics_dt <- renderDT({
     pcard_datatable(pcard_pitch_metrics_table(active_pitcher_data()))
   })
@@ -3249,29 +3296,19 @@ caps_media_ui <- function() {
 
       tags$div(
         class = "pcard-panel",
-        tags$div(style = "display:flex; justify-content:space-between; align-items:center; cursor:pointer;",
-                 onclick = "$('#cm-filter-body').toggle();",
+        tags$div(style = "display:flex; justify-content:space-between; align-items:center;",
                  tags$span("Filters", style = "font-size:13px; font-weight:700; color:#0C2340;"),
-                 tags$span("▾", style = "color:#8B8B96;")),
-        tags$div(
-          id = "cm-filter-body",
-          style = "display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:14px;",
-          uiOutput("cm_filter_pitch_type_ui"),
-          uiOutput("cm_filter_prev_pitch_ui"),
-          checkboxGroupInput("cm_filter_count", "Count Situation:",
-                             choices = c("Early","Ahead","Even","3-2","Kill/Putaway"), inline = TRUE),
-          checkboxGroupInput("cm_filter_batted_ball", "Batted Ball Type:",
-                             choices = c("Ground Ball","Line Drive","Fly Ball","Pop Up","Bunt"), inline = TRUE),
-          checkboxGroupInput("cm_filter_tto", "Times Through Order:",
-                             choices = c("1st","2nd","3rd+"), inline = TRUE),
-          uiOutput("cm_filter_vs_team_ui"),
-          uiOutput("cm_filter_velo_ui"),
-          uiOutput("cm_filter_exit_velo_ui"),
-          uiOutput("cm_filter_date_ui"),
-          uiOutput("cm_filter_inning_ui")
-        ),
-        tags$div(style = "margin-top:12px;",
-                 actionButton("cm_filter_reset", "Reset Filters", class = "btn btn-sm btn-outline-secondary"))
+                 tags$div(style = "display:flex; gap:8px;",
+                          actionButton("cm_filter_reset", "Reset", class = "btn btn-sm btn-outline-secondary"),
+                          actionButton("cm_filter_apply", "Apply Filters", class = "btn btn-sm btn-primary"))),
+
+        tags$div(style = "margin-top:10px;",
+                 selectizeInput("cm_filter_picker", NULL, choices = NULL,
+                               options = list(placeholder = "Search filters to add...",
+                                              onInitialize = I('function() { this.setValue(""); }')),
+                               width = "320px")),
+
+        uiOutput("cm_active_filters_ui")
       ),
 
       tags$div(
