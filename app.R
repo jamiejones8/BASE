@@ -2356,7 +2356,8 @@ caps_media_server <- function(input, output, session) {
 
   observe({
     remaining <- CM_FILTER_CATALOG[!CM_FILTER_CATALOG %in% cm_active_filter_keys()]
-    updateSelectizeInput(session, "cm_filter_picker", choices = c("" = "", remaining), selected = "")
+    updateSelectizeInput(session, "cm_filter_picker",
+                        choices = c("(blank)" = "", remaining), selected = "")
   })
 
   observeEvent(input$cm_filter_picker, {
