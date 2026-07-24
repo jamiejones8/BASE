@@ -818,7 +818,7 @@ pcard_apply_filters <- function(d, filters) {
     d <- d %>% filter(Bucket %in% filters$count_bucket)
 
   if (!is.null(filters$batted_ball)  && length(filters$batted_ball) > 0)
-    d <- d %>% filter(is.na(BattedBallType) | BattedBallType %in% filters$batted_ball)
+    d <- d %>% filter(BattedBallType %in% filters$batted_ball)   # CHANGED — no more is.na() escape hatch
 
   if (!is.null(filters$tto)          && length(filters$tto) > 0)
     d <- d %>% filter(TimeThruOrder %in% filters$tto)
@@ -830,7 +830,7 @@ pcard_apply_filters <- function(d, filters) {
     d <- d %>% filter(is.na(RelSpeed) | (RelSpeed >= filters$velo_range[1] & RelSpeed <= filters$velo_range[2]))
 
   if (!is.null(filters$exit_velo_range))
-    d <- d %>% filter(is.na(ExitSpeed) | (ExitSpeed >= filters$exit_velo_range[1] & ExitSpeed <= filters$exit_velo_range[2]))
+    d <- d %>% filter(!is.na(ExitSpeed) & ExitSpeed >= filters$exit_velo_range[1] & ExitSpeed <= filters$exit_velo_range[2])   # CHANGED — no more is.na() escape hatch
 
   if (!is.null(filters$inning_range) && "Inning" %in% names(d))
     d <- d %>% filter(is.na(Inning) | (Inning >= filters$inning_range[1] & Inning <= filters$inning_range[2]))
@@ -840,7 +840,7 @@ pcard_apply_filters <- function(d, filters) {
 
   d
 }
-
+    
 pcard_build_all <- function(df, pitcher_raw) {
   pitcher_data <- df %>%
     filter(Pitcher == pitcher_raw) %>%
