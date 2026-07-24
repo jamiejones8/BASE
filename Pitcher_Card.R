@@ -544,7 +544,7 @@ pcard_movement_plotly <- function(pitcher_data, palette, source_id = "cm_movemen
       xaxis = list(title = "Horizontal Break (in)", range = c(-25, 25),
                   fixedrange = TRUE, zeroline = TRUE),
       yaxis = list(title = "Induced Vertical Break (in)", range = c(-25, 25),
-                  fixedrange = TRUE, zeroline = TRUE, scaleanchor = "x", scaleratio = 1),
+                  fixedrange = TRUE, zeroline = TRUE),
       legend = list(orientation = "h", y = -0.15)
     ) %>%
     plotly::event_register("plotly_selected") %>%
@@ -746,6 +746,99 @@ pcard_draw_hit_metrics_page <- function(hit_metrics_tbl) {
 pcard_draw_count_usage_page <- function(count_usage_tbl) {
   grid.newpage()
   pcard_draw_table(count_usage_tbl, "Usage by Count Situation")
+}
+
+pcard_batted_ball_type <- function(tagged_hit_type) {
+  dplyr::case_when(
+    is.na(tagged_hit_type)          ~ NA_character_,
+    tagged_hit_type == "Undefined"  ~ NA_character_,
+    tagged_hit_type == "GroundBall" ~ "Ground Ball",
+    tagged_hit_type == "LineDrive"  ~ "Line Drive",
+    tagged_hit_type == "FlyBall"    ~ "Fly Ball",
+    tagged_hit_type == "Popup"      ~ "Pop Up",
+    tagged_hit_type == "Bunt"       ~ "Bunt",
+    TRUE                            ~ NA_character_
+  )
+}
+
+# ── adds derived columns needed by the filter panel: batted-ball type,
+#    count bucket, previous-pitch-type (requires PA-level ordering columns),
+#    and times-through-order (requires game/batter ordering columns).
+#    Falls back to NA for any derived column whose source columns don't exist. ──
+pcard_prep_filterable_data <- function(pitcher_data) {
+  d <- pitcher_data %>%
+    mutate(
+      TaggedPitchType_clean = pcard_canonicalize_pitch(TaggedPitchType),
+      BattedBallType         = pcard_batted_ball_type(TaggedHitType),
+      Bucket                 = pcard_count_bucket(Balls, Strikes)
+    )
+
+  has_pa_keys <- all(c("GameID", "Inning", "PAofInning", "PitchofPA") %in% names(d))
+  if (has_pa_keys) {
+    d <- d %>%
+      arrange(GameID, Inning, PAofInning, PitchofPA) %>%
+      group_by(GameID, Inning, PAofInning) %>%
+      mutate(PrevPitchType = dplyr::lag(TaggedPitchType_clean)) %>%
+      ungroup()
+  } else {
+    d$PrevPitchType <- NA_character_
+  }
+
+  has_tto_keys <- all(c("GameID", "Batter") %in% names(d))
+  if (has_tto_keys) {
+    d <- d %>%
+      arrange(GameID, Inning, PAofInning) %>%
+      group_by(GameID, Batter) %>%
+      mutate(TimeThruOrder_num = dplyr::dense_rank(PAofInning)) %>%
+      ungroup() %>%
+      mutate(TimeThruOrder = dplyr::case_when(
+        TimeThruOrder_num == 1 ~ "1st",
+        TimeThruOrder_num == 2 ~ "2nd",
+        TimeThruOrder_num >= 3 ~ "3rd+",
+        TRUE ~ NA_character_
+      ))
+  } else {
+    d$TimeThruOrder <- NA_character_
+  }
+
+  d
+}
+
+# ── applies the big filter panel's selections to a prepped data frame.
+#    OR within a filter category, AND across categories. Any filter that's
+#    NULL/empty is a no-op, so an untouched filter panel returns all rows. ──
+pcard_apply_filters <- function(d, filters) {
+  if (!is.null(filters$pitch_type)   && length(filters$pitch_type) > 0)
+    d <- d %>% filter(TaggedPitchType_clean %in% filters$pitch_type)
+
+  if (!is.null(filters$prev_pitch)   && length(filters$prev_pitch) > 0)
+    d <- d %>% filter(PrevPitchType %in% filters$prev_pitch)
+
+  if (!is.null(filters$count_bucket) && length(filters$count_bucket) > 0)
+    d <- d %>% filter(Bucket %in% filters$count_bucket)
+
+  if (!is.null(filters$batted_ball)  && length(filters$batted_ball) > 0)
+    d <- d %>% filter(is.na(BattedBallType) | BattedBallType %in% filters$batted_ball)
+
+  if (!is.null(filters$tto)          && length(filters$tto) > 0)
+    d <- d %>% filter(TimeThruOrder %in% filters$tto)
+
+  if (!is.null(filters$vs_team)      && length(filters$vs_team) > 0 && "BatterTeam" %in% names(d))
+    d <- d %>% filter(BatterTeam %in% filters$vs_team)
+
+  if (!is.null(filters$velo_range))
+    d <- d %>% filter(is.na(RelSpeed) | (RelSpeed >= filters$velo_range[1] & RelSpeed <= filters$velo_range[2]))
+
+  if (!is.null(filters$exit_velo_range))
+    d <- d %>% filter(is.na(ExitSpeed) | (ExitSpeed >= filters$exit_velo_range[1] & ExitSpeed <= filters$exit_velo_range[2]))
+
+  if (!is.null(filters$inning_range) && "Inning" %in% names(d))
+    d <- d %>% filter(is.na(Inning) | (Inning >= filters$inning_range[1] & Inning <= filters$inning_range[2]))
+
+  if (!is.null(filters$date_range) && "Date" %in% names(d))
+    d <- d %>% filter(as.Date(Date) >= filters$date_range[1] & as.Date(Date) <= filters$date_range[2])
+
+  d
 }
 
 pcard_build_all <- function(df, pitcher_raw) {
