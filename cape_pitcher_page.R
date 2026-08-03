@@ -205,6 +205,25 @@ cape_pitcher_quick_btn <- function(id, label) {
   )
 }
 
+cape_pitcher_heatmap_filter_label <- function(values,
+                                              fallback,
+                                              singular,
+                                              plural = paste0(singular, "s"),
+                                              max_inline = 2) {
+  values <- unique(as.character(values))
+  values <- values[!is.na(values) & nzchar(values)]
+
+  if (!length(values)) {
+    return(fallback)
+  }
+
+  if (length(values) <= max_inline) {
+    return(paste(values, collapse = " • "))
+  }
+
+  paste(length(values), plural)
+}
+
 cape_pitcher_read_parquet <- function(path = "CapeCod26.parquet") {
   arrow::read_parquet(path) %>%
     tibble::as_tibble()
@@ -578,8 +597,20 @@ cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), sour
   p
 }
 
-cape_pitcher_heatmap_x_breaks <- c(-0.83, -0.277, 0.277, 0.83)
-cape_pitcher_heatmap_y_breaks <- c(1.5, 2.17, 2.83, 3.5)
+cape_pitcher_heatmap_bounds <- list(
+  x = c(-2.25, 2.25),
+  y = c(0.45, 4.75),
+  plot_x = c(-2.65, 2.65),
+  plot_y = c(0, 5)
+)
+
+cape_pitcher_zone_vertical_guides <- c(-0.277, 0.277)
+cape_pitcher_zone_horizontal_guides <- c(2.17, 2.83)
+
+cape_pitcher_strike_zone_box <- tibble::tibble(
+  x = c(-0.83, -0.83, 0.83, 0.83, -0.83),
+  y = c(1.5, 3.5, 3.5, 1.5, 1.5)
+)
 
 cape_pitcher_home_plate <- tibble::tibble(
   x = c(-0.708, 0.708, 0.708, 0, -0.708),
@@ -639,154 +670,151 @@ cape_pitcher_batter_outline <- local({
   }
 })
 
-cape_pitcher_heatmap_value <- function(iz, sel, mode) {
-  if (mode == "freq") {
-    return(length(sel) / nrow(iz))
-  }
-  if (mode == "whiff") {
-    swings <- sum(iz$Swing[sel], na.rm = TRUE)
-    whiffs <- sum(iz$WhiffP[sel], na.rm = TRUE)
-    return(if (swings > 0) whiffs / swings else NA_real_)
-  }
-  if (mode == "xwoba") {
-    xwoba_con <- iz$xwOBA[sel][iz$BBE[sel] %in% TRUE]
-    return(if (sum(!is.na(xwoba_con)) > 0) mean(xwoba_con, na.rm = TRUE) else NA_real_)
-  }
-  if (mode == "xwobafull") {
-    pa_woba <- iz$paWOBA[sel]
-    return(if (sum(!is.na(pa_woba)) > 0) mean(pa_woba, na.rm = TRUE) else NA_real_)
-  }
-  exit_velo <- iz$ExitSpeed[sel][iz$BBE[sel] %in% TRUE]
-  if (sum(!is.na(exit_velo)) > 0) mean(exit_velo, na.rm = TRUE) else NA_real_
-}
-
-cape_pitcher_heatmap_fill_color <- function(value, mode, values) {
-  rgb_hex <- function(r, g, b) {
-    grDevices::rgb(r, g, b, maxColorValue = 255)
-  }
-
-  if (is.na(value)) {
-    return("#EEF2F6")
-  }
-
-  if (mode == "damage") {
-    norm_value <- pmin(pmax((value - 75) / 25, 0), 1)
-  } else if (mode == "xwoba") {
-    norm_value <- pmin(pmax((value - 0.250) / 0.300, 0), 1)
-  } else if (mode == "xwobafull") {
-    norm_value <- pmin(pmax((value - 0.200) / 0.250, 0), 1)
-  } else {
-    max_value <- suppressWarnings(max(values, na.rm = TRUE))
-    if (!is.finite(max_value) || max_value == 0) {
-      max_value <- 1
-    }
-    norm_value <- value / max_value
-  }
-
-  if (mode == "freq") {
-    return(rgb_hex(
-      round(235 - 225 * norm_value),
-      round(238 - 203 * norm_value),
-      round(242 - 176 * norm_value)
-    ))
-  }
-
-  if (mode == "whiff") {
-    return(rgb_hex(
-      round(235 - 209 * norm_value),
-      round(238 - 75 * norm_value),
-      round(242 - 61 * norm_value)
-    ))
-  }
-
-  rgb_hex(235, round(238 - 188 * norm_value), round(242 - 202 * norm_value))
-}
-
-cape_pitcher_heatmap_text_color <- function(value, mode, values) {
-  if (is.na(value)) {
-    return("#10233A")
-  }
-
-  if (mode == "damage") {
-    norm_value <- pmin(pmax((value - 75) / 25, 0), 1)
-  } else if (mode == "xwoba") {
-    norm_value <- pmin(pmax((value - 0.250) / 0.300, 0), 1)
-  } else if (mode == "xwobafull") {
-    norm_value <- pmin(pmax((value - 0.200) / 0.250, 0), 1)
-  } else {
-    max_value <- suppressWarnings(max(values, na.rm = TRUE))
-    if (!is.finite(max_value) || max_value == 0) {
-      max_value <- 1
-    }
-    norm_value <- value / max_value
-  }
-
-  if (norm_value > 0.5) "#FFFFFF" else "#10233A"
-}
-
-cape_pitcher_heatmap_label <- function(value, mode) {
-  if (is.na(value)) {
-    return("")
-  }
-  if (mode == "damage") {
-    return(as.character(round(value)))
-  }
-  if (mode %in% c("xwoba", "xwobafull")) {
-    return(sub("^0", "", sprintf("%.3f", value)))
-  }
-  paste0(round(100 * value), "%")
-}
-
-cape_pitcher_heatmap_cells <- function(d, mode = c("freq", "whiff", "damage", "xwoba", "xwobafull")) {
+cape_pitcher_heatmap_mode_meta <- function(mode = c("freq", "whiff", "damage", "xwoba", "xwobafull")) {
   mode <- match.arg(mode)
-  in_zone <- d %>%
-    dplyr::filter(!is.na(PlateLocSide), !is.na(PlateLocHeight), InZone)
+  switch(
+    mode,
+    freq = list(
+      colors = c("#F8FBFF", "#DDE9F5", "#89B1D8", "#0C2340"),
+      limits = c(0, 1)
+    ),
+    whiff = list(
+      colors = c("#F4FBFA", "#C4E9DE", "#34A58F", "#0D5C62"),
+      limits = c(0, 1)
+    ),
+    damage = list(
+      colors = c("#FFF8F2", "#F8D6AB", "#EB8551", "#9B271E"),
+      limits = c(72, 100)
+    ),
+    xwoba = list(
+      colors = c("#FFF8F4", "#F6CFBA", "#E87458", "#8E1E19"),
+      limits = c(0.15, 0.60)
+    ),
+    xwobafull = list(
+      colors = c("#FFF8F4", "#F6CAB2", "#E56D58", "#7F1C1A"),
+      limits = c(0.15, 0.55)
+    )
+  )
+}
 
-  if (nrow(in_zone) == 0) {
+cape_pitcher_heatmap_empty_message <- function(mode = c("freq", "whiff", "damage", "xwoba", "xwobafull")) {
+  mode <- match.arg(mode)
+  switch(
+    mode,
+    freq = "Not enough located pitches for this view.",
+    whiff = "No swing outcomes are available for this filtered view.",
+    damage = "No balls in play are available for this filtered view.",
+    xwoba = "No contact-quality events are available for this filtered view.",
+    xwobafull = "No plate-ending events are available for this filtered view."
+  )
+}
+
+cape_pitcher_heatmap_metric_vectors <- function(d, mode = c("freq", "whiff", "damage", "xwoba", "xwobafull")) {
+  mode <- match.arg(mode)
+
+  if (mode == "freq") {
+    return(list(num = rep(1, nrow(d)), den = rep(1, nrow(d))))
+  }
+
+  if (mode == "whiff") {
+    return(list(
+      num = as.numeric(d$WhiffP %in% TRUE),
+      den = as.numeric(d$Swing %in% TRUE)
+    ))
+  }
+
+  if (mode == "damage") {
+    valid <- d$BBE %in% TRUE & !is.na(d$ExitSpeed)
+    return(list(
+      num = ifelse(valid, d$ExitSpeed, 0),
+      den = as.numeric(valid)
+    ))
+  }
+
+  if (mode == "xwoba") {
+    valid <- d$BBE %in% TRUE & !is.na(d$xwOBA)
+    return(list(
+      num = ifelse(valid, d$xwOBA, 0),
+      den = as.numeric(valid)
+    ))
+  }
+
+  valid <- d$PACheck %in% TRUE & !is.na(d$paWOBA)
+  list(
+    num = ifelse(valid, d$paWOBA, 0),
+    den = as.numeric(valid)
+  )
+}
+
+cape_pitcher_heatmap_surface <- function(d,
+                                         mode = c("freq", "whiff", "damage", "xwoba", "xwobafull"),
+                                         nx = 88,
+                                         ny = 96,
+                                         bandwidth_x = 0.34,
+                                         bandwidth_y = 0.40) {
+  mode <- match.arg(mode)
+
+  d_loc <- d %>%
+    dplyr::filter(!is.na(PlateLocSide), !is.na(PlateLocHeight)) %>%
+    dplyr::mutate(
+      plot_x = -PlateLocSide,
+      plot_y = PlateLocHeight
+    )
+
+  if (nrow(d_loc) < 6) {
     return(NULL)
   }
 
-  col_idx <- cut(
-    in_zone$PlateLocSide,
-    cape_pitcher_heatmap_x_breaks,
-    labels = FALSE,
-    include.lowest = TRUE
-  )
-  row_idx <- cut(
-    in_zone$PlateLocHeight,
-    cape_pitcher_heatmap_y_breaks,
-    labels = FALSE,
-    include.lowest = TRUE
-  )
+  x_seq <- seq(cape_pitcher_heatmap_bounds$x[1], cape_pitcher_heatmap_bounds$x[2], length.out = nx)
+  y_seq <- seq(cape_pitcher_heatmap_bounds$y[1], cape_pitcher_heatmap_bounds$y[2], length.out = ny)
 
-  values <- matrix(NA_real_, 3, 3)
-  for (row in 1:3) {
-    for (col in 1:3) {
-      selected <- which(row_idx == row & col_idx == col)
-      values[row, col] <- cape_pitcher_heatmap_value(in_zone, selected, mode)
-    }
+  x_kernel <- exp(-0.5 * (outer(x_seq, d_loc$plot_x, FUN = "-") / bandwidth_x)^2)
+  y_kernel <- exp(-0.5 * (outer(y_seq, d_loc$plot_y, FUN = "-") / bandwidth_y)^2)
+
+  metric <- cape_pitcher_heatmap_metric_vectors(d_loc, mode)
+  den_surface <- sweep(y_kernel, 2, metric$den, `*`) %*% t(x_kernel)
+
+  peak_support <- suppressWarnings(max(den_surface, na.rm = TRUE))
+  if (!is.finite(peak_support) || peak_support <= 0) {
+    return(NULL)
   }
 
-  cells <- tidyr::expand_grid(row = 1:3, col = 1:3) %>%
-    dplyr::mutate(
-      xmin_raw = cape_pitcher_heatmap_x_breaks[col],
-      xmax_raw = cape_pitcher_heatmap_x_breaks[col + 1],
-      xmin = -xmax_raw,
-      xmax = -xmin_raw,
-      ymin = cape_pitcher_heatmap_y_breaks[row],
-      ymax = cape_pitcher_heatmap_y_breaks[row + 1],
-      x = (xmin + xmax) / 2,
-      y = (ymin + ymax) / 2,
-      value = purrr::map2_dbl(row, col, ~ values[.x, .y])
-    )
+  if (mode == "freq") {
+    value_surface <- den_surface / peak_support
+  } else {
+    num_surface <- sweep(y_kernel, 2, metric$num, `*`) %*% t(x_kernel)
+    value_surface <- num_surface / den_surface
+    value_surface[den_surface <= 0] <- NA_real_
+  }
 
-  all_values <- as.numeric(values)
-  cells %>%
-    dplyr::mutate(
-      fill_color = vapply(value, cape_pitcher_heatmap_fill_color, character(1), mode = mode, values = all_values),
-      text_color = vapply(value, cape_pitcher_heatmap_text_color, character(1), mode = mode, values = all_values),
-      label = vapply(value, cape_pitcher_heatmap_label, character(1), mode = mode)
-    )
+  support_scaled <- den_surface / peak_support
+  support_scaled[!is.finite(support_scaled)] <- 0
+
+  mask_floor <- if (identical(mode, "freq")) 0.04 else 0.08
+  alpha_span <- max(0.30, 0.62 - mask_floor)
+  value_surface[support_scaled < mask_floor] <- NA_real_
+
+  alpha_surface <- pmin(1, pmax(0, (support_scaled - mask_floor) / alpha_span))
+  alpha_surface[!is.finite(alpha_surface)] <- 0
+  alpha_surface[is.na(value_surface)] <- 0
+
+  surface <- tibble::tibble(
+    x = rep(x_seq, each = length(y_seq)),
+    y = rep(y_seq, times = length(x_seq)),
+    value = as.vector(value_surface),
+    support = as.vector(den_surface),
+    alpha = as.vector(alpha_surface)
+  ) %>%
+    dplyr::filter(is.finite(value), alpha > 0)
+
+  if (nrow(surface) == 0) {
+    return(NULL)
+  }
+
+  list(
+    surface = surface,
+    meta = cape_pitcher_heatmap_mode_meta(mode)
+  )
 }
 
 cape_pitcher_empty_heatmap_plot <- function(message) {
@@ -794,7 +822,7 @@ cape_pitcher_empty_heatmap_plot <- function(message) {
     ggplot2::annotate(
       "text",
       x = 0,
-      y = 0.5,
+      y = 0.55,
       label = message,
       colour = "#5F6B7A",
       size = 4.2,
@@ -802,7 +830,11 @@ cape_pitcher_empty_heatmap_plot <- function(message) {
     ) +
     ggplot2::xlim(-1, 1) +
     ggplot2::ylim(0, 1) +
-    ggplot2::theme_void()
+    ggplot2::theme_void() +
+    ggplot2::theme(
+      plot.background = ggplot2::element_rect(fill = "#FBFCFE", colour = NA),
+      panel.background = ggplot2::element_rect(fill = "#FBFCFE", colour = NA)
+    )
 }
 
 cape_pitcher_zone_heat_plot <- function(d,
@@ -810,52 +842,108 @@ cape_pitcher_zone_heat_plot <- function(d,
                                         batter_side = c("ALL", "L", "R")) {
   mode <- match.arg(mode)
   batter_side <- match.arg(batter_side)
-  cells <- cape_pitcher_heatmap_cells(d, mode)
+  surface_obj <- cape_pitcher_heatmap_surface(d, mode)
 
-  if (is.null(cells)) {
-    return(cape_pitcher_empty_heatmap_plot("No in-zone pitches for this selection."))
+  if (is.null(surface_obj)) {
+    return(cape_pitcher_empty_heatmap_plot(cape_pitcher_heatmap_empty_message(mode)))
   }
 
-  strike_zone <- tibble::tibble(
-    x = c(-0.83, -0.83, 0.83, 0.83, -0.83),
-    y = c(1.5, 3.5, 3.5, 1.5, 1.5)
+  surface <- surface_obj$surface
+  meta <- surface_obj$meta
+  contour_breaks <- stats::quantile(
+    surface$support[surface$support > 0],
+    probs = c(0.45, 0.70, 0.88),
+    na.rm = TRUE
+  )
+  contour_breaks <- unique(as.numeric(contour_breaks[is.finite(contour_breaks)]))
+
+  zone_verticals <- tibble::tibble(
+    x = -cape_pitcher_zone_vertical_guides,
+    xend = -cape_pitcher_zone_vertical_guides,
+    y = 1.5,
+    yend = 3.5
+  )
+  zone_horizontals <- tibble::tibble(
+    x = -0.83,
+    xend = 0.83,
+    y = cape_pitcher_zone_horizontal_guides,
+    yend = cape_pitcher_zone_horizontal_guides
   )
 
-  plot_obj <- ggplot2::ggplot() +
-    ggplot2::geom_rect(
-      data = cells,
-      ggplot2::aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill_color),
-      colour = "#D7DEE7",
-      linewidth = 0.7
+  plot_obj <- ggplot2::ggplot(surface, ggplot2::aes(x = x, y = y)) +
+    ggplot2::geom_raster(
+      ggplot2::aes(fill = value, alpha = alpha),
+      interpolate = TRUE
+    ) +
+    ggplot2::annotate(
+      "rect",
+      xmin = -0.83,
+      xmax = 0.83,
+      ymin = 1.5,
+      ymax = 3.5,
+      fill = "#FFFFFF",
+      alpha = 0.05
+    ) +
+    ggplot2::geom_segment(
+      data = zone_verticals,
+      ggplot2::aes(x = x, xend = xend, y = y, yend = yend),
+      inherit.aes = FALSE,
+      colour = grDevices::adjustcolor("#0C2340", alpha.f = 0.14),
+      linewidth = 0.35
+    ) +
+    ggplot2::geom_segment(
+      data = zone_horizontals,
+      ggplot2::aes(x = x, xend = xend, y = y, yend = yend),
+      inherit.aes = FALSE,
+      colour = grDevices::adjustcolor("#0C2340", alpha.f = 0.14),
+      linewidth = 0.35
     ) +
     ggplot2::geom_path(
-      data = strike_zone,
+      data = cape_pitcher_strike_zone_box,
       ggplot2::aes(x = x, y = y),
+      inherit.aes = FALSE,
       colour = "#10233A",
       linewidth = 1.0
     ) +
     ggplot2::geom_polygon(
       data = cape_pitcher_home_plate,
       ggplot2::aes(x = x, y = y),
+      inherit.aes = FALSE,
       fill = "#FFFFFF",
       colour = "#10233A",
       linewidth = 0.9
     ) +
-    ggplot2::geom_text(
-      data = cells,
-      ggplot2::aes(x = x, y = y, label = label, colour = text_color),
-      size = 5.2,
-      fontface = "bold"
+    ggplot2::scale_fill_gradientn(
+      colours = meta$colors,
+      limits = meta$limits,
+      oob = scales::squish,
+      na.value = "transparent",
+      guide = "none"
     ) +
-    ggplot2::scale_fill_identity() +
-    ggplot2::scale_colour_identity() +
-    ggplot2::coord_fixed(xlim = c(-2.45, 2.45), ylim = c(0, 5), clip = "off") +
+    ggplot2::scale_alpha_identity() +
+    ggplot2::coord_fixed(
+      xlim = cape_pitcher_heatmap_bounds$plot_x,
+      ylim = cape_pitcher_heatmap_bounds$plot_y,
+      clip = "off"
+    ) +
     ggplot2::theme_void() +
     ggplot2::theme(
-      plot.margin = ggplot2::margin(6, 12, 6, 12),
-      panel.background = ggplot2::element_rect(fill = "#FFFFFF", colour = NA),
-      plot.background = ggplot2::element_rect(fill = "#FFFFFF", colour = NA)
+      plot.margin = ggplot2::margin(8, 10, 8, 10),
+      panel.background = ggplot2::element_rect(fill = "#FBFCFE", colour = NA),
+      plot.background = ggplot2::element_rect(fill = "#FBFCFE", colour = NA)
     )
+
+  if (length(contour_breaks) > 0) {
+    plot_obj <- plot_obj +
+      ggplot2::geom_contour(
+        data = surface,
+        ggplot2::aes(x = x, y = y, z = support),
+        inherit.aes = FALSE,
+        breaks = contour_breaks,
+        colour = grDevices::adjustcolor("#0C2340", alpha.f = 0.14),
+        linewidth = 0.28
+      )
+  }
 
   if (!identical(batter_side, "ALL")) {
     batter_outline <- cape_pitcher_batter_outline(batter_side)
@@ -873,33 +961,6 @@ cape_pitcher_zone_heat_plot <- function(d,
             xmin = -2.85, xmax = -0.95, ymin = 0.35, ymax = 4.95
           )
       }
-
-      plot_obj <- plot_obj +
-        ggplot2::geom_rect(
-          data = cells,
-          ggplot2::aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill_color),
-          colour = "#D7DEE7",
-          linewidth = 0.7
-        ) +
-        ggplot2::geom_path(
-          data = strike_zone,
-          ggplot2::aes(x = x, y = y),
-          colour = "#10233A",
-          linewidth = 1.0
-        ) +
-        ggplot2::geom_polygon(
-          data = cape_pitcher_home_plate,
-          ggplot2::aes(x = x, y = y),
-          fill = "#FFFFFF",
-          colour = "#10233A",
-          linewidth = 0.9
-        ) +
-        ggplot2::geom_text(
-          data = cells,
-          ggplot2::aes(x = x, y = y, label = label, colour = text_color),
-          size = 5.2,
-          fontface = "bold"
-        )
     }
   }
 
@@ -912,6 +973,27 @@ cape_pitcher_player_page_ui <- function() {
       class = "hub-main",
       tags$head(
         tags$style(HTML("
+          #cpp-page {
+            color: #0C2340;
+          }
+          #cpp-page .card {
+            border: 1px solid rgba(12, 35, 64, 0.08);
+            border-radius: 18px;
+            box-shadow: 0 14px 30px rgba(12, 35, 64, 0.06);
+            background: linear-gradient(180deg, #FFFFFF 0%, #FCFDFE 100%);
+          }
+          #cpp-page .card-header {
+            background: transparent;
+            border-bottom: 1px solid rgba(12, 35, 64, 0.08);
+            color: #0C2340;
+            font-family: var(--font-head);
+            font-size: 20px;
+            letter-spacing: 0.02em;
+            padding: 16px 18px 14px 18px;
+          }
+          #cpp-page .card-body {
+            padding: 18px;
+          }
           #cpp-page .cpp-stat-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
@@ -941,6 +1023,38 @@ cape_pitcher_player_page_ui <- function() {
             font-size: 12px;
             line-height: 1.45;
             margin: 4px 0 0 0;
+          }
+          .cpp-page-intro {
+            background:
+              radial-gradient(circle at top right, rgba(10, 147, 150, 0.16), transparent 38%),
+              linear-gradient(135deg, rgba(12, 35, 64, 0.05) 0%, rgba(255, 255, 255, 0.96) 68%);
+            border: 1px solid rgba(12, 35, 64, 0.08);
+            border-radius: 24px;
+            box-shadow: 0 18px 36px rgba(12, 35, 64, 0.06);
+            margin-bottom: 22px;
+            padding: 24px 28px;
+          }
+          .cpp-kicker {
+            color: #0A9396;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.6px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+          }
+          .cpp-page-title {
+            color: #0C2340;
+            font-family: var(--font-head);
+            font-size: 38px;
+            line-height: 1;
+            margin: 0 0 10px 0;
+          }
+          .cpp-page-copy {
+            color: #5F6B7A;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0;
+            max-width: 780px;
           }
           #cpp-page .cpp-meta-card {
             background: linear-gradient(180deg, #F7FAFC 0%, #EEF3F8 100%);
@@ -1041,13 +1155,75 @@ cape_pitcher_player_page_ui <- function() {
           }
           #cpp-page .cpp-heatmap-controls {
             background: linear-gradient(180deg, #F7FAFC 0%, #EEF3F8 100%);
-            border: 1px solid rgba(12, 35, 64, 0.08);
-            border-radius: 12px;
-            padding: 12px 14px;
-            margin-bottom: 14px;
+            border-color: rgba(12, 35, 64, 0.08);
+            padding: 0;
+            margin-bottom: 0;
+          }
+          #cpp-page .cpp-heatmap-controls .card-body {
+            background: transparent;
           }
           #cpp-page .cpp-heatmap-controls .form-group {
             margin-bottom: 8px;
+          }
+          #cpp-page .cpp-heatmap-summary {
+            background: linear-gradient(180deg, #F7FAFC 0%, #EFF4F8 100%);
+            border: 1px solid rgba(12, 35, 64, 0.08);
+            border-radius: 16px;
+            margin-bottom: 16px;
+            padding: 14px 16px;
+          }
+          #cpp-page .cpp-heatmap-summary-title {
+            color: #0C2340;
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+          }
+          #cpp-page .cpp-heatmap-summary-note {
+            color: #5F6B7A;
+            font-size: 12px;
+            line-height: 1.45;
+            margin-bottom: 12px;
+          }
+          #cpp-page .cpp-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+          #cpp-page .cpp-chip {
+            background: rgba(12, 35, 64, 0.06);
+            border: 1px solid rgba(12, 35, 64, 0.08);
+            border-radius: 999px;
+            color: #35516E;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.25px;
+            padding: 6px 10px;
+          }
+          #cpp-page .cpp-chip-strong {
+            background: #0C2340;
+            border-color: #0C2340;
+            color: #FFFFFF;
+          }
+          #cpp-page .cpp-heatmap-card .card-body {
+            padding-top: 14px;
+          }
+          #cpp-page .cpp-heatmap-card-copy {
+            color: #5F6B7A;
+            font-size: 12px;
+            line-height: 1.45;
+            margin-bottom: 10px;
+            min-height: 34px;
+          }
+          #cpp-page .cpp-heatmap-side .radio-inline {
+            color: #0C2340;
+            font-weight: 700;
+            margin-right: 14px;
+          }
+          #cpp-page .cpp-heatmap-note {
+            color: #5F6B7A;
+            font-size: 12px;
+            line-height: 1.45;
+            margin-bottom: 14px;
           }
           #cpp-page .cpp-status {
             border-radius: 12px;
@@ -1077,13 +1253,14 @@ cape_pitcher_player_page_ui <- function() {
           class = "btn btn-outline-secondary btn-sm"
         )
       ),
-      tags$h2(
-        "Cape Pitcher Scout",
-        style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 10px;"
-      ),
-      tags$p(
-        "Choose a Cape team, load a pitcher, and work through movement, tables, and heatmaps in one place.",
-        style = "color:#5F6B7A; font-size:14px; margin-bottom:20px;"
+      tags$div(
+        class = "cpp-page-intro",
+        tags$div(class = "cpp-kicker", "Whitecaps Internal Scouting"),
+        tags$h2("Cape Pitcher Scout", class = "cpp-page-title"),
+        tags$p(
+          "Choose a Cape team, load a pitcher, and move from movement shapes into full-location heatmaps, split tables, and report-ready context without leaving the page.",
+          class = "cpp-page-copy"
+        )
       ),
       tags$div(
         id = "cpp-page",
@@ -1213,12 +1390,13 @@ cape_pitcher_player_page_ui <- function() {
         ),
         tags$div(class = "cpp-section-label", "Heatmap Analysis"),
         tags$p(
-          "Pitch-type and count filters sit directly above the heatmaps they control.",
+          "These filters drive full-location heatmaps that now include misses and chase lanes outside the strike zone, not just the box itself.",
           class = "cpp-section-copy"
         ),
         layout_columns(
           col_widths = c(8, 4),
           card(
+            class = "cpp-heatmap-controls",
             card_header("Heatmap Filters"),
             card_body(
               selectizeInput(
@@ -1257,6 +1435,7 @@ cape_pitcher_player_page_ui <- function() {
             )
           ),
           card(
+            class = "cpp-heatmap-controls cpp-heatmap-side",
             card_header("Heatmap Side"),
             card_body(
               radioButtons(
@@ -1277,34 +1456,70 @@ cape_pitcher_player_page_ui <- function() {
         card(
           card_header("Heatmaps"),
           card_body(
+            uiOutput("cpp_heatmap_summary"),
             tags$p(
-              "Use the heatmap filters above to narrow by pitch type and count. Quick buttons make two-strike heatmap views one click away.",
-              style = "color:#5F6B7A; font-size:12px; margin-bottom:12px;"
-            ),
-            layout_columns(
-              col_widths = c(4, 4, 4),
-              card(
-                card_header("Location - where he lives"),
-                card_body(plotOutput("cpp_pitch_zone", height = "320px"))
-              ),
-              card(
-                card_header("Whiff Zone - where he misses bats"),
-                card_body(plotOutput("cpp_pitch_whiff_zone", height = "320px"))
-              ),
-              card(
-                card_header("Damage Zone - exit velo allowed"),
-                card_body(plotOutput("cpp_pitch_dmg_zone", height = "320px"))
-              )
+              "Each panel below is a smoothed location surface built from actual pitch coordinates, so the visual carries beyond the zone edges and removes the oversized percentage labels from the old view.",
+              class = "cpp-heatmap-note"
             ),
             layout_columns(
               col_widths = c(6, 6),
               card(
-                card_header("xwOBAcon Zone - contact quality allowed"),
-                card_body(plotOutput("cpp_pitch_xwc_zone", height = "320px"))
+                class = "cpp-heatmap-card",
+                card_header("Pitch Location Density"),
+                card_body(
+                  tags$p(
+                    "Overall pitch concentration across the full plate area.",
+                    class = "cpp-heatmap-card-copy"
+                  ),
+                  plotOutput("cpp_pitch_zone", height = "350px")
+                )
               ),
               card(
-                card_header("xwOBA Zone - expected outcome allowed"),
-                card_body(plotOutput("cpp_pitch_xwf_zone", height = "320px"))
+                class = "cpp-heatmap-card",
+                card_header("Whiff Rate Surface"),
+                card_body(
+                  tags$p(
+                    "Where swings are most likely to miss, including chase space off the plate.",
+                    class = "cpp-heatmap-card-copy"
+                  ),
+                  plotOutput("cpp_pitch_whiff_zone", height = "350px")
+                )
+              )
+            ),
+            layout_columns(
+              col_widths = c(4, 4, 4),
+              card(
+                class = "cpp-heatmap-card",
+                card_header("Exit Velo Allowed"),
+                card_body(
+                  tags$p(
+                    "Smoothed contact damage on balls put in play by location.",
+                    class = "cpp-heatmap-card-copy"
+                  ),
+                  plotOutput("cpp_pitch_dmg_zone", height = "320px")
+                )
+              ),
+              card(
+                class = "cpp-heatmap-card",
+                card_header("xwOBAcon Allowed"),
+                card_body(
+                  tags$p(
+                    "Expected contact quality allowed at each location.",
+                    class = "cpp-heatmap-card-copy"
+                  ),
+                  plotOutput("cpp_pitch_xwc_zone", height = "320px")
+                )
+              ),
+              card(
+                class = "cpp-heatmap-card",
+                card_header("xwOBA Allowed"),
+                card_body(
+                  tags$p(
+                    "Expected plate-ending outcomes mapped to the finish location.",
+                    class = "cpp-heatmap-card-copy"
+                  ),
+                  plotOutput("cpp_pitch_xwf_zone", height = "320px")
+                )
               )
             )
           )
@@ -1742,14 +1957,78 @@ cape_pitcher_player_page_server <- function(input, output, session,
 
   heatmap_data <- reactive({
     d <- heatmap_filtered()
-    req(nrow(d) > 0)
 
     if (identical(input$cpp_heat_side, "L")) {
-      d <- d %>% filter(BatterSide == "Left")
+      d <- d %>% filter(BatterSide %in% c("Left", "L"))
     } else if (identical(input$cpp_heat_side, "R")) {
-      d <- d %>% filter(BatterSide == "Right")
+      d <- d %>% filter(BatterSide %in% c("Right", "R"))
     }
     d
+  })
+
+  output$cpp_heatmap_summary <- renderUI({
+    d <- heatmap_data()
+    pitch_label <- cape_pitcher_heatmap_filter_label(
+      input$cpp_pitch_filter,
+      fallback = "All pitch types",
+      singular = "pitch type"
+    )
+    count_label <- cape_pitcher_heatmap_filter_label(
+      input$cpp_count_filter,
+      fallback = "All counts",
+      singular = "count"
+    )
+    side_label <- switch(
+      input$cpp_heat_side %||% "ALL",
+      L = "vs LHH",
+      R = "vs RHH",
+      "All hitters"
+    )
+
+    if (nrow(d) == 0) {
+      return(
+        tags$div(
+          class = "cpp-heatmap-summary",
+          tags$div(class = "cpp-heatmap-summary-title", "No pitches match the current heatmap filter."),
+          tags$div(
+            class = "cpp-heatmap-summary-note",
+            "Broaden the pitch type, count, or hitter-side filter to rebuild the location surfaces."
+          ),
+          tags$div(
+            class = "cpp-chip-row",
+            tags$span(class = "cpp-chip cpp-chip-strong", side_label),
+            tags$span(class = "cpp-chip", pitch_label),
+            tags$span(class = "cpp-chip", count_label)
+          )
+        )
+      )
+    }
+
+    located_n <- sum(!is.na(d$PlateLocSide) & !is.na(d$PlateLocHeight))
+    excluded_n <- nrow(d) - located_n
+    note <- if (excluded_n > 0) {
+      paste0(
+        excluded_n,
+        " filtered pitch(es) do not have location data and are excluded from the surfaces."
+      )
+    } else {
+      "All filtered pitches have plate-location data, so every surface reflects the full sample."
+    }
+
+    tags$div(
+      class = "cpp-heatmap-summary",
+      tags$div(
+        class = "cpp-heatmap-summary-title",
+        paste0(format(located_n, big.mark = ","), " located pitch(es) in view")
+      ),
+      tags$div(class = "cpp-heatmap-summary-note", note),
+      tags$div(
+        class = "cpp-chip-row",
+        tags$span(class = "cpp-chip cpp-chip-strong", side_label),
+        tags$span(class = "cpp-chip", pitch_label),
+        tags$span(class = "cpp-chip", count_label)
+      )
+    )
   })
 
   output$cpp_mov_lhh <- plotly::renderPlotly({
