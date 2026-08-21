@@ -1,0 +1,11 @@
+.git
+.runtime-builder-deps
+.runtime-build-output*
+.runtime-build-output-defense
+scripts/__pycache__
+data/D1 Defense File.parquet
+CapeCod26.parquet
+brewstuff.model
+pitch_models.rds
+PitcherModels/Stuff+2.rds
+PitcherModels/location_plus_model.rds
