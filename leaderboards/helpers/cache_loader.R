@@ -4,10 +4,10 @@ LEADERBOARDS_CACHE_VERSION <- function() {
 
 leaderboards_cache_path <- function(
     cache_dir = get0(
-      "WHITE_CAPS_CACHE_DIR",
+      "TEAM_ANALYTICS_CACHE_DIR",
       inherits = TRUE,
       ifnotfound = file.path(
-        get0("WHITE_CAPS_APP_DIR", inherits = TRUE, ifnotfound = "."),
+        get0("TEAM_ANALYTICS_APP_DIR", inherits = TRUE, ifnotfound = "."),
         "cache"
       )
     )
@@ -63,7 +63,7 @@ read_leaderboards_cache <- function(cache_path = leaderboards_cache_path()) {
   tryCatch(
     readRDS(cache_path),
     error = function(e) {
-      warning("⚠️ Unable to read leaderboards cache: ", e$message)
+      warning("Unable to read leaderboards cache: ", e$message)
       NULL
     }
   )

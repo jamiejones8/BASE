@@ -14,8 +14,8 @@ pcard_ncaa_colors <- tryCatch(
   error = function(e) NULL
 )
 
-PCARD_DEFAULT_PRIMARY   <- "#0C2340"
-PCARD_DEFAULT_SECONDARY <- "#FFFFFF"
+PCARD_DEFAULT_PRIMARY   <- TEAM_CONFIG$colors$primary
+PCARD_DEFAULT_SECONDARY <- TEAM_CONFIG$colors$secondary
 
 pcard_get_school_theme <- function(team_abbr) {
   default <- list(primary = PCARD_DEFAULT_PRIMARY, secondary = PCARD_DEFAULT_SECONDARY,
@@ -396,7 +396,7 @@ pcard_location_plot <- function(pitcher_data, side = c("Left", "Right")) {
     theme(
       legend.position = "bottom",
       legend.text = element_text(size = 8),
-      plot.title = element_text(hjust = 0.5, size = 12, face = "bold", colour = "#0C2340"),
+      plot.title = element_text(hjust = 0.5, size = 12, face = "bold", colour = TEAM_CONFIG$colors$primary),
       plot.subtitle = element_text(hjust = 0.5, size = 9, colour = "#8B8B96", face = "italic")
     )
 }
@@ -425,21 +425,20 @@ pcard_density_heatmap <- function(pitcher_data, pitch_type = "All", side = "All"
                     contour = FALSE, interpolate = TRUE) +
     scale_fill_gradient(low = "white", high = "#C8102E", guide = "none") +
     geom_path(data = pcard_strike_zone_box, aes(x = x, y = y),
-              color = "#0C2340", linewidth = 1, inherit.aes = FALSE) +
+              color = TEAM_CONFIG$colors$primary, linewidth = 1, inherit.aes = FALSE) +
     geom_polygon(data = pcard_home_plate_shape, aes(x = x, y = y),
-                fill = "white", color = "#0C2340", linewidth = 0.8, inherit.aes = FALSE) +
+                fill = "white", color = TEAM_CONFIG$colors$primary, linewidth = 0.8, inherit.aes = FALSE) +
     coord_fixed() + xlim(-2.5, 2.5) + ylim(0, 5) +
     labs(title = title_txt, x = NULL, y = NULL) +
     theme_void() +
     theme(
-      plot.title = element_text(hjust = 0.5, size = 12, face = "bold", colour = "#0C2340"),
+      plot.title = element_text(hjust = 0.5, size = 12, face = "bold", colour = TEAM_CONFIG$colors$primary),
       plot.background = element_rect(fill = "white", colour = NA)
     )
 }
 
 # ── movement plot: shared collision-avoidance + generic drawing engine ──
-# Single source of truth used by BOTH the Acquisitions Board (app.R) and
-# CAPS Media (pcard_movement_plot() below). Fix bugs here once.
+# Shared movement-plot helpers used by BASE Media and report rendering.
 pcard_nudge_labels <- function(x, y, min_dist = 6) {
   n <- length(x)
   label_y <- y
@@ -655,7 +654,7 @@ pcard_draw_table <- function(tbl, title, core_fontsize = NULL, head_fontsize = N
   tg$heights <- unit(rep(1, nrow(tg)), "null")
 
   title_grob <- textGrob(title, gp = gpar(fontsize = 14, fontface = "bold",
-                                          col = "#0C2340", fontfamily = "sans"))
+                                          col = TEAM_CONFIG$colors$primary, fontfamily = "sans"))
 
   tg <- gtable_add_rows(tg, heights = grobHeight(title_grob) + unit(10, "pt"), pos = 0)
   tg <- gtable_add_grob(tg, title_grob, t = 1, l = 1, r = ncol(tg), name = "title")

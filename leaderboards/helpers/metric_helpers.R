@@ -32,7 +32,7 @@ is_hit_in_play <- function(play_result) {
   !is.na(play_result) & as.character(play_result) %in% c("Single", "Double", "Triple")
 }
 
-is_brewster_barrel <- function(exit_speed, angle) {
+is_barrel <- function(exit_speed, angle) {
   ev <- safe_metric_num(exit_speed)
   la <- safe_metric_num(angle)
 

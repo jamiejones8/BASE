@@ -1,6 +1,6 @@
 # =========================================================
-#  BREWSTER WHITECAPS ANALYTICS
-#  Shared leaderboard workspace for embedded Whitecaps views
+#  TEAM ANALYTICS
+#  Shared leaderboard workspace for embedded BASE views
 # =========================================================
 
 library(shiny)
@@ -9,30 +9,51 @@ library(shinyjs)
 library(DT)
 library(dplyr)
 
-WHITE_CAPS_APP_DIR <- normalizePath(".", winslash = "/", mustWork = TRUE)
-WHITE_CAPS_DATA_DIR <- file.path(WHITE_CAPS_APP_DIR, "data")
-WHITE_CAPS_CACHE_DIR <- file.path(WHITE_CAPS_APP_DIR, "cache")
-WHITE_CAPS_WWW_DIR <- file.path(WHITE_CAPS_APP_DIR, "www")
-WHITE_CAPS_RESOURCE_PREFIX <- "whitecaps-assets"
-
-if (!(WHITE_CAPS_RESOURCE_PREFIX %in% names(shiny::resourcePaths()))) {
-  shiny::addResourcePath(WHITE_CAPS_RESOURCE_PREFIX, WHITE_CAPS_WWW_DIR)
+if (!exists("TEAM_CONFIG", inherits = TRUE)) {
+  source(file.path("..", "team_config.R"), local = FALSE)
 }
 
-whitecaps_asset_path <- function(path = "") {
-  base_path <- paste0(WHITE_CAPS_RESOURCE_PREFIX, "/", path)
+TEAM_ANALYTICS_APP_DIR <- normalizePath(".", winslash = "/", mustWork = TRUE)
+TEAM_ANALYTICS_DATA_DIR <- file.path(TEAM_ANALYTICS_APP_DIR, "data")
+TEAM_ANALYTICS_CACHE_DIR <- file.path(TEAM_ANALYTICS_APP_DIR, "cache")
+TEAM_ANALYTICS_WWW_DIR <- file.path(TEAM_ANALYTICS_APP_DIR, "www")
+TEAM_BRAND_WWW_DIR <- normalizePath(
+  file.path(TEAM_ANALYTICS_APP_DIR, "..", "www"),
+  winslash = "/",
+  mustWork = FALSE
+)
+TEAM_ANALYTICS_RESOURCE_PREFIX <- "team-analytics-assets"
+TEAM_BRAND_RESOURCE_PREFIX <- "team-brand-assets"
+
+if (!(TEAM_ANALYTICS_RESOURCE_PREFIX %in% names(shiny::resourcePaths()))) {
+  shiny::addResourcePath(TEAM_ANALYTICS_RESOURCE_PREFIX, TEAM_ANALYTICS_WWW_DIR)
+}
+if (dir.exists(TEAM_BRAND_WWW_DIR) &&
+    !(TEAM_BRAND_RESOURCE_PREFIX %in% names(shiny::resourcePaths()))) {
+  shiny::addResourcePath(TEAM_BRAND_RESOURCE_PREFIX, TEAM_BRAND_WWW_DIR)
+}
+
+team_analytics_asset_path <- function(path = "") {
+  base_path <- paste0(TEAM_ANALYTICS_RESOURCE_PREFIX, "/", path)
 
   if (is.null(path) || !nzchar(path)) {
     return(base_path)
   }
 
-  asset_file <- file.path(WHITE_CAPS_WWW_DIR, path)
+  asset_file <- file.path(TEAM_ANALYTICS_WWW_DIR, path)
   if (!file.exists(asset_file)) {
     return(base_path)
   }
 
   asset_version <- as.integer(file.info(asset_file)$mtime[[1]])
   paste0(base_path, "?v=", asset_version)
+}
+
+team_brand_asset_path <- function(path = "") {
+  base_path <- paste0(TEAM_BRAND_RESOURCE_PREFIX, "/", path)
+  asset_file <- file.path(TEAM_BRAND_WWW_DIR, path)
+  if (!nzchar(path) || !file.exists(asset_file)) return(base_path)
+  paste0(base_path, "?v=", as.integer(file.info(asset_file)$mtime[[1]]))
 }
 
 # ---- BRAND CONFIG ----
@@ -62,11 +83,11 @@ source("helpers/leaderboard_rankings.R", local = TRUE)
 source("helpers/print_layouts.R", local = TRUE)
 
 # ---- THEME ----
-whitecaps_theme <- bs_theme(
-  bg = "#f4f7f8",
-  fg = "#172033",
-  primary = "#06768A",
-  secondary = "#21283D",
+team_analytics_theme <- bs_theme(
+  bg = TEAM_CONFIG$colors$background,
+  fg = TEAM_CONFIG$colors$primary,
+  primary = TEAM_CONFIG$colors$accent,
+  secondary = TEAM_CONFIG$colors$primary,
   base_font = "Source Sans 3",
   heading_font = "Oswald"
 )
@@ -74,23 +95,24 @@ whitecaps_theme <- bs_theme(
 # =========================================================
 #  UI
 # =========================================================
-whitecaps_ui_dependencies <- function() {
+team_analytics_ui_dependencies <- function() {
   tagList(
   useShinyjs(),
   tags$head(
     tags$title(APP_TITLE),
     tags$link(rel = "icon", type = "image/png", href = BRAND_LOGO_FILE),
     tags$link(
-      id = "whitecaps-stylesheet",
+      id = "team-analytics-stylesheet",
       rel = "stylesheet",
       type = "text/css",
-      href = whitecaps_asset_path("styles.css")
+      href = team_analytics_asset_path("styles.css")
     ),
     tags$link(
-      id = "whitecaps-font-app",
+      id = "team-analytics-font-app",
       href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap",
       rel = "stylesheet"
     ),
+    tags$style(HTML(base_brand_css(include_leaderboards = TRUE))),
     tags$script(HTML("
       $(document).on('click', '.nav-item', function(e) {
         e.preventDefault();
@@ -101,6 +123,12 @@ whitecaps_ui_dependencies <- function() {
         e.preventDefault();
         Shiny.setInputValue('nav_home', Math.random());
       });
+      $(document).on('click', '.leaderboards-season-option', function(e) {
+        e.preventDefault();
+        $('.leaderboards-season-option').removeClass('active').attr('aria-pressed', 'false');
+        $(this).addClass('active').attr('aria-pressed', 'true');
+        Shiny.setInputValue('leaderboards_period_placeholder', $(this).data('period'), {priority: 'event'});
+      });
       $(document).on('click', '#save_pdf', function(e) {
         e.preventDefault();
         window.print();
@@ -110,7 +138,7 @@ whitecaps_ui_dependencies <- function() {
   )
 }
 
-whitecaps_page_meta <- function(page) {
+team_analytics_page_meta <- function(page) {
   switch(
     page,
     "home" = list(
@@ -152,7 +180,7 @@ whitecaps_page_meta <- function(page) {
   )
 }
 
-whitecaps_shell_ui <- function() {
+team_analytics_shell_ui <- function() {
   div(
     class = "leaderboards-shell",
 
@@ -160,18 +188,47 @@ whitecaps_shell_ui <- function() {
     div(
       class = "top-nav",
       div(
-        class = "logo-wrapper",
-        a(
-          href = "#",
-          id = "nav_home_logo",
-          class = "nav-logo-link",
-          tags$img(src = BRAND_LOGO_FILE, class = "nav-logo")
+        class = "leaderboards-nav-context",
+        div(
+          class = "logo-wrapper",
+          a(
+            href = "#",
+            id = "nav_home_logo",
+            class = "nav-logo-link",
+            tags$img(src = BRAND_LOGO_FILE, class = "nav-logo")
+          )
+        ),
+        div(
+          class = "leaderboards-nav-copy",
+          tags$span(class = "leaderboards-nav-title", "Leaderboards"),
+          tags$span(class = "leaderboards-nav-subtitle", "Texas State analytics")
+        )
+      ),
+      div(
+        class = "leaderboards-season-filter",
+        tags$span(class = "leaderboards-season-label", "Data window"),
+        tags$div(
+          class = "leaderboards-season-options",
+          tags$button(
+            type = "button", class = "leaderboards-season-option active",
+            `data-period` = "2026-season", `aria-pressed` = "true",
+            title = "Dataset mapping will be added later", "2026 Season"
+          ),
+          tags$button(
+            type = "button", class = "leaderboards-season-option",
+            `data-period` = "2026-fall", `aria-pressed` = "false",
+            title = "Dataset mapping will be added later", "2026 Fall"
+          ),
+          tags$button(
+            type = "button", class = "leaderboards-season-option",
+            `data-period` = "2027-season", `aria-pressed` = "false",
+            title = "Dataset mapping will be added later", "2027 Season"
+          )
         )
       ),
       div(
         class = "nav-links",
-        a("CAPS", href = "#", class = "nav-item", id = "nav_caps_hub"),
-        a("Home", href = "#", class = "nav-item active", id = "nav_home"),
+        a("Overview", href = "#", class = "nav-item active", id = "nav_home"),
         a("Hitting", href = "#", class = "nav-item", id = "nav_hitting"),
         a("Pitching", href = "#", class = "nav-item", id = "nav_pitching"),
         a("Process", href = "#", class = "nav-item", id = "nav_process"),
@@ -197,12 +254,12 @@ whitecaps_shell_ui <- function() {
 }
 
 embedded_ui <- tagList(
-  whitecaps_ui_dependencies(),
-  whitecaps_shell_ui()
+  team_analytics_ui_dependencies(),
+  team_analytics_shell_ui()
 )
 
 ui <- fluidPage(
-  theme = whitecaps_theme,
+  theme = team_analytics_theme,
   embedded_ui
 )
 
@@ -210,7 +267,7 @@ ui <- fluidPage(
 #  SERVER
 # =========================================================
 server <- function(input, output, session) {
-  message("🚀 Initializing Whitecaps leaderboards server")
+  message("Initializing leaderboards for ", TEAM_CONFIG$full_name)
   
   # ---- REACTIVES ----
   current_page          <- reactiveVal("home")
@@ -227,11 +284,42 @@ server <- function(input, output, session) {
   #  LOAD LEADERBOARD DATA (ONLY on init + manual refresh)
   # =========================================================
   load_local_data <- function() {
-    tryCatch({
-      message("📥 Loading leaderboard data from CapeCod26.parquet...")
+      tryCatch({
+        message("Loading leaderboard data from ", TEAM_CONFIG$data$season_file, "...")
 
-      active_file <- pick_active_bundled_file()
-      cache_result <- load_valid_leaderboards_cache(active_file)
+        shared_college_data <- get0(
+          "season_data",
+          envir = globalenv(),
+          inherits = FALSE,
+          ifnotfound = NULL
+        )
+        if (!is.null(shared_college_data) && nrow(shared_college_data) > 0) {
+          team_rows <- shared_college_data[
+            base_team_matches(shared_college_data$PitcherTeam) |
+              base_team_matches(shared_college_data$BatterTeam),
+            ,
+            drop = FALSE
+          ]
+          precomputed_bundle(NULL)
+          combined_data(process_data(as.data.frame(team_rows)))
+          message(
+            "Loaded ", nrow(team_rows),
+            " Texas State rows from the shared 2026 college source."
+          )
+          return(invisible(NULL))
+        }
+
+        active_file <- pick_active_bundled_file()
+        if (is.null(active_file$path) || !nzchar(active_file$path) || !file.exists(active_file$path)) {
+          precomputed_bundle(NULL)
+          combined_data(tibble::tibble())
+          message(
+            "The 2026 college source is unavailable; showing an empty leaderboard state."
+          )
+          return(invisible(NULL))
+        }
+
+        cache_result <- load_valid_leaderboards_cache(active_file)
 
       if (isTRUE(cache_result$valid)) {
         bundle <- cache_result$bundle
@@ -254,11 +342,16 @@ server <- function(input, output, session) {
       combined_data(data_list$raw)
 
       message("🏁 Leaderboard data loaded successfully using live calculations.")
-    }, error = function(e) {
-      message("❌ Error loading leaderboard data: ", e$message)
-      stop(e)
-    })
-  }
+      }, error = function(e) {
+        precomputed_bundle(NULL)
+        combined_data(tibble::tibble())
+        message(
+          "Leaderboard data is unavailable; showing an empty state: ",
+          e$message
+        )
+        invisible(NULL)
+      })
+    }
   
   # ---- INITIAL LOAD + MANUAL REFRESH (Data Files page) ----
   observeEvent(refresh_trigger(), {
@@ -366,7 +459,7 @@ server <- function(input, output, session) {
   #  PAGE RENDERING
   # =========================================================
   output$page_header_bar <- renderUI({
-    meta <- whitecaps_page_meta(current_page())
+    meta <- team_analytics_page_meta(current_page())
     controls <- list()
 
     if (current_page() %in% pitcher_tto_pages) {

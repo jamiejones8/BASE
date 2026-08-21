@@ -1,0 +1,6 @@
+.git
+.runtime-builder-deps
+.runtime-build-output*
+scripts/__pycache__
+data/D1 Defense File.parquet
+.runtime-build-output-defense/

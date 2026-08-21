@@ -15,11 +15,18 @@ app_dir <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork =
 old_wd <- setwd(app_dir)
 on.exit(setwd(old_wd), add = TRUE)
 
-WHITE_CAPS_APP_DIR <- app_dir
-WHITE_CAPS_DATA_DIR <- file.path(WHITE_CAPS_APP_DIR, "data")
-WHITE_CAPS_CACHE_DIR <- file.path(WHITE_CAPS_APP_DIR, "cache")
+TEAM_ANALYTICS_APP_DIR <- app_dir
+TEAM_ANALYTICS_DATA_DIR <- file.path(TEAM_ANALYTICS_APP_DIR, "data")
+TEAM_ANALYTICS_CACHE_DIR <- file.path(TEAM_ANALYTICS_APP_DIR, "cache")
+TEAM_BRAND_WWW_DIR <- file.path(TEAM_ANALYTICS_APP_DIR, "..", "www")
 
-whitecaps_asset_path <- function(path = "") {
+source(file.path(TEAM_ANALYTICS_APP_DIR, "..", "team_config.R"), local = FALSE)
+
+team_analytics_asset_path <- function(path = "") {
+  path
+}
+
+team_brand_asset_path <- function(path = "") {
   path
 }
 
@@ -36,10 +43,23 @@ source("helpers/cache_loader.R", local = TRUE)
 
 active_file <- pick_active_bundled_file()
 if (is.null(active_file$path) || !nzchar(active_file$path) || !file.exists(active_file$path)) {
-  stop("No leaderboard data source file was found.", call. = FALSE)
+  message(
+    "No season data file is present yet; skipping leaderboard cache generation. ",
+    "The runtime can load the configured 2026 college source when credentials are available."
+  )
+  quit(save = "no", status = 0L)
 }
 
-message("📦 Building precomputed leaderboards cache from ", active_file$label)
+source_size <- file.info(active_file$path)$size
+if (!is.na(source_size) && source_size > 500 * 1024^2) {
+  message(
+    "The configured college source is larger than 500 MB; skipping build-time cache generation. ",
+    "The app will filter the shared 2026 source at runtime."
+  )
+  quit(save = "no", status = 0L)
+}
+
+message("Building precomputed leaderboards cache from ", active_file$label)
 
 data_list <- load_bundled_data_file(
   file_path = active_file$path,
@@ -47,6 +67,13 @@ data_list <- load_bundled_data_file(
 )
 
 processed_raw <- data_list$raw
+if (is.null(processed_raw) || nrow(processed_raw) == 0) {
+  message(
+    "No season rows are loaded yet; skipping leaderboard cache generation. ",
+    "The app will use the configured 2026 college source when rows are available."
+  )
+  quit(save = "no", status = 0L)
+}
 team_pitching <- get_team_pitching(processed_raw)
 team_hitting <- get_team_hitting(processed_raw)
 tto_choices <- c("All Times Through Order", PITCHER_TTO_LEVELS())

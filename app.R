@@ -23,6 +23,21 @@ library(stringr)
 library(tibble)
 library(reactable)
 
+source("team_config.R", local = FALSE)
+source("data_access.R", local = FALSE)
+source("defense_data_access.R", local = FALSE)
+source("defense_attribution.R", local = FALSE)
+source("pitch_retags.R", local = FALSE)
+
+BASE_RETAG_STORAGE_STATUS <- base_retag_storage_status()
+message(
+  if (isTRUE(BASE_RETAG_STORAGE_STATUS$ok)) {
+    paste("Persistent pitch retag storage ready at", BASE_RETAG_STORAGE_STATUS$path)
+  } else {
+    paste("Persistent pitch retag storage unavailable:", BASE_RETAG_STORAGE_STATUS$message)
+  }
+)
+
 combine  <- dplyr::combine
 slice    <- dplyr::slice
 between  <- dplyr::between
@@ -32,6 +47,8 @@ last     <- dplyr::last
 source("scout_app.R")
 source("leaderboards_embed.R")
 source("cape_pitcher_page.R")
+source("hitter_scouting_page.R")
+source("defense_page.R")
 source("Pitcher_Card.R")
 # ══════════════════════════════════════════════════════════════════════════════
 # HF HUB WRITE-BACK HELPER — now points at a Dataset repo, not the Space repo
@@ -39,15 +56,22 @@ source("Pitcher_Card.R")
 # changes no longer restart the app.
 # ══════════════════════════════════════════════════════════════════════════════
 
-HF_DATA_REPO_ID   <- "BrewsterWhitecapsMAC/acq-board-data"
+HF_DATA_REPO_ID   <- TEAM_CONFIG$data$hf_repo_id
 HF_DATA_REPO_TYPE <- "dataset"
-SEASON_DATA_FILE      <- "CapeCod26.parquet"
-SEASON_DATA_REPO_ID   <- Sys.getenv("CAPE_DATA_REPO_ID", unset = HF_DATA_REPO_ID)
-SEASON_DATA_REPO_PATH <- Sys.getenv("CAPE_DATA_REPO_PATH", unset = SEASON_DATA_FILE)
+SEASON_DATA_FILE      <- TEAM_CONFIG$data$season_file
+SEASON_DATA_REPO_ID   <- base_env("BASE_SEASON_DATA_REPO_ID",
+                                  HF_DATA_REPO_ID)
+SEASON_DATA_REPO_PATH <- base_env("BASE_SEASON_DATA_REPO_PATH",
+                                  TEAM_CONFIG$data$hf_repo_path)
 
 push_file_to_hf <- function(local_path, repo_path,
                             commit_message = paste("Update", repo_path),
                             repo_id = HF_DATA_REPO_ID) {
+
+  if (!nzchar(repo_id)) {
+    message("HF dataset repository is not configured — skipping push for ", repo_path)
+    return(invisible(FALSE))
+  }
 
   token <- Sys.getenv("write_token")
   if (!nzchar(token)) {
@@ -99,13 +123,27 @@ push_file_to_hf <- function(local_path, repo_path,
 }
 
 pull_file_from_hf <- function(repo_path, local_path, repo_id = HF_DATA_REPO_ID) {
-  token <- Sys.getenv("write_token")
+  if (!nzchar(repo_id)) {
+    message("HF dataset repository is not configured — using local ", local_path)
+    return(invisible(FALSE))
+  }
+  token_candidates <- c(
+    Sys.getenv("BASE_DATA_TOKEN", unset = ""),
+    Sys.getenv("HF_TOKEN", unset = "")
+  )
+  token_candidates <- token_candidates[nzchar(token_candidates)]
+  token <- if (length(token_candidates)) token_candidates[[1]] else ""
+  message(
+    "HF read credential for ", repo_id, ": ",
+    if (nzchar(token)) "present" else "missing"
+  )
   url <- glue::glue(
     "https://huggingface.co/datasets/{repo_id}/resolve/main/{repo_path}"
   )
   tmp_path <- tempfile(tmpdir = dirname(local_path),
                        pattern = "hf_pull_",
                        fileext = paste0(".", tools::file_ext(local_path)))
+  download_timeout <- base_env_int("BASE_DATA_DOWNLOAD_TIMEOUT", 900L)
 
   resp <- tryCatch({
     if (nzchar(token)) {
@@ -113,20 +151,24 @@ pull_file_from_hf <- function(repo_path, local_path, repo_id = HF_DATA_REPO_ID) 
         url,
         httr::add_headers(Authorization = paste("Bearer", token)),
         httr::write_disk(tmp_path, overwrite = TRUE),
-        httr::timeout(15)
+        httr::timeout(download_timeout)
       )
     } else {
       httr::GET(
         url,
         httr::write_disk(tmp_path, overwrite = TRUE),
-        httr::timeout(15)
+        httr::timeout(download_timeout)
       )
     }
   }, error = function(e) NULL)
 
   if (is.null(resp) || httr::http_error(resp)) {
     if (file.exists(tmp_path)) unlink(tmp_path)
-    message("HF pull failed for ", repo_path, " — using local fallback if present.")
+    status <- if (is.null(resp)) "request error" else httr::status_code(resp)
+    message(
+      "HF pull failed for ", repo_path, " (status: ", status,
+      ") — using local fallback if present."
+    )
     return(invisible(FALSE))
   }
 
@@ -156,13 +198,93 @@ push_season_data_to_hf <- function(local_path = SEASON_DATA_FILE,
 }
 
 
-fetch_next_whitecaps_game <- function() {
+parse_base_schedule_times <- function(schedule) {
+  if ("DateTime" %in% names(schedule)) {
+    raw_times <- trimws(as.character(schedule$DateTime))
+  } else if ("Date" %in% names(schedule)) {
+    game_clock <- if ("Time" %in% names(schedule)) {
+      trimws(as.character(schedule$Time))
+    } else {
+      rep("12:00 PM", nrow(schedule))
+    }
+    raw_times <- paste(trimws(as.character(schedule$Date)), game_clock)
+  } else {
+    return(as.POSIXct(character(), tz = TEAM_CONFIG$schedule_timezone))
+  }
+
+  parsed <- suppressWarnings(lubridate::parse_date_time(
+    raw_times,
+    orders = c(
+      "ymd HMS", "ymd HM", "ymd IMS p", "ymd IM p",
+      "mdy HMS", "mdy HM", "mdy IMS p", "mdy IM p", "mdy",
+      "Ymd HMS", "Ymd HM"
+    ),
+    tz = TEAM_CONFIG$schedule_timezone,
+    quiet = TRUE
+  ))
+  as.POSIXct(parsed, tz = TEAM_CONFIG$schedule_timezone)
+}
+
+read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file) {
+  if (!nzchar(path) || !file.exists(path)) return(NULL)
+
+  schedule <- tryCatch(
+    readr::read_csv(path, show_col_types = FALSE),
+    error = function(e) NULL
+  )
+  has_datetime <- "DateTime" %in% names(schedule) || "Date" %in% names(schedule)
+  if (is.null(schedule) || !has_datetime || !"Opponent" %in% names(schedule)) {
+    message("BASE_SCHEDULE_FILE must contain Opponent plus DateTime or Date/Time columns")
+    return(NULL)
+  }
+
+  game_times <- parse_base_schedule_times(schedule)
+  active_rows <- rep(TRUE, nrow(schedule))
+  if ("Status" %in% names(schedule)) {
+    active_rows <- !tolower(trimws(as.character(schedule$Status))) %in%
+      c("cancelled", "canceled", "final", "completed", "postponed")
+  }
+  upcoming <- which(active_rows & !is.na(game_times) & game_times >= Sys.time())
+  if (!length(upcoming)) return(NULL)
+  i <- upcoming[which.min(game_times[upcoming])]
+  value_or <- function(column, default) {
+    if (!column %in% names(schedule) || is.na(schedule[[column]][i]) ||
+        !nzchar(trimws(as.character(schedule[[column]][i])))) default else schedule[[column]][i]
+  }
+  bool_or <- function(column, default = TRUE) {
+    value <- tolower(trimws(as.character(value_or(column, default))))
+    if (value %in% c("true", "t", "1", "yes", "home", "h")) TRUE
+    else if (value %in% c("false", "f", "0", "no", "away", "a")) FALSE
+    else default
+  }
+  game_time <- game_times[i]
+
+  list(
+    opponent = as.character(schedule$Opponent[i]),
+    venue = as.character(value_or("Venue", "Venue TBD")),
+    is_home = bool_or("IsHome", TRUE),
+    datetime = game_time,
+    time_str = format(game_time, "%A, %B %d · %I:%M %p"),
+    ms = as.numeric(game_time) * 1000,
+    wins = as.integer(value_or("TeamWins", 0L)),
+    losses = as.integer(value_or("TeamLosses", 0L)),
+    opp_wins = as.integer(value_or("OppWins", 0L)),
+    opp_losses = as.integer(value_or("OppLosses", 0L)),
+    opp_abbr = as.character(value_or("OppAbbr", "OPP"))
+  )
+}
+
+fetch_next_team_game <- function() {
+  configured_game <- read_next_game_from_schedule()
+  if (!is.null(configured_game)) return(configured_game)
+  if (!isTRUE(TEAM_CONFIG$stats_api_enabled) || is.na(TEAM_CONFIG$mlb_team_id)) return(NULL)
+
   resp <- tryCatch(
     httr::GET(paste0(
       "https://statsapi.mlb.com/api/v1/schedule",
-      "?sportId=22",
-      "&leagueId=565",
-      "&teamId=6096",
+      "?sportId=", TEAM_CONFIG$sport_id,
+      "&leagueId=", TEAM_CONFIG$league_id,
+      "&teamId=", TEAM_CONFIG$mlb_team_id,
       "&startDate=", format(Sys.Date(), "%Y-%m-%d"),
       "&endDate=",   format(Sys.Date() + 30, "%Y-%m-%d"),
       "&hydrate=team,venue"
@@ -178,17 +300,17 @@ fetch_next_whitecaps_game <- function() {
   for (d in sched$dates) {
     g <- d$games[[1]]
     if (g$status$abstractGameState %in% c("Preview", "Live")) {
-      is_home <- g$teams$home$team$id == 6096
+      is_home <- g$teams$home$team$id == TEAM_CONFIG$mlb_team_id
 
       opponent <- if (is_home) g$teams$away$team$name else g$teams$home$team$name
 
       # Venue: always the home team's venue
       venue <- g$venue$name
 
-      # Record: Brewster's side
-      brew_side <- if (is_home) g$teams$home else g$teams$away
-      wins   <- brew_side$leagueRecord$wins
-      losses <- brew_side$leagueRecord$losses
+      # Record: configured team's side
+      team_side <- if (is_home) g$teams$home else g$teams$away
+      wins   <- team_side$leagueRecord$wins
+      losses <- team_side$leagueRecord$losses
 
       # Opponent record
       opp_side <- if (is_home) g$teams$away else g$teams$home
@@ -200,7 +322,8 @@ fetch_next_whitecaps_game <- function() {
 
       
       teams_resp <- tryCatch(
-        httr::GET("https://statsapi.mlb.com/api/v1/teams?leagueId=565", httr::timeout(10)),
+        httr::GET(paste0("https://statsapi.mlb.com/api/v1/teams?leagueId=",
+                         TEAM_CONFIG$league_id), httr::timeout(10)),
         error = function(e) NULL
       )
       opp_abbr <- if (!is.null(teams_resp) && !httr::http_error(teams_resp)) {
@@ -227,8 +350,8 @@ fetch_next_whitecaps_game <- function() {
   return(NULL)
 }
 
-message("Fetching next Whitecaps game...")
-next_game <- tryCatch(fetch_next_whitecaps_game(), error = function(e) NULL)
+message("Fetching next game for ", TEAM_CONFIG$full_name, "...")
+next_game <- tryCatch(fetch_next_team_game(), error = function(e) NULL)
 
 NEXT_GAME_OPPONENT <- next_game$opponent   %||% "TBD"
 NEXT_GAME_TIME_STR <- next_game$time_str   %||% "TBD"
@@ -248,7 +371,7 @@ next_game_ms <- function() as.numeric(NEXT_GAME_DT) * 1000
 # ============================================================================
 # CARD ENGINE (inlined — was pitcher_report_card.R)
 # ============================================================================
-# Card engine for the CAPS Postgame Pitcher Reports tab.
+# Card engine for the BASE Postgame Pitcher Reports tab.
 # Trimmed to the packages the card builder actually needs (the standalone app
 # loaded many more for its Shiny UI / data tooling).
 library(dplyr)
@@ -265,7 +388,13 @@ pdf(file = NULL)
 Sys.setenv(TZ='EST')
 
 model <- lgb.load('brewstuff.model')
-Height26 <- read_csv("College26Heights.csv")
+Height26 <- tryCatch(
+  read_csv(TEAM_CONFIG$data$heights_file, show_col_types = FALSE),
+  error = function(e) tibble(
+    tm_name = character(), team_abbr = character(),
+    height = numeric(), set = numeric()
+  )
+)
 
 percentiledata <- read_csv("percentile_table.csv")
 
@@ -750,7 +879,7 @@ read_input_file <- function(datapath, original_name) {
     as.data.frame(arrow::read_parquet(datapath))
   } else {
     # readr (not base read.csv) so time/date columns parse to the same
-    # hms/Date/POSIXct classes the CapeCod26 parquet uses. With base read.csv
+    # hms/Date/POSIXct classes the configured TrackMan season source uses. With base read.csv
     # they come back as <character>, and the later bind_rows() against the
     # season fails on a <hms> vs <character> mismatch (Time/Tilt/UTCTime) —
     # combine_with_manual() swallows that error and the upload is silently
@@ -789,9 +918,9 @@ tok <- list(
   text_body    = "#36363F",
   text_2nd     = "#5F5F6B",
   text_3rd     = "#8B8B96",
-  navy         = "#0C2340",
-  cardinal     = "#C8102E",
-  cardinal_glow= "#E2374B",
+  navy         = TEAM_CONFIG$colors$primary,
+  cardinal     = TEAM_CONFIG$colors$accent,
+  cardinal_glow= TEAM_CONFIG$colors$accent,
   success      = "#1B8A4D",
   success_soft = "#E1F4E9",
   danger       = "#C03029",
@@ -805,10 +934,17 @@ ncaa_colors <- tryCatch(
 )
 
 team_palette <- function(team_abbr) {
-  fallback <- list(primary = "#0C2340", secondary = "#C8102E",
-                   label = team_abbr, logo_url = NA_character_)
+  fallback_label <- if (length(team_abbr) && !is.na(team_abbr) &&
+                        base_team_matches(team_abbr)) TEAM_CONFIG$full_name else team_abbr
+  fallback <- list(primary = TEAM_CONFIG$colors$primary,
+                   secondary = TEAM_CONFIG$colors$accent,
+                   label = fallback_label, logo_url = NA_character_)
   if (is.null(ncaa_colors) || length(team_abbr) == 0 ||
       is.na(team_abbr) || team_abbr == "") return(fallback)
+  if (base_team_matches(team_abbr)) {
+    fallback$logo_url <- TEAM_CONFIG$assets$report_logo_url
+    return(fallback)
+  }
   row <- ncaa_colors[ncaa_colors$team_abbr == team_abbr, ]
   if (nrow(row) == 0) return(fallback)
   list(primary   = row$`Primary Color`[1],
@@ -941,7 +1077,7 @@ theme_wildcats <- function(base = 14) {
 }
 
 header_grob_fn <- function(pitcher_name, subtitle,
-                           team_label   = "BREWSTER WHITECAPS",
+                           team_label   = toupper(TEAM_CONFIG$full_name),
                            banner_color = tok$navy,
                            accent_color = tok$cardinal_glow,
                            logo         = NULL) {
@@ -1002,7 +1138,7 @@ box_grob_fn <- function(box_row) {
 footer_grob_fn <- function() {
   gTree(children = gList(
     rectGrob(gp = gpar(fill = tok$bg_page, col = NA)),
-    textGrob("Brewster Whitecaps",
+    textGrob(TEAM_CONFIG$full_name,
              x = 0.02, y = 0.5, hjust = 0,
              gp = gpar(col = tok$text_3rd, fontsize = 9,
                        fontfamily = font_sans, fontface = "bold")),
@@ -1557,7 +1693,7 @@ boxscore_summary <- function(game) {
 
 
 # ============================================================================
-# Card assembly (extracted from the standalone app's observeEvent so the CAPS
+# Card assembly (extracted from the standalone app's observeEvent so the BASE
 # pitcher tab can reuse it). Returns a grid gTree ("page") ready to draw.
 #   game            : one pitcher's pitches, already run through pitcher_summary(),
 #                     canonicalize_pitch(), with a row_id column (current_pitches()).
@@ -1695,13 +1831,13 @@ draw_cards_to_pdf <- function(pages, file, width = 12.5, height = 12.5, dpi = 30
 # CARD TAB UI + SERVER (inlined — was pitcher_card_tab.R)
 # ============================================================================
 # ============================================================================
-# CAPS "Postgame Pitcher Reports" tab — BrewSummaryCard, embedded.
+# BASE "Postgame Pitcher Reports" tab — BrewSummaryCard, embedded.
 #
 # Provides:
 #   pitcher_card_ui()                         -> the page UI (drop into page_content)
 #   pitcher_card_server(input, output, session) -> the server logic (call once)
 #
-# All input/output IDs are prefixed `pc_` so they don't collide with the CAPS
+# All input/output IDs are prefixed `pc_` so they don't collide with the BASE
 # app's existing pitcher-report inputs. Depends on pitcher_report_card.R being
 # sourced first (model, pitcher_summary, build_pitcher_card_page, tok, etc.).
 # ============================================================================
@@ -1710,13 +1846,7 @@ library(plotly)
 pitcher_card_ui <- function() {
   tagList(
     tags$div(
-      class = "hub-main",
-      tags$div(
-        style = "margin-bottom: 16px;",
-        tags$button("← Back to Hub",
-                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
-                    class = "btn btn-outline-secondary btn-sm")
-      ),
+      class = "hub-main base-page base-report-page",
       tags$h2("Postgame Pitcher Report Card",
               style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 16px;"),
       sidebarLayout(
@@ -1727,8 +1857,7 @@ pitcher_card_ui <- function() {
             condition = "input.pc_manual_enabled",
             fileInput("pc_manual_csv", "Game CSV:", accept = c(".csv", ".parquet"),
                       buttonLabel = "Browse", placeholder = "No file selected"),
-            helpText("Appended to the CapeCod26 season so its date appears below. ",
-                     "Season stats still use CapeCod26.")
+            helpText("Appended to the configured season data for this session.")
           ),
           uiOutput("pc_team_ui"),
           uiOutput("pc_dates_ui"),
@@ -1832,13 +1961,13 @@ pitcher_card_ui <- function() {
       )
     ),
     tags$div(class = "hub-footer",
-             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+             base_brand_footer())
   )
 }
 
 pitcher_card_server <- function(input, output, session) {
 
-  # CapeCod26 season, optionally with this page's manual single-game CSV appended.
+  # Configured team season, optionally with this page's manual single-game CSV appended.
   master_data <- reactive({
     combine_with_manual(season_data, input$pc_manual_enabled, input$pc_manual_csv)
   })
@@ -1865,14 +1994,15 @@ pitcher_card_server <- function(input, output, session) {
   })
 
   # Team / date / pitcher selectors driven by the shared master_data
-  # (CapeCod26 season + optional manual single-game CSV) — same source as
+  # (configured season + optional manual single-game CSV) — same source as
   # the hitter reports.
   output$pc_team_ui <- renderUI({
-    req(!is.null(master_data()))
-    teams <- sort(unique(master_data()$PitcherTeam))
+    if (is.null(master_data()) || nrow(master_data()) == 0) return(base_data_notice())
+    teams <- base_team_choices(master_data()$PitcherTeam)
+    if (!length(teams)) return(base_data_notice())
     selectInput("pc_team", "Select Team:",
                 choices  = setNames(teams, team_display_name(teams)),
-                selected = teams[grepl("BRE|Brewster", teams, ignore.case = TRUE)][1])
+                selected = base_team_default(teams))
   })
 
   output$pc_dates_ui <- renderUI({
@@ -1912,7 +2042,7 @@ pitcher_card_server <- function(input, output, session) {
     selected_points(NULL)
   }
 
-  # Full-season pitches for the selected pitcher (all dates in CapeCod26), used
+  # Full-season pitches for the selected pitcher, used
   # for the season page of the PDF. Independent of the date selector and of any
   # retag/delete edits applied to the game card.
   load_pitcher_pitches_season <- function() {
@@ -2066,7 +2196,7 @@ pitcher_card_server <- function(input, output, session) {
                                     set_override    = set_override_val())
     card_page(page)
 
-    # Season card (all of this pitcher's CapeCod26 pitches) for the PDF's 2nd page.
+    # Season card (all of this pitcher's configured-season pitches) for the PDF's 2nd page.
     season <- tryCatch(load_pitcher_pitches_season(), error = function(e) NULL)
     season_page <- if (!is.null(season) && nrow(season) > 0) {
       tryCatch(
@@ -2120,8 +2250,8 @@ pitcher_card_server <- function(input, output, session) {
 # ============================================================================
 # SEASON PITCHER SUMMARY CARD tab (College26)
 # ============================================================================
-# Full-season summary card built from college26.parquet (loaded in
-# preprocessing above as `college26_data`). Reuses the BrewSummaryCard engine
+# Full-season summary card loaded on demand from the partitioned College26
+# runtime dataset. Reuses the BrewSummaryCard engine
 # (build_pitcher_card_page / draw_card_to_png / draw_cards_to_pdf). No date
 # selector or retag flow — the card aggregates every pitch the selected pitcher
 # threw in the College26 season. All IDs are prefixed `spc_`.
@@ -2131,24 +2261,23 @@ pitcher_card_server <- function(input, output, session) {
 season_pitcher_card_ui <- function() {
   tagList(
     tags$div(
-      class = "hub-main",
-      tags$div(
-        style = "margin-bottom: 16px;",
-        tags$button("← Back to Hub",
-                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
-                    class = "btn btn-outline-secondary btn-sm")
-      ),
+      class = "hub-main base-page base-report-page",
       tags$h2("Season Pitcher Summary Card",
               style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 16px;"),
-      if (is.null(college26_data))
+      if (!nrow(base_pitcher_catalog))
         tags$div(class = "alert alert-warning",
-                 "College26 season data is unavailable — check that college26.parquet ",
-                 "loaded from the acq-board-data dataset at startup."),
+                 "College season-card data is unavailable. Check BASE_RUNTIME_ROOT."),
       sidebarLayout(
         sidebarPanel(
           width = 3,
           uiOutput("spc_team_ui"),
           uiOutput("spc_pitcher_ui"),
+          checkboxInput(
+            "spc_include_cape",
+            "Include matched 2026 Cape Cod League pitches",
+            value = TRUE
+          ),
+          uiOutput("spc_source_note"),
           radioButtons("spc_pitch_src", "Pitch Type Source:",
                        choices = c("Tagged" = "tagged", "Auto (backup)" = "auto"),
                        selected = "tagged", inline = TRUE),
@@ -2183,7 +2312,7 @@ season_pitcher_card_ui <- function() {
       )
     ),
     tags$div(class = "hub-footer",
-             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+             base_brand_footer())
   )
 }
 
@@ -2208,12 +2337,18 @@ season_pitcher_card_server <- function(input, output, session) {
   })
 
   output$spc_team_ui <- renderUI({
-    req(length(college26_team_choices) > 0)
-    brew <- college26_team_choices[grepl("BRE|Brewster", college26_team_choices,
-                                         ignore.case = TRUE)]
+    if (!length(college26_team_choices)) {
+      return(base_data_notice(paste0(
+        "No ", TEAM_CONFIG$season, " college pitcher data is loaded yet. ",
+        "Populate ", TEAM_CONFIG$data$college_file, " to enable this selector."
+      )))
+    }
+    configured_team <- college26_team_choices[
+      base_team_matches(unname(college26_team_choices))
+    ]
     selectInput("spc_team", "Select Team:",
                 choices  = college26_team_choices,
-                selected = if (length(brew)) unname(brew[1]) else unname(college26_team_choices[1]))
+                selected = if (length(configured_team)) unname(configured_team[1]) else unname(college26_team_choices[1]))
   })
 
   output$spc_pitcher_ui <- renderUI({
@@ -2223,12 +2358,43 @@ season_pitcher_card_server <- function(input, output, session) {
     selectInput("spc_pitcher", "Select Pitcher:", choices = pitchers)
   })
 
+  output$spc_source_note <- renderUI({
+    req(input$spc_team, input$spc_pitcher)
+    primary_rows <- base_load_pitcher_rows(input$spc_team, input$spc_pitcher)
+    college_n <- nrow(primary_rows)
+    cape_n <- nrow(base_player_supplement_rows(
+      primary_rows,
+      cape26_data,
+      input$spc_pitcher,
+      role = "Pitcher"
+    ))
+    tags$p(
+      paste0(
+        format(college_n, big.mark = ","), " college pitches",
+        if (cape_n > 0L) paste0(" + ", format(cape_n, big.mark = ","), " matched Cape pitches")
+        else "; no matched Cape pitches"
+      ),
+      style = "font-size:12px; color:#5F6B7A; margin-top:-6px;"
+    )
+  })
+
   # Every College26 pitch for the selected pitcher, run through the same
   # preprocessing the game card uses.
   load_pitcher_pitches_season <- function() {
-    req(!is.null(college26_data), input$spc_team, input$spc_pitcher)
-    college26_data %>%
-      filter(PitcherTeam == input$spc_team, Pitcher == input$spc_pitcher) %>%
+    req(input$spc_team, input$spc_pitcher)
+    selected_data <- base_load_pitcher_rows(input$spc_team, input$spc_pitcher)
+    req(nrow(selected_data) > 0)
+
+    if (isTRUE(input$spc_include_cape)) {
+      selected_data <- base_add_player_supplement(
+        selected_data,
+        cape26_data,
+        input$spc_pitcher,
+        role = "Pitcher"
+      )
+    }
+
+    selected_data %>%
       apply_pitch_source(input$spc_pitch_src) %>%
       pitcher_summary() %>%
       mutate(TaggedPitchType = canonicalize_pitch(TaggedPitchType),
@@ -2286,14 +2452,15 @@ season_pitcher_card_server <- function(input, output, session) {
 }
 
 
-caps_media_server <- function(input, output, session) {
+base_media_server <- function(input, output, session) {
 
   cm_selected <- reactiveVal(NULL)
   cm_selection_uids <- reactiveVal(NULL)
+  cm_source_summary <- reactiveVal(NULL)
 
   observe({
-    req(!is.null(college26_data))
-    player_choices <- college26_data %>%
+    req(nrow(base_pitcher_catalog) > 0)
+    player_choices <- base_pitcher_catalog %>%
       filter(!is.na(Pitcher), !is.na(PitcherTeam)) %>%
       distinct(Pitcher, PitcherTeam) %>%
       mutate(
@@ -2306,16 +2473,45 @@ caps_media_server <- function(input, output, session) {
   })
 
   observeEvent(input$cm_load, {
-    req(!is.null(college26_data), input$cm_player_search, nzchar(input$cm_player_search))
+    req(input$cm_player_search, nzchar(input$cm_player_search))
     parts    <- strsplit(input$cm_player_search, "\\|\\|")[[1]]
     raw_p    <- parts[1]
     raw_team <- parts[2]
+    player_data <- base_load_pitcher_rows(raw_team, raw_p)
+    if (!nrow(player_data)) {
+      showNotification("No 2026 college rows were found for that player.", type = "warning")
+      return()
+    }
+    college_n <- nrow(player_data)
+    if (isTRUE(input$cm_include_cape)) {
+      player_data <- base_add_player_supplement(
+        player_data,
+        cape26_data,
+        raw_p,
+        role = "Pitcher"
+      )
+    }
+    cape_n <- sum(player_data$DataSource == "2026 Cape Cod League", na.rm = TRUE)
     pc <- tryCatch(
-      pcard_build_all(college26_data %>% filter(PitcherTeam == raw_team), raw_p),
+      pcard_build_all(player_data, raw_p),
       error = function(e) { showNotification(paste("Card build failed:", e$message), type = "error"); NULL }
     )
     cm_selected(pc)
+    cm_source_summary(list(college = college_n, cape = cape_n))
     cm_selection_uids(NULL)
+  })
+
+  output$cm_source_note <- renderUI({
+    counts <- cm_source_summary()
+    if (is.null(counts)) return(NULL)
+    tags$p(
+      paste0(
+        format(counts$college, big.mark = ","), " college pitches",
+        if (counts$cape > 0L) paste0(" + ", format(counts$cape, big.mark = ","), " Cape pitches")
+        else "; no matched Cape pitches"
+      ),
+      style = "color:#5F6B7A; font-size:12px; margin-top:-14px; margin-bottom:18px;"
+    )
   })
 
   output$cm_missing_msg <- renderUI({
@@ -2541,9 +2737,12 @@ caps_media_server <- function(input, output, session) {
          
 standings <- tryCatch(fetch_standings(), error = function(e) NULL)
 
-fetch_whitecaps_roster <- function() {
+fetch_team_roster <- function() {
+  if (!isTRUE(TEAM_CONFIG$stats_api_enabled) || is.na(TEAM_CONFIG$mlb_team_id)) return(NULL)
   resp <- tryCatch(
-    httr::GET("https://statsapi.mlb.com/api/v1/teams/6096/roster?season=2026&hydrate=person",
+    httr::GET(paste0("https://statsapi.mlb.com/api/v1/teams/",
+                     TEAM_CONFIG$mlb_team_id, "/roster?season=", TEAM_CONFIG$season,
+                     "&hydrate=person"),
               httr::timeout(10)),
     error = function(e) NULL
   )
@@ -2566,8 +2765,25 @@ fetch_whitecaps_roster <- function() {
   }))
 }
 
-message("Fetching Whitecaps roster...")
-roster_raw <- tryCatch(fetch_whitecaps_roster(), error = function(e) NULL)
+empty_roster <- function() {
+  data.frame(Name = character(), Pos = character(), Number = character(),
+             Bats = character(), Throws = character(), pos_type = character(),
+             stringsAsFactors = FALSE)
+}
+
+read_configured_roster <- function(path) {
+  if (!nzchar(path) || !file.exists(path)) return(NULL)
+  roster <- tryCatch(readr::read_csv(path, show_col_types = FALSE), error = function(e) NULL)
+  required <- c("Name", "Pos", "Number", "Bats", "Throws", "pos_type")
+  if (is.null(roster) || !all(required %in% names(roster))) return(NULL)
+  as.data.frame(roster[, required])
+}
+
+message("Loading roster for ", TEAM_CONFIG$full_name, "...")
+roster_raw <- read_configured_roster(TEAM_CONFIG$data$roster_file)
+if (is.null(roster_raw)) {
+  roster_raw <- tryCatch(fetch_team_roster(), error = function(e) NULL)
+}
 
 if (!is.null(roster_raw)) {
   roster_pitchers   <- roster_raw %>% filter(pos_type == "Pitcher")   %>% select(Name, Pos, Number, Bats, Throws)
@@ -2575,35 +2791,9 @@ if (!is.null(roster_raw)) {
   roster_infielders <- roster_raw %>% filter(pos_type == "Infielder") %>% select(Name, Pos, Number, Bats, Throws)
   roster_outfielders <- roster_raw %>% filter(pos_type == "Outfielder") %>% select(Name, Pos, Number, Bats, Throws)
 } else {
-  message("Roster fetch failed — using hardcoded fallback")
-  roster_pitchers <- data.frame(
-    Name = c("Charlie Willcox","Nate Harris","Logan Eisenrich","Ethan Grim","Zach Kmatz",
-             "Jordan Martin","Finbar O'Brien","Landon Mack","Joshua Whritenour",
-             "Schuyler Sandford","Jordan Regulski","Carter Williams","Maverick Rizy",
-             "Frank Menendez","Tommy Conley","Sebastian Santos-Olsen","Trent Collier",
-             "Charlie West","Nate Smithburg","Tye Briscoe"),
-    Pos    = c(rep("RHP",13),"LHP","LHP","LHP","LHP","LHP","LHP","LHP"),
-    Number = rep("", 20),
-    Bats   = rep("", 20),
-    Throws = rep("", 20),
-    stringsAsFactors = FALSE
-  )
-  roster_catchers <- data.frame(
-    Name = c("Owen Jenkins","Jacob Lee","Jimmy Janicki"),
-    Pos = c("C","C","C"), Number = rep("", 3), Bats = rep("", 3), Throws = rep("", 3), stringsAsFactors = FALSE
-  )
-  roster_infielders <- data.frame(
-    Name = c("Dalton Wentz","Brendan Lawson","Pete Daniel","Nicholas Partida",
-             "Will Moore","Dane Harvey","Petey Craska","Jamie Laskofski",
-             "Landon Penfield","Jacob Lambdin","Jett Kenady","Alexander Peck"),
-    Pos = c("MINF","SS","SS","SS","INF","1B","1B","SS","3B","SS","SS","SS"),
-    Number = rep("", 12), Bats = rep("", 12), Throws = rep("", 12), stringsAsFactors = FALSE
-  )
-  roster_outfielders <- data.frame(
-    Name = c("Adam Magpoc","Brody DeLamielleure","Michael Torres","Frank Carney",
-             "Terrence Kiel II","Jay Abernathy","Blaine Brown","Cash Strayer","Eric Hines"),
-    Pos = rep("OF", 9), Number = rep("", 9), Bats = rep("", 9), Throws = rep("", 9), stringsAsFactors = FALSE
-  )
+  message("Roster unavailable; set BASE_ROSTER_FILE to provide a college roster")
+  empty_group <- empty_roster()[, c("Name", "Pos", "Number", "Bats", "Throws")]
+  roster_pitchers <- roster_catchers <- roster_infielders <- roster_outfielders <- empty_group
 }
 
 
@@ -2625,12 +2815,6 @@ pcard_report_ui <- function() {
     "))),
     tags$div(
       class = "hub-main",
-      tags$div(
-        style = "margin-bottom: 16px;",
-        tags$button("← Back to Hub",
-                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
-                    class = "btn btn-outline-secondary btn-sm")
-      ),
       tags$div(
         id = "pcard-page",
         uiOutput("pcard_missing_msg"),
@@ -2660,7 +2844,7 @@ pcard_report_ui <- function() {
       )
     ),
     tags$div(class = "hub-footer",
-             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+             base_brand_footer())
   )
 }                   
 # ==========================================
@@ -2688,6 +2872,24 @@ apply_pitch_source <- function(df, src) {
 # Map team code(s) -> full NcaaColors team name (falls back to the raw code).
 team_display_name <- function(abbr) {
   vapply(as.character(abbr), function(t) team_palette(t)$label, character(1))
+}
+
+base_data_notice <- function(message = NULL) {
+  if (is.null(message)) {
+    message <- paste0(
+      "No ", TEAM_CONFIG$season, " Texas State pitch data is loaded yet. ",
+      "Add TrackMan data to ", TEAM_CONFIG$data$season_file, "."
+    )
+  }
+  tags$div(
+    class = "base-data-notice",
+    style = paste0(
+      "padding:12px 14px; border-left:4px solid ", TEAM_CONFIG$colors$accent,
+      "; background:", TEAM_CONFIG$colors$background,
+      "; color:", TEAM_CONFIG$colors$primary, "; font-size:13px;"
+    ),
+    message
+  )
 }
 
 # Export filename base, e.g. "Johnny Nuanez - June 13 vs Bourne (Pitcher) Report".
@@ -2723,7 +2925,7 @@ draw_grid_table <- function(df,
                             x_center     = 0.5,
                             row_h        = 0.028,
                             table_width  = 0.85,
-                            header_bg    = "#0C2340",
+                            header_bg    = TEAM_CONFIG$colors$primary,
                             zebra_bg     = "#f0f4f8",
                             alt_row_bg   = NULL,
                             title_cex    = 0.75,
@@ -2740,7 +2942,7 @@ draw_grid_table <- function(df,
 
   if (!is.null(title)) {
     grid.text(title, x = x_center, y = y_cursor,
-              gp = gpar(fontface = "bold", cex = title_cex, col = "#0C2340"))
+              gp = gpar(fontface = "bold", cex = title_cex, col = TEAM_CONFIG$colors$primary))
     y_cursor <- y_cursor - row_h * 0.9
   }
 
@@ -2972,9 +3174,9 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
     grid.newpage()
     pushViewport(viewport(x = 0.5, y = 0.97, width = 1, height = 0.06, just = c("center","top")))
     grid.text(paste(catcher_name, "- Postgame Catching Report"), x = 0.5, y = 0.5,
-              gp = gpar(fontface = "bold", cex = 1.6, col = "#0C2340"))
+              gp = gpar(fontface = "bold", cex = 1.6, col = TEAM_CONFIG$colors$primary))
     grid.text(as.character(game_date), x = 0.5, y = 0.05,
-              gp = gpar(cex = 0.85, col = "#0C2340"))
+              gp = gpar(cex = 0.85, col = TEAM_CONFIG$colors$primary))
     pushViewport(viewport(x = 0.92, y = 0.5, width = 0.10, height = 0.90))
     grid.draw(logo_grob)
     popViewport()
@@ -3001,7 +3203,7 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
                     table_width = 0.75, header_cex = 0.68, cell_cex = 0.68, title_cex = 0.90)
 
     grid.text("Game Framing - Strike Locations", x = 0.5, y = PLOT_TOP,
-              gp = gpar(fontface = "bold", cex = 0.90, col = "#0C2340"))
+              gp = gpar(fontface = "bold", cex = 0.90, col = TEAM_CONFIG$colors$primary))
 
     pushViewport(viewport(x = 0.27, y = PLOT_TOP - 0.02, width = 0.42, height = 0.24, just = c("center","top")))
     print(g_won_p, newpage = FALSE)
@@ -3011,14 +3213,14 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
     print(g_lost_p, newpage = FALSE)
     popViewport()
 
-    grid.text("Data: TrackMan | Brewster Whitecaps Analytics",
+    grid.text(paste("Data: TrackMan |", TEAM_CONFIG$full_name, "Analytics"),
               x = 0.5, y = 0.02, gp = gpar(cex = 0.55, col = "grey40", fontface = "italic"))
 
     # PAGE 2 - SEASON
     grid.newpage()
     pushViewport(viewport(x = 0.5, y = 0.97, width = 1, height = 0.06, just = c("center","top")))
     grid.text(paste(catcher_name, "- Season Catching Report"), x = 0.5, y = 0.5,
-              gp = gpar(fontface = "bold", cex = 1.6, col = "#0C2340"))
+              gp = gpar(fontface = "bold", cex = 1.6, col = TEAM_CONFIG$colors$primary))
     pushViewport(viewport(x = 0.92, y = 0.5, width = 0.10, height = 0.90))
     grid.draw(logo_grob)
     popViewport()
@@ -3041,7 +3243,7 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
 
     plot_top2 <- y_cur - GAP
     grid.text("Season Framing - Strike Locations", x = 0.5, y = plot_top2,
-              gp = gpar(fontface = "bold", cex = 0.90, col = "#0C2340"))
+              gp = gpar(fontface = "bold", cex = 0.90, col = TEAM_CONFIG$colors$primary))
 
     pushViewport(viewport(x = 0.27, y = plot_top2 - 0.02, width = 0.42, height = 0.24, just = c("center","top")))
     print(s_won_p, newpage = FALSE)
@@ -3051,7 +3253,7 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
     print(s_lost_p, newpage = FALSE)
     popViewport()
 
-    grid.text("Data: TrackMan | Brewster Whitecaps Analytics",
+    grid.text(paste("Data: TrackMan |", TEAM_CONFIG$full_name, "Analytics"),
               x = 0.5, y = 0.02, gp = gpar(cex = 0.55, col = "grey40", fontface = "italic"))
 
   }, error = function(e) message("PDF generation error: ", conditionMessage(e)))
@@ -3066,14 +3268,18 @@ xgb_fit              <- readRDS("PitcherModels/location_plus_model.rds")
 league_stats_pitcher <- readRDS("PitcherModels/location_plus_league_stats_pitcher.rds")
 
 # ==========================================
-# HITTER DATA SOURCE + REPORT HELPERS (from capstest.R)
+# HITTER DATA SOURCE + REPORT HELPERS (from basetest.R)
 # ==========================================
 download_from_hf_dataset <- function(repo_id, filename, token) {
+  if (!nzchar(repo_id)) stop("HF dataset repository is not configured")
   url  <- paste0("https://huggingface.co/datasets/", repo_id, "/resolve/main/", filename)
   tmp  <- tempfile(fileext = paste0(".", tools::file_ext(filename)))
-  resp <- httr::GET(url,
-                    httr::add_headers(Authorization = paste("Bearer", token)),
-                    httr::write_disk(tmp, overwrite = TRUE),
+  auth <- if (nzchar(token)) {
+    httr::add_headers(Authorization = paste("Bearer", token))
+  } else {
+    httr::add_headers()
+  }
+  resp <- httr::GET(url, auth, httr::write_disk(tmp, overwrite = TRUE),
                     httr::timeout(120))
   if (httr::http_error(resp)) stop("Failed to download ", filename, ": ", httr::status_code(resp))
   tmp
@@ -3092,13 +3298,80 @@ read_data_file <- function(path) {
   }
 }
 
+# Keep the complete season source on the mounted volume, but materialize only
+# columns referenced by the current R application. This preserves every source
+# field for future features without forcing all 201 columns into RAM at once.
+read_season_runtime_data <- function(path) {
+  ext <- tolower(tools::file_ext(path))
+  if (ext != "parquet") return(read_data_file(path))
+
+  dataset <- arrow::open_dataset(path, format = "parquet")
+  available <- names(dataset$schema)
+  r_files <- list.files(
+    ".", pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE
+  )
+  source_lines <- unlist(lapply(r_files, function(file) {
+    tryCatch(readLines(file, warn = FALSE), error = function(e) character())
+  }), use.names = FALSE)
+
+  referenced <- available[vapply(available, function(column) {
+    pattern <- paste0(
+      "(?<![[:alnum:]_.])\\Q", column, "\\E(?![[:alnum:]_.])"
+    )
+    any(grepl(pattern, source_lines, perl = TRUE))
+  }, logical(1))]
+
+  core_columns <- c(
+    "PitchUID", "GameID", "GameUID", "Date", "LocalDateTime", "UTCDateTime",
+    "Pitcher", "PitcherId", "PitcherTeam", "PitcherThrows",
+    "Batter", "BatterId", "BatterTeam", "BatterSide",
+    "Catcher", "CatcherId", "CatcherTeam", "CatcherThrows",
+    "TaggedPitchType", "AutoPitchType", "PitchCall", "KorBB",
+    "TaggedHitType", "PlayResult", "Notes", "Top/Bottom",
+    "RelSpeed", "SpinRate", "SpinAxis", "RelHeight", "RelSide", "Extension",
+    "InducedVertBreak", "HorzBreak", "PlateLocHeight", "PlateLocSide",
+    "ExitSpeed", "Angle", "Direction", "Inning", "PAofInning", "PitchofPA",
+    "Balls", "Strikes", "OutsOnPlay", "RunsScored"
+  )
+  selected <- intersect(available, unique(c(core_columns, referenced)))
+  if (!length(selected)) stop("No usable season columns were selected")
+
+  message(
+    "Reading ", length(selected), " of ", length(available),
+    " mounted season columns; the full source remains intact on disk."
+  )
+  dataset %>%
+    dplyr::select(tidyselect::all_of(selected)) %>%
+    dplyr::collect()
+}
+
 message("Loading master game data...")
-# Pull the latest deployed season parquet from the configured dataset repo,
-# then fall back to the local copy if the remote fetch is unavailable.
-invisible(pull_season_data_from_hf())
+# The BASE deployment reads its mounted bucket path directly. A configured
+# remote repository remains an optional fallback for other deployments only.
+if (!file.exists(SEASON_DATA_FILE)) {
+  invisible(pull_season_data_from_hf())
+}
 
 season_data <- tryCatch({
-  df <- arrow::read_parquet(SEASON_DATA_FILE)
+  df <- read_season_runtime_data(SEASON_DATA_FILE)
+  if (nrow(df) == 0) {
+    df <- df %>%
+      mutate(across(any_of(c(
+        "PitcherTeam", "BatterTeam", "CatcherTeam", "Pitcher", "Batter", "Catcher",
+        "PitcherThrows", "BatterSide", "CatcherThrows", "TaggedPitchType",
+        "AutoPitchType", "PitchCall", "KorBB", "TaggedHitType", "PlayResult",
+        "GameID", "GameUID", "Top/Bottom"
+      )), as.character)) %>%
+      mutate(across(any_of(c(
+        "PitcherId", "BatterId", "CatcherId", "OutsOnPlay", "RunsScored",
+        "RelSpeed", "SpinRate", "SpinAxis", "RelHeight", "RelSide", "Extension",
+        "InducedVertBreak", "HorzBreak", "PlateLocHeight", "PlateLocSide",
+        "ExitSpeed", "Angle", "Direction", "Inning", "PAofInning", "PitchofPA",
+        "Balls", "Strikes"
+      )), ~ suppressWarnings(as.numeric(.x))))
+  }
+  if ("Notes" %in% names(df)) df$Notes <- as.character(df$Notes)
+  df$DataSource <- "2026 College Season"
   message("Loaded ", SEASON_DATA_FILE, " — rows: ", nrow(df))
   df
 }, error = function(e) {
@@ -3110,25 +3383,47 @@ master_last_updated <- if (!is.null(season_data)) format(Sys.time(), "%b %d, %Y 
 message("Season data rows: ", if (!is.null(season_data)) nrow(season_data) else 0)
 
 # ----------------------------------------------------------------------------
-# College26 season pitch data (large) for the Season Pitcher Card tab. Pulled
-# once at startup straight from the private acq-board-data HF dataset (to a
-# tempfile, Bearer-auth) and read from there — no local copy is kept.
+# The full College26 master stays in private Space storage for future features.
+# Current all-college scouting loads one selected pitcher from hash-partitioned
+# runtime data, while season_data contains only the configured team's rows.
 # ----------------------------------------------------------------------------
-COLLEGE26_FILE      <- "College26.parquet"
-COLLEGE26_REPO_ID   <- Sys.getenv("COLLEGE26_REPO_ID",   unset = HF_DATA_REPO_ID)
-COLLEGE26_REPO_PATH <- Sys.getenv("COLLEGE26_REPO_PATH", unset = COLLEGE26_FILE)
+COLLEGE26_FILE      <- TEAM_CONFIG$data$college_file
+COLLEGE26_REPO_ID   <- base_env("COLLEGE26_REPO_ID", TEAM_CONFIG$data$college_repo_id)
+COLLEGE26_REPO_PATH <- base_env("COLLEGE26_REPO_PATH", TEAM_CONFIG$data$college_repo_path)
 
-message("Loading College26 season data from HF dataset ", COLLEGE26_REPO_ID, "...")
-college26_data <- tryCatch({
-  path <- download_from_hf_dataset(COLLEGE26_REPO_ID, COLLEGE26_REPO_PATH,
-                                   Sys.getenv("write_token"))
-  df <- arrow::read_parquet(path)
-  message("Loaded ", COLLEGE26_REPO_PATH, " from HF — rows: ", nrow(df))
+college26_data <- NULL
+
+# CapeCod26 remains a separate supplemental source. It is joined only after a
+# player is selected, so Cape teams never replace or hide college affiliations.
+cape26_data <- tryCatch({
+  df <- read_data_file(TEAM_CONFIG$data$cape_file)
+  if ("Notes" %in% names(df)) df$Notes <- as.character(df$Notes)
+  df$DataSource <- "2026 Cape Cod League"
+  message("Loaded ", TEAM_CONFIG$data$cape_file, " — rows: ", nrow(df))
   df
 }, error = function(e) {
-  message(COLLEGE26_REPO_PATH, " HF load failed: ", e$message)
+  message(TEAM_CONFIG$data$cape_file, " load failed: ", e$message)
   NULL
 })
+
+base_add_player_supplement <- function(primary, supplemental, player, role = "Pitcher") {
+  if (is.null(primary) || !nrow(primary) || is.null(supplemental) || !nrow(supplemental) ||
+      !role %in% names(primary) || !role %in% names(supplemental)) {
+    return(primary)
+  }
+
+  extra <- base_player_supplement_rows(primary, supplemental, player, role)
+  if (!nrow(extra)) return(primary)
+  extra[[role]] <- as.character(player)[[1]]
+
+  tryCatch(
+    dplyr::bind_rows(primary, extra),
+    error = function(e) {
+      message("Cape supplement bind failed for ", player, ": ", e$message)
+      primary
+    }
+  )
+}
 
 # Precompute the Season Pitcher Card selector choices once, at startup, so the
 # renderUI selectors never re-scan the large College26 table:
@@ -3137,12 +3432,12 @@ college26_data <- tryCatch({
 #                                (formatted pitcher name -> raw Pitcher value)
 college26_team_choices     <- character(0)
 college26_pitchers_by_team <- list()
-if (!is.null(college26_data)) {
-  .c26_teams <- sort(unique(college26_data$PitcherTeam))
+if (nrow(base_pitcher_catalog) > 0) {
+  .c26_teams <- sort(unique(base_pitcher_catalog$PitcherTeam))
   .c26_teams <- .c26_teams[!is.na(.c26_teams)]
   college26_team_choices <- setNames(.c26_teams, unname(team_display_name(.c26_teams)))
 
-  .c26_tp <- college26_data %>%
+  .c26_tp <- base_pitcher_catalog %>%
     filter(!is.na(PitcherTeam), !is.na(Pitcher)) %>%
     distinct(PitcherTeam, Pitcher) %>%
     arrange(Pitcher)
@@ -3156,8 +3451,8 @@ if (!is.null(college26_data)) {
 
 # ----------------------------------------------------------------------------
 # Manual single-game CSV support. Each report page has a toggle + uploader; when
-# enabled the uploaded game is appended to the CapeCod26 season so its date(s)
-# show up in the team/date selectors. The season itself stays CapeCod26.
+# enabled the uploaded game is appended to the configured season so its date(s)
+# show up in the team/date selectors. The configured season remains unchanged.
 # ----------------------------------------------------------------------------
 align_manual_to_season <- function(manual, season) {
   common <- intersect(names(manual), names(season))
@@ -3255,36 +3550,33 @@ report_viewer_ui <- function(png_paths, pdf_path, download_id_pdf, download_id_p
   )
 }
 
-caps_media_ui <- function() {
+base_media_ui <- function() {
   tagList(
     tags$head(tags$style(HTML("
-      #cm-page { max-width: 1100px; margin: 0 auto; padding: 0 24px 40px; }
+      #cm-page { max-width: 1180px; margin: 0 auto; padding: 0 0 40px; }
       #cm-page .pcard-panel {
-        background: #fff; border: 1px solid #EAEAEE; border-radius: 10px;
-        padding: 12px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(12,35,64,0.04);
+        background: var(--base-surface); border: 1px solid var(--base-border); border-radius: var(--base-radius);
+        padding: 16px; margin-bottom: 18px; box-shadow: var(--base-shadow-sm);
       }
       #cm-page .pcard-panel img { width: 100%; height: auto; display: block; }
       #cm-page .pcard-row { display: flex; gap: 20px; }
       #cm-page .pcard-row .pcard-panel { flex: 1; min-width: 0; }
       #cm-page .pcard-section-label {
-        font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
-        color: #5F5F6B; margin: 4px 0 10px;
+        font-family: var(--base-font-display); font-size: 17px; font-weight: 600;
+        letter-spacing: 1px; text-transform: uppercase;
+        color: var(--base-muted); margin: 28px 0 12px; padding-bottom: 9px;
+        border-bottom: 1px solid var(--base-border);
       }
     "))),
     tags$div(
-      class = "hub-main",
-      tags$div(
-        style = "margin-bottom: 16px;",
-        tags$button("← Back to Hub",
-                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
-                    class = "btn btn-outline-secondary btn-sm")
-      ),
-      tags$h2("CAPS Media",
+      class = "hub-main base-page base-media-page",
+      tags$h2("BASE Media",
               style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 16px;"),
-      tags$p("Search any pitcher in the College26 database.",
+      tags$p("Search any pitcher in the configured college database.",
              style = "color:#5F6B7A; font-size:14px; margin-bottom:20px;"),
 
       tags$div(
+        class = "base-control-grid base-player-search",
         style = "display: grid; grid-template-columns: 3fr 1fr; gap: 16px; align-items: end; margin-bottom: 24px;",
         tags$div(
           tags$label("Search Player:", style = "font-size:13px; font-weight:600; color:#5F5F6B;"),
@@ -3294,11 +3586,17 @@ caps_media_ui <- function() {
         ),
         actionButton("cm_load", "Load Player", class = "btn btn-primary")
       ),
+      checkboxInput(
+        "cm_include_cape",
+        "Include matched 2026 Cape Cod League pitches",
+        value = TRUE
+      ),
+      uiOutput("cm_source_note"),
 
       tags$div(
         class = "pcard-panel",
         tags$div(style = "display:flex; justify-content:space-between; align-items:center;",
-                 tags$span("Filters", style = "font-size:13px; font-weight:700; color:#0C2340;"),
+                 tags$span("Filters", style = "font-size:13px; font-weight:700; color:var(--navy);"),
                  tags$div(style = "display:flex; gap:8px;",
                           actionButton("cm_filter_reset", "Reset", class = "btn btn-sm btn-outline-secondary"),
                           actionButton("cm_filter_apply", "Apply Filters", class = "btn btn-sm btn-primary"))),
@@ -3359,7 +3657,7 @@ caps_media_ui <- function() {
       )
     ),
     tags$div(class = "hub-footer",
-             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+             base_brand_footer())
   )
 }                      
 # ==========================================
@@ -3449,7 +3747,8 @@ build_split_color_matrix_hitter <- function(df, bench_map, lower_is_better = c()
 message("HITTER_TOKEN present: ", nchar(Sys.getenv("HITTER_TOKEN")) > 0)
 sd_models <- tryCatch({
   token <- Sys.getenv("HITTER_TOKEN")
-  repo  <- "BrewsterWhitecapsMAC/swing-decision-models"
+  repo  <- TEAM_CONFIG$data$swing_model_repo
+  if (!nzchar(repo)) stop("BASE_SWING_MODEL_REPO is not configured")
   message("Downloading swing decision models...")
   list(
     model_take  = xgb.load(download_from_hf_dataset(repo, "HitterXRV_Take.ubj",  token)),
@@ -3538,7 +3837,7 @@ make_swdec_plot <- function(df, plot_title) {
     xlim(-2.5,2.5) + ylim(0,5) + coord_fixed() +
     labs(title=plot_title, subtitle="\u25b2 Swing  \u25cf Take  |  Green = Good  Red = Bad", x=NULL, y=NULL) +
     theme_minimal(base_size=10) +
-    theme(plot.title=element_text(hjust=0.5,face="bold",size=11,color="#0C2340"),
+    theme(plot.title=element_text(hjust=0.5,face="bold",size=11,color=TEAM_CONFIG$colors$primary),
           plot.subtitle=element_text(hjust=0.5,size=7,color="grey50"),
           axis.text=element_blank(), axis.ticks=element_blank(), panel.grid=element_blank(),
           legend.position="bottom", legend.text=element_text(size=7.5),
@@ -3561,7 +3860,7 @@ make_swdec_heatmap <- function(df, plot_title) {
     xlim(-2.5,2.5) + ylim(0,5) + coord_fixed() +
     labs(title=plot_title, subtitle="Red = Good Decisions  |  Blue = Bad Decisions", x=NULL, y=NULL) +
     theme_minimal(base_size=10) +
-    theme(plot.title=element_text(hjust=0.5,face="bold",size=11,color="#0C2340"),
+    theme(plot.title=element_text(hjust=0.5,face="bold",size=11,color=TEAM_CONFIG$colors$primary),
           plot.subtitle=element_text(hjust=0.5,size=7,color="grey50"),
           axis.text=element_blank(), axis.ticks=element_blank(), panel.grid=element_blank())
 }
@@ -3608,7 +3907,9 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
                    score_pitches_xrv(models = active_models)
 
   logo_grob <- tryCatch({
-    img <- magick::image_read("www/logo1.png")
+    logo_file <- base_team_logo_file()
+    if (is.na(logo_file)) stop("Configured team logo was not found")
+    img <- magick::image_read(logo_file)
     img <- magick::image_resize(img, "x100")
     grid::rasterGrob(as.raster(img), interpolate=TRUE)
   }, error=function(e) grid::nullGrob())
@@ -3907,30 +4208,30 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
   on.exit(try(dev.off(), silent=TRUE), add=TRUE)
 
   page_header_hitter <- function(name, subtitle) {
-    grid.rect(x=0,y=1,width=1,height=0.06,just=c("left","top"),gp=gpar(fill="#0C2340",col=NA))
+    grid.rect(x=0,y=1,width=1,height=0.06,just=c("left","top"),gp=gpar(fill=TEAM_CONFIG$colors$primary,col=NA))
     grid.text(name,     x=0.03,y=0.978,just="left",gp=gpar(col="white",   fontface="bold",cex=1.2))
-    grid.text(subtitle, x=0.03,y=0.948,just="left",gp=gpar(col="#9DC2EA", cex=1.0))
+    grid.text(subtitle, x=0.03,y=0.948,just="left",gp=gpar(col=TEAM_CONFIG$colors$accent, cex=1.0))
     pushViewport(viewport(x=0.96,y=0.965,width=0.07,height=0.08,just=c("center","center")))
     grid.draw(logo_grob); popViewport()
   }
   page_footer_hitter <- function() {
-    grid.text("Data: TrackMan | Brewster Whitecaps Analytics",
-              x=0.5,y=0.02,gp=gpar(cex=0.55,col="#0C2340",fontface="italic"))
+    grid.text(paste("Data: TrackMan |", TEAM_CONFIG$full_name, "Analytics"),
+              x=0.5,y=0.02,gp=gpar(cex=0.55,col=TEAM_CONFIG$colors$primary,fontface="italic"))
   }
 
   tryCatch({
     # PAGE 1 — GAME
     grid.newpage()
     page_header_hitter(hitter_name, "Postgame Hitter Report")
-    grid.text("Game Stats", x=0.5,y=0.89,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
+    grid.text("Game Stats", x=0.5,y=0.89,gp=gpar(fontface="bold",cex=1,col=TEAM_CONFIG$colors$primary))
     draw_grid_table(counting_stats, y_top=0.865, x_center=0.5, row_h=0.018, cell_cex=0.90)
     pushViewport(viewport(x=0.5,y=0.82,width=0.96,height=0.30,just=c("center","top")))
     print(zone_plot, newpage=FALSE); popViewport()
     draw_grid_table(stats_by_pitch, title="Stats by Pitch Type",
                     y_top=0.490, x_center=0.5, row_h=0.026, title_cex=0.90, header_cex=0.80, cell_cex=0.80)
-    grid.lines(x=c(0.03,0.97), y=c(0.300,0.300), gp=gpar(col="#9DC2EA", lwd=1))
-    grid.text("Swing Decisions", x=0.5, y=0.290, gp=gpar(fontface="bold", cex=0.90, col="#0C2340"))
-    grid.text("Game", x=0.25, y=0.290, gp=gpar(fontface="bold", cex=0.75, col="#0C2340"))
+    grid.lines(x=c(0.03,0.97), y=c(0.300,0.300), gp=gpar(col=TEAM_CONFIG$colors$accent, lwd=1))
+    grid.text("Swing Decisions", x=0.5, y=0.290, gp=gpar(fontface="bold", cex=0.90, col=TEAM_CONFIG$colors$primary))
+    grid.text("Game", x=0.25, y=0.290, gp=gpar(fontface="bold", cex=0.75, col=TEAM_CONFIG$colors$primary))
     pushViewport(viewport(x=0.12, y=0.312, width=0.22, height=0.250, just=c("center","top")))
     print(game_swdec_plot + theme(plot.title=element_blank(),plot.subtitle=element_blank(),legend.position="none"),
           newpage=FALSE); popViewport()
@@ -3941,7 +4242,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     if (!is.null(active_models) && !is.null(game_xrv_overall))
       draw_grid_table(game_xrv_overall, title="xRV",
                       y_top=0.075, x_center=0.34, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
-    grid.text("Season", x=0.75, y=0.290, gp=gpar(fontface="bold", cex=0.75, col="#0C2340"))
+    grid.text("Season", x=0.75, y=0.290, gp=gpar(fontface="bold", cex=0.75, col=TEAM_CONFIG$colors$primary))
     pushViewport(viewport(x=0.62, y=0.312, width=0.22, height=0.250, just=c("center","top")))
     print(season_swdec_plot + theme(plot.title=element_blank(),plot.subtitle=element_blank()),
           newpage=FALSE); popViewport()
@@ -3957,11 +4258,11 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 
     # PAGE 2 — SEASON
     grid.newpage()
-    page_header_hitter(hitter_name, "2026 Season Report")
+    page_header_hitter(hitter_name, paste(TEAM_CONFIG$season_label, "Report"))
     draw_grid_table(season_stats, title="Season Stats",
                     y_top=0.900, x_center=0.5, row_h=0.020, table_width=0.65,
                     header_cex=0.80, cell_cex=0.80, title_cex=0.90, color_matrix=season_color_matrix)
-    grid.text("Location Density vs. RHP", x=0.5,y=0.83,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
+    grid.text("Location Density vs. RHP", x=0.5,y=0.83,gp=gpar(fontface="bold",cex=1,col=TEAM_CONFIG$colors$primary))
     grid.text("X = Whiff  |  Diamond = Hard Hit (95+ EV)", x=0.5,y=0.695,gp=gpar(cex=0.58,col="grey40",fontface="italic"))
     pushViewport(viewport(x=0.17,y=0.81,width=0.30,height=0.20,just=c("center","top")))
     print(density_rhp[["Fastball"]],newpage=FALSE); popViewport()
@@ -3969,17 +4270,17 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     print(density_rhp[["Breaker"]],newpage=FALSE); popViewport()
     pushViewport(viewport(x=0.83,y=0.81,width=0.30,height=0.20,just=c("center","top")))
     print(density_rhp[["Offspeed"]],newpage=FALSE); popViewport()
-    grid.text("Stats vs. RHP by Pitch Type", x=0.5,y=0.60,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
+    grid.text("Stats vs. RHP by Pitch Type", x=0.5,y=0.60,gp=gpar(fontface="bold",cex=1,col=TEAM_CONFIG$colors$primary))
     draw_grid_table(rhp_stats, y_top=0.59, x_center=0.5, row_h=0.015,
                     table_width=0.90, header_cex=0.62, cell_cex=0.75, color_matrix=rhp_color_matrix)
-    grid.text("Location Density vs. LHP", x=0.5,y=0.50,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
+    grid.text("Location Density vs. LHP", x=0.5,y=0.50,gp=gpar(fontface="bold",cex=1,col=TEAM_CONFIG$colors$primary))
     pushViewport(viewport(x=0.17,y=0.49,width=0.28,height=0.20,just=c("center","top")))
     print(density_lhp[["Fastball"]],newpage=FALSE); popViewport()
     pushViewport(viewport(x=0.50,y=0.49,width=0.28,height=0.20,just=c("center","top")))
     print(density_lhp[["Breaker"]],newpage=FALSE); popViewport()
     pushViewport(viewport(x=0.83,y=0.49,width=0.28,height=0.20,just=c("center","top")))
     print(density_lhp[["Offspeed"]],newpage=FALSE); popViewport()
-    grid.text("Stats vs. LHP by Pitch Type", x=0.5,y=0.28,gp=gpar(fontface="bold",cex=1,col="#0C2340"))
+    grid.text("Stats vs. LHP by Pitch Type", x=0.5,y=0.28,gp=gpar(fontface="bold",cex=1,col=TEAM_CONFIG$colors$primary))
     draw_grid_table(lhp_stats, y_top=0.27, x_center=0.5, row_h=0.015,
                     table_width=0.90, header_cex=0.62, cell_cex=0.75, color_matrix=lhp_color_matrix)
     page_footer_hitter()
@@ -3989,12 +4290,37 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 # ==========================================
 # HUB UI
 # ==========================================
+BASE_NAV_TABS <- c(
+  hub                = "tab_home",
+  catcher            = "tab_catcher",
+  hitter             = "tab_hitter",
+  hitter_scouting    = "tab_hitter_scouting",
+  defense            = "tab_defense",
+  pitcher            = "tab_pitcher",
+  pitcher_player     = "tab_pitcher_player",
+  pitcher_mock       = "tab_pcard_mock",
+  team_analytics_app = "tab_leaderboards",
+  season_pitcher     = "tab_season_pitcher",
+  base_media         = "tab_base_media"
+)
+
+base_nav_click_js <- function(target) {
+  tab_value <- unname(BASE_NAV_TABS[target])
+  if (!length(tab_value) || is.na(tab_value)) return("")
+  sprintf(
+    "var navLink=document.querySelector(\".navbar-nav a[data-value='%s']\");if(navLink){navLink.click();}",
+    tab_value
+  )
+}
+
 apps <- list(
   list(id = "catcher",          title = "Catcher Reports",          page = "catcher",        status = "live"),
   list(id = "hitter",           title = "Postgame Hitter Reports",  page = "hitter",         status = "live"),
+  list(id = "hitter_scouting",  title = "Hitter Scouting",         page = "hitter_scouting", status = "live", image_src = "hitter_scouting.png"),
   list(id = "pitcher",          title = "Postgame Pitcher Reports", page = "pitcher",        status = "live"),
-  list(id = "pitcher_player",   title = "Cape Pitcher Scout", page = "pitcher_player", status = "live", image_src = "pitcher_scouting.png"),
-  whitecaps_hub_card(),
+  list(id = "pitcher_player",   title = "Pitcher Scouting", page = "pitcher_player", status = "live", image_src = "pitcher_scouting.png"),
+  list(id = "defense",          title = "Defensive Analytics", page = "defense", status = "live", image_src = "TXST_Primary.jpg"),
+  team_analytics_hub_card(),
   list(id = "umpire",           title = "Umpire Reports",           page = NULL,             status = "live")
 )
 
@@ -4006,7 +4332,7 @@ make_card <- function(app) {
   card_image  <- if (!is.null(app$image_src)) app$image_src else paste0(app$id, ".png")
 
   if (!is.null(app$page) && app$status == "live") {
-    onclick_js <- paste0("Shiny.setInputValue('nav_to', '", app$page, "', {priority: 'event'})")
+    onclick_js <- base_nav_click_js(app$page)
     tags$div(
       onclick = onclick_js,
       class   = card_class,
@@ -4044,11 +4370,11 @@ make_card <- function(app) {
 hub_ui <- function() {
   tagList(
     tags$div(
-      class = "hub-main",
+      class = "hub-main base-page base-hub-page",
       tags$div(class = "section-label", "Applications"),
       tags$div(class = "app-grid", lapply(apps, make_card)),
       tags$div(class = "section-label", style = "margin-top: 40px;",
-               "2025 Roster"),
+               paste(TEAM_CONFIG$season_label, "Roster")),
       tags$div(
         class = "standings-wrapper",
         tags$div(class = "standings-division-label", "Catchers"),
@@ -4063,7 +4389,7 @@ hub_ui <- function() {
     ),
     tags$div(
       class = "hub-footer",
-      paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y"))
+      base_brand_footer()
     )
   )
 }
@@ -4071,26 +4397,21 @@ hub_ui <- function() {
 catcher_ui <- function() {
   tagList(
     tags$div(
-      class = "hub-main",
-      tags$div(
-        style = "margin-bottom: 24px;",
-        tags$button("< Back to Hub",
-                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
-                    class = "btn btn-outline-secondary btn-sm")
-      ),
+      class = "hub-main base-page base-generator-page",
       tags$h2("Catcher Report Generator",
               style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 24px;"),
       tags$div(
+        class = "base-control-grid",
         style = "display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 32px;",
         tags$div(
+          class = "base-control-panel",
           tags$h4("Select Team & Game", style = "color: var(--navy); margin-bottom: 12px;"),
           checkboxInput("catcher_manual_enabled", "Upload single-game CSV", value = FALSE),
           conditionalPanel(
             condition = "input.catcher_manual_enabled",
             fileInput("catcher_manual_csv", "Game CSV:", accept = c(".csv", ".parquet"),
                       buttonLabel = "Browse", placeholder = "No file selected"),
-            helpText("Appended to the CapeCod26 season so its date appears below. ",
-                     "Season stats still use CapeCod26.")
+            helpText("Appended to the configured season data for this session.")
           ),
           uiOutput("catcher_team_select_ui"),
           uiOutput("catcher_date_ui")
@@ -4103,7 +4424,7 @@ catcher_ui <- function() {
                        selected = "tagged", inline = TRUE)
         )
       ),
-      tags$div(style = "display:flex; gap:12px; align-items:center;",
+      tags$div(class = "base-action-row", style = "display:flex; gap:12px; align-items:center;",
         actionButton("generate_catcher", "Generate Report", class = "btn btn-primary", style = "width:200px;"),
         downloadButton("download_catcher_all", "Download All (PDF)",
                        class = "btn btn-outline-primary", style = "width:200px;")),
@@ -4112,29 +4433,24 @@ catcher_ui <- function() {
       uiOutput("catcher_report_ui")
     ),
     tags$div(class = "hub-footer",
-             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+             base_brand_footer())
   )
 }
 
 hitter_ui <- function() {
   tagList(
-    tags$div(class="hub-main",
-      tags$div(style="margin-bottom:24px;",
-        tags$button("← Back to Hub",
-                    onclick="Shiny.setInputValue('nav_to','hub',{priority:'event'})",
-                    class="btn btn-outline-secondary btn-sm")),
+    tags$div(class="hub-main base-page base-generator-page",
       tags$h2("Hitter Report Generator",
               style="font-family:var(--font-head);color:var(--navy);margin-bottom:24px;"),
-      tags$div(style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:32px;",
-        tags$div(
+      tags$div(class = "base-control-grid", style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:32px;",
+        tags$div(class = "base-control-panel",
           tags$h4("Select Team & Game(s)", style="color:var(--navy);margin-bottom:12px;"),
           checkboxInput("hitter_manual_enabled", "Upload single-game CSV", value = FALSE),
           conditionalPanel(
             condition = "input.hitter_manual_enabled",
             fileInput("hitter_manual_csv", "Game CSV:", accept = c(".csv", ".parquet"),
                       buttonLabel = "Browse", placeholder = "No file selected"),
-            helpText("Appended to the CapeCod26 season so its date appears below. ",
-                     "Season stats still use CapeCod26.")),
+            helpText("Appended to the configured season data for this session.")),
           uiOutput("hitter_team_select_ui"),
           uiOutput("hitter_dates_ui")),
         tags$div(
@@ -4144,7 +4460,7 @@ hitter_ui <- function() {
                        choices = c("Tagged" = "tagged", "Auto (backup)" = "auto"),
                        selected = "tagged", inline = TRUE))
       ),
-      tags$div(style = "display:flex; gap:12px; align-items:center;",
+      tags$div(class = "base-action-row", style = "display:flex; gap:12px; align-items:center;",
         actionButton("generate_hitter","Generate Report",class="btn btn-primary",style="width:200px;"),
         downloadButton("download_hitter_all","Download All (PDF)",
                        class="btn btn-outline-primary", style="width:200px;")),
@@ -4152,7 +4468,7 @@ hitter_ui <- function() {
       uiOutput("hitter_status"), br(),
       uiOutput("hitter_report_ui")
     ),
-    tags$div(class="hub-footer", paste0("Brewster Whitecaps Analytics · ",format(Sys.Date(),"%Y")))
+    tags$div(class="hub-footer", base_brand_footer())
   )
 }
 
@@ -4162,12 +4478,6 @@ pitcher_ui <- function() {
   tagList(
     tags$div(
       class = "hub-main",
-      tags$div(
-        style = "margin-bottom: 24px;",
-        tags$button("< Back to Hub",
-                    onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
-                    class = "btn btn-outline-secondary btn-sm")
-      ),
       tags$h2("Pitcher Report Generator",
               style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 24px;"),
       tags$div(
@@ -4206,100 +4516,103 @@ pitcher_ui <- function() {
       uiOutput("pitcher_download_ui")
     ),
     tags$div(class = "hub-footer",
-             paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y")))
+             base_brand_footer())
   )
 }
 
-# Map team API abbreviations to logo filenames
-ccbl_logo <- function(abbr) {
-  map <- c(
-    BRE = "BRE.png", BOU = "BOU.png", CHA = "CHA.png",
-    COT = "COT.png", FAL = "FAL.png", HAR = "HAR.png",
-    HYA = "HYA.png", ORL = "ORL.png", WAR = "WAR.png",
-    YD  = "YD.png"
+# Resolve an opponent logo from www/<ABBR>.png, then the NCAA team metadata.
+opponent_logo <- function(abbr) {
+  direct <- paste0(toupper(as.character(abbr)), ".png")
+  if (file.exists(file.path("www", direct))) return(direct)
+  logo_url <- team_palette(as.character(abbr))$logo_url
+  if (length(logo_url) && !is.na(logo_url) && nzchar(logo_url)) {
+    return(logo_url)
+  }
+  base_team_logo_url()
+}
+
+home_quick_link <- function(label, description, target, number) {
+  tags$button(
+    type = "button",
+    class = "home-quick-link",
+    onclick = base_nav_click_js(target),
+    tags$span(class = "home-quick-number", number),
+    tags$span(
+      class = "home-quick-copy",
+      tags$strong(label),
+      tags$small(description)
+    ),
+    tags$span(class = "home-quick-arrow", HTML("&rarr;"))
   )
-  unname(map[abbr]) %||% "BRE.png"
 }
 
 home_tab_ui <- function() {
   tagList(
     tags$head(tags$style(HTML("
-      .navbar { background-color: #0C2340 !important; border-bottom: none; }
-      .navbar-brand { color: #fff !important; font-family: 'Oswald', sans-serif;
-                      font-size: 18px; letter-spacing: 2px; }
-      .navbar-nav > li > a {
-        color: rgba(255,255,255,0.65) !important;
-        font-size: 12px; font-weight: 500; letter-spacing: 0.4px;
-        padding: 14px 14px !important;
-        border-bottom: 2px solid transparent;
+      #base-home .content-area { background: transparent; }
+      #base-home .section-label {
+        font-size: 15px; font-weight: 600; letter-spacing: 1.2px;
+        text-transform: uppercase; color: var(--base-muted); margin-bottom: 16px;
       }
-      .navbar-nav > li > a:hover  { color: #fff !important; }
-      .navbar-nav > li.active > a,
-      .navbar-nav > li.active > a:hover,
-      .navbar-nav > li.active > a:focus {
-        color: #fff !important; border-bottom: 2px solid #C8102E;
-        background: transparent !important;
-      }
-      .navbar-nav > li > a:focus { background: transparent !important; }
-      .nav-tabs { display: none; }
-      #caps-home .content-area { padding: 24px 32px; background: #f8f9fb; }
-      #caps-home .section-label {
-        font-size: 10px; font-weight: 600; letter-spacing: 1.5px;
-        text-transform: uppercase; color: #5F5F6B; margin-bottom: 14px;
-      }
-      #caps-home .pos-filters { display: flex; gap: 6px; margin-bottom: 14px; }
-      #caps-home .pos-pill {
-        font-size: 11px; font-weight: 600; padding: 4px 14px;
-        border-radius: 20px; cursor: pointer;
-        border: 1px solid #DADADA; background: #fff; color: #5F5F6B;
-      }
-      #caps-home .pos-pill.active {
-        background: #0C2340; color: #fff; border-color: #0C2340;
-      }
-      #caps-home .roster-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-        gap: 8px;
-      }
-      #caps-home .player-card {
-        background: #fff; border: 0.5px solid #EAEAEE;
-        border-radius: 8px; padding: 10px 13px;
-        display: flex; align-items: center; gap: 10px;
-      }
-      #caps-home .p-init {
-        width: 44px; height: 44px; border-radius: 50%;
-        background: #E6F1FB; color: #185FA5;
-        font-size: 14px; font-weight: 700;
-        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-      }
-      #caps-home .p-name { font-size: 12px; font-weight: 600; color: #16161B; }
-      #caps-home .p-info { font-size: 10px; color: #8B8B96; margin-top: 2px; }
       .tab-content > .tab-pane { padding: 0; }
       .tab-pane[data-value='tab_leaderboards'] .navbar { display: none !important; }
       .tab-pane[data-value='tab_leaderboards'] .navbar-default { display: none !important; }
       .navbar-nav > li > a[data-value='tab_pcard_mock'] { display: none !important; }
     "))),
     tags$div(
-      id = "caps-home",
+      id = "base-home",
       uiOutput("scoreboard_hero"),
       tags$div(
         class = "content-area",
-        tags$div(class = "section-label", "2026 Roster"),
-        tags$div(
-          class = "pos-filters",
-          tags$div(class = "pos-pill active", `data-group` = "Pitchers",    "Pitchers"),
-          tags$div(class = "pos-pill",        `data-group` = "Catchers",    "Catchers"),
-          tags$div(class = "pos-pill",        `data-group` = "Infielders",  "Infielders"),
-          tags$div(class = "pos-pill",        `data-group` = "Outfielders", "Outfielders")
+        tags$section(
+          class = "home-command-section",
+          tags$div(
+            class = "home-section-heading",
+            tags$div(
+              tags$div(class = "base-eyebrow", "BASE command center"),
+              tags$h2("Start with what you need")
+            ),
+            tags$div(
+              class = "home-data-status",
+              tags$span(class = "home-status-dot"),
+              paste(TEAM_CONFIG$season, "college data ready")
+            )
+          ),
+          tags$div(
+            class = "home-quick-grid",
+            home_quick_link("Pitcher Reports", "Postgame pitch and outing analysis", "pitcher", "01"),
+            home_quick_link("Pitcher Scouting", "Search the full college player pool", "pitcher_player", "02"),
+            home_quick_link("Hitter Scouting", "Analyze opposing-hitter tendencies", "hitter_scouting", "03"),
+            home_quick_link("Defensive Analytics", "Explore positioning and batted-ball context", "defense", "04"),
+            home_quick_link("Leaderboards", "Team rankings and performance trends", "team_analytics_app", "05"),
+            home_quick_link("Catcher Reports", "Receiving and game-management reports", "catcher", "06")
+          )
         ),
-        uiOutput("home_roster_grid")
+        tags$section(
+          class = "home-roster-section",
+          tags$div(
+            class = "home-section-heading home-roster-heading",
+            tags$div(
+              tags$div(class = "base-eyebrow", "Team directory"),
+              tags$h2(TEAM_CONFIG$roster_label)
+            ),
+            tags$div(
+              class = "pos-filters",
+              tags$div(class = "pos-pill active", `data-group` = "Pitchers",    "Pitchers"),
+              tags$div(class = "pos-pill",        `data-group` = "Catchers",    "Catchers"),
+              tags$div(class = "pos-pill",        `data-group` = "Infielders",  "Infielders"),
+              tags$div(class = "pos-pill",        `data-group` = "Outfielders", "Outfielders")
+            )
+          ),
+          uiOutput("home_roster_grid")
+        )
       ),
       tags$script(HTML("
-        $(document).on('click', '#caps-home .pos-pill', function() {
-          $('#caps-home .pos-pill').removeClass('active');
+        $(document).on('click', '#base-home .pos-pill', function() {
+          $('#base-home .pos-pill').removeClass('active');
           $(this).addClass('active');
           var grp = $(this).data('group');
-          $('#caps-home .player-card').each(function() {
+          $('#base-home .player-card').each(function() {
             $(this).toggle($(this).data('group') === grp);
           });
         });
@@ -4308,1399 +4621,126 @@ home_tab_ui <- function() {
   )
 }
 
-# ============================================================================
-# ACQUISITIONS BOARD (integrated from AcquisitionsApp3.R)
-# Self-contained: globals + scoped UI builder (acq_board_ui) + server module
-# (acq_board_server). Wired into the navbarPage as the "Acquisitions Board"
-# tab and called once from the main server.
-# ============================================================================
-
-# ── 1. Pull latest data from HF dataset repo, then load ────────────────────
-ACQ_DATA_FILES <- c(
-  "pitch_level.parquet", "pa_results.parquet", "pitcher_season.parquet",
-  "pitch_metrics.parquet", "movement_avg.parquet", "pitching_all.parquet",
-  "hitting_all.parquet", "player_bios.parquet",
-  "necbl_pitching.parquet", "necbl_hitting.parquet",
-  "nwl_pitching.parquet", "nwl_hitting.parquet"
-)
-
-pull_acq_data_from_hf <- function() {
-  for (f in ACQ_DATA_FILES) {
-    tryCatch({
-      pull_file_from_hf(f, f, repo_id = HF_DATA_REPO_ID)
-      message("[acq] Pulled latest ", f, " from HF dataset repo")
-    }, error = function(e) {
-      message("[acq] Pull failed for ", f, ", using bundled copy: ", e$message)
-    })
-  }
-}
-
-invisible(pull_acq_data_from_hf())
-
-acq_pitch_level    <- read_parquet("pitch_level.parquet")
-acq_pitcher_season <- read_parquet("pitcher_season.parquet")
-acq_pitch_metrics  <- read_parquet("pitch_metrics.parquet")
-acq_movement_avg   <- read_parquet("movement_avg.parquet")
-acq_pitching_all   <- read_parquet("pitching_all.parquet")
-acq_hitting_all    <- read_parquet("hitting_all.parquet")
-acq_player_bios    <- read_parquet("player_bios.parquet")
-acq_necbl_pitching <- read_parquet("necbl_pitching.parquet")
-acq_necbl_hitting  <- read_parquet("necbl_hitting.parquet")
-acq_nwl_pitching   <- read_parquet("nwl_pitching.parquet")
-acq_nwl_hitting    <- read_parquet("nwl_hitting.parquet")
-
-message("[acq] Data loaded.")
-
-# ── 2. Harmonize data ────────────────────────────────────────────────────────
-# Wrapped in a function so it can be re-run after "Run updates" refreshes the
-# raw tables (acq_pitch_level, acq_necbl_pitching, etc. via <<-). Without this,
-# the combined acq_all_pitchers/acq_all_hitters tables the UI actually reads
-
-# from only ever get built once, at app startup.
-acq_rebuild_combined <- function() {
-
-  acq_pitcher_season_tagged <- acq_pitcher_season %>%
-    mutate(
-      has_pbp    = TRUE,
-      source_key = as.character(pitcher_id),
-      class_year = NA_character_
-    ) %>%
-    rename(ERA_approx = ERA) %>%
-    left_join(
-      acq_pitching_all %>%
-        distinct(player_id, .keep_all = TRUE) %>%
-        select(player_id, ERA_real = ERA),
-      by = c("pitcher_id" = "player_id")
-    ) %>%
-    mutate(ERA = coalesce(ERA_real, ERA_approx)) %>%
-    select(-ERA_real, -ERA_approx)
-
-  acq_necbl_pitchers_clean <- acq_necbl_pitching %>%
-    mutate(source_key = paste(player_name, team, "NECBL")) %>%
-    mutate(
-      pitcher_name = coalesce(full_name, player_name),
-      pitch_hand   = throws,
-      team_name    = team,
-      IP_dec       = suppressWarnings(as.numeric(ip)),
-      K9           = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (k  / IP_dec) * 9, NA), 1),
-      BB9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (bb / IP_dec) * 9, NA), 1),
-      KBB          = round(ifelse(!is.na(bb) & bb > 0, k / bb, NA), 2),
-      HR9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (coalesce(hr,0L) / IP_dec) * 9, NA), 1),
-      FIP          = round(ifelse(!is.na(IP_dec) & IP_dec > 0,
-                                  ((13*coalesce(hr,0L) + 3*(coalesce(bb,0L)+coalesce(hbp,0L)) -
-                                     2*coalesce(k,0L)) / IP_dec) + 3.10, NA), 2),
-      ERA          = suppressWarnings(as.numeric(era)),
-      WHIP         = suppressWarnings(as.numeric(whip)),
-      IP           = IP_dec,
-      age          = NA_integer_,
-      college      = school,
-      class_year   = year,
-      has_pbp      = FALSE
-    ) %>%
-    select(pitcher_name, pitch_hand, age, class_year, college,
-           team_name, league_name, G = app, IP, ERA, FIP, WHIP,
-           K9, BB9, KBB, HR9, has_pbp, source_key)
-  acq_nwl_pitchers_clean <- acq_nwl_pitching %>%
-    mutate(
-      pitcher_name = paste(firstname, lastname),
-      pitch_hand   = str_extract(coalesce(bats_throws, ""), "(?<=/).$"),
-      team_name    = team_abv,
-      IP_dec       = suppressWarnings(as.numeric(IP)),
-      ERA_num      = suppressWarnings(as.numeric(ERA)),
-      WHIP_num     = suppressWarnings(as.numeric(WHIP)),
-      K9_num       = suppressWarnings(as.numeric(`K/9`)),
-      BB9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (BB / IP_dec) * 9, NA), 1),
-      KBB          = round(ifelse(!is.na(BB) & BB > 0, K / BB, NA), 2),
-      HR9          = round(ifelse(!is.na(IP_dec) & IP_dec > 0, (HR / IP_dec) * 9, NA), 1),
-      FIP          = round(ifelse(!is.na(IP_dec) & IP_dec > 0,
-                                  ((13*coalesce(HR,0L) + 3*(coalesce(BB,0L)+coalesce(HB,0L)) -
-                                      2*coalesce(K,0L)) / IP_dec) + 3.10, NA), 2),
-      age          = NA_integer_,
-      class_year   = class,
-      has_pbp      = FALSE,
-      source_key   = paste(pitcher_name, team_abv, "Northwoods League")
-    ) %>%
-    select(pitcher_name, pitch_hand, age, class_year, college,
-           team_name, league_name, G, IP = IP_dec,
-           ERA = ERA_num, FIP, WHIP = WHIP_num,
-           K9 = K9_num, BB9, KBB, HR9, has_pbp, source_key)
-
-  acq_all_pitchers <<- bind_rows(
-    acq_pitcher_season_tagged %>%
-      select(pitcher_name, pitch_hand, age, class_year, college,
-             team_name, league_name, G, IP, ERA, FIP, WHIP,
-             K9, BB9, KBB, HR9, has_pbp, source_key),
-    acq_necbl_pitchers_clean,
-    acq_nwl_pitchers_clean
-  )
-
-acq_hitting_all_clean <- acq_hitting_all %>%
-    mutate(source_key = as.character(player_id), class_year = NA_character_, K = SO,
-           Bats = if ("bats" %in% names(acq_hitting_all)) bats else NA_character_) %>%
-    select(player_name, position, age, class_year, college,
-           team_name, league_name, G, AB, H, R,
-           `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, Bats, source_key)
-
-  acq_necbl_hitting_clean <- acq_necbl_hitting %>%
-    mutate(source_key = paste(player_name, Team, "NECBL")) %>%
-    mutate(
-      player_name = coalesce(full_name, player_name),
-      team_name   = Team,
-      age         = NA_integer_,
-      class_year  = year,
-      college     = school,
-      R           = NA_integer_,
-      SB          = NA_integer_,
-      OPS         = round(coalesce(obp, 0) + coalesce(slg, 0), 3),
-      AVG         = avg,
-      OBP         = obp,
-      SLG         = slg,
-      Bats        = if ("bats" %in% names(acq_necbl_hitting)) bats else NA_character_
-    ) %>%
-    select(player_name, position, age, class_year, college,
-           team_name, league_name, G = gp, AB = ab, H = h, R,
-           `2B` = `2b`, `3B` = `3b`, HR = hr, RBI = rbi,
-           BB = bb, K = k, SB, AVG, OBP, SLG, OPS, Bats, source_key)
-
-  acq_nwl_hitting_clean <- acq_nwl_hitting %>%
-    mutate(
-      player_name = paste(firstname, lastname), team_name = team_abv,
-      age = NA_integer_, class_year = class,
-      AVG = suppressWarnings(as.numeric(AVG)),
-      OBP = suppressWarnings(as.numeric(OBP)),
-      SLG = suppressWarnings(as.numeric(SLG)),
-      OPS = suppressWarnings(as.numeric(OPS)),
-      Bats = if ("bats_throws" %in% names(acq_nwl_hitting))
-               stringr::str_extract(coalesce(bats_throws, ""), "^[A-Za-z]") else NA_character_,
-      source_key  = paste(player_name, team_abv, "Northwoods League")
-    ) %>%
-    select(player_name, position, age, class_year, college,
-           team_name, league_name, G, AB, H, R,
-           `2B`, `3B`, HR, RBI, BB, K, SB, AVG, OBP, SLG, OPS, Bats, source_key)
-
-  acq_all_hitters <<- bind_rows(acq_hitting_all_clean, acq_necbl_hitting_clean, acq_nwl_hitting_clean)
-  message("[acq] Rebuilt combined tables — ", nrow(acq_all_pitchers), " pitchers, ",
-          nrow(acq_all_hitters), " hitters.")
-}
-
-acq_age_or_class <- function(age, class_year) {
-  dplyr::case_when(
-    !is.na(class_year) & class_year != "" ~ class_year,
-    !is.na(age)                           ~ as.character(age),
-    TRUE                                  ~ "—"
-  )
-}
-
-acq_rebuild_combined()
-
-
-# ── 3. Constants ─────────────────────────────────────────────────────────────
-ACQ_NAVY  <- "#0D2B56"
-ACQ_TEAL  <- "#00827F"
-ACQ_WHITE <- "#FFFFFF"
-
-ACQ_PITCH_COLORS <- c(
-  "FF" = "#D22D49", "SI" = "#FE9D00", "FC" = "#933F2C",
-  "SL" = "#EEE716", "ST" = "#DDB33A", "CU" = "#00D1ED",
-  "KC" = "#3025CE", "CH" = "#1DBE3A", "FS" = "#4AFF89",
-  "FA" = "#D22D49", "CS" = "#00D1ED"
-)
-
-ACQ_ALL_LEAGUES <- c("All", "MLB Draft League", "Appalachian League",
-                     "NECBL", "Northwoods League")
-
-ACQ_INELIG_FILE   <- "ineligible_pitchers.csv"
-ACQ_INELIG_FILE_H <- "ineligible_hitters.csv"
-
-# Pull the latest copy from the dataset repo at startup, before reading
-invisible(pull_file_from_hf("ineligible_pitchers.csv", ACQ_INELIG_FILE))
-invisible(pull_file_from_hf("ineligible_hitters.csv",  ACQ_INELIG_FILE_H))
-
-
-source("acq_helpers.R", local = TRUE)
-      
-
-acq_load_ineligible <- function() {
-  if (!file.exists(ACQ_INELIG_FILE)) return(character(0))
-  df <- read_csv(ACQ_INELIG_FILE, show_col_types = FALSE)
-  if ("source_key" %in% names(df)) df$source_key
-  else if ("pitcher_id" %in% names(df)) as.character(df$pitcher_id)
-  else character(0)
-}
-
-acq_save_ineligible <- function(keys) {
-  tibble(source_key = as.character(keys)) %>% write_csv(ACQ_INELIG_FILE)
-  push_file_to_hf(ACQ_INELIG_FILE, "ineligible_pitchers.csv",
-                  paste("Update ineligible pitchers —", length(keys), "total"))
-}
-
-acq_load_ineligible_h <- function() {
-  if (!file.exists(ACQ_INELIG_FILE_H)) return(character(0))
-  df <- read_csv(ACQ_INELIG_FILE_H, show_col_types = FALSE)
-  if ("source_key" %in% names(df)) df$source_key
-  else if ("player_id" %in% names(df)) as.character(df$player_id)
-  else character(0)
-}
-
-acq_save_ineligible_h <- function(keys) {
-  tibble(source_key = as.character(keys)) %>% write_csv(ACQ_INELIG_FILE_H)
-  push_file_to_hf(ACQ_INELIG_FILE_H, "ineligible_hitters.csv",
-                  paste("Update ineligible hitters —", length(keys), "total"))
-}
-
-acq_dt_header_js <- function() {
-  JS(glue(
-    "function(settings, json) {{
-       $(this.api().table().header()).css({{
-         'background-color':'{ACQ_TEAL}', 'color':'{ACQ_WHITE}'
-       }});
-     }}"
-  ))
-}
-
-# ── 4. Scoped CSS ────────────────────────────────────────────────────────────
-# Every selector is namespaced to #acq-app (or the two modal ids) so the
-# board's full-screen / dark styling can't bleed into the rest of the CAPS app.
-acq_app_css <- glue("
-  #acq-app * {{ box-sizing: border-box; }}
-  #acq-app {{ background:{ACQ_NAVY}; color:{ACQ_WHITE};
-              font-family:Arial,sans-serif; }}
-
-  /* Shell */
-  #acq-app .app-shell {{ display:flex; height:calc(100vh - 70px); }}
-
-  /* Sidebar */
-  #acq-app .sidebar {{
-    width:200px; min-width:200px; height:100%;
-    background:#061B38; border-right:1px solid #1A3A5C;
-    display:flex; flex-direction:column; flex-shrink:0;
-  }}
-  #acq-app .sidebar-logo {{ padding:16px 14px 12px; border-bottom:1px solid #1A3A5C; }}
-  #acq-app .sidebar-logo-title {{ font-size:13px; font-weight:bold; color:{ACQ_WHITE}; }}
-  #acq-app .sidebar-logo-sub {{ font-size:11px; color:#6B8CAE; margin-top:2px; }}
-
-  #acq-app .nav-section {{
-    font-size:10px; font-weight:bold; letter-spacing:.07em;
-    text-transform:uppercase; color:#4A6B8A; padding:14px 14px 4px;
-  }}
-  #acq-app .nav-item {{
-    display:flex; align-items:center; gap:9px;
-    padding:8px 14px; font-size:13px; cursor:pointer;
-    color:#8BAAC8; border-left:3px solid transparent; transition:all .15s;
-  }}
-  #acq-app .nav-item:hover {{ color:{ACQ_WHITE}; background:#0D2B56; }}
-  #acq-app .nav-item.active {{
-    color:{ACQ_TEAL}; background:#0A2240;
-    border-left-color:{ACQ_TEAL}; font-weight:bold;
-  }}
-  #acq-app .nav-item i {{ font-size:16px; }}
-  #acq-app .inelig-badge {{
-    margin-left:auto; font-size:9px; font-weight:bold;
-    background:#7B2020; color:#FFB3B3; padding:1px 6px; border-radius:10px;
-  }}
-
-  #acq-app .sidebar-bottom {{ margin-top:auto; border-top:1px solid #1A3A5C; padding:10px 14px; }}
-  #acq-app .sidebar-action {{
-    display:flex; align-items:center; gap:7px;
-    font-size:12px; color:#6B8CAE; cursor:pointer; padding:6px 0;
-  }}
-  #acq-app .sidebar-action:hover {{ color:{ACQ_WHITE}; }}
-  #acq-app .sidebar-action i {{ font-size:14px; }}
-
-  /* Main */
-  #acq-app .main-area {{ flex:1; display:flex; flex-direction:column; height:100%; overflow:hidden; }}
-  #acq-app .main-header {{
-    padding:12px 20px; border-bottom:1px solid #1A3A5C;
-    display:flex; align-items:center; justify-content:space-between;
-    background:#0A2240; flex-shrink:0;
-  }}
-  #acq-app .main-header-title {{ font-size:15px; font-weight:bold; color:{ACQ_WHITE}; }}
-  #acq-app .header-filters {{ display:flex; gap:8px; align-items:center; }}
-  #acq-app .content-area {{ flex:1; overflow-y:auto; padding:16px 20px; }}
-
-  /* Filter bar */
-  #acq-app .filter-bar {{ display:flex; gap:10px; align-items:flex-end; margin-bottom:14px; flex-wrap:wrap; }}
-  #acq-app .filter-group {{ display:flex; flex-direction:column; gap:4px; }}
-  #acq-app .filter-label {{ font-size:10px; color:#6B8CAE; text-transform:uppercase; letter-spacing:.05em; }}
-  #acq-app .filter-bar select, #acq-app .filter-bar input {{
-    background:#0F3366; color:{ACQ_WHITE}; border:1px solid #1A3A5C;
-    border-radius:4px; padding:5px 8px; font-size:12px;
-  }}
-  #acq-app .filter-bar input[type=number] {{ width:80px; }}
-  #acq-app .btn-apply {{
-    background:{ACQ_TEAL}; color:{ACQ_WHITE}; border:none;
-    padding:6px 14px; border-radius:4px; font-size:12px; cursor:pointer;
-    font-weight:bold; align-self:flex-end;
-  }}
-  #acq-app .btn-apply:hover {{ opacity:.85; }}
-
-  /* Action buttons */
-  #acq-app .action-bar {{ display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }}
-  #acq-app .btn-action {{
-    display:flex; align-items:center; gap:5px;
-    background:#0F3366; color:{ACQ_WHITE}; border:1px solid #1A3A5C;
-    padding:5px 12px; border-radius:4px; font-size:12px; cursor:pointer;
-  }}
-  #acq-app .btn-action:hover {{ border-color:{ACQ_TEAL}; color:{ACQ_TEAL}; }}
-  #acq-app .btn-action.danger {{ border-color:#7B2020; color:#FFB3B3; }}
-  #acq-app .btn-action.danger:hover {{ background:#4A1010; }}
-  #acq-app .btn-action.restore {{ border-color:#1A5276; color:#7EC8E3; }}
-  #acq-app .btn-top10 {{
-    display:flex; align-items:center; gap:5px;
-    background:{ACQ_TEAL}; color:{ACQ_WHITE}; border:none;
-    padding:5px 12px; border-radius:4px; font-size:12px; cursor:pointer;
-    font-weight:bold; margin-left:auto;
-  }}
-  #acq-app .btn-top10:hover {{ opacity:.85; }}
-
-  /* Tables (board + both modals) */
-  #acq-app .dataTables_wrapper, #acq-app .dataTables_info, #acq-app .dataTables_paginate,
-  #pitcher_modal .dataTables_wrapper, #pitcher_modal .dataTables_info, #pitcher_modal .dataTables_paginate,
-  #top10_modal .dataTables_wrapper, #top10_modal .dataTables_info, #top10_modal .dataTables_paginate {{ color:{ACQ_WHITE} !important; }}
-  #acq-app .dataTables_filter label, #acq-app .dataTables_length label,
-  #pitcher_modal .dataTables_filter label, #pitcher_modal .dataTables_length label,
-  #top10_modal .dataTables_filter label, #top10_modal .dataTables_length label {{ color:{ACQ_WHITE}; }}
-  #acq-app .dataTables_filter input, #acq-app .dataTables_length select,
-  #pitcher_modal .dataTables_filter input, #pitcher_modal .dataTables_length select,
-  #top10_modal .dataTables_filter input, #top10_modal .dataTables_length select {{
-    background:#0F3366; color:{ACQ_WHITE}; border:1px solid #1A3A5C;
-  }}
-  #acq-app table.dataTable tbody tr, #pitcher_modal table.dataTable tbody tr, #top10_modal table.dataTable tbody tr {{
-    background:#0F3366 !important; color:{ACQ_WHITE} !important;
-  }}
-  #acq-app table.dataTable tbody tr:hover, #pitcher_modal table.dataTable tbody tr:hover, #top10_modal table.dataTable tbody tr:hover {{
-    background:#1A4A6C !important; cursor:pointer;
-  }}
-  #acq-app table.dataTable tbody tr.selected td, #pitcher_modal table.dataTable tbody tr.selected td, #top10_modal table.dataTable tbody tr.selected td {{
-    background:{ACQ_TEAL} !important; color:{ACQ_WHITE} !important;
-  }}
-  #acq-app table.dataTable thead th, #pitcher_modal table.dataTable thead th, #top10_modal table.dataTable thead th {{
-    background:{ACQ_TEAL}; color:{ACQ_WHITE};
-  }}
-
-  /* Modals */
-  #pitcher_modal .modal-content, #top10_modal .modal-content {{
-    background:#0A2040; color:{ACQ_WHITE}; border:2px solid {ACQ_TEAL};
-  }}
-  #pitcher_modal .modal-header, #top10_modal .modal-header {{ background:{ACQ_TEAL}; border-bottom:none; }}
-  #pitcher_modal .modal-title, #top10_modal .modal-title {{ color:{ACQ_WHITE} !important; font-weight:bold; }}
-  #pitcher_modal .close, #top10_modal .close {{ color:{ACQ_WHITE} !important; opacity:1 !important; }}
-  #pitcher_modal .modal-footer, #top10_modal .modal-footer {{ background:#0A2040; border-top:1px solid {ACQ_TEAL}; }}
-
-  /* Misc */
-  #acq-app .info-bar {{ color:#8BAAC8; font-size:13px; margin-bottom:12px; }}
-  #acq-app .no-pbp-badge, #pitcher_modal .no-pbp-badge {{
-    display:inline-block; background:#2A3A50; color:#8BAAC8;
-    font-size:11px; padding:2px 8px; border-radius:3px; margin-left:8px;
-  }}
-  #acq-app label, #pitcher_modal label, #top10_modal label {{ color:{ACQ_WHITE}; }}
-  #acq-app hr, #pitcher_modal hr, #top10_modal hr {{ border-color:{ACQ_TEAL}; opacity:.4; }}
-  #acq-app select, #pitcher_modal select, #top10_modal select {{ background:#0F3366; color:{ACQ_WHITE}; border:1px solid #1A3A5C; }}
-
-  /* Pos buttons */
-  #acq-app .pos-btn, #top10_modal .pos-btn {{
-    background:#0F3366; color:{ACQ_WHITE};
-    border:1px solid #1A3A5C; margin:2px; padding:4px 10px;
-    border-radius:4px; cursor:pointer; font-size:12px; display:inline-block;
-  }}
-  #acq-app .pos-btn.active, #top10_modal .pos-btn.active {{
-    background:{ACQ_TEAL}; color:{ACQ_NAVY}; font-weight:bold; border-color:{ACQ_TEAL};
-  }}
-
-  /* Page sections (hidden by default) */
-  #acq-app .page {{ display:none; }}
-  #acq-app .page.active {{ display:block; }}
-
-  /* Scrollbar */
-  #acq-app ::-webkit-scrollbar {{ width:6px; height:6px; }}
-  #acq-app ::-webkit-scrollbar-track {{ background:#061B38; }}
-  #acq-app ::-webkit-scrollbar-thumb {{ background:#1A3A5C; border-radius:3px; }}
-  #acq-app ::-webkit-scrollbar-thumb:hover {{ background:{ACQ_TEAL}; }}
-
-  #acq-app button.nav-item {{
-    background:none; border-top:none; border-right:none;
-    border-bottom:none; border-left:3px solid transparent;
-    width:100%; text-align:left; border-radius:0;
-    display:flex; align-items:center; gap:9px;
-    padding:8px 14px; font-size:13px; cursor:pointer; color:#8BAAC8;
-  }}
-  #acq-app button.nav-item:hover {{ color:{ACQ_WHITE}; background:#0D2B56; }}
-  #acq-app button.nav-item.active {{
-    color:{ACQ_TEAL}; background:#0A2240;
-    border-left-color:{ACQ_TEAL}; font-weight:bold;
-  }}
-")
-
-# ── 5. UI builder ────────────────────────────────────────────────────────────
-acq_board_ui <- function() {
-  tagList(
-    tags$head(
-      tags$style(HTML(acq_app_css)),
-      tags$link(
-        rel  = "stylesheet",
-        href = "https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"
-      )
-    ),
-
-    div(id = "acq-app",
-      div(class = "app-shell",
-
-          # ── Sidebar ────────────────────────────────────────────────────────
-          div(class = "sidebar",
-              div(class = "sidebar-logo",
-                  div(class = "sidebar-logo-title", "Brewster Whitecaps"),
-                  div(class = "sidebar-logo-sub",   "Player Acquisitions")
-              ),
-              div(class = "nav-section", "Scouting"),
-              actionButton("nav_pitchers",   tagList(tags$i(class="ti ti-ball-baseball"), " Pitchers"),
-                           class = "nav-item active"),
-              actionButton("nav_hitters",    tagList(tags$i(class="ti ti-run"),           " Hitters"),
-                           class = "nav-item"),
-              actionButton("nav_top10",      tagList(tags$i(class="ti ti-trophy"),        " Top 10"),
-                           class = "nav-item"),
-              actionButton("nav_ineligible", tagList(tags$i(class="ti ti-ban"),           " Ineligible"),
-                           class = "nav-item"),
-              div(class = "sidebar-bottom",
-                  actionButton("open_run_updates",
-                               tagList(tags$i(class = "ti ti-refresh"), " Run updates"),
-                               class = "sidebar-action")
-              )
-          ),
-          # ── Main area ───────────────────────────────────────────────────────
-          div(class = "main-area",
-              div(class = "main-header",
-                  div(class = "main-header-title", textOutput("page_title", inline = TRUE)),
-                  div(class = "header-filters", uiOutput("header_subtitle"))
-              ),
-              div(class = "content-area",
-
-                  # ── Pitchers page ─────────────────────────────────────────
-                  div(id = "page_pitchers", class = "page active",
-                      div(class = "filter-bar",
-                          div(class = "filter-group",
-                              div(class = "filter-label", "League"),
-                              selectInput("pbp_league", NULL,
-                                          choices = ACQ_ALL_LEAGUES, selected = "All",
-                                          width = "150px")
-                          ),
-                          div(class = "filter-group",
-                              div(class = "filter-label", "Hand"),
-                              selectInput("pbp_hand", NULL,
-                                          choices = c("All","R","L"), selected = "All",
-                                          width = "80px")
-                          ),
-                          div(class = "filter-group",
-                              div(class = "filter-label", "Min IP"),
-                              numericInput("min_pitches", NULL, value = 0, min = 0, step = 1,
-                                           width = "70px")
-                          ),
-                          div(class = "filter-group",
-                              div(class = "filter-label", "Max Age"),
-                              numericInput("max_age_p", NULL, value = 99, min = 18, step = 1,
-                                           width = "70px")
-                          ),
-                          actionButton("apply_pbp_filter", "Apply", class = "btn-apply")
-                      ),
-                      div(class = "action-bar",
-                          actionButton("view_pitcher",   tagList(tags$i(class="ti ti-chart-line"), " View profile"),
-                                       class = "btn-action"),
-                          actionButton("remove_pitcher", tagList(tags$i(class="ti ti-ban"), " Mark ineligible"),
-                                       class = "btn-action danger"),
-                          actionButton("open_top10",     tagList(tags$i(class="ti ti-trophy"), " Top 10"),
-                                       class = "btn-top10")
-                      ),
-                      DTOutput("pbp_pitcher_table")
-                  ),
-
-                  # ── Hitters page ──────────────────────────────────────────
-                  div(id = "page_hitters", class = "page",
-                      div(class = "filter-bar",
-                          div(class = "filter-group",
-                              div(class = "filter-label", "League"),
-                              selectInput("season_league_h", NULL,
-                                          choices = ACQ_ALL_LEAGUES, selected = "All",
-                                          width = "150px")
-                          ),
-                          div(class = "filter-group",
-                              div(class = "filter-label", "Min AB"),
-                              numericInput("min_ab", NULL, value = 0, min = 0, step = 5,
-                                           width = "70px")
-                          ),
-                          div(class = "filter-group",
-                              div(class = "filter-label", "Bats"),
-                              selectInput("season_hand_h", NULL,
-                                          choices = c("All","R","L","S"), selected = "All",
-                                          width = "80px")
-                          ),
-                          div(class = "filter-group",
-                              div(class = "filter-label", "Max Age"),
-                              numericInput("max_age_h", NULL, value = 99, min = 18, step = 1,
-                                           width = "70px")
-                          ),
-                          actionButton("apply_season_h", "Apply", class = "btn-apply")
-                      ),
-                      div(class = "action-bar",
-                          actionButton("remove_hitter", tagList(tags$i(class="ti ti-ban"), " Mark ineligible"),
-                                       class = "btn-action danger"),
-                          actionButton("open_top10_h",  tagList(tags$i(class="ti ti-trophy"), " Top 10"),
-                                       class = "btn-top10")
-                      ),
-                      DTOutput("season_hitter_table")
-                  ),
-
-                  # ── Top 10 page ───────────────────────────────────────────
-                  div(id = "page_top10", class = "page",
-                      tabsetPanel(id = "top10_inline_tabs",
-                                  tabPanel("Hitting",
-                                           br(),
-                                           fluidRow(
-                                             column(3, selectInput("top10_league_h", "League:", choices = ACQ_ALL_LEAGUES,
-                                                                   selected = "All", width = "100%")),
-                                             column(3, numericInput("top10_min_ab", "Min AB:", value = 20,
-                                                                    min = 0, step = 5, width = "100%")),
-                                             column(3, numericInput("top10_max_age_h", "Max Age:", value = 99,
-                                                                    min = 18, step = 1, width = "100%")),
-                                             column(3, selectInput("top10_stat_h", "Sort by:",
-                                                                   choices = c("OPS","AVG","OBP","SLG","HR","RBI","SB"),
-                                                                   selected = "OPS", width = "100%"))
-                                           ),
-                                           div(style = "margin-bottom:10px;",
-                                               tags$p("Position:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
-                                               actionButton("hpos_All","All",class="pos-btn active"),
-                                               actionButton("hpos_C",  "C",  class="pos-btn"),
-                                               actionButton("hpos_1B", "1B", class="pos-btn"),
-                                               actionButton("hpos_2B", "2B", class="pos-btn"),
-                                               actionButton("hpos_3B", "3B", class="pos-btn"),
-                                               actionButton("hpos_SS", "SS", class="pos-btn"),
-                                               actionButton("hpos_LF", "LF", class="pos-btn"),
-                                               actionButton("hpos_CF", "CF", class="pos-btn"),
-                                               actionButton("hpos_RF", "RF", class="pos-btn"),
-                                               actionButton("hpos_DH", "DH", class="pos-btn")
-                                           ),
-                                           div(style = "margin-bottom:10px;",
-                               tags$p("Bats:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
-                               actionButton("bats_All","All", class="pos-btn active"),
-                               actionButton("bats_R",  "R",   class="pos-btn"),
-                               actionButton("bats_L",  "L",   class="pos-btn"),
-                               actionButton("bats_S",  "S",   class="pos-btn")
-                           ),
-                                           DTOutput("top10_hitting_table")
-                                  ),
-                                  tabPanel("Pitching",
-                                           br(),
-                                           fluidRow(
-                                             column(3, selectInput("top10_league_p", "League:", choices = ACQ_ALL_LEAGUES,
-                                                                   selected = "All", width = "100%")),
-                                             column(3, numericInput("top10_min_ip", "Min IP:", value = 5,
-                                                                    min = 0, step = 1, width = "100%")),
-                                             column(3, selectInput("top10_stat_p", "Sort by:",
-                                                                   choices = c("ERA","FIP","WHIP","K9","BB9","KBB"),
-                                                                   selected = "ERA", width = "100%")),
-                                             column(3, numericInput("top10_max_age_p", "Max Age:", value = 99,
-                                                                    min = 18, step = 1, width = "100%"))
-                                           ),
-                                           div(style = "margin-bottom:6px;",
-                                               tags$p("Role:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
-                                               actionButton("prole_All","All",class="pos-btn active"),
-                                               actionButton("prole_SP", "SP", class="pos-btn"),
-                                               actionButton("prole_RP", "RP", class="pos-btn")
-                                           ),
-                                           div(style = "margin-bottom:10px;",
-    tags$p("Hand:", style = "color:#8BAAC8; font-size:11px; margin-bottom:4px;"),
-    actionButton("phand_All","All", class="pos-btn active"),
-    actionButton("phand_R",  "RHP", class="pos-btn"),
-    actionButton("phand_L",  "LHP", class="pos-btn")
-),
-tags$p("Click a pitcher's row to view profile.",
-       style = "color:#6B8CAE; font-size:11px; margin-bottom:8px;"),
-DTOutput("top10_pitching_table")
-                                  )
-                      )
-                  ),
-
-                  # ── Ineligible page ───────────────────────────────────────
-                  div(id = "page_ineligible", class = "page",
-                      tabsetPanel(id = "inelig_tabs",
-                                  tabPanel("Pitchers",
-                                           br(),
-                                           div(class = "action-bar",
-                                               actionButton("restore_pitcher",
-                                                            tagList(tags$i(class="ti ti-circle-check"), " Restore selected"),
-                                                            class = "btn-action restore")
-                                           ),
-                                           tags$p(textOutput("inelig_subtitle"),
-                                                  style = "color:#8BAAC8; font-size:12px; margin-bottom:8px;"),
-                                           DTOutput("inelig_table")
-                                  ),
-                                  tabPanel("Hitters",
-                                           br(),
-                                           div(class = "action-bar",
-                                               actionButton("restore_hitter",
-                                                            tagList(tags$i(class="ti ti-circle-check"), " Restore selected"),
-                                                            class = "btn-action restore")
-                                           ),
-                                           tags$p(textOutput("inelig_h_subtitle"),
-                                                  style = "color:#8BAAC8; font-size:12px; margin-bottom:8px;"),
-                                           DTOutput("inelig_hitter_table")
-                                  )
-                      )
-                  )
-              )
-          )
-      )
-    ),
-
-    # ── Pitcher profile modal ────────────────────────────────────────────────
-    bsModal(
-      id = "pitcher_modal", title = "Pitcher Profile",
-      trigger = NULL, size = "large",
-      uiOutput("modal_info"),
-      uiOutput("modal_body")
-    ),
-
-    # ── Top 10 modal ─────────────────────────────────────────────────────────
-    bsModal(
-      id = "top10_modal", title = "Top 10 Leaderboards",
-      trigger = NULL, size = "large",
-      tabsetPanel(id = "top10_modal_tabs",
-                  tabPanel("Hitting",
-                           br(),
-                           fluidRow(
-                             column(3, selectInput("top10m_league_h", "League:", choices = ACQ_ALL_LEAGUES,
-                                                   selected = "All", width = "100%")),
-                             column(3, numericInput("top10m_min_ab", "Min AB:", value = 20,
-                                                    min = 0, step = 5, width = "100%")),
-                             column(3, numericInput("top10m_max_age_h", "Max Age:", value = 99,
-                                                    min = 18, step = 1, width = "100%")),
-                             column(3, selectInput("top10m_stat_h", "Sort by:",
-                                                   choices = c("OPS","AVG","OBP","SLG","HR","RBI","SB"),
-                                                   selected = "OPS", width = "100%"))
-                           ),
-                           div(style = "margin-bottom:10px;",
-                               actionButton("hpos_m_All","All",class="pos-btn active"),
-                               actionButton("hpos_m_C",  "C",  class="pos-btn"),
-                               actionButton("hpos_m_1B", "1B", class="pos-btn"),
-                               actionButton("hpos_m_2B", "2B", class="pos-btn"),
-                               actionButton("hpos_m_3B", "3B", class="pos-btn"),
-                               actionButton("hpos_m_SS", "SS", class="pos-btn"),
-                               actionButton("hpos_m_LF", "LF", class="pos-btn"),
-                               actionButton("hpos_m_CF", "CF", class="pos-btn"),
-                               actionButton("hpos_m_RF", "RF", class="pos-btn"),
-                               actionButton("hpos_m_DH", "DH", class="pos-btn")
-                           ),
-                           div(style = "margin-bottom:10px;",
-                               actionButton("bats_m_All","All", class="pos-btn active"),
-                               actionButton("bats_m_R",  "R",   class="pos-btn"),
-                               actionButton("bats_m_L",  "L",   class="pos-btn"),
-                               actionButton("bats_m_S",  "S",   class="pos-btn")
-                           ),
-                           DTOutput("top10m_hitting_table")
-                  ),
-                  tabPanel("Pitching",
-                           br(),
-                           fluidRow(
-                             column(3, selectInput("top10m_league_p", "League:", choices = ACQ_ALL_LEAGUES,
-                                                   selected = "All", width = "100%")),
-                             column(3, numericInput("top10m_min_ip", "Min IP:", value = 5,
-                                                    min = 0, step = 1, width = "100%")),
-                             column(3, selectInput("top10m_stat_p", "Sort by:",
-                                                   choices = c("ERA","FIP","WHIP","K9","BB9","KBB"),
-                                                   selected = "ERA", width = "100%")),
-                             column(3, numericInput("top10m_max_age_p", "Max Age:", value = 99,
-                                                    min = 18, step = 1, width = "100%"))
-                           ),
-                           div(style = "margin-bottom:6px;",
-                               actionButton("prole_m_All","All",class="pos-btn active"),
-                               actionButton("prole_m_SP", "SP", class="pos-btn"),
-                               actionButton("prole_m_RP", "RP", class="pos-btn")
-                           ),
-                           div(style = "margin-bottom:10px;",
-                               actionButton("phand_m_All","All", class="pos-btn active"),
-                               actionButton("phand_m_R",  "RHP", class="pos-btn"),
-                               actionButton("phand_m_L",  "LHP", class="pos-btn")
-                           ),
-                           DTOutput("top10m_pitching_table")
-                  )
-      )
-    ),
-
-    bsModal(
-      id = "run_updates_modal", title = "Run Updates",
-      trigger = NULL, size = "medium",
-
-      tags$p(
-        "Pulls fresh stats from MLB, NECBL, and Northwoods League and rebuilds all data.",
-        style = "color:#8BAAC8; font-size:13px; margin-bottom:16px;"
-      ),
-
-      tags$div(
-        style = "margin-bottom:16px;",
-        tags$p(
-          "NECBL pitching CSV — download from necbl.com first, then upload here:",
-          style = "font-size:12px; color:#8BAAC8; margin-bottom:4px;"
-        ),
-        fileInput("necbl_csv_upload", NULL,
-                  accept      = ".csv",
-                  buttonLabel = "Browse",
-                  placeholder = "No file selected")
-      ),
-
-      actionButton("run_updates_btn", "Start Update",
-                   class = "btn-apply", style = "width:100%;")
-    )
-
-  ) 
-} 
-
-# ── 6. Server module ─────────────────────────────────────────────────────────
-acq_board_server <- function(input, output, session) {
-
-  data_version <- reactiveVal(0)
-  ineligible   <- reactiveVal(acq_load_ineligible())
-  ineligible_h <- reactiveVal(acq_load_ineligible_h())
-  selected_key <- reactiveVal(NULL)
-  current_page <- reactiveVal("pitchers")
-
-  h_pos    <- reactiveVal(c("All"))
-  p_role   <- reactiveVal("All")
-  p_hand   <- reactiveVal("All")
-  h_pos_m  <- reactiveVal(c("All"))
-  p_role_m <- reactiveVal("All")
-  p_hand_m <- reactiveVal("All")
-  h_bats   <- reactiveVal("All")
-  h_bats_m <- reactiveVal("All")
-
-  h_positions <- c("All","C","1B","2B","3B","SS","LF","CF","RF","DH")
-  p_roles     <- c("All","SP","RP")
-  p_hands     <- c("All","R","L")
-
-  set_active_btn <- function(group, selected, ids) {
-    for (id in ids) {
-      val <- sub(paste0("^", group), "", id)
-      if (val == selected) {
-        runjs(glue("$('#{id}').addClass('active').css({{'background-color':'{ACQ_TEAL}','color':'{ACQ_NAVY}','font-weight':'bold','border-color':'{ACQ_TEAL}'}});"))
-      } else {
-        runjs(glue("$('#{id}').removeClass('active').css({{'background-color':'#0F3366','color':'{ACQ_WHITE}','font-weight':'normal','border-color':'#1A3A5C'}});"))
-      }
-    }
-  }
-
-toggle_position <- function(current, clicked) {
-  if (clicked == "All") return("All")
-  current <- setdiff(current, "All")
-  if (clicked %in% current) {
-    current <- setdiff(current, clicked)
-  } else {
-    current <- c(current, clicked)
-  }
-  if (length(current) == 0) current <- "All"
-  current
-}
-
-set_active_btns <- function(group, selected, ids) {
-  for (id in ids) {
-    val <- sub(paste0("^", group), "", id)
-    if (val %in% selected) {
-      runjs(glue("$('#{id}').addClass('active').css({{'background-color':'{ACQ_TEAL}','color':'{ACQ_NAVY}','font-weight':'bold','border-color':'{ACQ_TEAL}'}});"))
-    } else {
-      runjs(glue("$('#{id}').removeClass('active').css({{'background-color':'#0F3366','color':'{ACQ_WHITE}','font-weight':'normal','border-color':'#1A3A5C'}});"))
-    }
-  }
-}
-  
-  lapply(h_positions, function(pos) {
-    observeEvent(input[[paste0("hpos_", pos)]], {
-      new_val <- toggle_position(h_pos(), pos)
-      h_pos(new_val)
-      set_active_btns("hpos_", new_val, paste0("hpos_", h_positions))
-    }, ignoreInit = TRUE)
-    observeEvent(input[[paste0("hpos_m_", pos)]], {
-      new_val <- toggle_position(h_pos_m(), pos)
-      h_pos_m(new_val)
-      set_active_btns("hpos_m_", new_val, paste0("hpos_m_", h_positions))
-    }, ignoreInit = TRUE)
-  })
-
-  lapply(p_roles, function(role) {
-    observeEvent(input[[paste0("prole_", role)]], {
-      p_role(role); set_active_btn("prole_", role, paste0("prole_", p_roles))
-    }, ignoreInit = TRUE)
-    observeEvent(input[[paste0("prole_m_", role)]], {
-      p_role_m(role); set_active_btn("prole_m_", role, paste0("prole_m_", p_roles))
-    }, ignoreInit = TRUE)
-  })
-
-  lapply(p_hands, function(hand) {
-    observeEvent(input[[paste0("phand_", hand)]], {
-      p_hand(hand); set_active_btn("phand_", hand, paste0("phand_", p_hands))
-    }, ignoreInit = TRUE)
-    observeEvent(input[[paste0("phand_m_", hand)]], {
-      p_hand_m(hand); set_active_btn("phand_m_", hand, paste0("phand_m_", p_hands))
-    }, ignoreInit = TRUE)
-  })
-
-  h_bats_choices <- c("All","R","L","S")
-
-  lapply(h_bats_choices, function(b) {
-    observeEvent(input[[paste0("bats_", b)]], {
-      h_bats(b); set_active_btn("bats_", b, paste0("bats_", h_bats_choices))
-    }, ignoreInit = TRUE)
-    observeEvent(input[[paste0("bats_m_", b)]], {
-      h_bats_m(b); set_active_btn("bats_m_", b, paste0("bats_m_", h_bats_choices))
-    }, ignoreInit = TRUE)
-  })
-  # ── Sidebar navigation ──────────────────────────────────────────────────
-  nav_pages <- c("pitchers","hitters","top10","ineligible")
-
-  switch_page <- function(page) {
-    current_page(page)
-    for (p in nav_pages) {
-      if (p == page) {
-        runjs(glue("$('#page_{p}').addClass('active');"))
-        runjs(glue("$('#nav_{p}').addClass('active');"))
-      } else {
-        runjs(glue("$('#page_{p}').removeClass('active');"))
-        runjs(glue("$('#nav_{p}').removeClass('active');"))
-      }
-    }
-  }
-
-  observeEvent(input$nav_pitchers,   { switch_page("pitchers") },   ignoreInit = TRUE)
-  observeEvent(input$nav_hitters,    { switch_page("hitters") },    ignoreInit = TRUE)
-  observeEvent(input$nav_top10,      { switch_page("top10") },      ignoreInit = TRUE)
-  observeEvent(input$nav_ineligible, { switch_page("ineligible") }, ignoreInit = TRUE)
-  observeEvent(input$open_run_updates, {
-    toggleModal(session, "run_updates_modal", toggle = "open")
-  })
-
-observeEvent(input$run_updates_btn, {
-
-  showModal(modalDialog(
-    title = "Updating data...",
-    tags$div(
-      tags$p("This will take 1-3 minutes. Please don't close this window.",
-             style = "margin-bottom:12px;"),
-      tags$p("Starting...")
-    ),
-    footer = NULL,
-    size = "m"
-  ))
-
-  result <- tryCatch({
-
-    update_progress <- function(msg) {
-      removeModal()
-      showModal(modalDialog(
-        title = "Updating data...",
-        tags$div(
-          tags$p("This will take 1-3 minutes. Please don't close this window.",
-                 style = "margin-bottom:12px;"),
-          tags$p(msg)
-        ),
-        footer = NULL,
-        size = "m"
-      ))
-    }
-
-    necbl_csv_path <- if (!is.null(input$necbl_csv_upload)) {
-      input$necbl_csv_upload$datapath
-    } else {
-      NULL
-    }
-
-    update_progress("Step 1/3: Updating MLB Draft League + Appalachian League...")
-    run_mlb_update()
-
-    update_progress("Step 2/3: Updating NECBL...")
-    run_necbl_update(necbl_csv_path)
-
-    update_progress("Step 3/3: Updating Northwoods League...")
-    run_nwl_update()
-
-    update_progress("Rebuilding combined tables...")
-    acq_rebuild_combined()
-    data_version(data_version() + 1)
-
-    list(success = TRUE)
-
-  }, error = function(e) {
-    list(success = FALSE, message = e$message)
-  })
-
-  removeModal()
-
-  if (isTRUE(result$success)) {
-    showModal(modalDialog(
-      title = "Update complete",
-      tags$p("Data has been refreshed. Reload the app to see the latest numbers."),
-      footer = modalButton("Close")
-    ))
-  } else {
-    showModal(modalDialog(
-      title = "Update failed",
-      tags$p(paste("Error:", result$message)),
-      footer = modalButton("Close")
-    ))
-  }
-})
-  observeEvent(input$open_top10,   { toggleModal(session, "top10_modal", toggle = "open") })
-  observeEvent(input$open_top10_h, { toggleModal(session, "top10_modal", toggle = "open") })
-
-  # ── Page title + subtitle ───────────────────────────────────────────────
-  output$page_title <- renderText({
-    switch(current_page(),
-           pitchers   = "Pitchers",
-           hitters    = "Hitters",
-           top10      = "Top 10 Leaderboards",
-           ineligible = "Ineligible Players"
-    )
-  })
-
-  output$header_subtitle <- renderUI({
-    switch(current_page(),
-           pitchers   = tags$span(textOutput("pbp_subtitle", inline=TRUE),
-                                  style="font-size:12px;color:#8BAAC8;"),
-           hitters    = tags$span(textOutput("season_h_subtitle", inline=TRUE),
-                                  style="font-size:12px;color:#8BAAC8;"),
-           ineligible = tags$span(textOutput("inelig_nav_total", inline=TRUE),
-                                  style="font-size:12px;color:#8BAAC8;"),
-           NULL
-    )
-  })
-
-  output$inelig_nav_badge <- renderUI({
-    n <- length(ineligible()) + length(ineligible_h())
-    if (n > 0) tags$span(n, class = "inelig-badge")
-  })
-
-  output$inelig_nav_total <- renderText({
-    glue("{length(ineligible())} pitchers · {length(ineligible_h())} hitters")
-  })
-
-  # ── Pitchers ────────────────────────────────────────────────────────────
-  filtered_pitchers <- reactive({
-    df <- acq_all_pitchers %>% filter(!source_key %in% ineligible())
-
-    if (input$pbp_league != "All")
-      df <- df %>% filter(league_name == input$pbp_league)
-    if (input$pbp_hand != "All")
-      df <- df %>% filter(pitch_hand == input$pbp_hand)
-    if (!is.na(input$min_pitches) && input$min_pitches > 0)
-      df <- df %>% filter(!is.na(IP) & IP >= input$min_pitches)
-    if (!is.na(input$max_age_p) && input$max_age_p < 99)
-      df <- df %>% filter(is.na(age) | age <= input$max_age_p)
-
-    df %>% arrange(ERA)
-  }) %>% bindEvent(input$apply_pbp_filter, ineligible(), data_version(), ignoreNULL = FALSE)
-
-  output$pbp_subtitle <- renderText(glue("{nrow(filtered_pitchers())} pitchers"))
-
-  output$pbp_pitcher_table <- renderDT({
-    filtered_pitchers() %>%
-      mutate(Profile = ifelse(has_pbp, "✓", "—"),
-             `Age/Yr` = acq_age_or_class(age, class_year)) %>%
-      select(Name = pitcher_name, Hand = pitch_hand, `Age/Yr`,
-             School = college, Team = team_name, League = league_name,
-             Profile, G, IP, ERA, FIP, WHIP,
-             `K/9` = K9, `BB/9` = BB9, `K/BB` = KBB, `HR/9` = HR9) %>%
-      datatable(selection = "multiple", rownames = FALSE,
-                options = list(pageLength = 25, scrollX = TRUE, dom = "ftip",
-                               initComplete = acq_dt_header_js()),
-                class = "display compact") %>%
-      formatRound(c("ERA","FIP","WHIP","K/9","BB/9","K/BB","HR/9"), 2)
-  })
-
-  observeEvent(input$view_pitcher, {
-    row <- input$pbp_pitcher_table_rows_selected
-    if (length(row) == 0) { showNotification("Select a pitcher first.", type="warning"); return() }
-    selected_key(filtered_pitchers()$source_key[row[1]])
-    toggleModal(session, "pitcher_modal", toggle = "open")
-  })
-
-  observeEvent(input$remove_pitcher, {
-    rows <- input$pbp_pitcher_table_rows_selected
-    if (length(rows) == 0) { showNotification("Select at least one pitcher.", type="warning"); return() }
-    keys  <- filtered_pitchers()$source_key[rows]
-    new_inelig <- unique(c(ineligible(), keys))
-    ineligible(new_inelig); acq_save_ineligible(new_inelig)
-    dataTableProxy("pbp_pitcher_table") %>% selectRows(NULL)
-    showNotification(glue("{length(keys)} pitcher(s) marked ineligible."), type="warning", duration=5)
-  })
-
-  # ── Hitters ─────────────────────────────────────────────────────────────
-filtered_hitters <- reactive({
-    df <- acq_all_hitters %>% filter(!source_key %in% ineligible_h())
-
-    if (input$season_league_h != "All")
-      df <- df %>% filter(league_name == input$season_league_h)
-    if (!is.na(input$max_age_h) && input$max_age_h < 99)
-      df <- df %>% filter(is.na(age) | age <= input$max_age_h)
-    if (input$season_hand_h != "All")
-      df <- df %>% filter(Bats == input$season_hand_h)          # NEW
-
-    df %>% filter(!is.na(AB), AB >= input$min_ab) %>% arrange(desc(OPS))
-  }) %>% bindEvent(input$apply_season_h, ineligible_h(), data_version(), ignoreNULL = FALSE)
-
-  output$season_h_subtitle <- renderText(glue("{nrow(filtered_hitters())} hitters"))
-
-  output$season_hitter_table <- renderDT({
-    filtered_hitters() %>%
-      mutate(`Age/Yr` = acq_age_or_class(age, class_year)) %>%
-      select(Name = player_name, Bats, `Age/Yr`, School = college,     # Bats added
-             Team = team_name, League = league_name, Pos = position,
-             G, AB, H, R, `2B`, `3B`, HR, RBI, BB, K, SB,
-             AVG, OBP, SLG, OPS) %>%
-      datatable(selection = "multiple", rownames = FALSE,
-                options = list(pageLength = 25, scrollX = TRUE, dom = "ftip",
-                               initComplete = acq_dt_header_js()),
-                class = "display compact") %>%
-      formatRound(c("AVG","OBP","SLG","OPS"), 3)
-  })
-
-  observeEvent(input$remove_hitter, {
-    rows <- input$season_hitter_table_rows_selected
-    if (length(rows) == 0) { showNotification("Select at least one hitter.", type="warning"); return() }
-    keys  <- filtered_hitters()$source_key[rows]
-    new_inelig <- unique(c(ineligible_h(), keys))
-    ineligible_h(new_inelig); acq_save_ineligible_h(new_inelig)
-    dataTableProxy("season_hitter_table") %>% selectRows(NULL)
-    showNotification(glue("{length(keys)} hitter(s) marked ineligible."), type="warning", duration=5)
-  })
-
-  # ── Ineligible ──────────────────────────────────────────────────────────
-  output$inelig_subtitle   <- renderText(glue("{length(ineligible())} pitchers marked ineligible"))
-  output$inelig_h_subtitle <- renderText(glue("{length(ineligible_h())} hitters marked ineligible"))
-
-  output$inelig_table <- renderDT({
-    keys <- ineligible()
-    if (length(keys) == 0) return(datatable(tibble(Message="No pitchers marked ineligible."),
-                                            rownames=FALSE, options=list(dom="t", initComplete=acq_dt_header_js()), class="display compact"))
-    acq_all_pitchers %>%
-      filter(source_key %in% keys) %>%
-      mutate(`Age/Yr` = acq_age_or_class(age, class_year)) %>%
-      select(Name=pitcher_name, Hand=pitch_hand, `Age/Yr`,
-             Team=team_name, League=league_name, School=college,
-             G, IP, ERA, FIP, WHIP) %>%
-      datatable(selection="single", rownames=FALSE,
-                options=list(dom="t", pageLength=50, initComplete=acq_dt_header_js()),
-                class="display compact") %>%
-      formatRound(c("ERA","FIP","WHIP"), 2)
-  })
-
-  observeEvent(input$restore_pitcher, {
-    row <- input$inelig_table_rows_selected
-    if (length(row) == 0) { showNotification("Select a pitcher to restore.", type="warning"); return() }
-    keys <- ineligible()
-    df   <- acq_all_pitchers %>% filter(source_key %in% keys)
-    key  <- df$source_key[row]; name <- df$pitcher_name[row]
-    new_inelig <- keys[keys != key]
-    ineligible(new_inelig); acq_save_ineligible(new_inelig)
-    dataTableProxy("inelig_table") %>% selectRows(NULL)
-    showNotification(glue("{name} restored."), type="message", duration=4)
-  })
-
-  output$inelig_hitter_table <- renderDT({
-    keys <- ineligible_h()
-    if (length(keys) == 0) return(datatable(tibble(Message="No hitters marked ineligible."),
-                                            rownames=FALSE, options=list(dom="t", initComplete=acq_dt_header_js()), class="display compact"))
-    acq_all_hitters %>%
-      filter(source_key %in% keys) %>%
-      mutate(`Age/Yr` = acq_age_or_class(age, class_year)) %>%
-      select(Name=player_name, Pos=position, `Age/Yr`,
-             Team=team_name, League=league_name, School=college,
-             G, AB, AVG, OBP, SLG, OPS) %>%
-      datatable(selection="single", rownames=FALSE,
-                options=list(dom="t", pageLength=50, initComplete=acq_dt_header_js()),
-                class="display compact") %>%
-      formatRound(c("AVG","OBP","SLG","OPS"), 3)
-  })
-
-  observeEvent(input$restore_hitter, {
-    row <- input$inelig_hitter_table_rows_selected
-    if (length(row) == 0) { showNotification("Select a hitter to restore.", type="warning"); return() }
-    keys <- ineligible_h()
-    df   <- acq_all_hitters %>% filter(source_key %in% keys)
-    key  <- df$source_key[row]; name <- df$player_name[row]
-    new_inelig <- keys[keys != key]
-    ineligible_h(new_inelig); acq_save_ineligible_h(new_inelig)
-    dataTableProxy("inelig_hitter_table") %>% selectRows(NULL)
-    showNotification(glue("{name} restored."), type="message", duration=4)
-  })
-
-  # ── Top 10 ──────────────────────────────────────────────────────────────
-  top10_pitcher_data <- function(league_in, min_ip, max_age, stat, role, hand) {
-  data_version()  
-  df <- acq_all_pitchers %>%
-    filter(!source_key %in% ineligible()) %>%
-    filter(!is.na(ERA), !is.na(IP), IP >= min_ip)
-
-  if (league_in != "All") df <- df %>% filter(league_name == league_in)
-  if (!is.na(max_age) && max_age < 99)
-    df <- df %>% filter(is.na(age) | age <= max_age)
-
-  if (role %in% c("SP","RP")) {
-    gs_join <- acq_pitching_all %>%
-      select(player_id, GS) %>% distinct(player_id, .keep_all=TRUE) %>%
-      mutate(source_key = as.character(player_id))
-    df <- df %>% left_join(gs_join %>% select(source_key, GS), by="source_key")
-    if (role == "SP") df <- df %>% filter(!is.na(GS), GS/G >= 0.5)
-    else              df <- df %>% filter(is.na(GS) | GS/G < 0.5)
-  }
-
-  if (hand != "All") df <- df %>% filter(pitch_hand == hand)
-
-  asc_stats <- c("ERA","FIP","WHIP","BB9")
-  df <- if (stat %in% asc_stats) arrange(df, .data[[stat]]) else
-    arrange(df, desc(.data[[stat]]))
-
-  df %>%
-    slice_head(n = 10) %>%
-    mutate(Rank = row_number(), `Age/Yr` = acq_age_or_class(age, class_year))
-}
-
-render_top10_pitcher_dt <- function(data) {
-  data %>%
-    select(Rank, Name=pitcher_name, Hand=pitch_hand,
-           Team=team_name, League=league_name, `Age/Yr`,
-           School=college, G, IP, ERA, FIP, WHIP,
-           `K/9`=K9, `BB/9`=BB9, `K/BB`=KBB) %>%
-    datatable(selection = "single", rownames=FALSE,
-              options=list(dom="t", pageLength=10, initComplete=acq_dt_header_js()),
-              class="display compact") %>%
-    formatRound(c("ERA","FIP","WHIP","K/9","BB/9","K/BB"), 2)
-}
-
-  top10_hitter_dt <- function(league_in, min_ab, max_age, stat, pos, hand) {
-    data_version()  
-    df <- acq_all_hitters %>%
-      filter(!source_key %in% ineligible_h()) %>%
-      filter(position != "P", !is.na(OPS), !is.na(AB), AB >= min_ab)
-
-    if (league_in != "All") df <- df %>% filter(league_name == league_in)
-    if (!is.na(max_age) && max_age < 99)
-      df <- df %>% filter(is.na(age) | age <= max_age)
-    if (!("All" %in% pos)) df <- df %>% filter(position %in% pos)
-    if (hand != "All") df <- df %>% filter(Bats == hand)          # NEW
-
-    df %>%
-      arrange(desc(.data[[stat]])) %>%
-      slice_head(n = 10) %>%
-      mutate(Rank = row_number(), `Age/Yr` = acq_age_or_class(age, class_year)) %>%
-      select(Rank, Name=player_name, Pos=position, Bats,          # Bats added
-             Team=team_name, League=league_name, `Age/Yr`,
-             School=college, G, AB, AVG, OBP, SLG, OPS, HR, RBI, SB) %>%
-      datatable(rownames=FALSE,
-                options=list(dom="t", pageLength=10, initComplete=acq_dt_header_js()),
-                class="display compact") %>%
-      formatRound(c("AVG","OBP","SLG","OPS"), 3)
-  }
-
-output$top10_hitting_table  <- renderDT(top10_hitter_dt(
-    input$top10_league_h, input$top10_min_ab, input$top10_max_age_h,
-    input$top10_stat_h, h_pos(), h_bats()))
-
-  output$top10m_hitting_table  <- renderDT(top10_hitter_dt(
-    input$top10m_league_h, input$top10m_min_ab, input$top10m_max_age_h,
-    input$top10m_stat_h, h_pos_m(), h_bats_m()))
-
-  top10_pitchers_inline <- reactive({
-    top10_pitcher_data(input$top10_league_p, input$top10_min_ip, input$top10_max_age_p,
-                        input$top10_stat_p, p_role(), p_hand())
-  })
-  top10_pitchers_modal <- reactive({
-    top10_pitcher_data(input$top10m_league_p, input$top10m_min_ip, input$top10m_max_age_p,
-                        input$top10m_stat_p, p_role_m(), p_hand_m())
-  })
-
-  output$top10_pitching_table  <- renderDT(render_top10_pitcher_dt(top10_pitchers_inline()))
-  output$top10m_pitching_table <- renderDT(render_top10_pitcher_dt(top10_pitchers_modal()))
-
-  # Click a row -> open profile directly, no button needed
-  observeEvent(input$top10_pitching_table_rows_selected, {
-    row <- input$top10_pitching_table_rows_selected
-    req(row)
-    selected_key(top10_pitchers_inline()$source_key[row[1]])
-    toggleModal(session, "pitcher_modal", toggle = "open")
-  }, ignoreNULL = TRUE)
-
-  observeEvent(input$top10m_pitching_table_rows_selected, {
-    row <- input$top10m_pitching_table_rows_selected
-    req(row)
-    selected_key(top10_pitchers_modal()$source_key[row[1]])
-    toggleModal(session, "top10_modal", toggle = "close")
-    toggleModal(session, "pitcher_modal", toggle = "open")
-  }, ignoreNULL = TRUE)
-
-  # ── Modal ───────────────────────────────────────────────────────────────
-  output$modal_info <- renderUI({
-    key <- selected_key(); req(key)
-    p   <- acq_all_pitchers %>% filter(source_key == key); req(nrow(p) > 0)
-    tags$div(
-      tags$h3(p$pitcher_name, style=glue("color:{ACQ_TEAL}; margin:0 0 4px 0;")),
-      if (!p$has_pbp) tags$span("No PBP data", class="no-pbp-badge"),
-      tags$p(glue(
-        "{coalesce(p$pitch_hand,'—')}HP  |  {acq_age_or_class(p$age, p$class_year)}  |  ",
-        "School: {ifelse(is.na(p$college),'—',p$college)}  |  ",
-        "Team: {ifelse(is.na(p$team_name),'—',p$team_name)}  |  ",
-        "League: {ifelse(is.na(p$league_name),'—',p$league_name)}"
-      ), class="info-bar")
-    )
-  })
-
-  output$modal_body <- renderUI({
-    key <- selected_key(); req(key)
-    p   <- acq_all_pitchers %>% filter(source_key == key); req(nrow(p) > 0)
-    if (p$has_pbp) {
-      tagList(
-        tags$hr(),
-        plotOutput("movement_plot", height="500px"),
-        tags$hr(),
-        tags$h4("Pitch metrics", style=glue("color:{ACQ_TEAL}; margin-top:0;")),
-        DTOutput("pitch_metrics_table")
-      )
-    } else {
-      tagList(
-        tags$hr(),
-        tags$h4("Season stats", style=glue("color:{ACQ_TEAL}; margin-top:0;")),
-        tags$table(
-          class="table", style="color:white; width:auto;",
-          tags$tr(tags$th("G"),tags$th("IP"),tags$th("ERA"),tags$th("FIP"),
-                  tags$th("WHIP"),tags$th("K/9"),tags$th("BB/9"),tags$th("K/BB"),tags$th("HR/9")),
-          tags$tr(
-            tags$td(p$G), tags$td(round(p$IP,1)), tags$td(round(p$ERA,2)),
-            tags$td(round(p$FIP,2)), tags$td(round(p$WHIP,2)), tags$td(round(p$K9,1)),
-            tags$td(round(p$BB9,1)), tags$td(round(p$KBB,2)), tags$td(round(p$HR9,1))
-          )
-        )
-      )
-    }
-  })
-
-output$movement_plot <- renderPlot({
-    key <- selected_key(); req(key)
-    p   <- acq_all_pitchers %>% filter(source_key == key); req(p$has_pbp)
-    pid <- as.integer(p$source_key)
-
-    ind_raw  <- acq_pitch_level %>%
-      filter(pitcher_id == pid, !is.na(hb_pov), !is.na(ivb),
-             !is.na(pitch_type), pitch_type != "")
-    mean_raw <- acq_movement_avg %>% filter(pitcher_id == pid)
-    req(nrow(ind_raw) > 0)
-
-    ind_data  <- ind_raw  %>% transmute(x = hb_pov, y = ivb, type = pitch_type)
-    mean_data <- mean_raw %>% transmute(x = pfx_x, y = pfx_z, type = pitch_type, velo = velo)
-
-    pcard_movement_plot_generic(
-      ind_data, mean_data, palette = ACQ_PITCH_COLORS, na_color = "#AAAAAA",
-      point_size = 3, mean_size = 12, label_size = 4
-    ) +
-      theme(
-        plot.background  = element_rect(fill = "white", color = NA),
-        panel.background = element_rect(fill = "#F7FAF8", color = NA),
-        panel.grid.major = element_line(color = "#DCE8DF", linewidth = 0.4),
-        panel.grid.minor = element_blank(),
-        text             = element_text(color = ACQ_WHITE),
-        axis.text        = element_text(color = "#444444"),
-        axis.title       = element_text(color = "#666666", size = 11),
-        plot.title       = element_text(color = ACQ_TEAL, face = "bold", size = 16,
-                                        hjust = 0.5, margin = margin(b = 10)),
-        legend.position  = "none"
-      )
-  }, bg = "white")
-
-  output$pitch_metrics_table <- renderDT({
-    key <- selected_key(); req(key)
-    p   <- acq_all_pitchers %>% filter(source_key == key); req(p$has_pbp)
-    pid <- as.integer(p$source_key)
-    acq_pitch_metrics %>%
-      filter(pitcher_id == pid, N >= 5) %>%
-      arrange(desc(N)) %>%
-      select(Pitch=pitch_type, N, Velo, iVB=iVB, HB,
-             `Strike%`=Strike_pct, `FPS%`=FPS_pct, `Whiff%`=Whiff_pct,
-             `Rel Ht`=Rel_Ht, `Rel Side`=Rel_Side, Ext) %>%
-      datatable(rownames=FALSE,
-                options=list(dom="t", pageLength=15, initComplete=acq_dt_header_js()),
-                class="display compact") %>%
-      formatRound(c("Velo","iVB","HB","Strike%","FPS%","Whiff%","Rel Ht","Rel Side","Ext"), 1)
-  })
-}
-
 # ==========================================
 # UI
 # ==========================================
 ui <- navbarPage(
-  title       = "CAPS",
-  id          = "caps_nav",
+  title       = tagList(
+    tags$img(
+      src = base_supercat_logo_url(),
+      alt = "Texas State SuperCat",
+      class = "base-nav-mark"
+    ),
+    tags$span(
+      class = "base-brand-lockup",
+      tags$span(class = "base-brand-name", "BASE"),
+      tags$span(class = "base-brand-team", TEAM_CONFIG$organization)
+    )
+  ),
+  id          = "base_nav",
   collapsible = TRUE,
-  windowTitle = "Brewster Whitecaps CAPS",
+  windowTitle = paste(TEAM_CONFIG$full_name, "BASE"),
   header = tagList(
     useShinyjs(),
     tags$head(
+      tags$link(rel = "icon", href = base_supercat_logo_url()),
       tags$link(rel = "stylesheet",
         href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"),
-      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=8"),
+      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=18"),
+      tags$style(HTML(base_brand_css(include_leaderboards = FALSE))),
       tags$style(HTML("
-        #caps-splash {
-          position: fixed; inset: 0; background: #0C2340; z-index: 9999;
+        #base-splash {
+          position: fixed; inset: 0; z-index: 9999;
           display: flex; align-items: center; justify-content: center;
-          flex-direction: column; transition: opacity 0.6s ease;
+          flex-direction: column; overflow: hidden;
+          background:
+            radial-gradient(circle at 50% 42%, rgba(215,189,138,0.16), transparent 18rem),
+            linear-gradient(145deg, var(--base-maroon-deep), var(--base-maroon) 68%, #64272a);
+          transition: opacity 0.45s ease;
         }
-        #caps-splash.fade-out { opacity: 0; pointer-events: none; }
+        #base-splash::before {
+          position: absolute; inset: 22px; border: 1px solid rgba(215,189,138,0.22);
+          content: ''; pointer-events: none;
+        }
+        #base-splash.fade-out { opacity: 0; pointer-events: none; }
         #splash-logo {
-          width: 100px; height: 100px; border-radius: 50%; background: white;
+          width: 132px; height: 132px;
           display: flex; align-items: center; justify-content: center;
-          animation: scaleIn 1.2s ease forwards; opacity: 0; overflow: hidden;
+          animation: markIn 0.8s cubic-bezier(.2,.75,.25,1) forwards;
+          opacity: 0;
         }
-        #splash-logo img { width: 90px; height: 90px; object-fit: contain; }
+        #splash-logo img {
+          width: 124px; height: 124px; object-fit: contain;
+          filter: drop-shadow(0 12px 22px rgba(0,0,0,0.28));
+        }
         #splash-title {
-          color: white; font-family: 'Oswald', sans-serif; font-size: 28px;
-          letter-spacing: 6px; margin-top: 20px;
-          animation: fadeUp 1s ease 0.8s forwards; opacity: 0; text-transform: uppercase;
+          color: white; font-family: var(--base-font-display); font-size: 34px;
+          font-weight: 600; letter-spacing: 8px; margin-top: 18px; margin-left: 8px;
+          animation: fadeUp 0.65s ease 0.35s forwards; opacity: 0; text-transform: uppercase;
         }
         #splash-sub {
-          color: #9DC2EA; font-size: 12px; letter-spacing: 2px; margin-top: 8px;
-          animation: fadeUp 1s ease 1.2s forwards; opacity: 0; text-align: center;
+          color: var(--base-gold-bright); font-size: 11px; font-weight: 600;
+          letter-spacing: 2.2px; margin-top: 8px;
+          animation: fadeUp 0.65s ease 0.55s forwards; opacity: 0;
+          text-align: center; text-transform: uppercase;
         }
-        @keyframes scaleIn {
-          0%   { transform: scale(0.3); opacity: 0; }
-          70%  { transform: scale(1.1); opacity: 1; }
-          100% { transform: scale(1);   opacity: 1; }
+        #splash-progress {
+          width: 112px; height: 2px; margin-top: 26px; overflow: hidden;
+          background: rgba(255,255,255,0.18); opacity: 0;
+          animation: fadeUp 0.5s ease 0.7s forwards;
+        }
+        #splash-progress::after {
+          display: block; width: 42%; height: 100%;
+          background: var(--base-gold-bright); content: '';
+          animation: loadSweep 1.2s ease-in-out 0.75s infinite alternate;
+        }
+        @keyframes markIn {
+          from { transform: translateY(12px) scale(0.88); opacity: 0; }
+          to { transform: translateY(0) scale(1); opacity: 1; }
         }
         @keyframes fadeUp {
-          from { transform: translateY(12px); opacity: 0; }
+          from { transform: translateY(8px); opacity: 0; }
           to   { transform: translateY(0);    opacity: 1; }
+        }
+        @keyframes loadSweep {
+          from { transform: translateX(-105%); }
+          to { transform: translateX(245%); }
         }
       ")),
       tags$script(HTML("
         $(document).ready(function() {
           setTimeout(function() {
-            $('#caps-splash').addClass('fade-out');
-            setTimeout(function() { $('#caps-splash').remove(); }, 700);
+            $('#base-splash').addClass('fade-out');
+            setTimeout(function() { $('#base-splash').remove(); }, 700);
           }, 2800);
         });
       "))
     ),
     tags$div(
-      id = "caps-splash",
-      tags$div(id = "splash-logo", tags$img(src = "logo1.png")),
-      tags$div(id = "splash-title", "C.A.P.S."),
-      tags$div(id = "splash-sub",   "Centralized Application Platform for Staff")
+      id = "base-splash",
+      tags$div(id = "splash-logo", tags$img(src = base_supercat_logo_url())),
+      tags$div(id = "splash-title", "BASE"),
+      tags$div(id = "splash-sub", TEAM_CONFIG$organization),
+      tags$div(id = "splash-progress", role = "progressbar", `aria-label` = "Loading BASE")
     )
   ),
   tabPanel("Home",             value = "tab_home",           home_tab_ui()),
-  tabPanel("Catcher Reports",  value = "tab_catcher",        catcher_ui()),
-  tabPanel("Hitter Reports",   value = "tab_hitter",         hitter_ui()),
   tabPanel("Pitcher Reports",  value = "tab_pitcher",        pitcher_card_ui()),
-  tabPanel("Season Pitcher Card", value = "tab_season_pitcher", season_pitcher_card_ui()),
-  tabPanel("Cape Pitcher Scout", value = "tab_pitcher_player", cape_pitcher_player_page_ui()),
-  tabPanel("Acquisitions Board", value = "tab_acq_board",    acq_board_ui()),
-  tabPanel("Leaderboards",     value = "tab_leaderboards",   whitecaps_embedded_ui()),
+  tabPanel("Hitter Reports",   value = "tab_hitter",         hitter_ui()),
+  tabPanel("Catcher Reports",  value = "tab_catcher",        catcher_ui()),
+  tabPanel("Pitcher Card",     value = "tab_season_pitcher", season_pitcher_card_ui()),
+  tabPanel("Pitcher Scouting", value = "tab_pitcher_player", cape_pitcher_player_page_ui()),
+  tabPanel("Hitter Scouting",  value = "tab_hitter_scouting", hitter_scouting_page_ui()),
+  tabPanel("Defensive Analytics", value = "tab_defense", defense_page_ui()),
+  tabPanel("Leaderboards",     value = "tab_leaderboards",   team_analytics_embedded_ui()),
   tabPanel("Umpire Reports",   value = "tab_umpire",
-    tags$div(style = "padding: 40px 32px;",
-      tags$h3("Umpire Reports", style = "color: #0C2340;"),
-      tags$p("Coming soon.", style = "color: #5F5F6B;"))),
-  tabPanel("Pitcher Card (Mock)", value = "tab_pcard_mock", pcard_report_ui()),
-  tabPanel("CAPS Media", value = "tab_caps_media", caps_media_ui())
+    tags$div(class = "hub-main base-page base-placeholder-page",
+      tags$div(class = "base-placeholder-panel",
+        tags$div(class = "base-eyebrow", "In development"),
+        tags$h2("Umpire Reports"),
+        tags$p("This workspace is being prepared for a future BASE release.")))),
+  tabPanel("BASE Media", value = "tab_base_media", base_media_ui()),
+  tabPanel("Pitcher Card (Mock)", value = "tab_pcard_mock", pcard_report_ui())
 )
 
 # ==========================================
@@ -5708,25 +4748,11 @@ ui <- navbarPage(
 # ==========================================
 server <- function(input, output, session) {
 
-  nav_map <- c(
-    hub            = "tab_home",
-    catcher        = "tab_catcher",
-    hitter         = "tab_hitter",
-    pitcher        = "tab_pitcher",
-    pitcher_player = "tab_pitcher_player",
-    pitcher_mock   = "tab_pcard_mock", 
-    whitecaps_app  = "tab_leaderboards"
-  )
-
   observeEvent(input$nav_to, {
-    target <- nav_map[input$nav_to]
-    if (!is.na(target)) updateNavbarPage(session, "caps_nav", selected = target)
+    target <- unname(BASE_NAV_TABS[input$nav_to])
+    if (length(target) && !is.na(target)) updateNavbarPage(session, "base_nav", selected = target)
   })
-  whitecaps_env$server(input, output, session)
-
-  observeEvent(input$nav_caps_hub, {
-    updateNavbarPage(session, "caps_nav", selected = "tab_home")
-  })
+  team_analytics_env$server(input, output, session)
 
   catcher_data <- reactive({
     combine_with_manual(season_data, input$catcher_manual_enabled, input$catcher_manual_csv)
@@ -5745,7 +4771,7 @@ server <- function(input, output, session) {
     session        = session,
     checkFunc      = function() Sys.time(),
     valueFunc      = function() {
-      tryCatch(fetch_next_whitecaps_game(), error = function(e) NULL)
+      tryCatch(fetch_next_team_game(), error = function(e) NULL)
     }
   )
 
@@ -5753,145 +4779,145 @@ server <- function(input, output, session) {
   output$scoreboard_hero <- renderUI({
     ng <- next_game_reactive()
 
+    team_identity <- tags$div(
+      class = "home-team-identity",
+      tags$div(
+        class = "home-team-marks",
+        tags$img(
+          src = base_conference_logo_url(),
+          alt = TEAM_CONFIG$league_name,
+          class = "home-team-logo"
+        ),
+        tags$span(class = "home-team-logo-divider", `aria-hidden` = "true"),
+        tags$img(
+          src = base_scoreboard_logo_url(),
+          alt = paste(TEAM_CONFIG$full_name, "logo"),
+          class = "home-team-logo"
+        )
+      ),
+      tags$div(
+        tags$div(
+          class = "home-season-line",
+          "Bobcats Analytics & Scouting Engine"
+        ),
+        tags$h1("Texas State Baseball"),
+        tags$p(
+          paste(
+            TEAM_CONFIG$competition_level,
+            "analytics, scouting, and team intelligence in one workspace."
+          )
+        )
+      )
+    )
+
+    if (is.null(ng)) {
+      return(tags$section(
+        id = "base-scoreboard",
+        class = "base-home-hero base-home-hero-empty",
+        tags$div(
+          class = "base-home-hero-inner",
+          team_identity,
+          tags$div(
+            class = "home-next-game-card is-empty",
+            tags$div(class = "home-game-kicker", "Next game"),
+            tags$div(class = "home-calendar-mark", tags$span(format(Sys.Date(), "%b")), tags$strong("—")),
+            tags$h2("Schedule pending"),
+            tags$p("Upcoming matchup details will appear here automatically as soon as a future game is added to the team schedule."),
+            tags$div(
+              class = "home-schedule-status",
+              tags$span(class = "home-status-dot"),
+              "Watching for the next scheduled game"
+            )
+          )
+        )
+      ))
+    }
+
     opponent   <- ng$opponent   %||% "TBD"
-    time_str   <- ng$time_str   %||% "TBD"
-    venue      <- ng$venue      %||% "TBD"
+    time_str   <- ng$time_str   %||% "Time TBD"
+    venue      <- ng$venue      %||% "Venue TBD"
     wins       <- ng$wins       %||% 0L
     losses     <- ng$losses     %||% 0L
     opp_wins   <- ng$opp_wins   %||% 0L
     opp_losses <- ng$opp_losses %||% 0L
     opp_abbr   <- ng$opp_abbr   %||% "OPP"
+    is_home    <- ng$is_home    %||% TRUE
     ms         <- if (!is.null(ng) && !is.na(ng$ms)) ng$ms else (as.numeric(Sys.time()) + 86400) * 1000
 
-    tags$div(
-      style = "background:#071828; border-bottom:3px solid #0a3a5a; font-family:'Bebas Neue',sans-serif;",
+    countdown_segments <- list(
+      list(ids = c("cd-d1", "cd-d2"), label = "Days"),
+      list(ids = c("cd-h1", "cd-h2"), label = "Hours"),
+      list(ids = c("cd-m1", "cd-m2"), label = "Minutes"),
+      list(ids = c("cd-s1", "cd-s2"), label = "Seconds")
+    )
+
+    tags$section(
+      id = "base-scoreboard",
+      class = "base-home-hero has-game",
       tags$div(
-        style = "background:#0C2340; padding:8px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #0a3a5a;",
-        tags$span(style = "color:#fff; font-size:22px; letter-spacing:5px;",
-          "C", tags$span(style = "color:#2DD4BF;", "A"), "PS"),
-        tags$span(style = "color:rgba(255,255,255,0.35); font-size:10px; letter-spacing:2px;",
-          "CENTRALIZED APPLICATION PLATFORM FOR STAFF"),
-        tags$span(style = "color:rgba(255,255,255,0.35); font-size:10px; letter-spacing:2px;",
-          "CAPE COD BASEBALL LEAGUE")
-      ),
-      tags$div(
-        style = "padding:20px 28px;",
+        class = "base-home-hero-inner",
+        team_identity,
         tags$div(
-          style = "display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:16px; margin-bottom:18px;",
+          class = "home-next-game-card",
           tags$div(
-            style = "display:flex; align-items:center; gap:14px;",
-            tags$img(src = "BRE.png", style = "width:56px; height:56px; object-fit:contain;"),
+            class = "home-game-card-header",
             tags$div(
-              tags$div(style = "color:#2DD4BF; font-size:11px; letter-spacing:2px;", "Brewster"),
-              tags$div(style = "color:#fff; font-size:26px; letter-spacing:2px; line-height:1;", "WHITECAPS"),
-              tags$div(style = "color:#fff; font-size:11px; letter-spacing:1px;",
-                paste0(wins, " \u2013 ", losses))
-            )
-          ),
-          tags$div(style = "color:rgba(255,255,255,0.15); font-size:24px; text-align:center;", "@"),
-          tags$div(
-            style = "display:flex; align-items:center; justify-content:flex-end; gap:14px;",
-            tags$div(
-              style = "text-align:right;",
-              tags$div(style = "color:#2DD4BF; font-size:11px; letter-spacing:2px;",
-                gsub(" .*", "", opponent)),
-              tags$div(style = "color:#fff; font-size:26px; letter-spacing:2px; line-height:1;",
-                toupper(gsub(".* ", "", opponent))),
-              tags$div(style = "color:#fff; font-size:11px; letter-spacing:1px;",
-                paste0(opp_wins, " \u2013 ", opp_losses))
+              tags$div(class = "home-game-kicker", "Next game"),
+              tags$div(class = "home-game-date", time_str)
             ),
-            tags$img(src = ccbl_logo(opp_abbr), style = "width:56px; height:56px; object-fit:contain;")
-          )
-        ),
-        tags$div(style = "height:1px; background:#0a3a5a; margin-bottom:14px;"),
-        tags$div(style = "color:#2DD4BF; font-size:10px; letter-spacing:4px; text-align:center; margin-bottom:10px;",
-          "GAME STARTS IN"),
-        tags$div(
-          style = "display:flex; justify-content:center; align-items:stretch; gap:0;",
-          lapply(list(
-            list(id1="cd-d1", id2="cd-d2", unit="DAYS", border=TRUE),
-            list(id1="cd-h1", id2="cd-h2", unit="HRS",  border=TRUE),
-            list(id1="cd-m1", id2="cd-m2", unit="MIN",  border=TRUE),
-            list(id1="cd-s1", id2="cd-s2", unit="SEC",  border=FALSE)
-          ), function(seg) {
-            tagList(
-              tags$div(
-                style = paste0("display:flex; flex-direction:column; align-items:center; padding:0 10px;",
-                  if (seg$border) " border-right:1px solid #0a3a5a;" else ""),
-                tags$div(
-                  style = "display:flex; gap:4px; margin-bottom:4px;",
-                  tags$div(
-                    style = "background:#040e1a; border:1px solid #0a3a5a; border-radius:3px; width:38px; height:54px; display:flex; align-items:center; justify-content:center; position:relative;",
-                    tags$div(style = "position:absolute; left:0; right:0; top:50%; height:1px; background:#071828; z-index:2;"),
-                    tags$span(id = seg$id1, style = "font-family:'Share Tech Mono',monospace; font-size:36px; font-weight:700; color:#2DD4BF; position:relative; z-index:1;", "0")
-                  ),
-                  tags$div(
-                    style = "background:#040e1a; border:1px solid #0a3a5a; border-radius:3px; width:38px; height:54px; display:flex; align-items:center; justify-content:center; position:relative;",
-                    tags$div(style = "position:absolute; left:0; right:0; top:50%; height:1px; background:#071828; z-index:2;"),
-                    tags$span(id = seg$id2, style = "font-family:'Share Tech Mono',monospace; font-size:36px; font-weight:700; color:#2DD4BF; position:relative; z-index:1;", "0")
-                  )
-                ),
-                tags$div(style = "color:rgba(45,212,191,0.4); font-size:9px; letter-spacing:2px;", seg$unit)
-              ),
-              if (seg$border) tags$div(
-                style = "display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 6px; padding-bottom:20px; gap:6px;",
-                tags$div(style = "width:5px; height:5px; background:#2DD4BF; border-radius:50%; opacity:0.5;"),
-                tags$div(style = "width:5px; height:5px; background:#2DD4BF; border-radius:50%; opacity:0.5;")
-              )
-            )
-          })
-        ),
-        tags$div(
-          style = "display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:12px; border-top:1px solid #0a3a5a;",
-          tags$div(
-            style = "text-align:center;",
-            tags$div(style = "color:rgba(45,212,191,0.4); font-size:9px; letter-spacing:2px; margin-bottom:2px;", "FIRST PITCH"),
-            tags$div(style = "color:#fff; font-size:13px; letter-spacing:1px; font-family:'Bebas Neue',sans-serif;", time_str)
+            tags$span(class = "home-game-location-badge", if (isTRUE(is_home)) "Home" else "Away")
           ),
           tags$div(
-            style = "text-align:center;",
-            tags$div(style = "color:rgba(45,212,191,0.4); font-size:9px; letter-spacing:2px; margin-bottom:2px;", "VENUE"),
-            tags$div(style = "color:#fff; font-size:13px; letter-spacing:1px; font-family:'Bebas Neue',sans-serif;", venue)
+            class = "home-matchup",
+            tags$div(
+              class = "home-matchup-team",
+              tags$img(src = base_scoreboard_logo_url(), alt = TEAM_CONFIG$full_name),
+              tags$div(
+                tags$strong(TEAM_CONFIG$abbreviation),
+                tags$small(paste0(wins, "–", losses))
+              )
+            ),
+            tags$div(class = "home-matchup-versus", if (isTRUE(is_home)) "VS" else "AT"),
+            tags$div(
+              class = "home-matchup-team opponent",
+              tags$div(
+                tags$strong(opponent),
+                tags$small(paste0(opp_wins, "–", opp_losses))
+              ),
+              tags$img(src = opponent_logo(opp_abbr), alt = paste(opponent, "logo"))
+            )
+          ),
+          tags$div(class = "home-game-venue", tags$span("Venue"), tags$strong(venue)),
+          tags$div(
+            class = "home-countdown",
+            lapply(countdown_segments, function(segment) {
+              tags$div(
+                class = "home-countdown-unit",
+                tags$div(
+                  class = "home-countdown-digits",
+                  tags$span(id = segment$ids[[1]], "0"),
+                  tags$span(id = segment$ids[[2]], "0")
+                ),
+                tags$small(segment$label)
+              )
+            })
           )
         )
       ),
-      tags$div(
-        id = "sb-bulbs",
-        style = "display:flex; justify-content:center; gap:6px; padding:10px 20px; background:#0C2340; border-top:2px solid #0a3a5a;"
-      ),
-      tags$script(HTML(sprintf("
-        (function() {
-          var row = document.getElementById('sb-bulbs');
-          for(var i=0;i<40;i++){
-            var b=document.createElement('div');
-            b.style.cssText='width:8px;height:8px;border-radius:50%%;background:#0a3a5a;display:inline-block;';
-            row.appendChild(b);
-          }
-          var bulbs=row.querySelectorAll('div'),frame=0;
-          setInterval(function(){
-            bulbs.forEach(function(b,i){ b.style.background=(i+frame)%%4===0?'#2DD4BF':'#0a3a5a'; });
-            frame++;
-          }, 300);
-          var target=%.0f;
-          function pad(n){ return String(Math.floor(n)).padStart(2,'0'); }
-          function tick(){
-            var diff=Math.max(0,target-Date.now());
-            var d=pad(Math.floor(diff/86400000));
-            var h=pad(Math.floor((diff%%86400000)/3600000));
-            var m=pad(Math.floor((diff%%3600000)/60000));
-            var s=pad(Math.floor((diff%%60000)/1000));
-            document.getElementById('cd-d1').textContent=d[0];
-            document.getElementById('cd-d2').textContent=d[1];
-            document.getElementById('cd-h1').textContent=h[0];
-            document.getElementById('cd-h2').textContent=h[1];
-            document.getElementById('cd-m1').textContent=m[0];
-            document.getElementById('cd-m2').textContent=m[1];
-            document.getElementById('cd-s1').textContent=s[0];
-            document.getElementById('cd-s2').textContent=s[1];
-          }
-          tick(); setInterval(tick,1000);
-        })();
-      ", ms)))
+      tags$script(HTML(paste0(
+        "(function(){",
+        "if(window.baseHomeCountdown){clearInterval(window.baseHomeCountdown);}",
+        "var target=", format(ms, scientific = FALSE, trim = TRUE), ";",
+        "function pad(n){return String(Math.max(0,Math.floor(n))).padStart(2,'0');}",
+        "function put(a,b,v){var x=document.getElementById(a),y=document.getElementById(b);if(x&&y){x.textContent=v[0];y.textContent=v[1];}}",
+        "function tick(){var diff=Math.max(0,target-Date.now());",
+        "put('cd-d1','cd-d2',pad(diff/86400000));",
+        "put('cd-h1','cd-h2',pad((diff%86400000)/3600000));",
+        "put('cd-m1','cd-m2',pad((diff%3600000)/60000));",
+        "put('cd-s1','cd-s2',pad((diff%60000)/1000));}",
+        "tick();window.baseHomeCountdown=setInterval(tick,1000);",
+        "})();"
+      )))
     )
   })
 
@@ -5936,6 +4962,17 @@ server <- function(input, output, session) {
   }
 
   output$home_roster_grid <- renderUI({
+    roster_count <- sum(vapply(
+      list(roster_pitchers, roster_catchers, roster_infielders, roster_outfielders),
+      nrow,
+      integer(1)
+    ))
+    if (roster_count == 0L) {
+      return(tags$p(
+        "Roster unavailable. Configure BASE_ROSTER_FILE to load the college roster.",
+        style = "color:#8B8B96; font-size:13px;"
+      ))
+    }
     tags$div(
       class = "roster-grid",
       tagList(
@@ -5953,15 +4990,15 @@ pcard_selected <- reactiveVal(NULL)
     req(!is.null(season_data), input$roster_pitcher_click)
     clicked_display <- input$roster_pitcher_click
 
-    updateNavbarPage(session, "caps_nav", selected = "tab_pcard_mock")   # NEW — navigate immediately
+    updateNavbarPage(session, "base_nav", selected = "tab_pcard_mock")   # NEW — navigate immediately
 
-    brew_pitchers <- season_data %>%
-      filter(grepl("BRE|Brewster", PitcherTeam, ignore.case = TRUE)) %>%
+    team_pitchers <- season_data %>%
+      filter(base_team_matches(PitcherTeam)) %>%
       distinct(Pitcher)
 
     norm_name <- function(x) trimws(tolower(x))
 
-    matched <- brew_pitchers %>%
+    matched <- team_pitchers %>%
       filter(norm_name(pcard_format_pitcher_name(Pitcher)) == norm_name(clicked_display))
 
     if (nrow(matched) == 0) {
@@ -6069,11 +5106,12 @@ pcard_selected <- reactiveVal(NULL)
   # CATCHER SERVER LOGIC
   # ==========================================
   output$catcher_team_select_ui <- renderUI({
-    req(!is.null(catcher_data()))
-    teams <- sort(unique(catcher_data()$CatcherTeam))
+    if (is.null(catcher_data()) || nrow(catcher_data()) == 0) return(base_data_notice())
+    teams <- base_team_choices(catcher_data()$CatcherTeam)
+    if (!length(teams)) return(base_data_notice())
     selectInput("catcher_team_select", "Select Team:",
                 choices  = setNames(teams, team_display_name(teams)),
-                selected = teams[grepl("BRE|Brewster", teams, ignore.case = TRUE)][1])
+                selected = base_team_default(teams))
   })
 
   output$catcher_date_ui <- renderUI({
@@ -6120,7 +5158,7 @@ pcard_selected <- reactiveVal(NULL)
         catcher     = input$catcher_name,
         game_date   = game_date,
         output_file = tmp_pdf,
-        logo_path   = "www/logo1.png"
+        logo_path   = base_team_logo_file()
       )
       catcher_pdf_path(tmp_pdf)
       output$catcher_status <- renderUI({ div(style = "color:orange;font-weight:bold;", "Rendering pages...") })
@@ -6180,7 +5218,7 @@ pcard_selected <- reactiveVal(NULL)
             catcher     = c_name,
             game_date   = game_date,
             output_file = fn,
-            logo_path   = "www/logo1.png"
+            logo_path   = base_team_logo_file()
           )
           TRUE
         }, error = function(e) { message("skip catcher ", c_name, ": ", e$message); FALSE })
@@ -6195,11 +5233,12 @@ pcard_selected <- reactiveVal(NULL)
   # HITTER SERVER
   # ==========================================
   output$hitter_team_select_ui <- renderUI({
-    req(!is.null(hitter_data()))
-    teams <- sort(unique(hitter_data()$BatterTeam))
+    if (is.null(hitter_data()) || nrow(hitter_data()) == 0) return(base_data_notice())
+    teams <- base_team_choices(hitter_data()$BatterTeam)
+    if (!length(teams)) return(base_data_notice())
     selectInput("hitter_team_select", "Select Team:",
                 choices  = setNames(teams, team_display_name(teams)),
-                selected = teams[grepl("BRE|Brewster", teams, ignore.case = TRUE)][1])
+                selected = base_team_default(teams))
   })
 
   output$hitter_dates_ui <- renderUI({
@@ -6314,7 +5353,31 @@ pcard_selected <- reactiveVal(NULL)
   # ==========================================
   # CAPE PITCHER PLAYER PAGE
   # ==========================================
-  cape_pitcher_player_page_server(input, output, session, source_data = season_data)
+  cape_pitcher_player_page_server(
+    input,
+    output,
+    session,
+    catalog_data = base_pitcher_catalog,
+    player_loader = base_load_pitcher_rows,
+    supplement_data = cape26_data
+  )
+
+  # ==========================================
+  # HITTER SCOUTING PAGE
+  # ==========================================
+  hitter_scouting_page_server(
+    input,
+    output,
+    session,
+    catalog_loader = base_get_hitter_catalog,
+    player_loader = base_load_hitter_rows,
+    supplement_data = cape26_data
+  )
+
+  # ==========================================
+  # DEFENSIVE ANALYTICS PAGE
+  # ==========================================
+  defense_page_server(input, output, session)
 
   # ==========================================
   # PITCHER SERVER LOGIC -> BrewSummaryCard
@@ -6326,12 +5389,7 @@ pcard_selected <- reactiveVal(NULL)
   # ==========================================
   season_pitcher_card_server(input, output, session)
 
-  # ==========================================
-  # ACQUISITIONS BOARD SERVER (AcquisitionsApp3)
-  # ==========================================
-  acq_board_server(input, output, session)
-
-  caps_media_server(input, output, session)
+  base_media_server(input, output, session)
 
 }
 

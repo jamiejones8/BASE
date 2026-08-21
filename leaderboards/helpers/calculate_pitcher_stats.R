@@ -139,7 +139,7 @@ calculate_pitching_stats <- function(df) {
       `K%`, `BB%`, BABIP, `Barrel%`, MaxVelo, `Whiff%`, `CSW%`
     )
   
-  message("✅ Pitching outcome stats calculated for ", nrow(stats), " pitchers (includes fixed Barrel%).")
+  message("Pitching outcome stats calculated for ", nrow(stats), " pitchers (includes fixed Barrel%).")
   return(stats)
 }
 

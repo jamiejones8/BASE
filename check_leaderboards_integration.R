@@ -16,11 +16,12 @@ assert_true <- function(condition, message) {
   }
 }
 
-caps_dir <- get_script_dir()
-old_wd <- setwd(caps_dir)
+base_dir <- get_script_dir()
+old_wd <- setwd(base_dir)
 on.exit(setwd(old_wd), add = TRUE)
 
 required_files <- c(
+  "team_config.R",
   "app.R",
   "leaderboards_embed.R",
   "leaderboards/app.R",
@@ -36,6 +37,7 @@ missing_files <- required_files[!file.exists(required_files)]
 assert_true(!length(missing_files), paste("Missing required file(s):", paste(missing_files, collapse = ", ")))
 
 parse_targets <- c(
+  "team_config.R",
   "app.R",
   "leaderboards_embed.R",
   "leaderboards/app.R",
@@ -51,17 +53,18 @@ parse_targets <- c(
 invisible(lapply(parse_targets, function(path) parse(file = path)))
 
 app_lines <- readLines("app.R", warn = FALSE)
-assert_true(any(grepl('source\\("leaderboards_embed\\.R"\\)', app_lines)), "CAPS/app.R no longer sources leaderboards_embed.R")
-assert_true(any(grepl("whitecaps_hub_card\\(\\)", app_lines)), "CAPS/app.R no longer registers the Whitecaps hub card")
-assert_true(any(grepl("whitecaps_bind_parent_server\\(", app_lines)), "CAPS/app.R no longer binds the Whitecaps parent server hook")
+assert_true(any(grepl('source\\("leaderboards_embed\\.R"\\)', app_lines)), "app.R no longer sources leaderboards_embed.R")
+assert_true(any(grepl("team_analytics_hub_card\\(\\)", app_lines)), "app.R no longer registers the team analytics hub card")
+assert_true(any(grepl("team_analytics_env\\$server\\(", app_lines)), "app.R no longer binds the embedded leaderboards server")
 
+source("team_config.R", local = FALSE)
 source("leaderboards_embed.R")
-assert_true(is.function(whitecaps_hub_card), "whitecaps_hub_card() is unavailable")
-assert_true(is.function(whitecaps_embedded_ui), "whitecaps_embedded_ui() is unavailable")
-assert_true(is.function(whitecaps_bind_parent_server), "whitecaps_bind_parent_server() is unavailable")
+assert_true(is.function(team_analytics_hub_card), "team_analytics_hub_card() is unavailable")
+assert_true(is.function(team_analytics_embedded_ui), "team_analytics_embedded_ui() is unavailable")
+assert_true(is.function(team_analytics_bind_parent_server), "team_analytics_bind_parent_server() is unavailable")
 
 loader_env <- new.env(parent = globalenv())
-old_leaderboards_wd <- setwd(file.path(caps_dir, "leaderboards"))
+old_leaderboards_wd <- setwd(file.path(base_dir, "leaderboards"))
 on.exit(setwd(old_leaderboards_wd), add = TRUE)
 source("helpers/checkbox_loader.R", local = loader_env)
 
@@ -69,8 +72,10 @@ files <- loader_env$list_bundled_data_files()
 assert_true(nrow(files) == 1L, paste("Expected exactly one CSV in leaderboards/data, found", nrow(files)))
 
 loaded <- loader_env$load_bundled_data_file(compute_summaries = FALSE)
-assert_true(nrow(loaded$raw) > 0, "Bundled Whitecaps data loaded but produced zero rows")
-assert_true("SourceFile" %in% names(loaded$raw), "Bundled Whitecaps data is missing SourceFile metadata")
+if (nrow(loaded$raw) == 0L) {
+  message("Season source is currently empty; verify the configured 2026 college dataset.")
+}
+assert_true("SourceFile" %in% names(loaded$raw), "Bundled team data is missing SourceFile metadata")
 
 cat("Leaderboards integration check passed.\n")
 cat("Active data file:", files$File[[1]], "\n")

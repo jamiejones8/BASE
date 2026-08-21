@@ -125,6 +125,6 @@ calculate_pitching_process_stats <- function(df) {
     select(Pitcher, Pitches, `Strike%`, `Zone%`, `FirstPitchStrike%`, `EarlyAhead%`) %>%
     arrange(desc(`Strike%`))
   
-  message("✅ Pitching process stats calculated for ", nrow(stats), " pitchers.")
+  message("Pitching process stats calculated for ", nrow(stats), " pitchers.")
   return(stats)
 }

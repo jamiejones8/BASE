@@ -1,6 +1,6 @@
 # =========================================================
-#  BREWSTER WHITECAPS — leaderboard data loader
-#  - Loads the canonical CapeCod26.parquet source from the repo root
+#  BASE — team leaderboard data loader
+#  - Loads the configured college-season source from the repo root
 #  - Falls back to CSV parsing helpers only when a CSV source is passed directly
 # =========================================================
 
@@ -26,7 +26,7 @@ safe_count_rows <- function(path) {
   }
 
   if (is_git_lfs_pointer_file(path)) {
-    warning("⚠️ Unable to count rows for ", basename(path), ": file is a Git LFS pointer.")
+    warning("Unable to count rows for ", basename(path), ": file is a Git LFS pointer.")
     return(NA_integer_)
   }
 
@@ -34,7 +34,7 @@ safe_count_rows <- function(path) {
 
   if (identical(ext, "parquet")) {
     if (!requireNamespace("arrow", quietly = TRUE)) {
-      warning("⚠️ Unable to count rows for ", basename(path), ": the 'arrow' package is not installed.")
+      warning("Unable to count rows for ", basename(path), ": the 'arrow' package is not installed.")
       return(NA_integer_)
     }
 
@@ -42,7 +42,7 @@ safe_count_rows <- function(path) {
       tryCatch(
         nrow(as.data.frame(arrow::read_parquet(path))),
         error = function(e) {
-          warning("⚠️ Unable to count rows for ", basename(path), ": ", e$message)
+          warning("Unable to count rows for ", basename(path), ": ", e$message)
           NA_integer_
         }
       )
@@ -60,7 +60,7 @@ safe_count_rows <- function(path) {
       )
     ),
     error = function(e) {
-      warning("⚠️ Unable to count rows for ", basename(path), ": ", e$message)
+      warning("Unable to count rows for ", basename(path), ": ", e$message)
       NA_integer_
     }
   )
@@ -68,7 +68,7 @@ safe_count_rows <- function(path) {
 
 leaderboards_project_dir <- function() {
   app_dir <- get0(
-    "WHITE_CAPS_APP_DIR",
+    "TEAM_ANALYTICS_APP_DIR",
     inherits = TRUE,
     ifnotfound = normalizePath(".", winslash = "/", mustWork = TRUE)
   )
@@ -77,8 +77,13 @@ leaderboards_project_dir <- function() {
 }
 
 leaderboards_source_path <- function() {
+  source_name <- get0(
+    "TEAM_CONFIG",
+    inherits = TRUE,
+    ifnotfound = list(data = list(season_file = "data/season.csv"))
+  )$data$season_file
   normalizePath(
-    file.path(leaderboards_project_dir(), "CapeCod26.parquet"),
+    file.path(leaderboards_project_dir(), source_name),
     winslash = "/",
     mustWork = FALSE
   )
@@ -99,7 +104,7 @@ is_git_lfs_pointer_file <- function(path) {
 }
 
 list_bundled_data_files <- function(
-    data_dir = get0("WHITE_CAPS_DATA_DIR", inherits = TRUE, ifnotfound = "data")
+    data_dir = get0("TEAM_ANALYTICS_DATA_DIR", inherits = TRUE, ifnotfound = "data")
 ) {
   files <- leaderboards_source_path()
   files <- files[file.exists(files) & vapply(files, is_supported_bundled_file, logical(1))]
@@ -142,7 +147,7 @@ list_bundled_data_files <- function(
 }
 
 pick_active_bundled_file <- function(
-    data_dir = get0("WHITE_CAPS_DATA_DIR", inherits = TRUE, ifnotfound = "data")
+    data_dir = get0("TEAM_ANALYTICS_DATA_DIR", inherits = TRUE, ifnotfound = "data")
 ) {
   files <- list_bundled_data_files(data_dir)
 
@@ -154,7 +159,7 @@ pick_active_bundled_file <- function(
 
   if (nrow(files) > 1) {
     warning(
-      "⚠️ Multiple leaderboard source files were found. ",
+      "Multiple leaderboard source files were found. ",
       "The app will use the most recently updated file: ",
       chosen$File[[1]]
     )
@@ -170,7 +175,7 @@ pick_active_bundled_file <- function(
 
 load_bundled_data_file <- function(
     file_path = NULL,
-    data_dir = get0("WHITE_CAPS_DATA_DIR", inherits = TRUE, ifnotfound = "data"),
+    data_dir = get0("TEAM_ANALYTICS_DATA_DIR", inherits = TRUE, ifnotfound = "data"),
     compute_summaries = FALSE
 ) {
   active_file <- if (is.null(file_path) || !nzchar(file_path)) {
@@ -184,7 +189,7 @@ load_bundled_data_file <- function(
   }
 
   if (is.null(active_file$path) || !nzchar(active_file$path) || !file.exists(active_file$path)) {
-    warning("⚠️ bundled_loader: No leaderboard data source file was found.")
+    warning("bundled_loader: No leaderboard data source file was found.")
     empty <- tibble::tibble()
     return(list(raw = empty, pitching = empty, hitting = empty))
   }
@@ -196,7 +201,7 @@ load_bundled_data_file <- function(
     )
   }
 
-  message("📄 Loading leaderboard data file: ", active_file$path)
+  message("Loading leaderboard data file: ", active_file$path)
 
   ext <- tolower(tools::file_ext(active_file$path))
   if (identical(ext, "parquet")) {
@@ -219,11 +224,11 @@ load_bundled_data_file <- function(
     combined_df <- as.data.frame(df)
   }
 
-  combined_df$SourceFile <- active_file$label
+  combined_df$SourceFile <- rep(active_file$label, nrow(combined_df))
 
   message(
-    "✅ bundled_loader: raw size = ",
-    nrow(combined_df), " rows × ", ncol(combined_df), " columns"
+    "bundled_loader: raw size = ",
+    nrow(combined_df), " rows x ", ncol(combined_df), " columns"
   )
 
   processed <- process_data(combined_df)
@@ -233,7 +238,7 @@ load_bundled_data_file <- function(
       processed$SourceFile <- combined_df$SourceFile
     } else {
       warning(
-        "⚠️ process_data() changed row count (combined_df=",
+        "process_data() changed row count (combined_df=",
         nrow(combined_df), ", processed=", nrow(processed),
         "). Cannot safely restore SourceFile by row position."
       )

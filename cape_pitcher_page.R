@@ -12,10 +12,7 @@ cape_pitcher_count_levels <- c(
   "3-0", "3-1", "3-2"
 )
 
-cape_pitcher_team_levels <- c(
-  "BRE_WHI", "BOU_BRA", "CHA_ANG", "COT_KET", "FAL_COM",
-  "HAR_MAR", "HYA_HAR", "ORL_FIR", "WAR_GAT", "YAR_RED"
-)
+cape_pitcher_team_levels <- TEAM_CONFIG$data_code
 
 cape_pitcher_pitch_pal <- c(
   "Four-Seam" = "#D94A3F",
@@ -73,21 +70,14 @@ cape_pitcher_pal_for <- function(types, palette = cape_pitcher_pitch_pal, defaul
   palette
 }
 
-cape_pitcher_ccbl_name <- function(team_code) {
-  map <- c(
-    BRE_WHI = "Brewster Whitecaps",
-    BOU_BRA = "Bourne Braves",
-    CHA_ANG = "Chatham Anglers",
-    COT_KET = "Cotuit Kettleers",
-    FAL_COM = "Falmouth Commodores",
-    HAR_MAR = "Harwich Mariners",
-    HYA_HAR = "Hyannis Harbor Hawks",
-    ORL_FIR = "Orleans Firebirds",
-    WAR_GAT = "Wareham Gatemen",
-    YAR_RED = "Yarmouth-Dennis Red Sox"
-  )
+cape_pitcher_team_name <- function(team_code) {
   code_chr <- as.character(team_code)
-  out <- unname(map[code_chr])
+  out <- rep(NA_character_, length(code_chr))
+  out[base_team_matches(code_chr)] <- TEAM_CONFIG$full_name
+  if (exists("team_display_name", mode = "function", inherits = TRUE)) {
+    unresolved <- is.na(out)
+    out[unresolved] <- team_display_name(code_chr[unresolved])
+  }
   ifelse(is.na(out), code_chr, out)
 }
 
@@ -199,7 +189,7 @@ cape_pitcher_quick_btn <- function(id, label) {
     style = paste(
       "margin:0 8px 8px 0;",
       "border-color:#cfd8e3;",
-      "color:#0C2340;",
+      paste0("color:", TEAM_CONFIG$colors$primary, ";"),
       "font-weight:600;"
     )
   )
@@ -224,12 +214,12 @@ cape_pitcher_heatmap_filter_label <- function(values,
   paste(length(values), plural)
 }
 
-cape_pitcher_read_parquet <- function(path = "CapeCod26.parquet") {
+cape_pitcher_read_parquet <- function(path = TEAM_CONFIG$data$season_file) {
   arrow::read_parquet(path) %>%
     tibble::as_tibble()
 }
 
-cape_pitcher_init_data <- function(path = "CapeCod26.parquet", raw_df = NULL) {
+cape_pitcher_init_data <- function(path = TEAM_CONFIG$data$season_file, raw_df = NULL) {
   source_df <- if (!is.null(raw_df)) {
     tibble::as_tibble(raw_df)
   } else {
@@ -237,11 +227,8 @@ cape_pitcher_init_data <- function(path = "CapeCod26.parquet", raw_df = NULL) {
   }
 
   source_df %>%
-    mutate(
-      caps_row_id = dplyr::row_number(),
-      TaggedPitchType = as.character(TaggedPitchType),
-      OriginalTaggedPitchType = as.character(TaggedPitchType)
-    )
+    mutate(base_row_id = dplyr::row_number()) %>%
+    base_prepare_retag_rows()
 }
 
 cape_pitcher_tag_snapshot <- function(d) {
@@ -283,7 +270,7 @@ cape_pitcher_prepare_view <- function(raw_df) {
       `Top/Bottom` = as.character(`Top/Bottom`),
       PitcherDisplay = cape_pitcher_format_pitcher_name(Pitcher),
       BatterDisplay = vapply(as.character(Batter), cape_pitcher_format_name, character(1)),
-      TeamDisplay = cape_pitcher_ccbl_name(PitcherTeam),
+      TeamDisplay = cape_pitcher_team_name(PitcherTeam),
       CSW = PitchCall %in% c("StrikeCalled", "StrikeSwinging")
     )
 }
@@ -303,6 +290,7 @@ cape_pitcher_summary <- function(d) {
     OBP = NA_real_,
     SLG = NA_real_,
     OPS = NA_real_,
+    ERAEstimate = NA_real_,
     WHIP = NA_real_,
     CSW = NA_real_,
     Whiff = NA_real_,
@@ -361,6 +349,8 @@ cape_pitcher_summary <- function(d) {
   slg_against <- cape_pitcher_rate(total_bases, ab)
   ops_against <- if (is.na(obp_against) || is.na(slg_against)) NA_real_ else obp_against + slg_against
   whip <- cape_pitcher_rate(hits + walks, outs_total / 3)
+  runs_allowed <- sum(cape_pitcher_safe_num(d$RunsScored), na.rm = TRUE)
+  era_estimate <- cape_pitcher_rate(runs_allowed * 27, outs_total)
   csw_rate <- cape_pitcher_rate(sum(d$CSW, na.rm = TRUE), nrow(d))
   whiff_rate <- cape_pitcher_rate(sum(d$WhiffP, na.rm = TRUE), sum(d$Swing, na.rm = TRUE))
   chase_rate <- cape_pitcher_rate(sum(d$Chase, na.rm = TRUE), sum(d$OutZone, na.rm = TRUE))
@@ -380,7 +370,7 @@ cape_pitcher_summary <- function(d) {
     PA = pa_total,
     Outs = outs_total,
     Hits = hits,
-    Runs = sum(cape_pitcher_safe_num(d$RunsScored), na.rm = TRUE),
+    Runs = runs_allowed,
     Walks = walks,
     Strikeouts = strikeouts,
     Homers = homers,
@@ -388,6 +378,7 @@ cape_pitcher_summary <- function(d) {
     OBP = obp_against,
     SLG = slg_against,
     OPS = ops_against,
+    ERAEstimate = era_estimate,
     WHIP = whip,
     CSW = csw_rate,
     Whiff = whiff_rate,
@@ -407,23 +398,32 @@ cape_pitcher_statline <- function(d) {
   summary <- cape_pitcher_summary(d)
 
   list(
-    Games = as.character(summary$Games),
-    IP = cape_pitcher_format_ip(summary$Outs),
-    BF = as.character(summary$PA),
-    H = as.character(summary$Hits),
-    R = as.character(summary$Runs),
-    BB = as.character(summary$Walks),
-    K = as.character(summary$Strikeouts),
-    HR = as.character(summary$Homers),
-    WHIP = cape_pitcher_format_num(summary$WHIP, 2),
-    AVG = cape_pitcher_format_rate(summary$AVG, 3),
-    OBP = cape_pitcher_format_rate(summary$OBP, 3),
-    SLG = cape_pitcher_format_rate(summary$SLG, 3),
-    OPS = cape_pitcher_format_rate(summary$OPS, 3),
-    `CSW%` = cape_pitcher_format_pct(summary$CSW, 1),
-    `Whiff%` = cape_pitcher_format_pct(summary$Whiff, 1),
-    `K-BB%` = cape_pitcher_format_pct(summary$KMinusBB, 1),
-    xwOBA = cape_pitcher_format_rate(summary$xwOBA, 3)
+    Workload = list(
+      Games = as.character(summary$Games),
+      IP = cape_pitcher_format_ip(summary$Outs),
+      BF = as.character(summary$PA)
+    ),
+    `Run Prevention` = list(
+      `ERA*` = cape_pitcher_format_num(summary$ERAEstimate, 2),
+      WHIP = cape_pitcher_format_num(summary$WHIP, 2),
+      R = as.character(summary$Runs),
+      H = as.character(summary$Hits),
+      BB = as.character(summary$Walks),
+      K = as.character(summary$Strikeouts),
+      HR = as.character(summary$Homers)
+    ),
+    `Opponent Production` = list(
+      AVG = cape_pitcher_format_rate(summary$AVG, 3),
+      OBP = cape_pitcher_format_rate(summary$OBP, 3),
+      SLG = cape_pitcher_format_rate(summary$SLG, 3),
+      OPS = cape_pitcher_format_rate(summary$OPS, 3),
+      xwOBA = cape_pitcher_format_rate(summary$xwOBA, 3)
+    ),
+    `Pitch Quality` = list(
+      `CSW%` = cape_pitcher_format_pct(summary$CSW, 1),
+      `Whiff%` = cape_pitcher_format_pct(summary$Whiff, 1),
+      `K-BB%` = cape_pitcher_format_pct(summary$KMinusBB, 1)
+    )
   )
 }
 
@@ -460,15 +460,182 @@ cape_pitcher_split_table <- function(d) {
 cape_pitcher_statline_ui <- function(statline) {
   if (!length(statline)) return(NULL)
 
-  tiles <- lapply(names(statline), function(label) {
-    tags$div(
-      class = "cpp-stat-tile",
-      tags$div(class = "cpp-stat-label", label),
-      tags$div(class = "cpp-stat-value", statline[[label]])
+  groups <- lapply(names(statline), function(group_label) {
+    metrics <- statline[[group_label]]
+    tiles <- lapply(names(metrics), function(label) {
+      tags$div(
+        class = "cpp-stat-tile",
+        tags$div(class = "cpp-stat-label", label),
+        tags$div(class = "cpp-stat-value", metrics[[label]])
+      )
+    })
+
+    tags$section(
+      class = paste(
+        "cpp-stat-group",
+        paste0("cpp-stat-group-", gsub("[^a-z0-9]+", "-", tolower(group_label)))
+      ),
+      tags$div(class = "cpp-stat-group-title", group_label),
+      tags$div(class = "cpp-stat-grid", tiles)
     )
   })
 
-  tags$div(class = "cpp-stat-grid", tiles)
+  tagList(
+    tags$div(class = "cpp-stat-groups", groups),
+    tags$p(
+      class = "cpp-stat-footnote",
+      "ERA* is estimated from all runs allowed because the pitch-level source does not identify earned runs."
+    )
+  )
+}
+
+cape_pitcher_table_header <- function(title, subtitle) {
+  card_header(
+    tags$div(
+      class = "cpp-table-heading",
+      tags$div(class = "cpp-table-title", title),
+      tags$div(class = "cpp-table-subtitle", subtitle)
+    )
+  )
+}
+
+cape_pitcher_pitch_cell <- function(value) {
+  if (is.null(value) || is.na(value) || !nzchar(as.character(value))) return("--")
+  pitch <- as.character(value)
+  palette <- cape_pitcher_pal_for(pitch)
+  color <- unname(palette[[pitch]])
+  tags$div(
+    class = "cpp-table-pitch",
+    tags$span(class = "cpp-table-pitch-dot", style = paste0("background:", color, ";")),
+    tags$span(pitch)
+  )
+}
+
+cape_pitcher_grade_cell <- function(value) {
+  grade <- suppressWarnings(as.numeric(value))
+  if (length(grade) != 1L || !is.finite(grade)) return(tags$span(class = "cpp-table-na", "--"))
+  tone <- if (grade >= 110) {
+    "elite"
+  } else if (grade >= 100) {
+    "plus"
+  } else if (grade >= 90) {
+    "average"
+  } else {
+    "below"
+  }
+  tags$span(class = paste("cpp-grade-pill", paste0("cpp-grade-", tone)), round(grade))
+}
+
+cape_pitcher_pct_bar <- function(value) {
+  pct <- suppressWarnings(as.numeric(value))
+  if (length(pct) != 1L || !is.finite(pct)) return(tags$span(class = "cpp-table-na", "--"))
+  pct_width <- max(0, min(100, pct * 100))
+  tags$div(
+    class = "cpp-pct-bar",
+    tags$span(class = "cpp-pct-bar-fill", style = paste0("width:", pct_width, "%;")),
+    tags$span(class = "cpp-pct-bar-label", paste0(round(pct * 100), "%"))
+  )
+}
+
+cape_pitcher_make_table <- function(df, pct = character(), d3 = character(),
+                                    d1 = character(), int = character(),
+                                    bar_pct = character(),
+                                    grade_cols = c("Stuff+", "Loc+", "Pitch+")) {
+  if (is.null(df) || nrow(df) == 0) {
+    df <- data.frame(Note = "No data for this selection.")
+  }
+
+  column_defs <- lapply(seq_along(names(df)), function(i) {
+    name <- names(df)[[i]]
+    first_column <- i == 1L
+    numeric_column <- is.numeric(df[[name]])
+    align <- if (first_column) "left" else if (numeric_column || name %in% c(pct, d3, d1, int)) "right" else "left"
+    sticky_style <- if (first_column) {
+      function(value, index) {
+        list(
+          background = if (index %% 2L == 0L) "#FBF8F3" else "#FFFFFF",
+          borderRight = "1px solid rgba(80,18,20,0.10)",
+          fontWeight = 700,
+          whiteSpace = "nowrap"
+        )
+      }
+    } else {
+      list(whiteSpace = "nowrap")
+    }
+
+    cell_renderer <- NULL
+    formatter <- NULL
+    if (name %in% c("Pitch", "PitchType")) {
+      cell_renderer <- cape_pitcher_pitch_cell
+    } else if (name %in% grade_cols) {
+      cell_renderer <- cape_pitcher_grade_cell
+    } else if (name %in% bar_pct) {
+      cell_renderer <- cape_pitcher_pct_bar
+    } else if (name %in% pct) {
+      formatter <- reactable::colFormat(percent = TRUE, digits = 0)
+    } else if (name %in% d3) {
+      formatter <- reactable::colFormat(digits = 3)
+    } else if (name %in% d1) {
+      formatter <- reactable::colFormat(digits = 1)
+    } else if (name %in% int) {
+      formatter <- reactable::colFormat(digits = 0)
+    }
+
+    reactable::colDef(
+      align = align,
+      sticky = if (first_column) "left" else NULL,
+      style = sticky_style,
+      cell = cell_renderer,
+      format = formatter,
+      minWidth = if (first_column) 132 else if (name == "Velo") 150 else 82,
+      headerStyle = list(whiteSpace = "nowrap")
+    )
+  })
+  names(column_defs) <- names(df)
+
+  reactable::reactable(
+    df,
+    class = "cpp-performance-table",
+    columns = column_defs,
+    pagination = FALSE,
+    compact = TRUE,
+    borderless = TRUE,
+    wrap = FALSE,
+    defaultPageSize = 9999,
+    highlight = TRUE,
+    searchable = nrow(df) > 12,
+    resizable = TRUE,
+    rowStyle = function(index) {
+      list(background = if (index %% 2L == 0L) "#FBF8F3" else "#FFFFFF")
+    },
+    theme = reactable::reactableTheme(
+      backgroundColor = "#FFFFFF",
+      color = "#2A2021",
+      borderColor = "rgba(80,18,20,0.10)",
+      highlightColor = "#F4ECDF",
+      cellStyle = list(
+        fontSize = "13px",
+        lineHeight = "1.35",
+        padding = "10px 12px",
+        fontVariantNumeric = "tabular-nums"
+      ),
+      headerStyle = list(
+        background = TEAM_CONFIG$colors$primary,
+        color = "#FFFFFF",
+        fontWeight = 700,
+        borderBottom = paste0("3px solid ", TEAM_CONFIG$colors$accent),
+        textTransform = "uppercase",
+        fontSize = "11px",
+        letterSpacing = "0.055em",
+        padding = "10px 12px"
+      ),
+      searchInputStyle = list(
+        border = "1px solid rgba(80,18,20,0.14)",
+        borderRadius = "10px",
+        padding = "8px 10px"
+      )
+    )
+  )
 }
 
 cape_pitcher_hover_text <- function(d) {
@@ -528,7 +695,7 @@ cape_pitcher_movement_plot <- function(d, batter_side = c("Left", "Right"), sour
     mode = "markers",
     text = hover_text,
     hoverinfo = "text",
-    customdata = ~caps_row_id,
+    customdata = ~base_pitch_key,
     source = source_id,
     marker = list(
       size = 10,
@@ -675,7 +842,7 @@ cape_pitcher_heatmap_mode_meta <- function(mode = c("freq", "whiff", "damage", "
   switch(
     mode,
     freq = list(
-      colors = c("#F8FBFF", "#DDE9F5", "#89B1D8", "#0C2340"),
+      colors = c("#FBF8F2", "#EFE2C8", "#D7BD8A", TEAM_CONFIG$colors$primary),
       limits = c(0, 1)
     ),
     whiff = list(
@@ -888,14 +1055,14 @@ cape_pitcher_zone_heat_plot <- function(d,
       data = zone_verticals,
       ggplot2::aes(x = x, xend = xend, y = y, yend = yend),
       inherit.aes = FALSE,
-      colour = grDevices::adjustcolor("#0C2340", alpha.f = 0.14),
+      colour = grDevices::adjustcolor(TEAM_CONFIG$colors$primary, alpha.f = 0.14),
       linewidth = 0.35
     ) +
     ggplot2::geom_segment(
       data = zone_horizontals,
       ggplot2::aes(x = x, xend = xend, y = y, yend = yend),
       inherit.aes = FALSE,
-      colour = grDevices::adjustcolor("#0C2340", alpha.f = 0.14),
+      colour = grDevices::adjustcolor(TEAM_CONFIG$colors$primary, alpha.f = 0.14),
       linewidth = 0.35
     ) +
     ggplot2::geom_path(
@@ -940,7 +1107,7 @@ cape_pitcher_zone_heat_plot <- function(d,
         ggplot2::aes(x = x, y = y, z = support),
         inherit.aes = FALSE,
         breaks = contour_breaks,
-        colour = grDevices::adjustcolor("#0C2340", alpha.f = 0.14),
+        colour = grDevices::adjustcolor(TEAM_CONFIG$colors$primary, alpha.f = 0.14),
         linewidth = 0.28
       )
   }
@@ -970,11 +1137,11 @@ cape_pitcher_zone_heat_plot <- function(d,
 cape_pitcher_player_page_ui <- function() {
   tagList(
     tags$div(
-      class = "hub-main",
+      class = "hub-main base-page base-scout-page",
       tags$head(
         tags$style(HTML("
           #cpp-page {
-            color: #0C2340;
+            color: var(--navy);
           }
           #cpp-page .card {
             border: 1px solid rgba(12, 35, 64, 0.08);
@@ -985,7 +1152,7 @@ cape_pitcher_player_page_ui <- function() {
           #cpp-page .card-header {
             background: transparent;
             border-bottom: 1px solid rgba(12, 35, 64, 0.08);
-            color: #0C2340;
+            color: var(--navy);
             font-family: var(--font-head);
             font-size: 20px;
             letter-spacing: 0.02em;
@@ -996,8 +1163,40 @@ cape_pitcher_player_page_ui <- function() {
           }
           #cpp-page .cpp-stat-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+            gap: 10px;
+          }
+          #cpp-page .cpp-stat-groups {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 14px;
+          }
+          #cpp-page .cpp-stat-group {
+            grid-column: span 6;
+            min-width: 0;
+            padding: 15px;
+            border: 1px solid rgba(12, 35, 64, 0.08);
+            border-radius: 16px;
+            background: #F7FAFC;
+          }
+          #cpp-page .cpp-stat-group-workload,
+          #cpp-page .cpp-stat-group-pitch-quality { grid-column: span 4; }
+          #cpp-page .cpp-stat-group-run-prevention,
+          #cpp-page .cpp-stat-group-opponent-production { grid-column: span 8; }
+          #cpp-page .cpp-stat-group-title {
+            margin: 0 0 11px;
+            color: var(--navy);
+            font-family: var(--font-head);
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.055em;
+            text-transform: uppercase;
+          }
+          #cpp-page .cpp-stat-footnote {
+            margin: 11px 2px 0;
+            color: #697586;
+            font-size: 11px;
+            line-height: 1.45;
           }
           #cpp-page .cpp-control-stack .form-group {
             margin-bottom: 12px;
@@ -1035,7 +1234,7 @@ cape_pitcher_player_page_ui <- function() {
             padding: 24px 28px;
           }
           .cpp-kicker {
-            color: #0A9396;
+            color: var(--teal);
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 1.6px;
@@ -1043,7 +1242,7 @@ cape_pitcher_player_page_ui <- function() {
             text-transform: uppercase;
           }
           .cpp-page-title {
-            color: #0C2340;
+            color: var(--navy);
             font-family: var(--font-head);
             font-size: 38px;
             line-height: 1;
@@ -1064,9 +1263,10 @@ cape_pitcher_player_page_ui <- function() {
             min-height: 132px;
           }
           #cpp-page .cpp-stat-tile {
-            background: linear-gradient(180deg, #0C2340 0%, #14355F 100%);
+            background: var(--navy);
             border-radius: 14px;
-            padding: 14px 12px;
+            min-height: 84px;
+            padding: 13px 12px;
             box-shadow: 0 10px 22px rgba(12, 35, 64, 0.08);
           }
           #cpp-page .cpp-stat-label {
@@ -1079,13 +1279,13 @@ cape_pitcher_player_page_ui <- function() {
           }
           #cpp-page .cpp-stat-value {
             color: #FFFFFF;
-            font-size: 28px;
+            font-size: 25px;
             font-weight: 700;
             letter-spacing: -0.5px;
             line-height: 1;
           }
           #cpp-page .cpp-meta-name {
-            color: #0C2340;
+            color: var(--navy);
             font-size: 20px;
             font-weight: 700;
             margin-bottom: 4px;
@@ -1096,7 +1296,7 @@ cape_pitcher_player_page_ui <- function() {
             line-height: 1.45;
           }
           #cpp-page .cpp-section-label {
-            color: #0C2340;
+            color: var(--navy);
             font-size: 18px;
             font-weight: 700;
             margin: 22px 0 10px 0;
@@ -1143,7 +1343,7 @@ cape_pitcher_player_page_ui <- function() {
             padding-top: 12px;
           }
           #cpp-page .cpp-subhead {
-            color: #0C2340;
+            color: var(--navy);
             font-size: 12px;
             font-weight: 700;
             letter-spacing: 0.4px;
@@ -1173,7 +1373,7 @@ cape_pitcher_player_page_ui <- function() {
             padding: 14px 16px;
           }
           #cpp-page .cpp-heatmap-summary-title {
-            color: #0C2340;
+            color: var(--navy);
             font-size: 16px;
             font-weight: 700;
             margin-bottom: 4px;
@@ -1200,8 +1400,8 @@ cape_pitcher_player_page_ui <- function() {
             padding: 6px 10px;
           }
           #cpp-page .cpp-chip-strong {
-            background: #0C2340;
-            border-color: #0C2340;
+            background: var(--navy);
+            border-color: var(--navy);
             color: #FFFFFF;
           }
           #cpp-page .cpp-heatmap-card .card-body {
@@ -1215,7 +1415,7 @@ cape_pitcher_player_page_ui <- function() {
             min-height: 34px;
           }
           #cpp-page .cpp-heatmap-side .radio-inline {
-            color: #0C2340;
+            color: var(--navy);
             font-weight: 700;
             margin-right: 14px;
           }
@@ -1243,22 +1443,242 @@ cape_pitcher_player_page_ui <- function() {
             background: #FDECEC;
             color: #A12626;
           }
+
+          /* BASE design-system alignment. These rules intentionally affect
+             presentation only; input/output IDs and layout behavior remain intact. */
+          #cpp-page { color: var(--base-ink); }
+          #cpp-page .card {
+            border: 1px solid var(--base-border);
+            border-radius: var(--base-radius);
+            background: var(--base-surface);
+            box-shadow: var(--base-shadow-sm);
+          }
+          #cpp-page .card-header {
+            border-bottom-color: var(--base-border);
+            color: var(--base-ink);
+            font-family: var(--base-font-display);
+            font-size: 17px;
+          }
+          .cpp-page-intro {
+            margin-bottom: 24px;
+            padding: 24px 26px;
+            border: 1px solid var(--base-border);
+            border-radius: var(--base-radius-lg);
+            background:
+              radial-gradient(circle at top right, rgba(215,189,138,0.18), transparent 42%),
+              var(--base-surface);
+            box-shadow: var(--base-shadow-sm);
+          }
+          .cpp-kicker { color: var(--base-maroon); }
+          .cpp-page-title { color: var(--base-ink); font-size: 42px; }
+          .cpp-page-copy,
+          #cpp-page .cpp-helper,
+          #cpp-page .cpp-meta-line,
+          #cpp-page .cpp-section-copy,
+          #cpp-page .cpp-retag-note,
+          #cpp-page .cpp-heatmap-summary-note,
+          #cpp-page .cpp-heatmap-card-copy,
+          #cpp-page .cpp-heatmap-note { color: var(--base-muted); }
+          #cpp-page .cpp-meta-card,
+          #cpp-page .cpp-heatmap-controls,
+          #cpp-page .cpp-heatmap-summary {
+            border-color: var(--base-border);
+            border-radius: var(--base-radius);
+            background: var(--base-surface-soft);
+          }
+          #cpp-page .cpp-stat-tile {
+            border: 1px solid rgba(215,189,138,0.22);
+            border-radius: var(--base-radius);
+            background: var(--base-maroon);
+            box-shadow: var(--base-shadow-sm);
+          }
+          #cpp-page .cpp-stat-group {
+            border-color: var(--base-border);
+            background: var(--base-surface-soft);
+          }
+          #cpp-page .cpp-stat-group-title { color: var(--base-maroon); }
+          #cpp-page .cpp-stat-footnote { color: var(--base-muted); }
+          #cpp-page .cpp-stat-value { font-family: var(--base-font-data); }
+          #cpp-page .cpp-meta-name,
+          #cpp-page .cpp-section-label,
+          #cpp-page .cpp-subhead,
+          #cpp-page .cpp-heatmap-summary-title { color: var(--base-ink); }
+          #cpp-page .cpp-section-label {
+            padding-bottom: 9px;
+            border-bottom: 1px solid var(--base-border);
+            font-family: var(--base-font-display);
+            letter-spacing: 0.035em;
+          }
+          #cpp-page .cpp-chip {
+            border-color: var(--base-border);
+            background: var(--base-surface-muted);
+            color: var(--base-maroon);
+          }
+          #cpp-page .cpp-chip-strong {
+            border-color: var(--base-maroon);
+            background: var(--base-maroon);
+            color: #fff;
+          }
+          #cpp-page .cpp-status.clean { background: var(--base-success-soft); color: var(--base-success); }
+          #cpp-page .cpp-status.dirty { background: var(--base-warning-soft); color: var(--base-warning); }
+          #cpp-page .cpp-status.error { background: var(--base-danger-soft); color: var(--base-danger); }
+          #cpp-page .cpp-table-card {
+            margin-bottom: 14px;
+            overflow: hidden !important;
+            border-color: rgba(80,18,20,0.12);
+          }
+          #cpp-page .cpp-table-card .card-header {
+            padding: 15px 18px 13px;
+            background: linear-gradient(90deg, rgba(80,18,20,0.045), rgba(215,189,138,0.08));
+            border-bottom: 1px solid var(--base-border);
+          }
+          #cpp-page .cpp-table-heading {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 18px;
+            width: 100%;
+          }
+          #cpp-page .cpp-table-title {
+            flex: 0 0 auto;
+            color: var(--base-maroon);
+            font-family: var(--base-font-display);
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.025em;
+          }
+          #cpp-page .cpp-table-subtitle {
+            color: var(--base-muted);
+            font-family: var(--base-font-body);
+            font-size: 11px;
+            font-weight: 500;
+            line-height: 1.4;
+            text-align: right;
+          }
+          #cpp-page .cpp-table-card .cpp-table-body {
+            padding: 14px 18px 17px;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            scrollbar-color: rgba(80,18,20,0.28) transparent;
+            scrollbar-width: thin;
+          }
+          #cpp-page .cpp-table-card-wide .cpp-performance-table {
+            min-width: 1080px;
+          }
+          #cpp-page .cpp-performance-table {
+            width: 100%;
+            border: 1px solid rgba(80,18,20,0.09);
+            border-radius: 12px;
+            overflow: hidden;
+            font-family: var(--base-font-body);
+          }
+          #cpp-page .cpp-performance-table .rt-thead {
+            box-shadow: 0 3px 10px rgba(80,18,20,0.12);
+          }
+          #cpp-page .cpp-performance-table .rt-tr:hover .rt-td {
+            background: #F4ECDF !important;
+          }
+          #cpp-page .cpp-table-pitch {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            min-width: 0;
+            color: var(--base-ink);
+            font-weight: 700;
+          }
+          #cpp-page .cpp-table-pitch-dot {
+            flex: 0 0 auto;
+            width: 9px;
+            height: 9px;
+            border: 2px solid rgba(255,255,255,0.82);
+            border-radius: 50%;
+            box-shadow: 0 0 0 1px rgba(80,18,20,0.16);
+          }
+          #cpp-page .cpp-grade-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 38px;
+            padding: 3px 8px;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            font-family: var(--base-font-data);
+            font-size: 12px;
+            font-weight: 800;
+            line-height: 1.2;
+          }
+          #cpp-page .cpp-grade-elite {
+            border-color: #2D6E50;
+            background: #2D6E50;
+            color: #FFFFFF;
+          }
+          #cpp-page .cpp-grade-plus {
+            border-color: #B7D9C5;
+            background: #E8F4ED;
+            color: #245B42;
+          }
+          #cpp-page .cpp-grade-average {
+            border-color: #E0C991;
+            background: #F8F0DC;
+            color: #705820;
+          }
+          #cpp-page .cpp-grade-below {
+            border-color: #E2B9B9;
+            background: #F9E9E9;
+            color: #8B3030;
+          }
+          #cpp-page .cpp-pct-bar {
+            position: relative;
+            min-width: 70px;
+            height: 24px;
+            overflow: hidden;
+            border: 1px solid rgba(80,18,20,0.10);
+            border-radius: 7px;
+            background: rgba(80,18,20,0.04);
+          }
+          #cpp-page .cpp-pct-bar-fill {
+            position: absolute;
+            inset: 0 auto 0 0;
+            background: linear-gradient(90deg, rgba(80,18,20,0.16), rgba(215,189,138,0.46));
+          }
+          #cpp-page .cpp-pct-bar-label {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            height: 100%;
+            padding: 0 7px;
+            color: var(--base-ink);
+            font-family: var(--base-font-data);
+            font-size: 11px;
+            font-weight: 800;
+          }
+          #cpp-page .cpp-table-na { color: var(--base-muted); }
+          @media (max-width: 1050px) {
+            #cpp-page .cpp-stat-group { grid-column: 1 / -1; }
+          }
+          @media (max-width: 760px) {
+            #cpp-page .cpp-table-heading {
+              display: block;
+            }
+            #cpp-page .cpp-table-subtitle {
+              margin-top: 4px;
+              text-align: left;
+            }
+          }
+          @media (max-width: 560px) {
+            #cpp-page .cpp-stat-group { padding: 12px; }
+            #cpp-page .cpp-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          }
         "))
       ),
       tags$div(
-        style = "margin-bottom: 16px;",
-        tags$button(
-          "← Back to Hub",
-          onclick = "Shiny.setInputValue('nav_to', 'hub', {priority: 'event'})",
-          class = "btn btn-outline-secondary btn-sm"
-        )
-      ),
-      tags$div(
         class = "cpp-page-intro",
-        tags$div(class = "cpp-kicker", "Whitecaps Internal Scouting"),
-        tags$h2("Cape Pitcher Scout", class = "cpp-page-title"),
+        tags$div(class = "cpp-kicker", paste(TEAM_CONFIG$name, "Internal Scouting")),
+        tags$h2("Pitcher Scouting", class = "cpp-page-title"),
         tags$p(
-          "Choose a Cape team, load a pitcher, and move from movement shapes into full-location heatmaps, split tables, and report-ready context without leaving the page.",
+          "Choose a college team, load a pitcher, and move from movement shapes into full-location heatmaps, split tables, and report-ready context without leaving the page.",
           class = "cpp-page-copy"
         )
       ),
@@ -1273,7 +1693,7 @@ cape_pitcher_player_page_ui <- function() {
                 class = "cpp-control-stack",
                 selectInput(
                   "cpp_team",
-                  "Cape Cod League team",
+                  "College team",
                   choices = NULL,
                   width = "100%",
                   selectize = FALSE
@@ -1285,6 +1705,12 @@ cape_pitcher_player_page_ui <- function() {
                   width = "100%",
                   selectize = FALSE
                 ),
+                checkboxInput(
+                  "cpp_include_cape",
+                  "Include matched 2026 Cape Cod League pitches",
+                  value = TRUE
+                ),
+                uiOutput("cpp_source_note"),
                 tags$p(
                   "Pick a team first, then choose from the pitchers currently available for that club.",
                   class = "cpp-helper"
@@ -1308,7 +1734,7 @@ cape_pitcher_player_page_ui <- function() {
         ),
         tags$div(class = "cpp-section-label", "Visual Analysis"),
         tags$p(
-          "Movement plots, session retagging, and arm-angle overlay tools are grouped here for pitch-shape review.",
+          "Movement plots, persistent pitch retagging, and arm-angle overlay tools are grouped here for pitch-shape review.",
           class = "cpp-section-copy"
         ),
         layout_columns(
@@ -1337,8 +1763,13 @@ cape_pitcher_player_page_ui <- function() {
               ),
               actionButton(
                 "cpp_apply_retag",
-                "Apply Retag",
+                "Save Retag Permanently",
                 class = "btn btn-primary btn-sm btn-block"
+              ),
+              actionButton(
+                "cpp_revert_retag",
+                "Revert Selected to Original",
+                class = "btn btn-default btn-sm btn-block"
               ),
               actionButton(
                 "cpp_clear_selection",
@@ -1346,7 +1777,7 @@ cape_pitcher_player_page_ui <- function() {
                 class = "btn btn-default btn-sm btn-block"
               ),
               tags$p(
-                "Session only. Retags stay on this page until refresh.",
+                "Saved retags persist across sessions without modifying the source Parquet.",
                 class = "cpp-retag-note"
               ),
               tags$div(
@@ -1529,57 +1960,83 @@ cape_pitcher_player_page_ui <- function() {
           "Pitch shape, split performance, usage, and expected outcomes are grouped below for report-building.",
           class = "cpp-section-copy"
         ),
-        layout_columns(
-          col_widths = c(6, 6),
-          card(
-            card_header("Arsenal - velo / movement / shape"),
-            card_body(reactableOutput("cpp_arsenal"))
+        card(
+          class = "cpp-table-card cpp-table-card-wide",
+          cape_pitcher_table_header(
+            "Arsenal Overview",
+            "Velocity bands, movement shape, release traits, and expected contact by pitch."
           ),
-          card(
-            card_header("Results vs LHH / vs RHH"),
-            card_body(reactableOutput("cpp_psplit"))
-          )
+          card_body(class = "cpp-table-body", reactableOutput("cpp_arsenal"))
+        ),
+        card(
+          class = "cpp-table-card cpp-table-card-wide",
+          cape_pitcher_table_header(
+            "Split Results",
+            "Overall quality and outcomes against left- and right-handed hitters."
+          ),
+          card_body(class = "cpp-table-body", reactableOutput("cpp_psplit"))
+        ),
+        card(
+          class = "cpp-table-card cpp-table-card-wide",
+          cape_pitcher_table_header(
+            "Results by Pitch vs LHH",
+            "Pitch-level grades, run value, expected contact, and approach rates."
+          ),
+          card_body(class = "cpp-table-body", reactableOutput("cpp_perf_lhh"))
+        ),
+        card(
+          class = "cpp-table-card cpp-table-card-wide",
+          cape_pitcher_table_header(
+            "Results by Pitch vs RHH",
+            "Pitch-level grades, run value, expected contact, and approach rates."
+          ),
+          card_body(class = "cpp-table-body", reactableOutput("cpp_perf_rhh"))
         ),
         layout_columns(
           col_widths = c(6, 6),
           card(
-            card_header("vs LHH - grades & results by pitch"),
-            card_body(reactableOutput("cpp_perf_lhh"))
+            class = "cpp-table-card",
+            cape_pitcher_table_header(
+              "Pitch Mix by Side",
+              "Usage distribution against each hitter side."
+            ),
+            card_body(class = "cpp-table-body", reactableOutput("cpp_pmix"))
           ),
           card(
-            card_header("vs RHH - grades & results by pitch"),
-            card_body(reactableOutput("cpp_perf_rhh"))
-          )
-        ),
-        layout_columns(
-          col_widths = c(6, 6),
-          card(
-            card_header("Pitch Mix by Side"),
-            card_body(reactableOutput("cpp_pmix"))
-          ),
-          card(
-            card_header("Get-Ahead & Put-Away"),
-            card_body(reactableOutput("cpp_pusage"))
+            class = "cpp-table-card",
+            cape_pitcher_table_header(
+              "Get-Ahead & Put-Away",
+              "First-pitch and two-strike usage with whiff results."
+            ),
+            card_body(class = "cpp-table-body", reactableOutput("cpp_pusage"))
           )
         ),
         card(
-          card_header("xwOBA / xwOBAcon - by pitch"),
-          card_body(reactableOutput("cpp_pitch_xw_table"))
+          class = "cpp-table-card cpp-table-card-wide",
+          cape_pitcher_table_header(
+            "Expected Outcomes by Pitch",
+            "xwOBA on all completed plate appearances and xwOBA on contact."
+          ),
+          card_body(class = "cpp-table-body", reactableOutput("cpp_pitch_xw_table"))
         )
       )
     ),
     tags$div(
       class = "hub-footer",
-      paste0("Brewster Whitecaps Analytics · ", format(Sys.Date(), "%Y"))
+      base_brand_footer()
     )
   )
 }
 
 cape_pitcher_player_page_server <- function(input, output, session,
-                                            data_path = "CapeCod26.parquet",
-                                            source_data = NULL) {
+                                            data_path = TEAM_CONFIG$data$season_file,
+                                            source_data = NULL,
+                                            catalog_data = NULL,
+                                            player_loader = NULL,
+                                            supplement_data = NULL) {
   raw_data <- reactiveVal(NULL)
-  loaded_tags <- reactiveVal(character())
+  catalog_snapshot <- reactiveVal(NULL)
+  supplement_snapshot <- reactiveVal(NULL)
   data_loaded <- reactiveVal(FALSE)
   data_loading <- reactiveVal(FALSE)
   manual_heights <- reactiveVal(
@@ -1591,10 +2048,12 @@ cape_pitcher_player_page_server <- function(input, output, session,
   )
   status_message <- reactiveVal("Pitcher page data will load when this tab is opened.")
   status_class <- reactiveVal("clean")
-  selected_rows <- reactiveVal(integer(0))
+  selected_rows <- reactiveVal(character(0))
+  retag_revision <- reactiveVal(0L)
+  loaded_player_key <- reactiveVal(NULL)
 
-  observeEvent(input$caps_nav, {
-    if (!identical(input$caps_nav, "tab_pitcher_player") || isTRUE(data_loaded()) || isTRUE(data_loading())) {
+  observeEvent(input$base_nav, {
+    if (!identical(input$base_nav, "tab_pitcher_player") || isTRUE(data_loaded()) || isTRUE(data_loading())) {
       return()
     }
 
@@ -1615,14 +2074,59 @@ cape_pitcher_player_page_server <- function(input, output, session,
         }
       }
 
-      initial_data <- cape_pitcher_init_data(
-        path = data_path,
-        raw_df = source_snapshot
-      )
-      raw_data(initial_data)
-      loaded_tags(cape_pitcher_tag_snapshot(initial_data))
+      supplement_value <- NULL
+      if (!is.null(supplement_data)) {
+        supplement_value <- if (shiny::is.reactive(supplement_data)) {
+          supplement_data()
+        } else if (is.function(supplement_data)) {
+          supplement_data()
+        } else {
+          supplement_data
+        }
+      }
+      supplement_snapshot(supplement_value)
+
+      catalog_value <- NULL
+      if (!is.null(catalog_data)) {
+        catalog_value <- if (shiny::is.reactive(catalog_data)) {
+          catalog_data()
+        } else if (is.function(catalog_data)) {
+          catalog_data()
+        } else {
+          catalog_data
+        }
+      }
+
+      if (!is.null(catalog_value) && nrow(catalog_value) > 0) {
+        catalog_snapshot(catalog_value %>%
+          transmute(
+            PitcherTeam = as.character(PitcherTeam),
+            Pitcher = as.character(Pitcher)
+          ) %>%
+          filter(
+            !is.na(PitcherTeam), nzchar(PitcherTeam),
+            !is.na(Pitcher), nzchar(Pitcher)
+          ) %>%
+          distinct())
+        raw_data(NULL)
+        status_message("Select a pitcher to load 2026 college data.")
+      } else {
+        initial_data <- cape_pitcher_init_data(
+          path = data_path,
+          raw_df = source_snapshot
+        )
+        raw_data(initial_data)
+        if (nrow(initial_data) == 0) {
+          status_class("clean")
+          status_message(paste0(
+            "No ", TEAM_CONFIG$season,
+            " college pitch data is loaded. Populate ", TEAM_CONFIG$data$college_file,
+            " to enable team and pitcher scouting."
+          ))
+        }
+      }
       data_loaded(TRUE)
-      selected_rows(integer(0))
+      selected_rows(character(0))
     }, error = function(e) {
       status_class("error")
       status_message(paste("Pitcher page load failed:", e$message))
@@ -1634,11 +2138,18 @@ cape_pitcher_player_page_server <- function(input, output, session,
 
   pitcher_catalog <- reactive({
     req(isTRUE(data_loaded()))
-    d <- raw_data()
+    d <- catalog_snapshot()
+    if (is.null(d)) d <- raw_data()
     req(!is.null(d))
     req(nrow(d) > 0)
 
-    d %>%
+    catalog_data <- d
+    if ("DataSource" %in% names(catalog_data)) {
+      catalog_data <- catalog_data %>%
+        filter(is.na(DataSource) | DataSource != "2026 Cape Cod League")
+    }
+
+    catalog_data %>%
       filter(
         !is.na(PitcherTeam), nzchar(PitcherTeam),
         !is.na(Pitcher), nzchar(Pitcher)
@@ -1649,7 +2160,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
       ) %>%
       distinct() %>%
       mutate(
-        TeamDisplay = cape_pitcher_ccbl_name(PitcherTeam),
+        TeamDisplay = cape_pitcher_team_name(PitcherTeam),
         PitcherDisplay = cape_pitcher_format_pitcher_name(Pitcher),
         TeamOrder = match(PitcherTeam, cape_pitcher_team_levels),
         TeamOrder = ifelse(is.na(TeamOrder), 999, TeamOrder)
@@ -1663,7 +2174,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
       arrange(TeamOrder, TeamDisplay)
 
     current_team <- isolate(input$cpp_team)
-    default_team <- if ("BRE_WHI" %in% tc$PitcherTeam) "BRE_WHI" else tc$PitcherTeam[1]
+    default_team <- base_team_default(tc$PitcherTeam)
     selected_team <- if (!is.null(current_team) && current_team %in% tc$PitcherTeam) {
       current_team
     } else {
@@ -1705,15 +2216,116 @@ cape_pitcher_player_page_server <- function(input, output, session,
 
   current_pitcher_key <- reactive({
     req(input$cpp_team, input$cpp_pitcher)
+    available_pitchers <- team_pitchers()
+    req(
+      nrow(available_pitchers) > 0,
+      input$cpp_pitcher %in% available_pitchers$Pitcher
+    )
     paste(input$cpp_team, input$cpp_pitcher, sep = "::")
   })
 
+  observeEvent(current_pitcher_key(), {
+    if (!is.function(player_loader)) return()
+
+    player_key <- current_pitcher_key()
+    selected_team <- input$cpp_team
+    selected_pitcher <- input$cpp_pitcher
+    selected_rows(character(0))
+    loaded_player_key(NULL)
+    raw_data(NULL)
+    status_class("clean")
+    status_message("Loading selected pitcher's 2026 data...")
+
+    tryCatch({
+      player_rows <- player_loader(selected_team, selected_pitcher)
+      initial_data <- cape_pitcher_init_data(raw_df = player_rows)
+      if (nrow(initial_data) > 0 &&
+          !all(c("PitcherTeam", "Pitcher") %in% names(initial_data))) {
+        stop("Loaded pitcher data is missing its team or player identifier.")
+      }
+      raw_data(initial_data)
+      loaded_player_key(player_key)
+      if (nrow(initial_data) > 0) {
+        storage <- base_retag_storage_status()
+        if (isTRUE(storage$ok)) {
+          status_message("Saved retags are permanent and loaded automatically.")
+        } else {
+          status_class("error")
+          status_message(paste("Persistent retag storage is unavailable:", storage$message))
+        }
+      } else {
+        status_message("No 2026 college pitches were found for the selected player.")
+      }
+    }, error = function(e) {
+      loaded_player_key(NULL)
+      raw_data(NULL)
+      status_class("error")
+      status_message(paste("Player load failed:", e$message))
+      showNotification(paste("Player load failed:", e$message), type = "error")
+    })
+  }, ignoreInit = FALSE)
+
   pitcher_raw <- reactive({
-    req(input$cpp_team, input$cpp_pitcher)
+    player_key <- current_pitcher_key()
+    if (is.function(player_loader)) {
+      req(identical(loaded_player_key(), player_key))
+    }
+    retag_revision()
     d <- raw_data()
     req(!is.null(d))
+    req(all(c("PitcherTeam", "Pitcher") %in% names(d)))
 
-    d %>% filter(PitcherTeam == input$cpp_team, Pitcher == input$cpp_pitcher)
+    college_rows <- d %>%
+      filter(PitcherTeam == input$cpp_team, Pitcher == input$cpp_pitcher)
+
+    supplement <- supplement_snapshot()
+    if (!isTRUE(input$cpp_include_cape) || is.null(supplement) || !nrow(supplement)) {
+      return(base_apply_pitch_retags(college_rows))
+    }
+
+    cape_rows <- base_player_supplement_rows(
+      college_rows,
+      supplement,
+      input$cpp_pitcher,
+      role = "Pitcher"
+    )
+
+    bind_rows(college_rows, cape_rows) %>%
+      base_apply_pitch_retags()
+  })
+
+  output$cpp_source_note <- renderUI({
+    player_key <- current_pitcher_key()
+    if (is.function(player_loader)) {
+      req(identical(loaded_player_key(), player_key))
+    }
+    d <- raw_data()
+    req(!is.null(d))
+    req(all(c("PitcherTeam", "Pitcher") %in% names(d)))
+    primary_rows <- d %>%
+      filter(PitcherTeam == input$cpp_team, Pitcher == input$cpp_pitcher)
+    college_n <- sum(
+      primary_rows$PitcherTeam == input$cpp_team &
+        primary_rows$Pitcher == input$cpp_pitcher,
+      na.rm = TRUE
+    )
+    supplement <- supplement_snapshot()
+    cape_n <- if (is.null(supplement) || !nrow(supplement)) 0L else nrow(
+      base_player_supplement_rows(
+        primary_rows,
+        supplement,
+        input$cpp_pitcher,
+        role = "Pitcher"
+      )
+    )
+    tags$p(
+      paste0(
+        format(college_n, big.mark = ","), " college pitches",
+        if (cape_n > 0L) paste0(" + ", format(cape_n, big.mark = ","), " matched Cape pitches")
+        else "; no matched Cape pitches"
+      ),
+      class = "cpp-helper"
+    )
   })
 
   observeEvent(current_pitcher_key(), {
@@ -1736,26 +2348,6 @@ cape_pitcher_player_page_server <- function(input, output, session,
     d <- pitcher_raw()
     req(nrow(d) > 0)
     cape_pitcher_prepare_view(d)
-  })
-
-  current_pending_changes <- reactive({
-    req(isTRUE(data_loaded()))
-    current <- raw_data()
-    snapshot_tags <- loaded_tags()
-    current_tags <- cape_pitcher_tag_snapshot(current)
-    req(length(current_tags) == length(snapshot_tags))
-    sum(current_tags != snapshot_tags)
-  })
-
-  observe({
-    pending <- current_pending_changes()
-    if (pending > 0) {
-      status_class("dirty")
-      status_message(paste0(pending, " pitch(es) retagged in this session."))
-    } else {
-      status_class("clean")
-      status_message("Retags are temporary and apply only to this session.")
-    }
   })
 
   observeEvent(input$cpp_save_height, {
@@ -1838,7 +2430,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
         class = "cpp-meta-line",
         paste(
           c(
-            cape_pitcher_ccbl_name(team_code),
+            cape_pitcher_team_name(team_code),
             if (!is.na(throw_hand) && nzchar(throw_hand)) paste0(substr(throw_hand, 1, 1), "HP") else NULL,
             paste0(game_count, " game(s)"),
             paste0(nrow(d), " pitches")
@@ -1950,7 +2542,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
   observeEvent(
     list(input$cpp_team, input$cpp_pitcher),
     {
-      selected_rows(integer(0))
+      selected_rows(character(0))
     },
     ignoreInit = TRUE
   )
@@ -2061,8 +2653,8 @@ cape_pitcher_player_page_server <- function(input, output, session,
       ed <- suppressWarnings(
         plotly::event_data("plotly_selected", source = "cpp_mov_lhh_src", priority = "event")
       )
-      ids <- suppressWarnings(as.integer(ed$customdata))
-      ids <- ids[!is.na(ids)]
+      ids <- as.character(ed$customdata)
+      ids <- ids[!is.na(ids) & nzchar(ids)]
       selected_rows(ids)
     },
     ignoreNULL = TRUE
@@ -2076,28 +2668,33 @@ cape_pitcher_player_page_server <- function(input, output, session,
       ed <- suppressWarnings(
         plotly::event_data("plotly_selected", source = "cpp_mov_rhh_src", priority = "event")
       )
-      ids <- suppressWarnings(as.integer(ed$customdata))
-      ids <- ids[!is.na(ids)]
+      ids <- as.character(ed$customdata)
+      ids <- ids[!is.na(ids) & nzchar(ids)]
       selected_rows(ids)
     },
     ignoreNULL = TRUE
   )
 
   observeEvent(input$cpp_clear_selection, {
-    selected_rows(integer(0))
+    selected_rows(character(0))
   })
 
   output$cpp_selection_info <- renderText({
     sel_n <- length(selected_rows())
-    pending <- current_pending_changes()
-    if (sel_n == 0 && pending == 0) {
+    d <- pitcher_raw()
+    saved_n <- if ("base_has_saved_retag" %in% names(d)) {
+      sum(d$base_has_saved_retag, na.rm = TRUE)
+    } else {
+      0L
+    }
+    if (sel_n == 0 && saved_n == 0) {
       "No pitches selected."
     } else if (sel_n == 0) {
-      paste0("No pitches selected. ", pending, " session retag(s).")
-    } else if (pending == 0) {
+      paste0("No pitches selected. ", saved_n, " saved retag(s) loaded.")
+    } else if (saved_n == 0) {
       paste0(sel_n, " pitch(es) selected.")
     } else {
-      paste0(sel_n, " pitch(es) selected. ", pending, " session retag(s).")
+      paste0(sel_n, " pitch(es) selected. ", saved_n, " saved retag(s) loaded.")
     }
   })
 
@@ -2109,34 +2706,73 @@ cape_pitcher_player_page_server <- function(input, output, session,
   })
 
   observeEvent(input$cpp_apply_retag, {
-    ids <- selected_rows()
-    if (!length(ids)) {
+    keys <- selected_rows()
+    if (!length(keys)) {
       showNotification("Select pitches on a movement plot first.", type = "warning")
       return()
     }
 
-    updated <- raw_data()
-    rows <- which(updated$caps_row_id %in% ids)
+    current <- pitcher_raw()
+    rows <- which(current$base_pitch_key %in% keys)
     if (!length(rows)) {
       showNotification("Selected pitches are no longer available. Reload the page data and try again.", type = "error")
       return()
     }
 
-    updated$TaggedPitchType[rows] <- input$cpp_new_pitch_type
-    raw_data(updated)
-    selected_rows(integer(0))
-    status_class("dirty")
-    status_message(paste0("Retagged ", length(rows), " pitch(es) for this session."))
-    showNotification(
-      paste0("Retagged ", length(rows), " pitch(es) as ", input$cpp_new_pitch_type, "."),
-      type = "message"
-    )
+    tryCatch({
+      saved <- base_save_pitch_retags(current[rows, , drop = FALSE], input$cpp_new_pitch_type)
+      retag_revision(retag_revision() + 1L)
+      selected_rows(character(0))
+      status_class("clean")
+      status_message(paste0("Saved ", saved, " permanent pitch retag(s)."))
+      showNotification(
+        paste0("Permanently retagged ", saved, " pitch(es) as ", input$cpp_new_pitch_type, "."),
+        type = "message"
+      )
+    }, error = function(e) {
+      status_class("error")
+      status_message(paste("Retag save failed:", conditionMessage(e)))
+      showNotification(paste("Retag save failed:", conditionMessage(e)), type = "error")
+    })
+  })
+
+  observeEvent(input$cpp_revert_retag, {
+    keys <- selected_rows()
+    if (!length(keys)) {
+      showNotification("Select saved retags on a movement plot first.", type = "warning")
+      return()
+    }
+
+    current <- pitcher_raw()
+    rows <- which(current$base_pitch_key %in% keys)
+    if (!length(rows)) {
+      showNotification("Selected pitches are no longer available.", type = "error")
+      return()
+    }
+
+    tryCatch({
+      reverted <- base_revert_pitch_retags(current[rows, , drop = FALSE])
+      retag_revision(retag_revision() + 1L)
+      selected_rows(character(0))
+      status_class("clean")
+      status_message(paste0("Reverted ", reverted, " saved pitch retag(s) to source values."))
+      showNotification(
+        if (reverted > 0) paste0("Reverted ", reverted, " pitch retag(s).")
+        else "None of the selected pitches had saved retags.",
+        type = if (reverted > 0) "message" else "warning"
+      )
+    }, error = function(e) {
+      status_class("error")
+      status_message(paste("Retag revert failed:", conditionMessage(e)))
+      showNotification(paste("Retag revert failed:", conditionMessage(e)), type = "error")
+    })
   })
 
   output$cpp_arsenal <- renderReactable({
-    make_table(
+    cape_pitcher_make_table(
       pitcher_arsenal(pitcher_full()),
       pct = "Usage%",
+      bar_pct = "Usage%",
       d1 = c("IVB", "HB", "Ext"),
       d3 = "xwOBAcon",
       int = c("#", "Spin")
@@ -2144,7 +2780,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
   })
 
   output$cpp_psplit <- renderReactable({
-    make_table(
+    cape_pitcher_make_table(
       cape_pitcher_split_table(pitcher_full()),
       pct = c("Whiff%", "Chase%", "K%", "BB%"),
       d3 = c("AVG", "OPS", "OBP", "SLG"),
@@ -2153,7 +2789,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
   })
 
   output$cpp_perf_lhh <- renderReactable({
-    make_table(
+    cape_pitcher_make_table(
       pitcher_perf_side(pitcher_full(), "L"),
       pct = c("Zone%", "Whiff%", "Chase%"),
       d3 = "xwOBAcon",
@@ -2163,7 +2799,7 @@ cape_pitcher_player_page_server <- function(input, output, session,
   })
 
   output$cpp_perf_rhh <- renderReactable({
-    make_table(
+    cape_pitcher_make_table(
       pitcher_perf_side(pitcher_full(), "R"),
       pct = c("Zone%", "Whiff%", "Chase%"),
       d3 = "xwOBAcon",
@@ -2173,15 +2809,23 @@ cape_pitcher_player_page_server <- function(input, output, session,
   })
 
   output$cpp_pmix <- renderReactable({
-    make_table(pmix_wide(pitcher_full()), pct = c("vs LHH", "vs RHH"))
+    cape_pitcher_make_table(
+      pmix_wide(pitcher_full()),
+      pct = c("vs LHH", "vs RHH"),
+      bar_pct = c("vs LHH", "vs RHH")
+    )
   })
 
   output$cpp_pusage <- renderReactable({
-    make_table(pusage(pitcher_full()), pct = c("Usage%", "Whiff%"))
+    cape_pitcher_make_table(
+      pusage(pitcher_full()),
+      pct = c("Usage%", "Whiff%"),
+      bar_pct = "Usage%"
+    )
   })
 
   output$cpp_pitch_xw_table <- renderReactable({
-    make_table(
+    cape_pitcher_make_table(
       pitcher_xw_table(pitcher_full()),
       d3 = c("xwOBAcon", "xwOBA"),
       int = c("#", "BBE")

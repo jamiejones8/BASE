@@ -1,5 +1,5 @@
 # =========================================================
-#  BREWSTER WHITECAPS ANALYTICS — Bundled Data File Page
+#  TEAM ANALYTICS — Bundled Data File Page
 # =========================================================
 library(shiny)
 library(DT)
@@ -14,7 +14,7 @@ upload_page_ui <- function(id) {
         class = "leaderboard-card-full",
         h4("Current Source"),
         p(
-          "Leaderboards read from CapeCod26.parquet.",
+          paste("Leaderboards read from", TEAM_CONFIG$data$season_file, "."),
           "Reload here if the source file changes."
         ),
         actionButton(ns("refresh_local_btn"), "Reload Data", class = "txst-btn"),

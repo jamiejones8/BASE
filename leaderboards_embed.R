@@ -1,61 +1,58 @@
-whitecaps_hub_image_src <- local({
-  image_file <- "www/surf.png"
+team_analytics_hub_image_src <- local({
+  configured <- base_asset_url(TEAM_CONFIG$assets$hub_image)
+  image_file <- file.path("www", configured)
 
   if (!file.exists(image_file)) {
-    return("surf.png")
+    return(configured)
   }
 
-  paste0("surf.png?v=", as.integer(file.info(image_file)$mtime[[1]]))
+  paste0(configured, "?v=", as.integer(file.info(image_file)$mtime[[1]]))
 })
 
-WHITECAPS_PAGE_ID <- "whitecaps_app"
+TEAM_ANALYTICS_PAGE_ID <- "team_analytics_app"
 
-whitecaps_env <- local({
+team_analytics_env <- local({
   env <- new.env(parent = globalenv())
   source("leaderboards/app.R", local = env, chdir = TRUE)
   env
 })
 
-whitecaps_hub_card <- function() {
+team_analytics_hub_card <- function() {
   list(
-    id = "whitecaps_central",
-    title = "Whitecaps Analytics",
-    page = WHITECAPS_PAGE_ID,
+    id = "team_analytics",
+    title = paste(TEAM_CONFIG$name, "Analytics"),
+    page = TEAM_ANALYTICS_PAGE_ID,
     status = "live",
-    image_src = whitecaps_hub_image_src
+    image_src = team_analytics_hub_image_src
   )
 }
 
-whitecaps_is_page <- function(page) {
-  identical(page, WHITECAPS_PAGE_ID)
+team_analytics_is_page <- function(page) {
+  identical(page, TEAM_ANALYTICS_PAGE_ID)
 }
 
-whitecaps_embedded_ui <- function() {
-  if (exists("embedded_ui", envir = whitecaps_env, inherits = FALSE)) {
-    return(tagList(whitecaps_env$embedded_ui))
+team_analytics_embedded_ui <- function() {
+  if (exists("embedded_ui", envir = team_analytics_env, inherits = FALSE)) {
+    return(tagList(team_analytics_env$embedded_ui))
   }
 
-  tagList(whitecaps_env$ui)
+  tagList(team_analytics_env$ui)
 }
 
-whitecaps_bind_parent_server <- function(current_page, input, output, session, hub_page = "hub") {
+team_analytics_bind_parent_server <- function(current_page, input, output, session, hub_page = "hub") {
   initialized <- reactiveVal(FALSE)
 
-  observeEvent(input$nav_caps_hub, {
-    current_page(hub_page)
-  })
-
   observeEvent(current_page(), {
-    if (whitecaps_is_page(current_page()) && !initialized()) {
+    if (team_analytics_is_page(current_page()) && !initialized()) {
       session$onFlushed(function() {
-        whitecaps_env$server(input, output, session)
+        team_analytics_env$server(input, output, session)
         initialized(TRUE)
       }, once = TRUE)
     }
 
-    if (!whitecaps_is_page(current_page())) {
-      removeUI(selector = "head #whitecaps-stylesheet", multiple = TRUE, immediate = TRUE)
-      removeUI(selector = "head #whitecaps-font-app", multiple = TRUE, immediate = TRUE)
+    if (!team_analytics_is_page(current_page())) {
+      removeUI(selector = "head #team-analytics-stylesheet", multiple = TRUE, immediate = TRUE)
+      removeUI(selector = "head #team-analytics-font-app", multiple = TRUE, immediate = TRUE)
     }
   }, ignoreInit = FALSE)
 }

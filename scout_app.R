@@ -1,8 +1,6 @@
 # ============================================================================
-#  OPPONENT SCOUTING + ACQUISITIONS  —  VT / Brewster
-#  Load a TrackMan CSV *or* a SQLite .db. Pitching + Hitting reports,
-#  plus an Acquisitions tab that ranks prospects and cross-references an
-#  (optional) reference roster to flag who's already signed elsewhere.
+#  OPPONENT SCOUTING — configurable college workflow
+#  Load a TrackMan CSV *or* a SQLite .db for pitching and hitting reports.
 #  Standalone: no source() files.  Open and Run App.
 # ============================================================================
 
@@ -20,7 +18,7 @@ options(shiny.maxRequestSize = 500 * 1024^2)
 
 # ---- Pull models from a private HF dataset (token via Space secret HF_TOKEN) -
 library(httr)
-SCOUT_DATASET <- Sys.getenv("SCOUT_DATASET", "BrewsterWhitecapsMAC/REPLACE-ME")
+SCOUT_DATASET <- Sys.getenv("SCOUT_DATASET", TEAM_CONFIG$data$hf_repo_id)
 .tok <- Sys.getenv("HF_TOKEN")
 message(sprintf(">>> HF_TOKEN check — present:%s  length:%d  prefix:'%s'  (want length ~37-40, prefix 'hf_')",
                 nzchar(.tok), nchar(.tok), substr(.tok, 1, 3)))
@@ -81,16 +79,6 @@ arm_slot_label <- function(deg) dplyr::case_when(
   deg >= 22   ~ "Low 3/4",
   deg >= 5    ~ "Sidearm",
   TRUE        ~ "Submarine")
-
-# normalize a name to a join key: handles "Last, First" and "First Last"
-norm_name <- function(x) {
-  x <- tolower(trimws(as.character(x)))
-  x <- gsub("[.'\"-]", "", x)
-  x <- gsub(",", " ", x)
-  vapply(strsplit(x, "\\s+"),
-         function(t) { t <- t[t != ""]; paste(sort(t), collapse = " ") },
-         character(1))
-}
 
 # ============================================================================
 #  LIVE SCORING — compute Stuff+/Loc+/Pitch+, xRV, xwOBA from raw TrackMan
@@ -455,84 +443,6 @@ btype_table <- function(d, split) {
     arrange(match(`Pitch Group`, c("Fastball","Breaking","Offspeed")))
 }
 
-# ---- Acquisition grades -----------------------------------------------------
-acq_pitchers <- function(d, minp) {
-  out <- d %>% filter(!is.na(Pitcher)) %>%
-    group_by(Pitcher) %>%
-    summarise(
-      Hand    = dplyr::first(PThrows),
-      SeenAt  = dplyr::first(PitcherTeam),
-      Pitches = dplyr::n(),
-      FBVelo  = round(mnn(RelSpeed[PitchGroup == "Fastball"]), 1),
-      TopVelo = round(mxn(RelSpeed)),
-      swings = sum(Swing, na.rm = TRUE), whiffs = sum(WhiffP, na.rm = TRUE),
-      ooz = sum(OutZone, na.rm = TRUE), chase = sum(Chase, na.rm = TRUE),
-      ab = sum(AB, na.rm = TRUE), h = sum(Hit, na.rm = TRUE), bb = sum(BB, na.rm = TRUE),
-      hbp = sum(HBP, na.rm = TRUE), sf = sum(SF, na.rm = TRUE),
-      tb = sum(X1B, na.rm = TRUE) + 2*sum(X2B, na.rm = TRUE) +
-           3*sum(X3B, na.rm = TRUE) + 4*sum(HR, na.rm = TRUE),
-      .groups = "drop") %>%
-    filter(Pitches >= minp) %>%
-    mutate(
-      `Whiff%` = ifelse(swings > 0, whiffs / swings, NA_real_),
-      `Chase%` = ifelse(ooz > 0, chase / ooz, NA_real_),
-      obp = ifelse((ab + bb + hbp + sf) > 0, (h + bb + hbp) / (ab + bb + hbp + sf), NA_real_),
-      slg = ifelse(ab > 0, tb / ab, NA_real_),
-      `OPS Agst` = round(ifelse(is.na(obp) | is.na(slg), NA_real_, obp + slg), 3)) %>%
-    transmute(Player = Pitcher, Hand, SeenAt, Pitches, FBVelo, TopVelo,
-              `Whiff%`, `Chase%`, `OPS Agst`)
-  if (nrow(out) == 0) return(out)
-  out %>% mutate(Grade = round(100 * rowMeans(
-    cbind(pctl(FBVelo), pctl(`Whiff%`), pctl(`Chase%`), pctl(-`OPS Agst`)),
-    na.rm = TRUE))) %>% arrange(desc(Grade))
-}
-
-acq_hitters <- function(d, minp) {
-  out <- d %>% filter(!is.na(Batter)) %>%
-    group_by(Batter) %>%
-    summarise(
-      Side    = dplyr::first(BatSide),
-      SeenAt  = dplyr::first(BatterTeam),
-      Pitches = dplyr::n(),
-      EV = round(mnn(ExitSpeed[BBE]), 1),
-      swings = sum(Swing, na.rm = TRUE), whiffs = sum(WhiffP, na.rm = TRUE),
-      contact = sum(Contact, na.rm = TRUE),
-      ooz = sum(OutZone, na.rm = TRUE), chase = sum(Chase, na.rm = TRUE),
-      ab = sum(AB, na.rm = TRUE), h = sum(Hit, na.rm = TRUE), bb = sum(BB, na.rm = TRUE),
-      hbp = sum(HBP, na.rm = TRUE), sf = sum(SF, na.rm = TRUE),
-      tb = sum(X1B, na.rm = TRUE) + 2*sum(X2B, na.rm = TRUE) +
-           3*sum(X3B, na.rm = TRUE) + 4*sum(HR, na.rm = TRUE),
-      .groups = "drop") %>%
-    filter(Pitches >= minp) %>%
-    mutate(
-      obp = ifelse((ab + bb + hbp + sf) > 0, (h + bb + hbp) / (ab + bb + hbp + sf), NA_real_),
-      slg = ifelse(ab > 0, tb / ab, NA_real_),
-      OPS = round(ifelse(is.na(obp) | is.na(slg), NA_real_, obp + slg), 3),
-      `Contact%` = ifelse(swings > 0, contact / swings, NA_real_),
-      `Chase%` = ifelse(ooz > 0, chase / ooz, NA_real_),
-      `Whiff%` = ifelse(swings > 0, whiffs / swings, NA_real_)) %>%
-    transmute(Player = Batter, Side, SeenAt, Pitches, EV, OPS,
-              `Contact%`, `Chase%`, `Whiff%`)
-  if (nrow(out) == 0) return(out)
-  out %>% mutate(Grade = round(100 * rowMeans(
-    cbind(pctl(EV), pctl(OPS), pctl(`Contact%`), pctl(-`Whiff%`)),
-    na.rm = TRUE))) %>% arrange(desc(Grade))
-}
-
-# join reference roster -> College + current Status
-attach_status <- function(tbl, ref) {
-  if (is.null(tbl) || nrow(tbl) == 0) return(tbl)
-  tbl$.key <- norm_name(tbl$Player)
-  if (is.null(ref)) { tbl$College <- NA_character_; tbl$Status <- "no roster loaded"
-                      return(tbl %>% select(-.key)) }
-  out <- tbl %>% left_join(ref, by = ".key")
-  out %>% mutate(
-      Status = ifelse(is.na(RefTeam), "AVAILABLE?",
-                paste0(RefTeam, ifelse(is.na(RefLeague), "", paste0(" (", RefLeague, ")")))),
-      College = College) %>%
-    select(-.key, -RefTeam, -RefLeague)
-}
-
 # ============================================================================
 #  TABLE RENDERER
 # ============================================================================
@@ -613,9 +523,9 @@ draw_spray <- function(d) {
     x <- b$Distance * sin(b$Bearing * pi/180)
     y <- b$Distance * cos(b$Bearing * pi/180)
     hit <- b$PlayResult %in% c("Single", "Double", "Triple", "HomeRun")
-    points(x, y, pch = 19, cex = 0.7, col = ifelse(hit, "#a83b3b", "#0a2342"))
+    points(x, y, pch = 19, cex = 0.7, col = ifelse(hit, "#a83b3b", TEAM_CONFIG$colors$primary))
     legend("topright", c("Hit", "Out/other"), pch = 19,
-           col = c("#a83b3b", "#0a2342"), bty = "n", cex = 0.9)
+           col = c("#a83b3b", TEAM_CONFIG$colors$primary), bty = "n", cex = 0.9)
   } else text(0, 200, "No batted-ball locations", col = "#888")
 }
 
@@ -641,7 +551,7 @@ make_table <- function(df, pct = character(), d3 = character(),
               backgroundColor = "#ffffff", color = "#10233a",
               borderColor = "#dbe3ec", highlightColor = "#eef4fb",
               cellStyle = list(fontSize = "14px", padding = "8px 10px"),
-              headerStyle = list(background = "#0a2342", color = "#ffffff",
+              headerStyle = list(background = TEAM_CONFIG$colors$primary, color = "#ffffff",
                                  fontWeight = "bold", borderBottom = "3px solid #1aa3b5",
                                  textTransform = "uppercase", fontSize = "12px",
                                  letterSpacing = "0.4px")))
@@ -789,17 +699,17 @@ grade_react <- function(df, gcols) {
             defaultPageSize = 9999,
             theme = reactableTheme(backgroundColor = "#ffffff", color = "#10233a",
               borderColor = "#dbe3ec", cellStyle = list(fontSize = "15px", padding = "8px 10px"),
-              headerStyle = list(background = "#0a2342", color = "#ffffff", fontWeight = "bold",
+              headerStyle = list(background = TEAM_CONFIG$colors$primary, color = "#ffffff", fontWeight = "bold",
                 borderBottom = "3px solid #1aa3b5", textTransform = "uppercase", fontSize = "12px")))
 }
 
 # ============================================================================
 #  UI
 # ============================================================================
-# Theme: navy + seafoam green on white, to match the Brewster Whitecaps.
-theme_bw <- bs_theme(version = 5, bg = "#ffffff", fg = "#10233a",
-                     primary = "#0a2342", secondary = "#1aa3b5",
-                     "navbar-bg" = "#0a2342",
+# Theme: navy + seafoam green on white, to use the configured team brand.
+theme_bw <- bs_theme(version = 5, bg = "#ffffff", fg = TEAM_CONFIG$colors$primary,
+                     primary = TEAM_CONFIG$colors$primary, secondary = TEAM_CONFIG$colors$accent,
+                     "navbar-bg" = TEAM_CONFIG$colors$primary,
                      base_font = font_google("Inter"))
 
 # Banner = the navy navbar. Drop the official team logo at  www/logo.png  next to
@@ -836,7 +746,7 @@ hitter_xw_table <- function(d) {
 }
 
 # ============================================================================
-#  SCOUTING PAGES  (CAPS-styled; each opens on its own; one shared CSV upload)
+#  SCOUTING PAGES  (BASE-styled; each opens on its own; one shared CSV upload)
 # ============================================================================
 scout_databar <- function() {
   tags$div(
@@ -849,18 +759,14 @@ scout_databar <- function() {
 scout_shell <- function(title, ...) {
   tagList(
     tags$div(
-      class = "hub-main",
-      tags$div(style = "margin-bottom:20px;",
-        tags$button("\u2190 Back to Hub",
-          onclick = "Shiny.setInputValue('nav_to','hub',{priority:'event'})",
-          class = "btn btn-outline-secondary btn-sm")),
+      class = "hub-main base-page base-scout-page",
       tags$h2(title, style = "font-family:var(--font-head);color:var(--navy);margin-bottom:18px;"),
       scout_databar(),
       textOutput("status"),
       tags$hr(style = "border-color:#dbe3ec;"),
       ...),
     tags$div(class = "hub-footer",
-             paste0("Brewster Whitecaps Analytics \u00b7 ", format(Sys.Date(), "%Y"))))
+             base_brand_footer()))
 }
 
 scout_pitching_ui <- function() scout_shell("Pitcher Scouting",
@@ -922,20 +828,6 @@ scout_hitting_ui <- function() scout_shell("Hitter Scouting",
   card(card_header("Spray Chart"),
        card_body(plotOutput("h_spray", height = "320px"))))
 
-scout_acq_ui <- function() scout_shell("Acquisitions",
-  fileInput("roster_csv", "Reference roster CSV (optional)", accept = ".csv",
-            buttonLabel = "Browse", placeholder = "No file selected"),
-  layout_columns(col_widths = c(4, 4, 4),
-    radioButtons("acq_type", "Target", c("Pitchers" = "P", "Hitters" = "H"),
-                 selected = "P", inline = TRUE),
-    checkboxInput("acq_available", "Only show AVAILABLE (not on a loaded roster)", FALSE),
-    textInput("acq_college", "College contains", "")),
-  tags$p(style = "color:#888;font-size:12px;",
-         "Grade = composite percentile within the loaded data (higher = better target). ",
-         "Load a reference roster to fill College + signed status."),
-  card(card_header("Acquisition Board"),
-       card_body(reactableOutput("acq_board"))))
-
 scout_grades_ui <- function() scout_shell("Player Grades",
   layout_columns(col_widths = c(4, 8),
     radioButtons("grade_type", "Player type", c("Pitchers" = "P", "Hitters" = "H"),
@@ -954,7 +846,6 @@ scout_grades_ui <- function() scout_shell("Player Grades",
 # ============================================================================
 scout_server <- function(input, output, session) {
   raw <- reactiveVal(NULL)
-  ref <- reactiveVal(NULL)
   db_path_ok <- reactiveVal(NULL)
 
   # --- CSV ---
@@ -1002,26 +893,6 @@ scout_server <- function(input, output, session) {
     raw(prep_pitches(df))
     showNotification(paste0("Loaded ", nrow(df), " pitches (", length(keep),
                             " of ", length(have), " columns)."), type = "message")
-  })
-
-  # --- reference roster ---
-  observeEvent(input$roster_csv, {
-    req(input$roster_csv)
-    r <- tryCatch(utils::read.csv(input$roster_csv$datapath, stringsAsFactors = FALSE,
-                                  check.names = FALSE), error = function(e) NULL)
-    if (is.null(r)) { showNotification("Could not read roster CSV.", type = "error"); return() }
-    pick <- function(cands) { hit <- intersect(tolower(cands), tolower(names(r)))
-      if (!length(hit)) return(NULL); names(r)[tolower(names(r)) == hit[1]][1] }
-    nm <- pick(c("Player","Name")); if (is.null(nm)) { showNotification("Roster needs a Player/Name column.", type = "error"); return() }
-    col <- pick(c("College","School")); lvl <- pick(c("Level","Division"))
-    tm  <- pick(c("Team","Club")); lg <- pick(c("League"))
-    ref(tibble(.key = norm_name(r[[nm]]),
-               College  = if (!is.null(col)) r[[col]] else NA_character_,
-               Level    = if (!is.null(lvl)) r[[lvl]] else NA_character_,
-               RefTeam  = if (!is.null(tm))  r[[tm]]  else NA_character_,
-               RefLeague= if (!is.null(lg))  r[[lg]]  else NA_character_) %>%
-          distinct(.key, .keep_all = TRUE))
-    showNotification(paste0("Roster loaded: ", nrow(r), " players."), type = "message")
   })
 
   output$status <- renderText({ d <- raw()
@@ -1102,7 +973,7 @@ scout_server <- function(input, output, session) {
   output$release_plot <- renderPlot({ d <- pdata(); req(nrow(d) > 0)
     d <- d %>% filter(!is.na(RelSide), !is.na(RelHeight)); req(nrow(d) > 0)
     ptf  <- factor(d$PitchType)
-    cols <- c("#0a2342","#1aa3b5","#e07b39","#5fae57","#a83b3b","#7b5ea7","#c9a13b","#3a7ebf")
+    cols <- c(TEAM_CONFIG$colors$primary,TEAM_CONFIG$colors$accent,"#e07b39","#5fae57","#a83b3b","#7b5ea7","#c9a13b","#3a7ebf")
     pal  <- cols[(as.integer(ptf) - 1) %% length(cols) + 1]
     op <- par(mar = c(4, 4, 1, 1), bg = "white"); on.exit(par(op))
     plot(d$RelSide, d$RelHeight, col = pal, pch = 19, cex = 0.5, las = 1,
@@ -1133,25 +1004,6 @@ scout_server <- function(input, output, session) {
     d3 = c("xwOBAcon","xwOBA"), int = c("#","BBE")))
   output$h_la    <- renderPlot({ d <- bdata(); req(nrow(d) > 0); draw_la(d) })
   output$h_spray <- renderPlot({ d <- bdata(); req(nrow(d) > 0); draw_spray(d) })
-
-  # --- Acquisitions ---
-  output$acq_board <- renderReactable({
-    d <- raw(); req(d)
-    pool <- team_filter(d, if (input$acq_type == "P") "PitcherTeam" else "BatterTeam")
-    tbl <- if (input$acq_type == "P") acq_pitchers(pool, input$minp) else acq_hitters(pool, input$minp)
-    tbl <- attach_status(tbl, ref())
-    if (!is.null(tbl) && nrow(tbl) > 0) {
-      if (isTRUE(input$acq_available)) tbl <- tbl %>% filter(Status == "AVAILABLE?")
-      if (nzchar(input$acq_college) && "College" %in% names(tbl))
-        tbl <- tbl %>% filter(grepl(input$acq_college, College, ignore.case = TRUE))
-      front <- intersect(c("Player","College","Hand","Side","Grade"), names(tbl))
-      tbl <- tbl %>% select(all_of(front), everything())
-    }
-    pcts <- intersect(c("Whiff%","Chase%","Contact%"), names(tbl))
-    make_table(tbl, pct = pcts, d3 = intersect(c("OPS","OPS Agst"), names(tbl)),
-               d1 = intersect(c("FBVelo","EV"), names(tbl)),
-               int = intersect(c("Pitches","TopVelo","Grade"), names(tbl)))
-  })
 
   # --- Player Grades ---
   observe({ d <- raw(); req(d, input$grade_type, input$minp)

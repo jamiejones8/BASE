@@ -5,7 +5,7 @@ library(dplyr)
 
 process_data <- function(df) {
   if (is.null(df) || nrow(df) == 0) {
-    message("⚠️ No data provided to process_data()")
+    message("No data provided to process_data()")
     return(tibble())
   }
   
@@ -94,7 +94,7 @@ process_data <- function(df) {
     )
   }
   
-  message("✅ Data processed successfully with ", nrow(df), " rows.")
+  message("Data processed successfully with ", nrow(df), " rows.")
   df
 }
 
@@ -104,7 +104,7 @@ process_data <- function(df) {
 
 filter_active_team <- function(df, team_column) {
   if (!team_column %in% names(df)) {
-    message("⚠️ Missing team column — returning all data for debugging.")
+    message("Missing team column - returning all data for debugging.")
     return(df)
   }
 

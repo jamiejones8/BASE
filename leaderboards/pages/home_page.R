@@ -5,14 +5,6 @@ home_page_ui <- function() {
   div(
     class = "main-container",
     div(
-      class = "home-intro",
-      h4(APP_COMMAND_CENTER),
-      p(
-        "Quick-look hitting and pitching leaders from the current Whitecaps season file."
-      )
-    ),
-    tags$hr(),
-    div(
       class = "home-columns",
       div(
         class = "home-column",
@@ -62,7 +54,6 @@ home_page_ui <- function() {
           DT::dataTableOutput("home_pitch_ip")
         )
       )
-    ),
-    tags$hr()
+    )
   )
 }
