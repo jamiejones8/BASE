@@ -198,7 +198,26 @@ TEAM_CONFIG <- list(
       base_env("BASE_DATA_REPO_ID", "")
     ),
     college_repo_path = base_env("BASE_COLLEGE_DATA_REPO_PATH", base_env("BASE_COLLEGE_DATA_FILE", "College26.parquet")),
-    cape_file = base_env("BASE_CAPE_DATA_FILE", "CapeCod26.parquet"),
+    cape_file = base_env(
+      "BASE_CAPE_DATA_FILE",
+      if (dir.exists("/base-data")) "/base-data/CapeCod26.parquet" else "CapeCod26.parquet"
+    ),
+    brewstuff_model_file = base_env(
+      "BASE_BREWSTUFF_MODEL_FILE",
+      if (dir.exists("/base-data")) "/base-data/models/brewstuff.model" else "brewstuff.model"
+    ),
+    scout_models_file = base_env(
+      "BASE_SCOUT_MODELS_FILE",
+      if (dir.exists("/base-data")) "/base-data/models/pitch_models.rds" else "pitch_models.rds"
+    ),
+    pitcher_stuff_model_file = base_env(
+      "BASE_PITCHER_STUFF_MODEL_FILE",
+      if (dir.exists("/base-data")) "/base-data/models/Stuff+2.rds" else "PitcherModels/Stuff+2.rds"
+    ),
+    pitcher_location_model_file = base_env(
+      "BASE_PITCHER_LOCATION_MODEL_FILE",
+      if (dir.exists("/base-data")) "/base-data/models/location_plus_model.rds" else "PitcherModels/location_plus_model.rds"
+    ),
     heights_file = base_env("BASE_PLAYER_HEIGHTS_FILE", "College26Heights.csv"),
     roster_file = base_env("BASE_ROSTER_FILE", "config/texas_state_roster_2026_reference.csv"),
     schedule_file = base_env("BASE_SCHEDULE_FILE", "config/texas_state_schedule_2026.csv")

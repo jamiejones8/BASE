@@ -16,39 +16,17 @@ suppressWarnings(suppressMessages(library(xgboost)))
 
 options(shiny.maxRequestSize = 500 * 1024^2)
 
-# ---- Pull models from a private HF dataset (token via Space secret HF_TOKEN) -
-library(httr)
-SCOUT_DATASET <- Sys.getenv("SCOUT_DATASET", TEAM_CONFIG$data$hf_repo_id)
-.tok <- Sys.getenv("HF_TOKEN")
-message(sprintf(">>> HF_TOKEN check — present:%s  length:%d  prefix:'%s'  (want length ~37-40, prefix 'hf_')",
-                nzchar(.tok), nchar(.tok), substr(.tok, 1, 3)))
-hf_get <- function(file, dest = file) {
-  if (file.exists(dest)) return(dest)
-  url <- paste0("https://huggingface.co/datasets/", SCOUT_DATASET, "/resolve/main/", file)
-  resp <- tryCatch(
-    httr::GET(url, httr::add_headers(Authorization = paste("Bearer", Sys.getenv("HF_TOKEN")))),
-    error = function(e) { message("HF connection error (", file, "): ", conditionMessage(e)); NULL })
-  if (is.null(resp)) return(dest)
-  st <- httr::status_code(resp)
-  if (st != 200) {
-    message(sprintf(">>> HF download FAILED for '%s' — HTTP %s from dataset '%s'. ",
-                    file, st, SCOUT_DATASET),
-            "Check that HF_TOKEN can read this (org-)private dataset and SCOUT_DATASET is exact.")
-    return(dest)
-  }
-  writeBin(httr::content(resp, "raw"), dest)
-  message(sprintf(">>> HF download OK: %s (%s bytes) from %s",
-                  file, format(file.info(dest)$size, big.mark = ","), SCOUT_DATASET))
-  dest
-}
-hf_get("pitch_models.rds")
-hf_get("xwoba_grid.rds")
+# ---- Models for live, in-app scoring of raw uploads -------------------------
+# Large deployment assets live on the persistent /base-data volume. Local
+# development retains the repository-relative fallbacks from TEAM_CONFIG.
+SCOUT_MODELS_FILE <- TEAM_CONFIG$data$scout_models_file
+XWGRID_FILE <- base_env("BASE_XWGRID_FILE", "xwoba_grid.rds")
+message(">>> Loading scouting models from ", SCOUT_MODELS_FILE)
 
-# Trained models for live, in-app scoring of raw uploads (blank if not present).
-MODELS <- tryCatch(if (file.exists("pitch_models.rds")) readRDS("pitch_models.rds") else NULL,
+MODELS <- tryCatch(if (file.exists(SCOUT_MODELS_FILE)) readRDS(SCOUT_MODELS_FILE) else NULL,
                    error = function(e) { message(">>> readRDS pitch_models.rds failed: ",
                                                   conditionMessage(e)); NULL })
-XWGRID <- tryCatch(if (file.exists("xwoba_grid.rds")) readRDS("xwoba_grid.rds") else NULL,
+XWGRID <- tryCatch(if (file.exists(XWGRID_FILE)) readRDS(XWGRID_FILE) else NULL,
                    error = function(e) { message(">>> readRDS xwoba_grid.rds failed: ",
                                                   conditionMessage(e)); NULL })
 if (is.null(MODELS)) message(">>> MODELS is NULL — Stuff+/Location+/Pitching+ and all grades will be blank.")

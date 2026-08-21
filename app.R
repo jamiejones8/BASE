@@ -387,7 +387,8 @@ options(shiny.maxRequestSize = 10000000 * 1024^2)
 pdf(file = NULL)
 Sys.setenv(TZ='EST')
 
-model <- lgb.load('brewstuff.model')
+message("Loading BrewStuff model from ", TEAM_CONFIG$data$brewstuff_model_file)
+model <- lgb.load(TEAM_CONFIG$data$brewstuff_model_file)
 Height26 <- tryCatch(
   read_csv(TEAM_CONFIG$data$heights_file, show_col_types = FALSE),
   error = function(e) tibble(
@@ -3262,9 +3263,9 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
 # ==========================================
 # PITCHER - MODELS (retained for compatibility; card tab no longer uses them)
 # ==========================================
-pitcher_model        <- readRDS("PitcherModels/Stuff+2.rds")
+pitcher_model        <- readRDS(TEAM_CONFIG$data$pitcher_stuff_model_file)
 league_stats         <- readRDS("PitcherModels/NEW_LeagueStats2.rds")
-xgb_fit              <- readRDS("PitcherModels/location_plus_model.rds")
+xgb_fit              <- readRDS(TEAM_CONFIG$data$pitcher_location_model_file)
 league_stats_pitcher <- readRDS("PitcherModels/location_plus_league_stats_pitcher.rds")
 
 # ==========================================

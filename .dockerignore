@@ -4,3 +4,8 @@
 scripts/__pycache__
 data/D1 Defense File.parquet
 .runtime-build-output-defense/
+CapeCod26.parquet
+brewstuff.model
+pitch_models.rds
+PitcherModels/Stuff+2.rds
+PitcherModels/location_plus_model.rds
