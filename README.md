@@ -124,3 +124,13 @@ Rscript leaderboards/scripts/precompute_leaderboards_cache.R
 Rscript check_leaderboards_integration.R
 R -e "shiny::runApp(host='0.0.0.0', port=7860)"
 ```
+
+## Deployment image
+
+Railway builds the application from `Dockerfile`, which uses the versioned
+`ghcr.io/jamiejones8/base-r-dependencies` image. That image contains R, system
+libraries, and R packages so normal application changes do not compile the
+dependency stack again. GitHub Actions republishes it only when
+`Dockerfile.dependencies` or its publishing workflow changes. When dependency
+requirements change, update `Dockerfile.dependencies`, bump its image version,
+publish it, and pin the resulting digest in `Dockerfile` before deployment.
