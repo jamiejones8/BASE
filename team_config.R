@@ -220,7 +220,7 @@ TEAM_CONFIG <- list(
     ),
     heights_file = base_env("BASE_PLAYER_HEIGHTS_FILE", "College26Heights.csv"),
     roster_file = base_env("BASE_ROSTER_FILE", "config/texas_state_roster_2027.csv"),
-    schedule_file = base_env("BASE_SCHEDULE_FILE", "config/texas_state_schedule_2026.csv")
+    schedule_file = base_env("BASE_SCHEDULE_FILE", "config/texas_state_schedule_2027.csv")
   )
 )
 

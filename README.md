@@ -48,9 +48,9 @@ player in the complete College26 source.
   Scouting reads the same override layer so pitch classifications stay aligned.
 - `config/texas_state_roster_2027.csv` drives the home roster using the Texas
   State 2026 fall roster for the upcoming 2027 season.
-- `config/texas_state_schedule_2026.csv` is intentionally header-only because
-  the 2026 season is complete; the home page points users to reports and
-  scouting instead of waiting for a future schedule.
+- `config/texas_state_schedule_2027.csv` drives the upcoming schedule and the
+  next-game card on the home page. It begins with the October 2026 fall
+  scrimmages for the upcoming 2027 season.
 
 The supplied Texas State primary, secondary, and SuperCat marks live in
 `www/`. The SuperCat is used for compact navigation, the secondary mark on the
