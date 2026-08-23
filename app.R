@@ -4375,7 +4375,7 @@ hub_ui <- function() {
       tags$div(class = "section-label", "Applications"),
       tags$div(class = "app-grid", lapply(apps, make_card)),
       tags$div(class = "section-label", style = "margin-top: 40px;",
-               paste(TEAM_CONFIG$season_label, "Roster")),
+               TEAM_CONFIG$roster_label),
       tags$div(
         class = "standings-wrapper",
         tags$div(class = "standings-division-label", "Catchers"),

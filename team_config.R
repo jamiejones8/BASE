@@ -93,7 +93,7 @@ TEAM_CONFIG <- list(
     "BASE_SEASON_LABEL",
     paste(base_env_int("BASE_SEASON", 2026L), "College Season")
   ),
-  roster_label = base_env("BASE_ROSTER_LABEL", "2026 Texas State roster"),
+  roster_label = base_env("BASE_ROSTER_LABEL", "2027 Texas State roster"),
   competition_level = base_env("BASE_COMPETITION_LEVEL", "NCAA Division I"),
   schedule_timezone = base_env("BASE_SCHEDULE_TIMEZONE", "America/Chicago"),
   colors = list(
@@ -219,7 +219,7 @@ TEAM_CONFIG <- list(
       if (dir.exists("/base-data")) "/base-data/models/location_plus_model.rds" else "PitcherModels/location_plus_model.rds"
     ),
     heights_file = base_env("BASE_PLAYER_HEIGHTS_FILE", "College26Heights.csv"),
-    roster_file = base_env("BASE_ROSTER_FILE", "config/texas_state_roster_2026_reference.csv"),
+    roster_file = base_env("BASE_ROSTER_FILE", "config/texas_state_roster_2027.csv"),
     schedule_file = base_env("BASE_SCHEDULE_FILE", "config/texas_state_schedule_2026.csv")
   )
 )
