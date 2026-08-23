@@ -4791,7 +4791,7 @@ server <- function(input, output, session) {
         ),
         tags$span(class = "home-team-logo-divider", `aria-hidden` = "true"),
         tags$img(
-          src = base_scoreboard_logo_url(),
+          src = base_supercat_logo_url(),
           alt = paste(TEAM_CONFIG$full_name, "logo"),
           class = "home-team-logo"
         )
@@ -4872,7 +4872,7 @@ server <- function(input, output, session) {
             class = "home-matchup",
             tags$div(
               class = "home-matchup-team",
-              tags$img(src = base_scoreboard_logo_url(), alt = TEAM_CONFIG$full_name),
+              tags$img(src = base_supercat_logo_url(), alt = TEAM_CONFIG$full_name),
               tags$div(
                 tags$strong(TEAM_CONFIG$abbreviation),
                 tags$small(paste0(wins, "–", losses))
