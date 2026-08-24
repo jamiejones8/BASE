@@ -76,6 +76,20 @@ validate_csv(
   "Player heights"
 )
 
+model_fields <- c(
+  "brewstuff_model_file",
+  "scout_models_file",
+  "pitcher_stuff_model_file",
+  "pitcher_location_model_file",
+  "pitcher_league_stats_file",
+  "pitcher_location_league_stats_file",
+  "xwoba_grid_file"
+)
+missing_models <- model_fields[!file.exists(unlist(TEAM_CONFIG$data[model_fields]))]
+if (length(missing_models)) {
+  fail("Configured model file(s) not found: ", paste(missing_models, collapse = ", "))
+}
+
 resolve_leaderboards_logo_check <- function() {
   configured <- TEAM_CONFIG$assets$leaderboards_logo
   candidates <- c(

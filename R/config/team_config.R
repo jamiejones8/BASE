@@ -98,6 +98,12 @@ base_env_int <- function(name, default = NA_integer_) {
   if (is.na(value)) default else value
 }
 
+base_file_override_or_fallback <- function(name, mounted_path, bundled_path) {
+  override <- Sys.getenv(name, unset = "")
+  if (nzchar(trimws(override))) return(base_env_path(name))
+  if (file.exists(mounted_path)) mounted_path else bundled_path
+}
+
 base_default_season_file <- function() {
   team_code <- base_env("BASE_TEAM_DATA_CODE", "TEX_BOB")
   derived_team_file <- file.path(
@@ -268,37 +274,45 @@ TEAM_CONFIG <- list(
       base_env("BASE_DATA_REPO_ID", "")
     ),
     college_repo_path = base_env("BASE_COLLEGE_DATA_REPO_PATH", base_env("BASE_COLLEGE_DATA_FILE", "College26.parquet")),
-    cape_file = base_env_path(
+    cape_file = base_file_override_or_fallback(
       "BASE_CAPE_DATA_FILE",
-      if (dir.exists("/base-data")) "/base-data/CapeCod26.parquet" else base_project_path("data", "external", "CapeCod26.parquet")
+      "/base-data/CapeCod26.parquet",
+      base_project_path("data", "external", "CapeCod26.parquet")
     ),
-    brewstuff_model_file = base_env_path(
+    brewstuff_model_file = base_file_override_or_fallback(
       "BASE_BREWSTUFF_MODEL_FILE",
-      if (dir.exists("/base-data")) "/base-data/models/brewstuff.model" else base_model_path("shared", "brewstuff.model")
+      "/base-data/models/brewstuff.model",
+      base_model_path("shared", "brewstuff.model")
     ),
-    scout_models_file = base_env_path(
+    scout_models_file = base_file_override_or_fallback(
       "BASE_SCOUT_MODELS_FILE",
-      if (dir.exists("/base-data")) "/base-data/models/pitch_models.rds" else base_model_path("shared", "pitch_models.rds")
+      "/base-data/models/pitch_models.rds",
+      base_model_path("shared", "pitch_models.rds")
     ),
-    pitcher_stuff_model_file = base_env_path(
+    pitcher_stuff_model_file = base_file_override_or_fallback(
       "BASE_PITCHER_STUFF_MODEL_FILE",
-      if (dir.exists("/base-data")) "/base-data/models/Stuff+2.rds" else base_model_path("pitcher", "Stuff+2.rds")
+      "/base-data/models/Stuff+2.rds",
+      base_model_path("pitcher", "Stuff+2.rds")
     ),
-    pitcher_location_model_file = base_env_path(
+    pitcher_location_model_file = base_file_override_or_fallback(
       "BASE_PITCHER_LOCATION_MODEL_FILE",
-      if (dir.exists("/base-data")) "/base-data/models/location_plus_model.rds" else base_model_path("pitcher", "location_plus_model.rds")
+      "/base-data/models/location_plus_model.rds",
+      base_model_path("pitcher", "location_plus_model.rds")
     ),
-    pitcher_league_stats_file = base_env_path(
+    pitcher_league_stats_file = base_file_override_or_fallback(
       "BASE_PITCHER_LEAGUE_STATS_FILE",
-      if (dir.exists("/base-data")) "/base-data/models/NEW_LeagueStats2.rds" else base_model_path("pitcher", "NEW_LeagueStats2.rds")
+      "/base-data/models/NEW_LeagueStats2.rds",
+      base_model_path("pitcher", "NEW_LeagueStats2.rds")
     ),
-    pitcher_location_league_stats_file = base_env_path(
+    pitcher_location_league_stats_file = base_file_override_or_fallback(
       "BASE_PITCHER_LOCATION_LEAGUE_STATS_FILE",
-      if (dir.exists("/base-data")) "/base-data/models/location_plus_league_stats_pitcher.rds" else base_model_path("pitcher", "location_plus_league_stats_pitcher.rds")
+      "/base-data/models/location_plus_league_stats_pitcher.rds",
+      base_model_path("pitcher", "location_plus_league_stats_pitcher.rds")
     ),
-    xwoba_grid_file = base_env_path(
+    xwoba_grid_file = base_file_override_or_fallback(
       "BASE_XWGRID_FILE",
-      if (dir.exists("/base-data")) "/base-data/models/xwoba_grid.rds" else base_model_path("shared", "xwoba_grid.rds")
+      "/base-data/models/xwoba_grid.rds",
+      base_model_path("shared", "xwoba_grid.rds")
     ),
     ncaa_colors_file = base_env_path("BASE_NCAA_COLORS_FILE", base_reference_path("NcaaColors.csv")),
     percentile_table_file = base_env_path("BASE_PERCENTILE_TABLE_FILE", base_reference_path("percentile_table.csv")),
