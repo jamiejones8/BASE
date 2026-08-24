@@ -1,5 +1,31 @@
-source("team_config.R", local = FALSE)
-source("pitch_retags.R", local = FALSE)
+get_script_dir <- function() {
+  frame_files <- vapply(sys.frames(), function(frame) {
+    ofile <- frame$ofile
+    if (is.null(ofile) || !nzchar(ofile)) return(NA_character_)
+    normalizePath(ofile, winslash = "/", mustWork = TRUE)
+  }, character(1))
+  frame_files <- frame_files[!is.na(frame_files)]
+  if (length(frame_files)) {
+    return(dirname(frame_files[[length(frame_files)]]))
+  }
+
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- "--file="
+  match <- grep(file_arg, args, value = TRUE)
+
+  if (!length(match)) {
+    return(normalizePath(getwd(), winslash = "/", mustWork = TRUE))
+  }
+
+  dirname(normalizePath(sub(file_arg, "", match[[1]]), winslash = "/", mustWork = TRUE))
+}
+
+project_root <- normalizePath(file.path(get_script_dir(), "..", ".."), winslash = "/", mustWork = TRUE)
+old_wd <- setwd(project_root)
+on.exit(setwd(old_wd), add = TRUE)
+
+source(file.path(project_root, "team_config.R"), local = FALSE)
+base_source("R/data/pitch_retags.R", local = FALSE)
 
 db_path <- tempfile(fileext = ".sqlite")
 on.exit(unlink(c(db_path, paste0(db_path, "-journal"))), add = TRUE)

@@ -1,6 +1,6 @@
 team_analytics_hub_image_src <- local({
   configured <- base_asset_url(TEAM_CONFIG$assets$hub_image)
-  image_file <- file.path("www", configured)
+  image_file <- base_www_path(configured)
 
   if (!file.exists(image_file)) {
     return(configured)
@@ -13,7 +13,7 @@ TEAM_ANALYTICS_PAGE_ID <- "team_analytics_app"
 
 team_analytics_env <- local({
   env <- new.env(parent = globalenv())
-  source("leaderboards/app.R", local = env, chdir = TRUE)
+  source(base_project_path("leaderboards", "app.R"), local = env, chdir = TRUE)
   env
 })
 

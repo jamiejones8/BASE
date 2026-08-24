@@ -20,14 +20,14 @@ options(shiny.maxRequestSize = 500 * 1024^2)
 # Large deployment assets live on the persistent /base-data volume. Local
 # development retains the repository-relative fallbacks from TEAM_CONFIG.
 SCOUT_MODELS_FILE <- TEAM_CONFIG$data$scout_models_file
-XWGRID_FILE <- base_env("BASE_XWGRID_FILE", "xwoba_grid.rds")
+XWGRID_FILE <- TEAM_CONFIG$data$xwoba_grid_file
 message(">>> Loading scouting models from ", SCOUT_MODELS_FILE)
 
 MODELS <- tryCatch(if (file.exists(SCOUT_MODELS_FILE)) readRDS(SCOUT_MODELS_FILE) else NULL,
                    error = function(e) { message(">>> readRDS pitch_models.rds failed: ",
                                                   conditionMessage(e)); NULL })
 XWGRID <- tryCatch(if (file.exists(XWGRID_FILE)) readRDS(XWGRID_FILE) else NULL,
-                   error = function(e) { message(">>> readRDS xwoba_grid.rds failed: ",
+                   error = function(e) { message(">>> readRDS xwOBA grid failed: ",
                                                   conditionMessage(e)); NULL })
 if (is.null(MODELS)) message(">>> MODELS is NULL — Stuff+/Location+/Pitching+ and all grades will be blank.")
 if (is.null(XWGRID)) message(">>> XWGRID is NULL — xwOBA columns will be blank.")

@@ -10,7 +10,7 @@ library(readr)
 
 # ── school branding (colors + logo), sourced from NcaaColors.csv ──
 pcard_ncaa_colors <- tryCatch(
-  readr::read_csv("NcaaColors.csv", show_col_types = FALSE),
+  readr::read_csv(TEAM_CONFIG$data$ncaa_colors_file, show_col_types = FALSE),
   error = function(e) NULL
 )
 

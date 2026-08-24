@@ -38,7 +38,7 @@ player in the complete College26 source.
 - The 201-column master remains untouched beside the runtime projection. New
   features can query it or add its fields to a regenerated projection, so
   optimization never discards source data.
-- `CapeCod26.parquet` is a supplemental source. When a selected college player
+- `data/external/CapeCod26.parquet` is a supplemental source. When a selected college player
   has a name match in the Cape dataset, scouting pages can include those Cape
   pitches without changing the player's college affiliation.
 - Pitch-type corrections from Pitcher Scouting are stored separately in
@@ -51,6 +51,21 @@ player in the complete College26 source.
 - `config/texas_state_schedule_2027.csv` drives the upcoming schedule and the
   next-game card on the home page. It begins with the October 2026 fall
   scrimmages for the upcoming 2027 season.
+
+## Repository layout
+
+- `R/` holds the main application source, split by config, data helpers,
+  modules, pages, reports, and integrations.
+- `models/` stores local model artifacts used by scouting and report features.
+- `data/reference/` stores reference tables used directly by the app.
+- `data/external/` stores optional supplemental datasets such as Cape Cod data.
+- `data/local/` stores local exploratory datasets and scratch exports.
+- `scripts/build/`, `scripts/checks/`, and `scripts/tests/` separate runtime
+  builders, validations, and focused tests.
+- `leaderboards/` remains a self-contained embedded Shiny app.
+
+More detailed folder conventions are documented in
+[`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md).
 
 The supplied Texas State primary, secondary, and SuperCat marks live in
 `www/`. The SuperCat is used for compact navigation, the secondary mark on the
@@ -66,7 +81,7 @@ home scoreboard, and the primary mark on the analytics hub card.
 3. Put team logos and card images in `www/`. The embedded leaderboards can
    resolve its configured logo directly from that shared folder.
 4. Retain the full master in the deployment's `/base-data` bucket, then run
-   `scripts/build_runtime_dataset.py` to create the query-on-demand runtime
+   `scripts/build/build_runtime_dataset.py` to create the query-on-demand runtime
    layer. Configure `BASE_RUNTIME_ROOT` to its mounted directory. Set
    `BASE_CAPE_DATA_FILE` for an optional player supplement.
 5. Set `BASE_ROSTER_FILE` and `BASE_SCHEDULE_FILE` for the college roster and

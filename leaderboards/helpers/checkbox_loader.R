@@ -82,6 +82,15 @@ leaderboards_source_path <- function() {
     inherits = TRUE,
     ifnotfound = list(data = list(season_file = "data/season.csv"))
   )$data$season_file
+
+  if (is.null(source_name) || is.na(source_name) || !nzchar(source_name)) {
+    return(character())
+  }
+
+  if (grepl("^(/|[A-Za-z]:[/\\\\])", source_name)) {
+    return(normalizePath(source_name, winslash = "/", mustWork = FALSE))
+  }
+
   normalizePath(
     file.path(leaderboards_project_dir(), source_name),
     winslash = "/",

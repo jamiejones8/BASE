@@ -807,7 +807,11 @@ cape_pitcher_batter_outline <- local({
     if (exists(obj_name, inherits = TRUE)) {
       img <- get(obj_name, inherits = TRUE)
     } else {
-      img_path <- if (identical(side, "L")) "left_batter.png" else "right_batter.png"
+      img_path <- if (identical(side, "L")) {
+        TEAM_CONFIG$data$left_batter_image_file
+      } else {
+        TEAM_CONFIG$data$right_batter_image_file
+      }
       if (file.exists(img_path)) {
         img <- png::readPNG(img_path)
       }
