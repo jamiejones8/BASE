@@ -11,4 +11,4 @@ base_wrapper_file <- local({
 source(
   file.path(dirname(base_wrapper_file), "R", "app_main.R"),
   local = FALSE
-)
+)$value
