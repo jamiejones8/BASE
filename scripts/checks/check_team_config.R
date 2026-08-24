@@ -89,6 +89,14 @@ missing_models <- model_fields[!file.exists(unlist(TEAM_CONFIG$data[model_fields
 if (length(missing_models)) {
   fail("Configured model file(s) not found: ", paste(missing_models, collapse = ", "))
 }
+pointer_models <- model_fields[vapply(
+  TEAM_CONFIG$data[model_fields],
+  base_is_lfs_pointer,
+  logical(1)
+)]
+if (length(pointer_models)) {
+  fail("Configured model file(s) are unresolved Git LFS pointers: ", paste(pointer_models, collapse = ", "))
+}
 
 resolve_leaderboards_logo_check <- function() {
   configured <- TEAM_CONFIG$assets$leaderboards_logo

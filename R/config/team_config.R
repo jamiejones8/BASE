@@ -98,10 +98,16 @@ base_env_int <- function(name, default = NA_integer_) {
   if (is.na(value)) default else value
 }
 
+base_is_lfs_pointer <- function(path) {
+  if (!file.exists(path)) return(FALSE)
+  first_line <- tryCatch(readLines(path, n = 1L, warn = FALSE), error = function(e) character())
+  identical(first_line, "version https://git-lfs.github.com/spec/v1")
+}
+
 base_file_override_or_fallback <- function(name, mounted_path, bundled_path) {
   override <- Sys.getenv(name, unset = "")
   if (nzchar(trimws(override))) return(base_env_path(name))
-  if (file.exists(mounted_path)) mounted_path else bundled_path
+  if (file.exists(mounted_path) && !base_is_lfs_pointer(mounted_path)) mounted_path else bundled_path
 }
 
 base_default_season_file <- function() {

@@ -36,8 +36,11 @@ www/pitching.png filter=lfs diff=lfs merge=lfs -text
 www/pitcher.png filter=lfs diff=lfs merge=lfs -text
 www/umpire.png filter=lfs diff=lfs merge=lfs -text
 models/pitcher/*.rds filter=lfs diff=lfs merge=lfs -text
+models/pitcher/NEW_LeagueStats2.rds -filter -diff -merge -text
+models/pitcher/location_plus_league_stats_pitcher.rds -filter -diff -merge -text
 www/brewster[[:space:]]team.jpg filter=lfs diff=lfs merge=lfs -text
 models/shared/*.rds filter=lfs diff=lfs merge=lfs -text
+models/shared/xwoba_grid.rds -filter -diff -merge -text
 www/acquisitions.png filter=lfs diff=lfs merge=lfs -text
 www/hitter_scouting.png filter=lfs diff=lfs merge=lfs -text
 www/pitcher_scouting.png filter=lfs diff=lfs merge=lfs -text
