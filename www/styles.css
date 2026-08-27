@@ -1095,12 +1095,17 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 .base-placeholder-panel h2 { margin: 8px 0 10px !important; }
 .base-placeholder-panel p { max-width: 520px; margin: 0; color: var(--base-muted); font-size: 16px; }
 .base-eyebrow {
-  color: var(--base-maroon);
-  font-family: var(--base-font-data);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  display: none !important;
+}
+
+/* Keep primary pages direct: titles only, without decorative or explanatory
+   subheadings. Functional section labels, controls, and table titles remain. */
+.base-workspace-heading p,
+.base-workspace-description,
+.home-season-line,
+.home-team-identity p,
+.dap-hero p {
+  display: none !important;
 }
 
 #base-scoreboard {

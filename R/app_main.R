@@ -4836,7 +4836,7 @@ ui <- navbarPage(
       tags$link(rel = "icon", href = base_supercat_logo_url()),
       tags$link(rel = "stylesheet",
         href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"),
-      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=22"),
+      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=23"),
       tags$style(HTML(base_brand_css(include_leaderboards = FALSE))),
       tags$style(HTML("
         #base-splash {
