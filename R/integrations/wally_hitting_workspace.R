@@ -209,13 +209,19 @@ base_hitting_embedded_head <- function() {
       .base-hitting-workspace {
         --txst-maroon: var(--base-maroon);
         --txst-gold: var(--base-gold-bright);
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
         color: var(--base-ink);
         font-family: var(--base-font-body);
       }
       .base-hitting-workspace .base-hitting-embedded-layout {
         display: grid;
         min-height: 760px;
-        grid-template-columns: minmax(230px, 270px) minmax(0, 1fr);
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        grid-template-columns: clamp(230px, 16vw, 270px) minmax(0, 1fr);
         gap: 18px;
         align-items: start;
       }
@@ -235,7 +241,23 @@ base_hitting_embedded_head <- function() {
         font-size: 20px;
         font-weight: 600;
       }
-      .base-hitting-workspace .base-hitting-main { min-width: 0; }
+      .base-hitting-workspace .base-hitting-main,
+      .base-hitting-workspace .base-hitting-main > .tabbable,
+      .base-hitting-workspace .base-hitting-main .tab-content,
+      .base-hitting-workspace .base-hitting-main .tab-pane {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+      }
+      .base-hitting-workspace .base-hitting-main .row {
+        margin-right: 0;
+        margin-left: 0;
+      }
+      .base-hitting-workspace .base-hitting-main .row > [class*='col-'] {
+        min-width: 0;
+        padding-right: 8px;
+        padding-left: 8px;
+      }
       .base-hitting-workspace .nav-tabs {
         display: flex;
         overflow-x: auto;
@@ -314,6 +336,22 @@ base_hitting_embedded_head <- function() {
         justify-content: center;
         border-radius: 0 !important;
       }
+      .base-hitting-workspace .shiny-spinner-output-container,
+      .base-hitting-workspace .shiny-html-output,
+      .base-hitting-workspace .shiny-plot-output,
+      .base-hitting-workspace .html-widget {
+        min-width: 0;
+        max-width: 100%;
+      }
+      .base-hitting-workspace .dataTables_wrapper {
+        width: 100% !important;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+      .base-hitting-workspace .dataTables_wrapper table.dataTable { margin: 0 !important; }
       .base-hitting-workspace .aar-report-header {
         display: grid;
         grid-template-columns: 72px minmax(0, 1fr) 72px;

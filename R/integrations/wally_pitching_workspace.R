@@ -204,6 +204,9 @@ base_pitching_embedded_head <- function() {
       .base-pitching-workspace {
         --txst-maroon: var(--base-maroon);
         --txst-gold: var(--base-gold-bright);
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
         color: var(--base-ink);
         font-family: var(--base-font-body);
       }
@@ -216,7 +219,10 @@ base_pitching_embedded_head <- function() {
       .base-pitching-workspace .base-pitching-embedded-layout {
         display: grid;
         min-height: 760px;
-        grid-template-columns: minmax(230px, 270px) minmax(0, 1fr);
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        grid-template-columns: clamp(230px, 16vw, 270px) minmax(0, 1fr);
         gap: 18px;
         align-items: start;
       }
@@ -236,7 +242,23 @@ base_pitching_embedded_head <- function() {
         font-size: 20px;
         font-weight: 600;
       }
-      .base-pitching-workspace .base-pitching-main { min-width: 0; }
+      .base-pitching-workspace .base-pitching-main,
+      .base-pitching-workspace .base-pitching-main > .tabbable,
+      .base-pitching-workspace .base-pitching-main .tab-content,
+      .base-pitching-workspace .base-pitching-main .tab-pane {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+      }
+      .base-pitching-workspace .base-pitching-main .row {
+        margin-right: 0;
+        margin-left: 0;
+      }
+      .base-pitching-workspace .base-pitching-main .row > [class*='col-'] {
+        min-width: 0;
+        padding-right: 8px;
+        padding-left: 8px;
+      }
       .base-pitching-workspace .bslib-sidebar-layout > .sidebar {
         border: 1px solid var(--base-border);
         border-radius: var(--base-radius);
@@ -319,8 +341,30 @@ base_pitching_embedded_head <- function() {
         justify-content: center;
         border-radius: 0 !important;
       }
-      .base-pitching-workspace .cr-percentile-column { display: flex; }
-      .base-pitching-workspace .cr-percentile-column > .shiny-html-output { display: flex; width: 100%; }
+      .base-pitching-workspace .shiny-spinner-output-container,
+      .base-pitching-workspace .shiny-html-output,
+      .base-pitching-workspace .shiny-plot-output,
+      .base-pitching-workspace .html-widget {
+        min-width: 0;
+        max-width: 100%;
+      }
+      .base-pitching-workspace .dataTables_wrapper {
+        width: 100% !important;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+      .base-pitching-workspace .dataTables_wrapper table.dataTable { margin: 0 !important; }
+      .base-pitching-workspace .cr-percentile-column { display: flex; min-width: 0; }
+      .base-pitching-workspace .cr-percentile-column > .shiny-spinner-output-container,
+      .base-pitching-workspace .cr-percentile-column > .shiny-html-output {
+        display: flex;
+        width: 100% !important;
+        min-width: 0;
+        flex: 1 1 100%;
+      }
       .base-pitching-workspace .cr-percentile-card {
         width: 100%;
         min-height: 0 !important;
@@ -445,6 +489,114 @@ base_pitching_embedded_head <- function() {
         color: var(--base-ink);
         font-size: 12px;
         font-weight: 700;
+      }
+      .base-pitching-workspace .base-pitching-performance-tables,
+      .base-pitching-workspace .base-pitching-performance-details {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin: 0 !important;
+      }
+      .base-pitching-workspace .base-pitching-performance-tables::before,
+      .base-pitching-workspace .base-pitching-performance-tables::after,
+      .base-pitching-workspace .base-pitching-performance-details::before,
+      .base-pitching-workspace .base-pitching-performance-details::after {
+        display: none !important;
+        content: none !important;
+      }
+      .base-pitching-workspace .base-pitching-performance-tables > [class*='col-'],
+      .base-pitching-workspace .base-pitching-performance-details > [class*='col-'] {
+        float: none;
+        width: auto;
+        padding: 0;
+      }
+      .base-pitching-workspace .base-season-summary-page {
+        display: grid;
+        gap: 18px;
+        width: 100%;
+        min-width: 0;
+      }
+      .base-pitching-workspace .base-season-summary-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        min-width: 0;
+      }
+      .base-pitching-workspace .base-season-summary-header > .shiny-html-output {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .base-pitching-workspace .base-season-summary-header .btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+      .base-pitching-workspace .base-season-summary-section,
+      .base-pitching-workspace .base-season-summary-hand-panel {
+        min-width: 0;
+      }
+      .base-pitching-workspace .base-season-summary-hands {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        align-items: start;
+      }
+      .base-pitching-workspace .base-season-summary-hand-panel {
+        border: 1px solid rgba(80, 18, 20, 0.12);
+        border-radius: 10px;
+        background: #fff;
+        overflow: hidden;
+      }
+      .base-pitching-workspace .base-season-summary-hand-panel .table-title {
+        margin: 0 !important;
+        border-radius: 0;
+      }
+      .base-pitching-workspace .base-season-summary-table-label {
+        padding: 8px 12px;
+        color: #501214;
+        font-weight: 700;
+        border-top: 1px solid rgba(80, 18, 20, 0.12);
+        background: #f7f3ed;
+      }
+      .base-pitching-workspace .base-season-summary-page .dataTables_wrapper {
+        margin: 0;
+      }
+      .base-pitching-workspace .base-team-trends-dashboard {
+        display: grid;
+        grid-template-columns: minmax(320px, .72fr) minmax(0, 1.48fr);
+        gap: 18px;
+        align-items: start;
+        margin-top: 14px;
+      }
+      .base-pitching-workspace .base-team-trends-charts {
+        display: grid;
+        min-width: 0;
+        grid-template-columns: 1fr;
+        gap: 18px;
+      }
+      .base-pitching-workspace .base-team-trends-charts .shiny-spinner-output-container,
+      .base-pitching-workspace .base-team-trends-charts .html-widget {
+        width: 100% !important;
+      }
+      @media (max-width: 1450px) {
+        .base-pitching-workspace .base-pitching-performance-tables,
+        .base-pitching-workspace .base-pitching-performance-details {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 1100px) {
+        .base-pitching-workspace .base-season-summary-hands {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 720px) {
+        .base-pitching-workspace .base-season-summary-header {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+      @media (max-width: 1180px) {
+        .base-pitching-workspace .base-team-trends-dashboard { grid-template-columns: 1fr; }
       }
       @media (max-width: 900px) {
         .base-pitching-workspace .bslib-sidebar-layout,

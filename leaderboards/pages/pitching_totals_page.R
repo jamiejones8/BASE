@@ -65,22 +65,23 @@ pitching_totals_page_server <- function(id, pitching_data) {
       thr <- d1_pitch[[col_name]]
       if (is.null(thr) || is.na(thr) || !(col_name %in% names(df))) return(dt)
       
-      green_bg   <- "#c6efce"
-      green_text <- "#006100"
+      good_bg <- "rgba(227,52,52,0.30)"
+      bad_bg  <- "rgba(93,126,188,0.30)"
+      stat_text <- "#391315"
       
       if (col_name %in% higher_better) {
         dt %>% DT::formatStyle(
           columns = col_name,
-          `background-color` = DT::styleInterval(thr, c(NA, paste0(green_bg, " !important"))),
-          color              = DT::styleInterval(thr, c(NA, green_text)),
-          fontWeight         = DT::styleInterval(thr, c(NA, "700"))
+          `background-color` = DT::styleInterval(thr, c(paste0(bad_bg, " !important"), paste0(good_bg, " !important"))),
+          color              = stat_text,
+          fontWeight         = "700"
         )
       } else if (col_name %in% lower_better) {
         dt %>% DT::formatStyle(
           columns = col_name,
-          `background-color` = DT::styleInterval(thr, c(paste0(green_bg, " !important"), NA)),
-          color              = DT::styleInterval(thr, c(green_text, NA)),
-          fontWeight         = DT::styleInterval(thr, c("700", NA))
+          `background-color` = DT::styleInterval(thr, c(paste0(good_bg, " !important"), paste0(bad_bg, " !important"))),
+          color              = stat_text,
+          fontWeight         = "700"
         )
       } else {
         dt

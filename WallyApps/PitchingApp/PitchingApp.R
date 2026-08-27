@@ -81,11 +81,11 @@ bench_fill <- function(value, bench, tol = 0.05, lower_better = FALSE) {
   if (isTRUE(lower_better)) rel <- -rel   # flip sign for lower-is-better stats
   
   if (rel >= 0) {
-    "#C6EFCE"        # green (Excel-ish)
+    "#F3B9B9"        # good: high-percentile red
   } else if (rel > -tol) {
     NA_character_    # within 5% worse → no color
   } else {
-    "#F8CBAD"        # red (Excel-ish)
+    "#C7D4EA"        # bad: low-percentile blue
   }
 }
 
@@ -844,8 +844,8 @@ pct <- function(x) sprintf("%.1f%%", 100 * x)
 
 shade_vs_ref <- function(value, ref, tol = 0.01) {
   if (is.na(value)) return("white")
-  if (value > ref + tol) return("#c6efce")    # green
-  if (value < ref - tol) return("#ffc7ce")    # red
+  if (value > ref + tol) return("#F3B9B9")
+  if (value < ref - tol) return("#C7D4EA")
   "white"
 }
 
@@ -2616,11 +2616,11 @@ txst_count_breakdown_table <- function(df) {
   shade_cell <- function(val, ref, lower_better = FALSE) {
     if (!is.finite(val) || !is.finite(ref)) return(NA_character_)
     if (!lower_better) {
-    if (val >= ref) return("#c6efce")
-      return("#ffc7ce")
+    if (val >= ref) return("#F3B9B9")
+      return("#C7D4EA")
     } else {
-    if (val <= ref) return("#c6efce")
-      return("#ffc7ce")
+    if (val <= ref) return("#F3B9B9")
+      return("#C7D4EA")
     }
   }
   
@@ -2693,12 +2693,12 @@ txst_process_table <- function(df, season_col_label = "Season") {
     v
   }
   
-  # --- your shading rule: >= ref green; within 5pp below ref = none; >5pp below ref red ---
+  # --- slider-aligned shading: high percentiles red, low percentiles blue ---
   shade_cell <- function(val, ref, tol = 0.05) {
     if (!is.finite(val) || !is.finite(ref)) return(NA_character_)
-    if (val >= ref) return("#c6efce")                 # green
+    if (val >= ref) return("#F3B9B9")
     if (val >= (ref - tol)) return(NA_character_)     # no color (within 5pp below)
-    "#ffc7ce"                                         # red (>5pp below)
+    "#C7D4EA"
   }
   
   # Column indices in the rendered table
@@ -2783,8 +2783,8 @@ txst_ptperf_table <- function(df) {
   fmt_pct <- function(v) ifelse(is.finite(v), sprintf("%.0f%%", 100 * v), "NA")
   shade_ref <- function(v, ref, tol) {
     if (!is.finite(v) || !is.finite(ref)) return(NA_character_)
-    if (v > ref + tol) return("#c6efce")
-    if (v < ref - tol) return("#ffc7ce")
+    if (v > ref + tol) return("#F3B9B9")
+    if (v < ref - tol) return("#C7D4EA")
     NA_character_
   }
   
@@ -5970,32 +5970,17 @@ percent_rank_dir <- function(x, higher_is_better = TRUE) {
 }
 
 bucket_color <- local({
-  alpha60 <- function(hex) {
+  rgba <- function(hex, alpha) {
     rgb <- grDevices::col2rgb(hex)
-    sprintf("rgba(%d,%d,%d,0.60)", rgb[1], rgb[2], rgb[3])
+    sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], alpha)
   }
-  cols <- list(
-    maroon     = alpha60("#501214"),  # 0–4.9
-    darkred    = alpha60("#8B0000"),  # 5.0–19.9
-    red        = alpha60("#FF0000"),  # 20.0–34.9
-    lightred   = alpha60("#FF9999"),  # 35.0–44.9
-    white      = "#FFFFFF",           # 45.0–54.9
-    lightgreen = alpha60("#A1D99B"),  # 55.0–64.9
-    green      = alpha60("#008000"),  # 65.0–79.9
-    darkgreen  = alpha60("#006400"),  # 80.0–94.9
-    gold       = alpha60("#B4975A")   # 95.0–100
-  )
   function(p) {
     if (is.na(p)) return(NA_character_)
-    if (p < 0.050) return(cols$maroon)
-    if (p < 0.200) return(cols$darkred)
-    if (p < 0.350) return(cols$red)
-    if (p < 0.450) return(cols$lightred)
-    if (p < 0.550) return(cols$white)
-    if (p < 0.650) return(cols$lightgreen)
-    if (p < 0.800) return(cols$green)
-    if (p < 0.950) return(cols$darkgreen)
-    cols$gold
+    p <- pmin(pmax(p, 0), 1)
+    severity <- abs((p - 0.5) * 2)
+    if (severity < 0.08) return(NA_character_)
+    alpha <- 0.16 + 0.72 * severity^0.80
+    rgba(if (p >= 0.5) "#E33434" else "#5D7EBC", alpha)
   }
 })
 
@@ -6010,8 +5995,22 @@ parse_num <- function(v) {
   sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], a)
 }
 
-CF_GREEN <- .alpha_rgba("#C6EFCE", a = 0.70)  # excel-ish green
-CF_RED   <- .alpha_rgba("#FFC7CE", a = 0.70)  # match AAR red
+CF_GREEN <- .alpha_rgba("#E33434", a = 0.30)  # good: high-percentile red
+CF_RED   <- .alpha_rgba("#5D7EBC", a = 0.30)  # bad: low-percentile blue
+
+.severity_fill <- function(score) {
+  if (!is.finite(score)) return(NA_character_)
+  score <- pmin(pmax(score, -1), 1)
+  severity <- abs(score)
+  if (severity < 0.08) return(NA_character_)
+  alpha <- 0.16 + 0.72 * severity^0.80
+  .alpha_rgba(if (score > 0) "#E33434" else "#5D7EBC", a = alpha)
+}
+
+.severity_text <- function(fill) {
+  alpha <- suppressWarnings(as.numeric(sub(".*,(0?\\.[0-9]+)\\)$", "\\1", fill)))
+  ifelse(!is.na(fill) & is.finite(alpha) & alpha >= 0.58, "#FFFFFF", "#391315")
+}
 
 # ---- D1 averages (PERCENT stats) as FRACTIONS ----
 D1_PCT_AVG <- list(
@@ -6152,11 +6151,7 @@ ABS_RULES <- list(
   if (!is.finite(v) || !is.finite(avg_frac) || avg_frac <= 0) return(NA_character_)
   v_pp <- v * 100
   avg_pp <- avg_frac * 100
-  lo <- avg_pp - band_pp
-  hi <- avg_pp + band_pp
-  if (v_pp < lo) return(CF_RED)
-  if (v_pp > hi) return(CF_GREEN)
-  NA_character_
+  .severity_fill((v_pp - avg_pp) / band_pp)
 }
 
 # Lower-is-better variant
@@ -6165,11 +6160,7 @@ ABS_RULES <- list(
   if (!is.finite(v) || !is.finite(avg_frac) || avg_frac <= 0) return(NA_character_)
   v_pp <- v * 100
   avg_pp <- avg_frac * 100
-  lo <- avg_pp - band_pp
-  hi <- avg_pp + band_pp
-  if (v_pp < lo) return(CF_GREEN)
-  if (v_pp > hi) return(CF_RED)
-  NA_character_
+  .severity_fill((avg_pp - v_pp) / band_pp)
 }
 # Absolute rules for non-% columns
 .fill_abs_rule <- function(value, rule) {
@@ -6179,18 +6170,21 @@ ABS_RULES <- list(
   # Special: Rel Ht => within [no_min, no_max] = no color; outside = GREEN
   if (!is.null(rule$no_min) && !is.null(rule$no_max)) {
     if (v >= rule$no_min && v <= rule$no_max) return(NA_character_)
-    return(CF_GREEN)
+    span <- max((rule$no_max - rule$no_min) / 2, .Machine$double.eps)
+    distance <- if (v < rule$no_min) rule$no_min - v else v - rule$no_max
+    return(.severity_fill(distance / span))
   }
-  
-  # Standard:
-  # - if green_min exists: v >= green_min => GREEN
-  # - if green_max exists: v <= green_max => GREEN
-  # - if red_min exists:   v >= red_min   => RED
-  # - if red_max exists:   v <= red_max   => RED
-  if (!is.null(rule$green_min) && v >= rule$green_min) return(CF_GREEN)
-  if (!is.null(rule$green_max) && v <= rule$green_max) return(CF_GREEN)
-  if (!is.null(rule$red_min)   && v >= rule$red_min)   return(CF_RED)
-  if (!is.null(rule$red_max)   && v <= rule$red_max)   return(CF_RED)
+
+  if (!is.null(rule$green_min) && !is.null(rule$red_max)) {
+    midpoint <- (rule$green_min + rule$red_max) / 2
+    span <- max(abs(rule$green_min - rule$red_max) / 2, .Machine$double.eps)
+    return(.severity_fill((v - midpoint) / span))
+  }
+  if (!is.null(rule$green_max) && !is.null(rule$red_min)) {
+    midpoint <- (rule$green_max + rule$red_min) / 2
+    span <- max(abs(rule$red_min - rule$green_max) / 2, .Machine$double.eps)
+    return(.severity_fill((midpoint - v) / span))
+  }
   
   NA_character_
 }
@@ -6205,14 +6199,10 @@ ABS_RULES <- list(
   sl_cb_sw_ct <- pt %in% tolower(c("slider","curveball","curve ball","sweeper","cutter"))
   
   if (fb_sink) {
-    if (v > 2386) return(CF_GREEN)
-    if (v < 1986) return(CF_RED)
-    return(NA_character_)
+    return(.severity_fill((v - mean(c(2386, 1986))) / ((2386 - 1986) / 2)))
   }
   if (sl_cb_sw_ct) {
-    if (v > 2558) return(CF_GREEN)
-    if (v < 2158) return(CF_RED)
-    return(NA_character_)
+    return(.severity_fill((v - mean(c(2558, 2158))) / ((2558 - 2158) / 2)))
   }
   NA_character_
 }
@@ -6293,10 +6283,11 @@ shade_columns_txst <- function(out_df,
     order_val <- suppressWarnings(readr::parse_number(as.character(txt)))
     order_attr <- ifelse(is.finite(order_val), as.character(order_val), "")
     
+    text_colors <- .severity_text(fills)
     out[[nm]] <- ifelse(
       is.na(fills),
       sprintf("<span class='cf-cell' data-order='%s'>%s</span>", order_attr, txt),
-      sprintf("<span class='cf-cell' data-order='%s' style='background-color:%s'>%s</span>", order_attr, fills, txt)
+      sprintf("<span class='cf-cell' data-order='%s' style='background-color:%s;color:%s;font-weight:700'>%s</span>", order_attr, fills, text_colors, txt)
     )
   }
   
@@ -6353,14 +6344,23 @@ ui <- base_pitching_page(
   title = app_title_link, 
   head_css,                 
   tags$script(HTML("
-    $(document).on('shown.bs.tab','a[data-bs-toggle=\"tab\"]',function(e){
+    function baseKeepPitchingTabVisible(link){
+      var $link=$(link), nav=$link.closest('.nav-tabs')[0];
+      if(!nav) return;
+      var left=$link.position().left+nav.scrollLeft;
+      var target=Math.max(0,left-(nav.clientWidth-$link.outerWidth())/2);
+      nav.scrollTo({left:target,behavior:'smooth'});
+    }
+    $(document).on('shown.bs.tab','a[data-bs-toggle=\"tab\"],a[data-toggle=\"tab\"]',function(e){
       var txt=$(e.target).text().trim();
       document.body.classList.toggle('aar-active', txt==='AAR');
+      baseKeepPitchingTabVisible(e.target);
     });
-    $(function(){
+    $(function(){ window.setTimeout(function(){
       var active=$('.nav-tabs .nav-link.active').text().trim();
       document.body.classList.toggle('aar-active', active==='AAR');
-    });
+      $('.base-pitching-main .nav-tabs .nav-link.active').each(function(){baseKeepPitchingTabVisible(this);});
+    },150); });
   ")),
   sidebar = sidebar(
     title = "Select Pitcher/Game",
@@ -6400,7 +6400,8 @@ ui <- base_pitching_page(
           size      = "sm"
         )
       ),
-      fluidRow(
+      div(
+        class = "base-pitching-performance-tables",
         column(
           6,
           div(class = "table-title mb-1", "Traditional Stats"),
@@ -6416,7 +6417,8 @@ ui <- base_pitching_page(
           withSpinner(DTOutput("performance_results_table"), type = 4, color = "#501214")
         )
       ),
-      fluidRow(
+      div(
+        class = "base-pitching-performance-details",
         column(
           6,
           div(class = "cr-percentile-column mt-3", withSpinner(uiOutput("performance_percentiles"), type = 4, color = "#501214"))
@@ -6481,67 +6483,40 @@ ui <- base_pitching_page(
     ),
     nav_panel(
       title = "Season Summary",
-      fluidRow(
-        column(
-          9,
-          uiOutput("season_summary_header_ui")
-        ),
-        column(
-          3,
-          div(style = "padding-top: 14px; text-align: right;",
-              downloadButton("season_summary_pdf", "Download Season Summary PDF"))
-        )
-      ),
       div(
-        style = "display:inline-block; vertical-align:top;",
-        div(style = "background:#501214; color:#B4975A; font-weight:700; padding:7px 12px; border-radius:4px 4px 0 0; margin-bottom:0;", "Split Summary"),
-        withSpinner(DTOutput("season_summary_split_table"), type = 4, color = "#501214")
-      ),
-      fluidRow(
-        column(
-          6,
-          withSpinner(plotOutput("season_summary_movement", height = "520px", width = "100%"), type = 4, color = "#501214")
+        class = "base-season-summary-page",
+        div(
+          class = "base-season-summary-header",
+          uiOutput("season_summary_header_ui"),
+          downloadButton("season_summary_pdf", "Download Season Summary PDF")
         ),
-        column(
-          6,
+        div(
+          class = "base-season-summary-section",
+          div(class = "table-title mb-1", "Split Summary"),
+          withSpinner(DTOutput("season_summary_split_table"), type = 4, color = "#501214")
+        ),
+        div(
+          class = "base-season-summary-hands",
           div(
-            style = "margin-left: 6px;",
-            fluidRow(
-              column(
-                5,
-                withSpinner(plotOutput("season_summary_usage_lhh", height = "210px", width = "100%"), type = 4, color = "#501214")
-              ),
-              column(
-                7,
-                div(
-                  style = "display:inline-block; vertical-align:top; margin-top: 4px; width:100%;",
-                  div(style = "background:#501214; color:#B4975A; font-weight:700; padding:7px 12px; border-radius:4px 4px 0 0; margin-bottom:0;", "v LHH Pitch Type Performance"),
-                  withSpinner(DTOutput("season_summary_hand_perf_lhh"), type = 4, color = "#501214")
-                )
-              )
-            ),
-            fluidRow(
-              style = "margin-top: 8px;",
-              column(
-                5,
-                withSpinner(plotOutput("season_summary_usage_rhh", height = "210px", width = "100%"), type = 4, color = "#501214")
-              ),
-              column(
-                7,
-                div(
-                  style = "display:inline-block; vertical-align:top; margin-top: 4px; width:100%;",
-                  div(style = "background:#501214; color:#B4975A; font-weight:700; padding:7px 12px; border-radius:4px 4px 0 0; margin-bottom:0;", "v RHH Pitch Type Performance"),
-                  withSpinner(DTOutput("season_summary_hand_perf_rhh"), type = 4, color = "#501214")
-                )
-              )
-            )
+            class = "base-season-summary-hand-panel",
+            div(class = "table-title mb-1", "vs. Left-Handed Hitters"),
+            withSpinner(plotOutput("season_summary_usage_lhh", height = "230px", width = "100%"), type = 4, color = "#501214"),
+            div(class = "base-season-summary-table-label", "Pitch Type Performance"),
+            withSpinner(DTOutput("season_summary_hand_perf_lhh"), type = 4, color = "#501214")
+          ),
+          div(
+            class = "base-season-summary-hand-panel",
+            div(class = "table-title mb-1", "vs. Right-Handed Hitters"),
+            withSpinner(plotOutput("season_summary_usage_rhh", height = "230px", width = "100%"), type = 4, color = "#501214"),
+            div(class = "base-season-summary-table-label", "Pitch Type Performance"),
+            withSpinner(DTOutput("season_summary_hand_perf_rhh"), type = 4, color = "#501214")
           )
+        ),
+        div(
+          class = "base-season-summary-section",
+          div(class = "table-title mb-1", "Pitch Type Summary"),
+          withSpinner(DTOutput("season_summary_pitch_table"), type = 4, color = "#501214")
         )
-      ),
-      div(
-        style = "display:inline-block; vertical-align:top; margin-top: 12px;",
-        div(style = "background:#501214; color:#B4975A; font-weight:700; padding:7px 12px; border-radius:4px 4px 0 0; margin-bottom:0;", "Pitch Type Summary"),
-        withSpinner(DTOutput("season_summary_pitch_table"), type = 4, color = "#501214")
       )
     ),
     nav_panel(
@@ -6846,10 +6821,14 @@ ui <- base_pitching_page(
               strong("Performance Stats by Pitch Type"),
               uiOutput("team_ts_ptype_perf_boxes")
           ),
-          div(class = "mt-3 cr-percentile-column", withSpinner(uiOutput("team_staff_percentiles"), type = 4, color = "#501214")),
-          fluidRow(
-            column(6, withSpinner(plotlyOutput("team_ts_roll", height = "330px", width = "100%"), type = 4, color = "#501214")),
-            column(6, withSpinner(plotlyOutput("team_ts_game", height = "330px", width = "100%"), type = 4, color = "#501214"))
+          div(
+            class = "base-team-trends-dashboard",
+            div(class = "cr-percentile-column", withSpinner(uiOutput("team_staff_percentiles"), type = 4, color = "#501214")),
+            div(
+              class = "base-team-trends-charts",
+              withSpinner(plotlyOutput("team_ts_roll", height = "330px", width = "100%"), type = 4, color = "#501214"),
+              withSpinner(plotlyOutput("team_ts_game", height = "330px", width = "100%"), type = 4, color = "#501214")
+            )
           )
         ),
         nav_panel(
@@ -7275,7 +7254,7 @@ server <- function(input, output, session){
   # ---- AAR cell shading helper (GLOBAL in server scope; used by DT tables) ----
   fill_vs_d1 <- function(val, d1,
                          band = 0,
-                        green = "#c6efce", red = "#ffc7ce", none = NA) {
+                        green = "#F3B9B9", red = "#C7D4EA", none = NA) {
     val <- suppressWarnings(as.numeric(val))
     d1  <- suppressWarnings(as.numeric(d1))
     band <- suppressWarnings(as.numeric(band))
@@ -11326,8 +11305,8 @@ server <- function(input, output, session){
             bad  <- v_pp < lo
           }
           # grid does not accept rgba() strings; use solid hex for PDF
-          fills[good, 2] <- "#C6EFCE"
-          fills[bad,  2] <- "#FFC7CE"
+          fills[good, 2] <- "#F3B9B9"
+          fills[bad,  2] <- "#C7D4EA"
         }
       }
       

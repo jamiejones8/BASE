@@ -753,35 +753,119 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 .home-data-status { padding: 8px 12px; border: 1px solid var(--base-border); border-radius: 999px; background: rgba(255,255,255,0.70); color: var(--base-muted); font-size: 11px; font-weight: 600; }
 .home-quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; }
 .home-quick-link {
-  display: grid;
+  position: relative;
+  display: block;
+  height: 126px;
   min-height: 126px;
-  padding: 18px;
+  max-height: 126px;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--base-border);
   border-radius: var(--base-radius);
-  background: var(--base-surface);
+  background: var(--base-maroon-deep);
   box-shadow: var(--base-shadow-sm);
-  color: var(--base-ink);
-  grid-template-columns: auto 1fr auto;
-  gap: 13px;
-  align-items: start;
+  color: #fff;
   text-align: left;
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 .home-quick-link:hover { border-color: var(--base-border-strong); box-shadow: var(--base-shadow); transform: translateY(-2px); }
 .home-quick-link:focus { border-color: var(--base-maroon); outline: 3px solid rgba(80,18,20,0.10); outline-offset: 2px; }
-.home-quick-number { color: var(--base-gold); font-family: var(--base-font-data); font-size: 10px; font-weight: 700; }
-.home-quick-copy strong { display: block; color: var(--base-ink); font-family: var(--base-font-display); font-size: 17px; font-weight: 600; }
-.home-quick-copy small { display: block; margin-top: 7px; color: var(--base-muted); font-size: 12px; line-height: 1.4; }
-.home-quick-arrow { align-self: end; color: var(--base-maroon); font-size: 18px; }
+.home-quick-image {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  object-fit: cover !important;
+  object-position: center;
+  transition: transform 260ms ease;
+}
+.home-quick-link[data-target='postgame_reports'] .home-quick-image { object-position: 50% 48%; }
+.home-quick-link[data-target='team_pitching'] .home-quick-image { object-position: 72% 55%; }
+.home-quick-link[data-target='team_hitting'] .home-quick-image { object-position: 54% 48%; }
+.home-quick-link[data-target='opponent_scouting'] .home-quick-image { object-position: 50% 42%; }
+.home-quick-link[data-target='defense_workspace'] .home-quick-image { object-position: 50% 50%; }
+.home-quick-link[data-target='homebase'] .home-quick-image { object-position: 68% 10%; }
+.home-quick-link:hover .home-quick-image { transform: scale(1.035); }
+.home-quick-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(28,6,7,0.08) 12%, rgba(28,6,7,0.22) 48%, rgba(28,6,7,0.90) 100%);
+}
+.home-quick-link.has-no-image .home-quick-shade {
+  background:
+    radial-gradient(circle at 86% 18%, rgba(180,151,90,0.30), transparent 34%),
+    linear-gradient(135deg, var(--base-maroon), var(--base-maroon-deep));
+}
+.home-quick-number {
+  position: absolute;
+  top: 14px;
+  left: 15px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 999px;
+  background: rgba(30,5,7,0.42);
+  color: var(--base-gold-bright);
+  font-family: var(--base-font-data);
+  font-size: 9px;
+  font-weight: 700;
+  backdrop-filter: blur(5px);
+}
+.home-quick-copy {
+  position: absolute;
+  right: 48px;
+  bottom: 18px;
+  left: 17px;
+}
+.home-quick-copy strong { display: block; color: #fff; font-family: var(--base-font-display); font-size: 17px; font-weight: 600; line-height: 1.05; text-shadow: 0 2px 10px rgba(0,0,0,0.48); }
+.home-quick-arrow { position: absolute; right: 17px; bottom: 16px; color: var(--base-gold-bright); font-size: 22px; }
 
 /* --------------------------------------------------------------------------
    Workspace directory and integrated app shells
    -------------------------------------------------------------------------- */
 .base-workspace-page {
-  width: min(100%, var(--base-content-width));
+  width: min(100%, 1920px);
+  max-width: 100%;
   min-height: 100vh;
   margin: 0 auto;
   padding: clamp(76px, 6vw, 92px) clamp(18px, 3.25vw, 52px) 64px;
+  overflow-x: clip;
+}
+
+.base-workspace-page > .shiny-html-output,
+.base-workspace-page .base-pitching-workspace,
+.base-workspace-page .base-hitting-workspace,
+.base-workspace-page .base-defense-workspace,
+.base-workspace-page .base-scouting-workspace {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.base-workspace-page .tabbable,
+.base-workspace-page .tab-content,
+.base-workspace-page .tab-pane,
+.base-workspace-page .shiny-spinner-output-container,
+.base-workspace-page .shiny-html-output,
+.base-workspace-page .shiny-plot-output,
+.base-workspace-page .html-widget {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.base-workspace-page .dataTables_wrapper {
+  width: 100% !important;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.base-workspace-page img,
+.base-workspace-page svg,
+.base-workspace-page canvas {
+  max-width: 100%;
 }
 
 .base-workspace-heading {

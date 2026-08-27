@@ -717,25 +717,20 @@ percent_rank_dir <- function(x, higher_is_better = TRUE) {
   p
 }
 bucket_color <- local({
-  alpha60 <- function(hex){ rgb <- grDevices::col2rgb(hex); sprintf("rgba(%d,%d,%d,0.60)", rgb[1], rgb[2], rgb[3]) }
-  cols <- list(
-    maroon=alpha60("#501214"), darkred=alpha60("#8B0000"), red=alpha60("#FF0000"),
-    lightred=alpha60("#FF9999"), white="#FFFFFF", lightgreen=alpha60("#A1D99B"),
-    green=alpha60("#008000"), darkgreen=alpha60("#006400"), gold=alpha60("#B4975A")
-  )
+  rgba <- function(hex, alpha){ rgb <- grDevices::col2rgb(hex); sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], alpha) }
   function(p){
     if (is.na(p)) return(NA_character_)
-    if (p < 0.050) return(cols$maroon)
-    if (p < 0.200) return(cols$darkred)
-    if (p < 0.350) return(cols$red)
-    if (p < 0.450) return(cols$lightred)
-    if (p < 0.550) return(cols$white)
-    if (p < 0.650) return(cols$lightgreen)
-    if (p < 0.800) return(cols$green)
-    if (p < 0.950) return(cols$darkgreen)
-    cols$gold
+    p <- pmin(pmax(p, 0), 1)
+    severity <- abs((p - 0.5) * 2)
+    if (severity < 0.08) return(NA_character_)
+    alpha <- 0.16 + 0.72 * severity^0.80
+    rgba(if (p >= 0.5) "#E33434" else "#5D7EBC", alpha)
   }
 })
+STAT_GOOD_FILL <- "rgba(227,52,52,0.30)"
+STAT_BAD_FILL <- "rgba(93,126,188,0.30)"
+STAT_GOOD_SOLID <- "#F3B9B9"
+STAT_BAD_SOLID <- "#C7D4EA"
 shade_columns9 <- function(df_in, cols, lower_better = character(0), percent_cols = character(0)) {
   out <- df_in; cols <- intersect(cols, names(out))
   for (nm in cols) {
@@ -1485,6 +1480,21 @@ ui <- base_hitting_page(
   theme = txst_theme,
   title = app_title_link,
   head_css,
+  tags$script(HTML("
+    function baseKeepHittingTabVisible(link){
+      var $link=$(link), nav=$link.closest('.nav-tabs')[0];
+      if(!nav) return;
+      var left=$link.position().left+nav.scrollLeft;
+      var target=Math.max(0,left-(nav.clientWidth-$link.outerWidth())/2);
+      nav.scrollTo({left:target,behavior:'smooth'});
+    }
+    $(document).on('shown.bs.tab','a[data-bs-toggle=\"tab\"],a[data-toggle=\"tab\"]',function(e){
+      if($(e.target).closest('.base-hitting-main').length) baseKeepHittingTabVisible(e.target);
+    });
+    $(function(){ window.setTimeout(function(){
+      $('.base-hitting-main .nav-tabs .nav-link.active').each(function(){baseKeepHittingTabVisible(this);});
+    },150); });
+  ")),
   sidebar = sidebar(
     title = "Select Hitter / Game / Splits",
     selectInput("Hitter", "Hitter", choices = hitters_txst, selected = hitters_txst[[1]]),
@@ -2485,11 +2495,11 @@ team_hit_statline_bits <- function(d) {
 d1_shade_fill <- function(val, d1, lower_better = FALSE) {
   if (!is.finite(val) || !is.finite(d1) || d1 == 0) return("")
   if (lower_better) {
-    if (val <= d1 * 0.95) return("#C6EFCE")
-    if (val >= d1 * 1.05) return("#F4CCCC")
+    if (val <= d1 * 0.95) return(STAT_GOOD_SOLID)
+    if (val >= d1 * 1.05) return(STAT_BAD_SOLID)
   } else {
-    if (val >= d1 * 1.05) return("#C6EFCE")
-    if (val <= d1 * 0.95) return("#F4CCCC")
+    if (val >= d1 * 1.05) return(STAT_GOOD_SOLID)
+    if (val <= d1 * 0.95) return(STAT_BAD_SOLID)
   }
   ""
 }
@@ -3416,74 +3426,70 @@ lower_better <- c("K%","Whiff%","IZ-Whiff%","Chase%","Pre2K Chase%","2K Chase%")
 
 shade_cell <- function(txt, bg){
   if (is.na(bg) || bg == "") return(txt)
-  sprintf("<span class='cf-cell' style='background-color:%s'>%s</span>", bg, txt)
+  alpha <- suppressWarnings(as.numeric(sub(".*,(0?\\.[0-9]+)\\)$", "\\1", bg)))
+  fg <- if (is.finite(alpha) && alpha >= 0.58) "#FFFFFF" else "#391315"
+  sprintf("<span class='cf-cell' style='background-color:%s;color:%s;font-weight:700'>%s</span>", bg, fg, txt)
+}
+
+stat_severity_fill <- function(score) {
+  if (!is.finite(score)) return("")
+  score <- pmin(pmax(score, -1), 1)
+  severity <- abs(score)
+  if (severity < 0.08) return("")
+  rgb <- grDevices::col2rgb(if (score > 0) "#E33434" else "#5D7EBC")
+  alpha <- 0.16 + 0.72 * severity^0.80
+  sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], alpha)
 }
 
 apply_d1_shading <- function(tbl_num, tbl_fmt){
   out <- tbl_fmt
   
-  bg_green <- "rgba(0,128,0,0.20)"
-  bg_red   <- "rgba(255,0,0,0.20)"
-  
-  # % stats: +/- 0.050 vs D1 (per CELL)
+  # Continuous severity: benchmark is neutral; +/- 5 points reaches full intensity.
   for (nm in intersect(names(D1_PCT), names(tbl_num))) {
     v <- tbl_num[[nm]]
     avg <- D1_PCT[[nm]]
     low_better <- nm %in% lower_better
-    
-    if (nm == "Z-Swing%") {
-      good <- !is.na(v) & v > 0.68
-      bad  <- rep(FALSE, length(v))
-    } else {
-      good <- if (low_better) (!is.na(v) & v <= (avg - 0.05)) else (!is.na(v) & v >= (avg + 0.05))
-      bad  <- if (low_better) (!is.na(v) & v >= (avg + 0.05)) else (!is.na(v) & v <= (avg - 0.05))
-    }
-    
-    bg <- ifelse(good, bg_green, ifelse(bad, bg_red, ""))
+    score <- (v - avg) / 0.05
+    if (low_better) score <- -score
+    bg <- vapply(score, stat_severity_fill, FUN.VALUE = character(1))
     out[[nm]] <- mapply(shade_cell, out[[nm]], bg, USE.NAMES = FALSE)
   }
   
   # non-% stats: wOBA/wOBAcon +/- .025; 90th EV +/- 2.5 (per CELL)
   if ("wOBA" %in% names(tbl_num) && "wOBA" %in% names(out)) {
     v <- tbl_num$wOBA; avg <- D1_NON[["wOBA"]]
-    bg <- ifelse(is.finite(v) & v >= avg + 0.025, bg_green,
-                 ifelse(is.finite(v) & v <= avg - 0.025, bg_red, ""))
+    bg <- vapply((v - avg) / 0.025, stat_severity_fill, FUN.VALUE = character(1))
     out$wOBA <- mapply(shade_cell, out$wOBA, bg, USE.NAMES = FALSE)
   }
   
   if ("wOBAcon" %in% names(tbl_num) && "wOBAcon" %in% names(out)) {
     v <- tbl_num$wOBAcon; avg <- D1_NON[["wOBAcon"]]
-    bg <- ifelse(is.finite(v) & v >= avg + 0.025, bg_green,
-                 ifelse(is.finite(v) & v <= avg - 0.025, bg_red, ""))
+    bg <- vapply((v - avg) / 0.025, stat_severity_fill, FUN.VALUE = character(1))
     out$wOBAcon <- mapply(shade_cell, out$wOBAcon, bg, USE.NAMES = FALSE)
   }
   
   # OBP / SLG / OPS: +/- .100 (same green/red rule as wOBA)
   if ("OBP" %in% names(tbl_num) && "OBP" %in% names(out)) {
     v <- tbl_num$OBP; avg <- D1_NON[["OBP"]]
-    bg <- ifelse(is.finite(v) & v >= avg + 0.100, bg_green,
-                 ifelse(is.finite(v) & v <= avg - 0.100, bg_red, ""))
+    bg <- vapply((v - avg) / 0.100, stat_severity_fill, FUN.VALUE = character(1))
     out$OBP <- mapply(shade_cell, out$OBP, bg, USE.NAMES = FALSE)
   }
   
   if ("SLG" %in% names(tbl_num) && "SLG" %in% names(out)) {
     v <- tbl_num$SLG; avg <- D1_NON[["SLG"]]
-    bg <- ifelse(is.finite(v) & v >= avg + 0.100, bg_green,
-                 ifelse(is.finite(v) & v <= avg - 0.100, bg_red, ""))
+    bg <- vapply((v - avg) / 0.100, stat_severity_fill, FUN.VALUE = character(1))
     out$SLG <- mapply(shade_cell, out$SLG, bg, USE.NAMES = FALSE)
   }
   
   if ("OPS" %in% names(tbl_num) && "OPS" %in% names(out)) {
     v <- tbl_num$OPS; avg <- D1_NON[["OPS"]]
-    bg <- ifelse(is.finite(v) & v >= avg + 0.100, bg_green,
-                 ifelse(is.finite(v) & v <= avg - 0.100, bg_red, ""))
+    bg <- vapply((v - avg) / 0.100, stat_severity_fill, FUN.VALUE = character(1))
     out$OPS <- mapply(shade_cell, out$OPS, bg, USE.NAMES = FALSE)
   }
   
   if ("90th EV" %in% names(tbl_num) && "90th EV" %in% names(out)) {
     v <- tbl_num[["90th EV"]]; avg <- D1_NON[["90th EV"]]
-    bg <- ifelse(is.finite(v) & v >= avg + 2.5, bg_green,
-                 ifelse(is.finite(v) & v <= avg - 2.5, bg_red, ""))
+    bg <- vapply((v - avg) / 2.5, stat_severity_fill, FUN.VALUE = character(1))
     out[["90th EV"]] <- mapply(shade_cell, out[["90th EV"]], bg, USE.NAMES = FALSE)
   }
   
@@ -4813,14 +4819,14 @@ server <- function(input, output, session){
             tol <- 0.05
             good <- if (higher) (val_num > avg * (1 + tol)) else (val_num < avg * (1 - tol))
           }
-          fills[good, 2] <- "#C6EFCE"
+          fills[good, 2] <- STAT_GOOD_SOLID
         }
       }
       if (title %in% names(d1_non)) {
         avg <- d1_non[[title]]
         if (is.finite(avg)) {
           good <- val_num > (avg + 2.5)
-          fills[good, 2] <- "#C6EFCE"
+          fills[good, 2] <- STAT_GOOD_SOLID
         }
       }
 
@@ -7672,11 +7678,11 @@ server <- function(input, output, session){
             if (!isTRUE(is.finite(v)) || !isTRUE(is.finite(b)) || b == 0) return("transparent")
             lower_better <- m %in% c("Whiffs","Chases")
             if (lower_better) {
-              if (v <= b * 0.95) return("#C6EFCE")
-              if (v >= b * 1.05) return("#F4CCCC")
+              if (v <= b * 0.95) return(STAT_GOOD_SOLID)
+              if (v >= b * 1.05) return(STAT_BAD_SOLID)
             } else {
-              if (v >= b * 1.05) return("#C6EFCE")
-              if (v <= b * 0.95) return("#F4CCCC")
+              if (v >= b * 1.05) return(STAT_GOOD_SOLID)
+              if (v <= b * 0.95) return(STAT_BAD_SOLID)
             }
             "transparent"
           }, character(1))
@@ -8661,11 +8667,11 @@ server <- function(input, output, session){
       if (!isTRUE(is.finite(season)) || !isTRUE(is.finite(d1)) || d1 == 0) return("")
       lower_better <- metric %in% c("Whiffs","Chases")
       if (lower_better) {
-        if (season <= d1 * 0.95) return("rgba(0,128,0,0.20)")
-        if (season >= d1 * 1.05) return("rgba(255,0,0,0.20)")
+        if (season <= d1 * 0.95) return(STAT_GOOD_FILL)
+        if (season >= d1 * 1.05) return(STAT_BAD_FILL)
       } else {
-        if (season >= d1 * 1.05) return("rgba(0,128,0,0.20)")
-        if (season <= d1 * 0.95) return("rgba(255,0,0,0.20)")
+        if (season >= d1 * 1.05) return(STAT_GOOD_FILL)
+        if (season <= d1 * 0.95) return(STAT_BAD_FILL)
       }
       ""
     }

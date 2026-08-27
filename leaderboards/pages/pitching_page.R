@@ -109,24 +109,25 @@ pitching_page_server <- function(id, pitching_data) {
       thr <- d1_pitch[[metric_name]]
       if (is.null(thr) || is.na(thr)) return(dt)
       
-      green_bg   <- "#c6efce"
-      green_text <- "#006100"
+      good_bg <- "rgba(227,52,52,0.30)"
+      bad_bg  <- "rgba(93,126,188,0.30)"
+      stat_text <- "#391315"
       
       if (metric_name %in% higher_better) {
         dt %>% DT::formatStyle(
           columns      = metric_name,   # displayed col
           valueColumns = num_col,        # hidden numeric col for comparisons
-          backgroundColor = DT::styleInterval(thr, c(NA, green_bg)),
-          color           = DT::styleInterval(thr, c(NA, green_text)),
-          fontWeight      = DT::styleInterval(thr, c(NA, "700"))
+          backgroundColor = DT::styleInterval(thr, c(bad_bg, good_bg)),
+          color           = stat_text,
+          fontWeight      = "700"
         )
       } else if (metric_name %in% lower_better) {
         dt %>% DT::formatStyle(
           columns      = metric_name,
           valueColumns = num_col,
-          backgroundColor = DT::styleInterval(thr, c(green_bg, NA)),
-          color           = DT::styleInterval(thr, c(green_text, NA)),
-          fontWeight      = DT::styleInterval(thr, c("700", NA))
+          backgroundColor = DT::styleInterval(thr, c(good_bg, bad_bg)),
+          color           = stat_text,
+          fontWeight      = "700"
         )
       } else {
         dt

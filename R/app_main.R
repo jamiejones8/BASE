@@ -4636,16 +4636,21 @@ opponent_logo <- function(abbr) {
   base_team_logo_url()
 }
 
-home_quick_link <- function(label, description, target, number) {
+home_quick_link <- function(label, description, target, number, image = NULL) {
+  has_image <- !is.null(image) && nzchar(image)
   tags$button(
     type = "button",
-    class = "home-quick-link",
+    class = paste("home-quick-link", if (has_image) "has-image" else "has-no-image"),
     onclick = base_nav_click_js(target),
-    tags$span(class = "home-quick-number", number),
+    `data-target` = target,
+    `aria-label` = paste(label, description),
+    if (has_image) {
+      tags$img(class = "home-quick-image", src = image, alt = "", `aria-hidden` = "true")
+    },
+    tags$span(class = "home-quick-shade", `aria-hidden` = "true"),
     tags$span(
       class = "home-quick-copy",
-      tags$strong(label),
-      tags$small(description)
+      tags$strong(label)
     ),
     tags$span(class = "home-quick-arrow", HTML("&rarr;"))
   )
@@ -4764,12 +4769,12 @@ home_tab_ui <- function() {
           ),
           tags$div(
             class = "home-quick-grid",
-            home_quick_link("Postgame Reports", "Pitching, hitting, and catching PDFs", "postgame_reports", "01"),
-            home_quick_link("Pitching", "Staff performance, bullpens, trends, and reports", "team_pitching", "02"),
-            home_quick_link("Hitting", "Lineups, team trends, and hitter development", "team_hitting", "03"),
-            home_quick_link("Opponent Scouting", "Scout NCAA pitchers and hitters", "opponent_scouting", "04"),
-            home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "05"),
-            home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "06"),
+            home_quick_link("Postgame Reports", "Pitching, hitting, and catching PDFs", "postgame_reports", "01", "postgamereports.jpg"),
+            home_quick_link("Pitching", "Staff performance, bullpens, trends, and reports", "team_pitching", "02", "pitching.jpg"),
+            home_quick_link("Hitting", "Lineups, team trends, and hitter development", "team_hitting", "03", "hitting.jpg"),
+            home_quick_link("Opponent Scouting", "Scout NCAA pitchers and hitters", "opponent_scouting", "04", "opponentscouting.jpg"),
+            home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "05", "defenseiveanalytics.webp"),
+            home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "06", "homeBASE.jpg"),
             home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "07")
           )
         ),
@@ -4831,7 +4836,7 @@ ui <- navbarPage(
       tags$link(rel = "icon", href = base_supercat_logo_url()),
       tags$link(rel = "stylesheet",
         href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"),
-      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=19"),
+      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=22"),
       tags$style(HTML(base_brand_css(include_leaderboards = FALSE))),
       tags$style(HTML("
         #base-splash {

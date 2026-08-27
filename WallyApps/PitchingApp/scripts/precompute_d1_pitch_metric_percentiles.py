@@ -100,15 +100,33 @@ def derive_zone(df: pd.DataFrame) -> pd.Series:
     side = pd.to_numeric(df["PlateLocSide"], errors="coerce")
     height_inches = height.where(~(height.notna() & (height < 10)), height * 12)
     side_inches = side.where(~(side.notna() & (side.abs() < 5)), side * 12)
-    return (
+    known = height_inches.notna() & side_inches.notna()
+    in_zone = (
         height_inches.between(18.29, 44.08, inclusive="both")
         & side_inches.between(-9.97, 9.97, inclusive="both")
     )
+    out = pd.Series(pd.NA, index=df.index, dtype="boolean")
+    out.loc[known] = in_zone.loc[known]
+    return out
 
 
 def is_strike_call(pc: pd.Series) -> pd.Series:
-    pc = pc.fillna("").astype(str)
-    return pc.isin(["StrikeCalled", "StrikeSwinging", "FoulBall", "FoulBallFieldable", "FoulBallNotFieldable", "FoulTip"])
+    # Keep the D1 reference definition identical to the app's prepare_flags():
+    # every swing result, including a ball put in play, is a strike outcome.
+    compact = pc.fillna("").astype(str).str.replace(r"[\s_-]+", "", regex=True).str.lower()
+    return compact.isin(
+        {
+            "strikecalled",
+            "strikeswinging",
+            "foulball",
+            "foulballfieldable",
+            "foulballnotfieldable",
+            "foultip",
+            "inplay",
+            "inplayout",
+            "inplaynoout",
+        }
+    )
 
 
 def infer_outs(pa: pd.DataFrame, outcomes: pd.DataFrame) -> pd.Series:
@@ -406,7 +424,10 @@ def main() -> None:
     df["TwoK"] = np.isfinite(df["StrikesPre_calc"]) & (df["StrikesPre_calc"] == 2)
     df["TwoKNo32"] = df["TwoK"] & np.isfinite(df["BallsPre_calc"]) & (df["BallsPre_calc"] != 3)
     df["At11"] = df["BallsPre_calc"].eq(1) & df["StrikesPre_calc"].eq(1)
-    df["Win11"] = df["At11"] & df["IsStrike"]
+    count_strike = pc.fillna("").astype(str).isin(
+        ["StrikeCalled", "StrikeSwinging", "FoulBall", "FoulBallFieldable", "FoulBallNotFieldable", "FoulTip"]
+    )
+    df["Win11"] = df["At11"] & count_strike
     df["ZoneKnown"] = np.isfinite(df["PlateLocHeight"]) & np.isfinite(df["PlateLocSide"])
 
     pitch_counts = df.groupby("PitcherKey").size().rename("Pitches")

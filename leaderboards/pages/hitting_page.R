@@ -67,7 +67,7 @@ hitting_page_server <- function(id, hitting_data) {
     
     # =========================================================
     #  D1 AVERAGE BENCHMARKS (Hitting) + HIGHLIGHT RULES
-    #  Green if "better than D1 avg"
+    #  Slider palette: blue below benchmark, red above benchmark.
     # =========================================================
     d1_hit <- list(
       `Z-Contact%` = 84.3,
@@ -86,25 +86,26 @@ hitting_page_server <- function(id, hitting_data) {
       thr <- d1_hit[[metric_name]]
       if (is.null(thr) || is.na(thr)) return(dt)  # no benchmark -> no styling
       
-      green_bg   <- "#c6efce"
-      green_text <- "#006100"
+      good_bg <- "rgba(227,52,52,0.30)"
+      bad_bg  <- "rgba(93,126,188,0.30)"
+      stat_text <- "#391315"
       
       if (metric_name %in% higher_better) {
         dt %>% DT::formatStyle(
           columns = metric_name,        # the displayed column
           valueColumns = num_col,        # the hidden numeric column used for comparisons
-          backgroundColor = DT::styleInterval(thr, c(NA, green_bg)),
-          color           = DT::styleInterval(thr, c(NA, green_text)),
-          fontWeight      = DT::styleInterval(thr, c(NA, "700"))
+          backgroundColor = DT::styleInterval(thr, c(bad_bg, good_bg)),
+          color           = stat_text,
+          fontWeight      = "700"
         )
       } else if (metric_name %in% lower_better) {
-        # green when BELOW threshold
+        # Lower-is-better metrics reverse the same blue-to-red scale.
         dt %>% DT::formatStyle(
           columns = metric_name,
           valueColumns = num_col,
-          backgroundColor = DT::styleInterval(thr, c(green_bg, NA)),
-          color           = DT::styleInterval(thr, c(green_text, NA)),
-          fontWeight      = DT::styleInterval(thr, c("700", NA))
+          backgroundColor = DT::styleInterval(thr, c(good_bg, bad_bg)),
+          color           = stat_text,
+          fontWeight      = "700"
         )
       } else {
         dt
