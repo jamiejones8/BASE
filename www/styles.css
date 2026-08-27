@@ -77,6 +77,45 @@ a:hover, a:focus { color: var(--base-maroon-deep); }
 /* --------------------------------------------------------------------------
    Primary application navigation
    -------------------------------------------------------------------------- */
+/* navbarPage remains as the compatibility router, but its global navigation
+   is intentionally hidden. Workspaces own their tabs; Home is the only global
+   control exposed to users. */
+body > nav.navbar { display: none !important; }
+
+#base-shell-home {
+  position: fixed;
+  z-index: 1200;
+  top: 16px;
+  left: 18px;
+  display: inline-flex;
+  min-height: 42px;
+  padding: 6px 13px 6px 8px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(215, 189, 138, 0.44);
+  border-radius: 999px;
+  background: rgba(49, 10, 12, 0.94);
+  box-shadow: 0 10px 26px rgba(49, 10, 12, 0.22);
+  color: #fff;
+  cursor: pointer;
+  font-family: var(--base-font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  backdrop-filter: blur(9px);
+  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+#base-shell-home img { width: 28px; height: 28px; object-fit: contain; }
+#base-shell-home:hover,
+#base-shell-home:focus {
+  background: var(--base-maroon);
+  box-shadow: 0 14px 30px rgba(49, 10, 12, 0.28);
+  outline: 2px solid rgba(215, 189, 138, 0.34);
+  outline-offset: 2px;
+  transform: translateY(-1px);
+}
+
 .navbar {
   min-height: 74px;
   margin-bottom: 0;
@@ -207,7 +246,7 @@ body > .container-fluid {
   width: min(100%, var(--base-content-width));
   min-height: calc(100vh - 122px);
   margin: 0 auto;
-  padding: clamp(28px, 3vw, 46px) clamp(18px, 3.25vw, 52px) 64px;
+  padding: clamp(76px, 6vw, 92px) clamp(18px, 3.25vw, 52px) 64px;
 }
 
 .hub-main > h2,
@@ -567,7 +606,7 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 /* --------------------------------------------------------------------------
    Home command center
    -------------------------------------------------------------------------- */
-#base-home { min-height: calc(100vh - 74px); }
+#base-home { min-height: 100vh; }
 
 .base-home-hero {
   position: relative;
@@ -600,7 +639,7 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
   width: min(100%, var(--base-content-width));
   min-height: 330px;
   margin: 0 auto;
-  padding: 44px clamp(22px, 4vw, 62px);
+  padding: 76px clamp(22px, 4vw, 62px) 44px;
   grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr);
   gap: clamp(34px, 6vw, 92px);
   align-items: center;
@@ -712,7 +751,7 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 .home-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
 .home-section-heading h2 { margin: 5px 0 0; color: var(--base-ink); font-family: var(--base-font-display); font-size: 29px; font-weight: 600; }
 .home-data-status { padding: 8px 12px; border: 1px solid var(--base-border); border-radius: 999px; background: rgba(255,255,255,0.70); color: var(--base-muted); font-size: 11px; font-weight: 600; }
-.home-quick-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.home-quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; }
 .home-quick-link {
   display: grid;
   min-height: 126px;
@@ -734,6 +773,129 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 .home-quick-copy strong { display: block; color: var(--base-ink); font-family: var(--base-font-display); font-size: 17px; font-weight: 600; }
 .home-quick-copy small { display: block; margin-top: 7px; color: var(--base-muted); font-size: 12px; line-height: 1.4; }
 .home-quick-arrow { align-self: end; color: var(--base-maroon); font-size: 18px; }
+
+/* --------------------------------------------------------------------------
+   Workspace directory and integrated app shells
+   -------------------------------------------------------------------------- */
+.base-workspace-page {
+  width: min(100%, var(--base-content-width));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(76px, 6vw, 92px) clamp(18px, 3.25vw, 52px) 64px;
+}
+
+.base-workspace-heading {
+  display: flex;
+  margin-bottom: 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.base-workspace-heading h1 {
+  margin: 4px 0 6px;
+  color: var(--base-ink);
+  font-family: var(--base-font-display);
+  font-size: clamp(34px, 3vw, 48px);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.base-workspace-heading p,
+.base-workspace-description {
+  max-width: 760px;
+  margin: 0;
+  color: var(--base-muted);
+  font-size: 15px;
+}
+
+.base-source-chip {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 1px solid var(--base-border);
+  border-radius: 999px;
+  background: rgba(255,255,255,.76);
+  color: var(--base-muted);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.base-workspace-tool-grid {
+  display: grid;
+  margin-top: 26px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.base-workspace-tool {
+  display: flex;
+  min-height: 190px;
+  padding: 22px;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid var(--base-border);
+  border-radius: var(--base-radius-lg);
+  background: var(--base-surface);
+  box-shadow: var(--base-shadow-sm);
+  color: var(--base-ink);
+  text-align: left;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.base-workspace-tool:not(.is-pending):hover,
+.base-workspace-tool:not(.is-pending):focus {
+  border-color: rgba(172,145,85,.68);
+  box-shadow: var(--base-shadow);
+  outline: none;
+  transform: translateY(-3px);
+}
+
+.base-workspace-tool.is-pending { cursor: default; opacity: .62; }
+.base-tool-eyebrow {
+  margin-bottom: 10px;
+  color: var(--base-gold);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.base-workspace-tool strong {
+  color: var(--base-ink);
+  font-family: var(--base-font-display);
+  font-size: 24px;
+  font-weight: 600;
+}
+.base-workspace-tool p { margin: 10px 0 18px; color: var(--base-muted); font-size: 13px; }
+.base-tool-action { margin-top: auto; color: var(--base-maroon); font-size: 11px; font-weight: 700; }
+
+.base-workspace-loading {
+  display: flex;
+  min-height: 320px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid var(--base-border);
+  border-radius: var(--base-radius-lg);
+  background: rgba(255,255,255,.62);
+  color: var(--base-muted);
+}
+.base-loading-mark {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 5px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--base-maroon);
+  box-shadow: 0 0 0 7px rgba(80,18,20,.08);
+  color: var(--base-gold-bright);
+  font-family: var(--base-font-display);
+  font-size: 25px;
+}
+.base-workspace-loading strong { color: var(--base-ink); font-family: var(--base-font-display); font-size: 20px; }
+.base-workspace-loading span { font-size: 12px; }
 
 .home-roster-section { padding: 24px; border: 1px solid var(--base-border); border-radius: var(--base-radius-lg); background: rgba(255,255,255,0.54); box-shadow: var(--base-shadow-sm); }
 #base-home .pos-filters { display: flex; flex-wrap: wrap; gap: 7px; margin: 0; }
@@ -877,7 +1039,7 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 @media (max-width: 991px) {
   .navbar .container-fluid { padding-left: 12px; padding-right: 12px; }
   .navbar-nav > li > a { min-height: 38px; margin: 18px 1px; padding: 10px 9px 8px !important; font-size: 10.5px; }
-  .hub-main { padding-top: 28px; }
+  .hub-main, .base-workspace-page { padding-top: 76px; }
   .app-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .base-home-hero-inner { grid-template-columns: 1fr; gap: 28px; }
   .home-team-identity { max-width: none; }
@@ -893,12 +1055,12 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
   .navbar-toggle { margin-top: 16px; }
   .navbar-nav { margin-top: 0; margin-bottom: 8px; }
   .navbar-nav > li > a { min-height: 42px; margin: 2px 0; padding: 12px 14px !important; border-radius: 7px; font-size: 12px; }
-  .hub-main { padding: 24px 16px 48px; }
+  .hub-main, .base-workspace-page { padding: 76px 16px 48px; }
   .hub-main > h2 { font-size: 32px !important; }
   .app-grid { grid-template-columns: 1fr; }
   .app-card { min-height: 0; }
   .card-img { height: 180px; }
-  .base-home-hero-inner { min-height: 0; padding: 34px 18px; }
+  .base-home-hero-inner { min-height: 0; padding: 78px 18px 34px; }
   .home-team-identity { align-items: flex-start; gap: 16px; }
   .home-team-marks { gap: 10px; }
   .home-team-logo { width: 64px; height: 64px; flex-basis: 64px; }
@@ -912,6 +1074,8 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
   .home-matchup-team img { width: 38px; height: 38px; flex-basis: 38px; }
   #base-home .content-area { padding: 24px 16px 48px; }
   .home-section-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .base-workspace-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .base-source-chip { white-space: normal; }
   .home-quick-grid { grid-template-columns: 1fr; }
   .home-roster-section { padding: 18px; }
   .home-roster-heading { margin-bottom: 18px; }

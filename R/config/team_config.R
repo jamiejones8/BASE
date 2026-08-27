@@ -118,7 +118,8 @@ base_default_season_file <- function() {
   )
   bundled_candidates <- c(
     base_project_path("data", "local", "College26.parquet"),
-    base_project_path("College26.parquet")
+    base_project_path("College26.parquet"),
+    base_project_path("data", "local", "texas_state_2027.csv")
   )
   mounted_file <- "/base-data/College26.runtime.parquet"
   if (file.exists(derived_team_file)) {
@@ -130,6 +131,27 @@ base_default_season_file <- function() {
   } else {
     bundled_candidates[[1]]
   }
+}
+
+base_default_ncaa_d1_master_file <- function() {
+  candidates <- c(
+    "/base-data/ncaa-d1/2026/master.parquet",
+    "/base-data/College26.parquet",
+    base_project_path("WallyApps", "D1 Files", "D1 Pitching:Hitting File.parquet"),
+    base_project_path("data", "local", "College26.parquet"),
+    base_project_path("College26.parquet")
+  )
+  existing <- candidates[file.exists(candidates)]
+  if (length(existing)) existing[[1]] else candidates[[1]]
+}
+
+base_default_ncaa_d1_defense_file <- function() {
+  candidates <- c(
+    "/base-data/ncaa-d1/2026/defense-alignment.parquet",
+    base_project_path("WallyApps", "D1 Files", "D1 Defense File.parquet")
+  )
+  existing <- candidates[file.exists(candidates)]
+  if (length(existing)) existing[[1]] else candidates[[1]]
 }
 
 base_env_bool <- function(name, default = FALSE) {
@@ -199,6 +221,22 @@ TEAM_CONFIG <- list(
     )
   ),
   data = list(
+    source_contract_file = base_env_path(
+      "BASE_DATA_SOURCE_CONTRACT_FILE",
+      base_project_path("config", "baseball_data_sources.json")
+    ),
+    ncaa_d1_master_file = base_env_path(
+      "BASE_NCAA_D1_MASTER_FILE",
+      base_default_ncaa_d1_master_file()
+    ),
+    ncaa_d1_defense_file = base_env_path(
+      "BASE_NCAA_D1_DEFENSE_FILE",
+      base_default_ncaa_d1_defense_file()
+    ),
+    team_supplement_dataset_dir = base_env_path(
+      "BASE_TEAM_SUPPLEMENT_DATASET_DIR",
+      "/base-data/supplements/texas-state-pitches"
+    ),
     season_file = base_env_path("BASE_SEASON_DATA_FILE", base_default_season_file()),
     runtime_root = base_env_path("BASE_RUNTIME_ROOT", "/base-data/derived2026"),
     pitcher_dataset_dir = base_env_path(
@@ -255,6 +293,16 @@ TEAM_CONFIG <- list(
           file.path(base_env_path("BASE_RUNTIME_ROOT", "/base-data/derived2026"), "defense")
         ),
         "catalogs", "batters.parquet"
+      )
+    ),
+    catcher_framing_reference_file = base_file_override_or_fallback(
+      "BASE_CATCHER_FRAMING_REFERENCE_FILE",
+      file.path(
+        base_env_path("BASE_RUNTIME_ROOT", "/base-data/derived2026"),
+        "reference", "d1_catcher_framing_metrics.csv"
+      ),
+      base_project_path(
+        "WallyApps", "DefenseApp", "data", "d1_catcher_framing_metrics.csv"
       )
     ),
     hitter_catalog_cache_file = base_env_path(

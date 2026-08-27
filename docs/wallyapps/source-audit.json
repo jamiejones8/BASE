@@ -1,0 +1,533 @@
+{
+  "candidate_master": {
+    "additional_feature_columns": [
+      "AutoHitType",
+      "AwayTeam",
+      "Catcher",
+      "CatcherId",
+      "CatcherTeam",
+      "CatcherThrows",
+      "EffectiveVelo",
+      "ExchangeTime",
+      "HangTime",
+      "HitLandingConfidence",
+      "HitLaunchConfidence",
+      "HomeTeam",
+      "HorzApprAngle",
+      "HorzRelAngle",
+      "League",
+      "Level",
+      "ModelConfidence",
+      "ModelConfidenceRaw",
+      "ModelPitchType",
+      "ModelPitchTypeRaw",
+      "ModelRetagReason",
+      "ModelTop3",
+      "PitchLocationConfidence",
+      "PitchMovementConfidence",
+      "PitchReleaseConfidence",
+      "PlayID",
+      "PopTime",
+      "PositionAt110X",
+      "PositionAt110Y",
+      "PositionAt110Z",
+      "SpinAxis3dActiveSpinRate",
+      "SpinAxis3dSpinEfficiency",
+      "Stadium",
+      "ThrowSpeed",
+      "TimeToBase",
+      "VertApprAngle",
+      "VertRelAngle",
+      "ZoneSpeed",
+      "ZoneTime"
+    ],
+    "base_core_schema": {
+      "missing": [],
+      "present": [
+        "Angle",
+        "AutoPitchType",
+        "Balls",
+        "Batter",
+        "BatterId",
+        "BatterSide",
+        "BatterTeam",
+        "Bearing",
+        "Date",
+        "Direction",
+        "Distance",
+        "ExitSpeed",
+        "Extension",
+        "GameID",
+        "GameUID",
+        "HorzBreak",
+        "InducedVertBreak",
+        "Inning",
+        "KorBB",
+        "LocalDateTime",
+        "Notes",
+        "OutsOnPlay",
+        "PAofInning",
+        "PitchCall",
+        "PitchUID",
+        "Pitcher",
+        "PitcherId",
+        "PitcherTeam",
+        "PitcherThrows",
+        "PitchofPA",
+        "PlateLocHeight",
+        "PlateLocSide",
+        "PlayResult",
+        "RelHeight",
+        "RelSide",
+        "RelSpeed",
+        "RunsScored",
+        "SpinAxis",
+        "SpinRate",
+        "Strikes",
+        "TaggedHitType",
+        "TaggedPitchType",
+        "Top/Bottom",
+        "UTCDateTime"
+      ],
+      "required_columns": 44
+    },
+    "columns": 212,
+    "date_max": "2026-06-21",
+    "date_min": "2025-02-16",
+    "date_ranges_by_year": {
+      "2025": {
+        "date_max": "2025-05-31",
+        "date_min": "2025-02-16"
+      },
+      "2026": {
+        "date_max": "2026-06-21",
+        "date_min": "2026-02-13"
+      }
+    },
+    "duplicate_pitch_uid_rows": 0,
+    "format": "parquet",
+    "metadata_values": {
+      "d1_data_type": [
+        "pitching"
+      ],
+      "query_end_date": [
+        "2026-06-22"
+      ],
+      "query_league": [],
+      "query_mode": [
+        "d1_data_file"
+      ],
+      "query_start_date": [
+        "2026-02-13"
+      ],
+      "source_scrape_date": [
+        "2026-02-13",
+        "2026-02-14",
+        "2026-02-15",
+        "2026-02-16",
+        "2026-02-17",
+        "2026-02-18",
+        "2026-02-19",
+        "2026-02-20",
+        "2026-02-21",
+        "2026-02-22",
+        "2026-02-23",
+        "2026-02-24",
+        "2026-02-25",
+        "2026-02-26",
+        "2026-02-27",
+        "2026-02-28",
+        "2026-03-01",
+        "2026-03-02",
+        "2026-03-03",
+        "2026-03-04",
+        "2026-03-05",
+        "2026-03-06",
+        "2026-03-07",
+        "2026-03-08",
+        "2026-03-09",
+        "2026-03-10",
+        "2026-03-11",
+        "2026-03-12",
+        "2026-03-13",
+        "2026-03-14",
+        "2026-03-15",
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22",
+        "2026-03-23",
+        "2026-03-24",
+        "2026-03-25",
+        "2026-03-26",
+        "2026-03-27",
+        "2026-03-28",
+        "2026-03-29",
+        "2026-03-30",
+        "2026-03-31",
+        "2026-04-01",
+        "2026-04-02",
+        "2026-04-03",
+        "2026-04-04",
+        "2026-04-05",
+        "2026-04-06",
+        "2026-04-07",
+        "2026-04-08",
+        "2026-04-09",
+        "2026-04-10",
+        "2026-04-11",
+        "2026-04-12",
+        "2026-04-13",
+        "2026-04-14",
+        "2026-04-15",
+        "2026-04-16",
+        "2026-04-17",
+        "2026-04-18",
+        "2026-04-19",
+        "2026-04-20",
+        "2026-04-21",
+        "2026-04-22",
+        "2026-04-23",
+        "2026-04-24",
+        "2026-04-25",
+        "2026-04-26",
+        "2026-04-27",
+        "2026-04-28",
+        "2026-04-29",
+        "2026-04-30",
+        "2026-05-01",
+        "2026-05-02",
+        "2026-05-03",
+        "2026-05-04",
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-11",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-14",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-17",
+        "2026-05-18",
+        "2026-05-19",
+        "2026-05-20",
+        "2026-05-21",
+        "2026-05-22",
+        "2026-05-23",
+        "2026-05-24",
+        "2026-05-25",
+        "2026-05-26",
+        "2026-05-28",
+        "2026-05-29",
+        "2026-05-30",
+        "2026-05-31",
+        "2026-06-01",
+        "2026-06-02",
+        "2026-06-03",
+        "2026-06-05",
+        "2026-06-06",
+        "2026-06-07",
+        "2026-06-08",
+        "2026-06-09",
+        "2026-06-10",
+        "2026-06-13",
+        "2026-06-14",
+        "2026-06-15",
+        "2026-06-16",
+        "2026-06-17",
+        "2026-06-18",
+        "2026-06-20",
+        "2026-06-22"
+      ]
+    },
+    "national_team_coverage": {
+      "batter_team_codes": 349,
+      "pitcher_team_codes": 349,
+      "team_codes_union": 351
+    },
+    "nonnull_coverage": {
+      "BatterId": {
+        "pct": 99.944,
+        "rows": 2050028
+      },
+      "BatterTeam": {
+        "pct": 100.0,
+        "rows": 2051176
+      },
+      "Date": {
+        "pct": 99.709,
+        "rows": 2045197
+      },
+      "GameUID": {
+        "pct": 100.0,
+        "rows": 2051176
+      },
+      "PitchUID": {
+        "pct": 100.0,
+        "rows": 2051176
+      },
+      "PitcherId": {
+        "pct": 99.913,
+        "rows": 2049395
+      },
+      "PitcherTeam": {
+        "pct": 100.0,
+        "rows": 2051176
+      },
+      "d1_data_type": {
+        "pct": 100.0,
+        "rows": 2051176
+      },
+      "query_end_date": {
+        "pct": 100.0,
+        "rows": 2051176
+      },
+      "query_league": {
+        "pct": 0.0,
+        "rows": 0
+      },
+      "query_mode": {
+        "pct": 100.0,
+        "rows": 2051176
+      },
+      "query_start_date": {
+        "pct": 100.0,
+        "rows": 2051176
+      },
+      "source_scrape_date": {
+        "pct": 100.0,
+        "rows": 2051176
+      }
+    },
+    "path": "WallyApps/D1 Files/D1 Pitching:Hitting File.parquet",
+    "row_groups": 2,
+    "rows": 2051176,
+    "rows_by_year": {
+      "2025": 4043,
+      "2026": 2041154
+    },
+    "size_bytes": 1055457360,
+    "texas_state_coverage": {
+      "date_max": "2026-05-31",
+      "date_min": "2026-02-13",
+      "hitters_by_year": {
+        "2026": 24
+      },
+      "hitting_rows_by_year": {
+        "2026": 9029
+      },
+      "matching_team_codes": [
+        "TEX_BOB"
+      ],
+      "pitchers_by_year": {
+        "2026": 26
+      },
+      "pitching_rows_by_year": {
+        "2026": 8924
+      }
+    },
+    "unique_games": 6759,
+    "unique_pitch_uids": 2051176
+  },
+  "current_base_local": {
+    "columns": 42,
+    "note": "Local placeholder only; deployed BASE is configured to use mounted College26/derived Parquet data.",
+    "path": "data/local/texas_state_2027.csv",
+    "rows": 0
+  },
+  "hitting_vs_pitching_duplicates": {
+    "2025_fall": {
+      "duplicate_storage_pct_of_union": 17.838,
+      "hitting_only_pitch_uids": 1081,
+      "hitting_unique_pitch_uids": 1581,
+      "pitching_only_pitch_uids": 1222,
+      "pitching_unique_pitch_uids": 1722,
+      "shared_pitch_uids": 500,
+      "union_pitch_uids": 2803
+    },
+    "2025_season": {
+      "duplicate_storage_pct_of_union": 0.0,
+      "hitting_only_pitch_uids": 246,
+      "hitting_unique_pitch_uids": 246,
+      "pitching_only_pitch_uids": 1389,
+      "pitching_unique_pitch_uids": 1389,
+      "shared_pitch_uids": 0,
+      "union_pitch_uids": 1635
+    },
+    "2026_season": {
+      "duplicate_storage_pct_of_union": 0.0,
+      "hitting_only_pitch_uids": 5045,
+      "hitting_unique_pitch_uids": 5045,
+      "pitching_only_pitch_uids": 4602,
+      "pitching_unique_pitch_uids": 4602,
+      "shared_pitch_uids": 0,
+      "union_pitch_uids": 9647
+    },
+    "2026_squads": {
+      "duplicate_storage_pct_of_union": 23.217,
+      "hitting_only_pitch_uids": 801,
+      "hitting_unique_pitch_uids": 1322,
+      "pitching_only_pitch_uids": 922,
+      "pitching_unique_pitch_uids": 1443,
+      "shared_pitch_uids": 521,
+      "union_pitch_uids": 2244
+    }
+  },
+  "local_team_export_union": {
+    "master_overlap_pct": 56.963,
+    "pitch_uids_in_master": 9482,
+    "pitch_uids_not_in_master": 7164,
+    "unique_pitch_uids": 16646
+  },
+  "local_team_exports": {
+    "hitting_2025_fall": {
+      "columns": 198,
+      "date_max": "2025-11-20",
+      "date_min": "2025-09-25",
+      "duplicate_pitch_uid_rows": 0,
+      "master_overlap_pct": 0.0,
+      "missing_pitch_uid_rows": 3587,
+      "path": "WallyApps/HittingApp/data/2025 Fall -cleaned.csv",
+      "pitch_uids_in_master": 0,
+      "pitch_uids_not_in_master": 1581,
+      "rows": 5168,
+      "size_bytes": 3028599,
+      "unique_pitch_uids": 1581
+    },
+    "hitting_2025_season": {
+      "columns": 198,
+      "date_max": "2025-03-14",
+      "date_min": "2025-02-14",
+      "duplicate_pitch_uid_rows": 0,
+      "master_overlap_pct": 0.0,
+      "missing_pitch_uid_rows": 2054,
+      "path": "WallyApps/HittingApp/data/2025 Season -cleaned.csv",
+      "pitch_uids_in_master": 0,
+      "pitch_uids_not_in_master": 246,
+      "rows": 2300,
+      "size_bytes": 720604,
+      "unique_pitch_uids": 246
+    },
+    "hitting_2026_season": {
+      "columns": 198,
+      "date_max": "2026-05-31",
+      "date_min": "2026-02-13",
+      "duplicate_pitch_uid_rows": 0,
+      "master_overlap_pct": 98.375,
+      "missing_pitch_uid_rows": 10294,
+      "path": "WallyApps/HittingApp/data/2026 Season - cleaned.csv",
+      "pitch_uids_in_master": 4963,
+      "pitch_uids_not_in_master": 82,
+      "rows": 15339,
+      "size_bytes": 8982069,
+      "unique_pitch_uids": 5045
+    },
+    "hitting_2026_squads": {
+      "columns": 198,
+      "date_max": "2026-05-26",
+      "date_min": "2026-01-15",
+      "duplicate_pitch_uid_rows": 0,
+      "master_overlap_pct": 0.0,
+      "missing_pitch_uid_rows": 3220,
+      "path": "WallyApps/HittingApp/data/2026 Squads - cleaned.csv",
+      "pitch_uids_in_master": 0,
+      "pitch_uids_not_in_master": 1322,
+      "rows": 4542,
+      "size_bytes": 2704264,
+      "unique_pitch_uids": 1322
+    },
+    "pitching_2025_fall": {
+      "columns": 198,
+      "date_max": "2025-11-08",
+      "date_min": "2025-09-25",
+      "duplicate_pitch_uid_rows": 0,
+      "master_overlap_pct": 0.0,
+      "missing_pitch_uid_rows": 3343,
+      "path": "WallyApps/PitchingApp/data/2025 Fall -cleaned.csv",
+      "pitch_uids_in_master": 0,
+      "pitch_uids_not_in_master": 1722,
+      "rows": 5065,
+      "size_bytes": 3174441,
+      "unique_pitch_uids": 1722
+    },
+    "pitching_2025_season": {
+      "columns": 198,
+      "date_max": "2025-05-21",
+      "date_min": "2025-02-15",
+      "duplicate_pitch_uid_rows": 0,
+      "master_overlap_pct": 0.0,
+      "missing_pitch_uid_rows": 7066,
+      "path": "WallyApps/PitchingApp/data/2025 Season -cleaned.csv",
+      "pitch_uids_in_master": 0,
+      "pitch_uids_not_in_master": 1389,
+      "rows": 8455,
+      "size_bytes": 3119534,
+      "unique_pitch_uids": 1389
+    },
+    "pitching_2026_season": {
+      "columns": 204,
+      "date_max": "2026-05-31",
+      "date_min": "2026-02-13",
+      "duplicate_pitch_uid_rows": 0,
+      "master_overlap_pct": 98.196,
+      "missing_pitch_uid_rows": 5400,
+      "path": "WallyApps/PitchingApp/data/2026 Season - cleaned.csv",
+      "pitch_uids_in_master": 4519,
+      "pitch_uids_not_in_master": 83,
+      "rows": 10002,
+      "size_bytes": 9780266,
+      "unique_pitch_uids": 4602
+    },
+    "pitching_2026_squads": {
+      "columns": 198,
+      "date_max": "2026-05-26",
+      "date_min": "2026-01-15",
+      "duplicate_pitch_uid_rows": 0,
+      "master_overlap_pct": 0.0,
+      "missing_pitch_uid_rows": 3051,
+      "path": "WallyApps/PitchingApp/data/2026 Squads - cleaned.csv",
+      "pitch_uids_in_master": 0,
+      "pitch_uids_not_in_master": 1443,
+      "rows": 4494,
+      "size_bytes": 2880629,
+      "unique_pitch_uids": 1443
+    },
+    "pitching_bullpens": {
+      "columns": 198,
+      "date_max": "2026-02-25",
+      "date_min": "2025-09-03",
+      "duplicate_pitch_uid_rows": 0,
+      "master_overlap_pct": 0.0,
+      "missing_pitch_uid_rows": 586,
+      "path": "WallyApps/PitchingApp/data/Bullpens - cleaned.csv",
+      "pitch_uids_in_master": 0,
+      "pitch_uids_not_in_master": 317,
+      "rows": 903,
+      "size_bytes": 557364,
+      "unique_pitch_uids": 317
+    }
+  },
+  "national_dataset_overlap": {
+    "catching_vs_pitching_hitting": {
+      "master_overlap_pct": 100.0,
+      "pitch_uids_in_master": 1505940,
+      "pitch_uids_not_in_master": 0,
+      "unique_pitch_uids": 1505940
+    },
+    "defense_vs_pitching_hitting": {
+      "master_overlap_pct": 78.004,
+      "pitch_uids_in_master": 1881227,
+      "pitch_uids_not_in_master": 530472,
+      "unique_pitch_uids": 2411699
+    }
+  },
+  "privacy": "Aggregate counts and schemas only; no player names or pitch rows are exported.",
+  "schema_version": 1
+}

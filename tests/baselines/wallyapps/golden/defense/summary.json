@@ -1,0 +1,9 @@
+{
+  "app": "DefenseApp",
+  "source_defense_rows": {},
+  "exploded_defense_rows": 672,
+  "catcher_rows": 92,
+  "catcher_metric_count": 17,
+  "golden_tables": ["defense-summary.csv", "leaderboard.csv", "catcher-framing.csv"],
+  "golden_visuals": ["shortstop-opportunities.png", "shortstop-opportunities.pdf", "shortstop-range.png", "shortstop-range.pdf", "catcher-framing.png", "catcher-framing.pdf"]
+}

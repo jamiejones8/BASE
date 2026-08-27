@@ -1,0 +1,351 @@
+{
+  "schema_version": 1,
+  "policy": "Migrate capabilities into existing BASE surfaces; do not embed standalone Wally applications or restore app-local pitch-event loaders.",
+  "strategies": [
+    "merge",
+    "reuse",
+    "replace_with_base",
+    "defer"
+  ],
+  "app_workspace_defaults": {
+    "HittingApp": "team_hitting",
+    "PitchingApp": "team_pitching",
+    "DefenseApp": "defense"
+  },
+  "features": [
+    {
+      "id": "HIT-001",
+      "app": "HittingApp",
+      "feature": "Performance tables and time series",
+      "strategy": "merge",
+      "target": "Hitting / Season Profile and Trends",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-001", "METRIC-002", "METRIC-004", "METRIC-006"],
+      "priority": 2,
+      "notes": "Reuse BASE statline and scouting tables; add only missing trend views after metric approval."
+    },
+    {
+      "id": "HIT-002",
+      "app": "HittingApp",
+      "feature": "Lineup Builder",
+      "strategy": "reuse",
+      "target": "Hitting / Lineup Builder",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-001", "METRIC-002", "METRIC-004"],
+      "priority": 2,
+      "notes": "Keep unique-player and unique-position constraints; drive summaries from shared hitter metrics."
+    },
+    {
+      "id": "HIT-003",
+      "app": "HittingApp",
+      "feature": "Damage heat maps",
+      "strategy": "replace_with_base",
+      "target": "Hitting / Exit Velocity and xwOBA surfaces",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-002", "METRIC-003", "METRIC-006"],
+      "priority": 3,
+      "notes": "BASE already provides richer national surfaces; compare outputs rather than duplicating the page."
+    },
+    {
+      "id": "HIT-004",
+      "app": "HittingApp",
+      "feature": "Whiff zones",
+      "strategy": "replace_with_base",
+      "target": "Hitting / Whiff Rate Surface",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-003", "METRIC-006"],
+      "priority": 3,
+      "notes": "Retain BASE full-location smoothing and validate sample/denominator parity."
+    },
+    {
+      "id": "HIT-005",
+      "app": "HittingApp",
+      "feature": "Team report PDF",
+      "strategy": "merge",
+      "target": "Hitting / Team Game Review",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-001", "METRIC-002", "METRIC-003", "METRIC-004", "METRIC-006"],
+      "priority": 2,
+      "notes": "One report renderer should serve preview and download from the same calculated payload."
+    },
+    {
+      "id": "HIT-006",
+      "app": "HittingApp",
+      "feature": "Game AAR",
+      "strategy": "merge",
+      "target": "Hitting / Game Review",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-003", "METRIC-004", "METRIC-006"],
+      "priority": 2,
+      "notes": "Preserve table-to-plot pitch numbering and the PDF layout as acceptance evidence."
+    },
+    {
+      "id": "HIT-007",
+      "app": "HittingApp",
+      "feature": "Hitter and team leaderboards",
+      "strategy": "replace_with_base",
+      "target": "Hitting / Leaderboards",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-001", "METRIC-002", "METRIC-003", "METRIC-004", "METRIC-006"],
+      "priority": 3,
+      "notes": "Retire the standalone table after approved metric parity; do not create a second leaderboard engine."
+    },
+    {
+      "id": "HIT-008",
+      "app": "HittingApp",
+      "feature": "Swing-decision location views",
+      "strategy": "merge",
+      "target": "Hitting / Count and Approach Tendencies",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-003", "METRIC-004", "METRIC-006"],
+      "priority": 2,
+      "notes": "Add taken-strike and chase-location views to the existing count table after zone approval."
+    },
+    {
+      "id": "HIT-009",
+      "app": "HittingApp",
+      "feature": "Ball-flight spray views",
+      "strategy": "merge",
+      "target": "Hitting / Spray Profile",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-002", "METRIC-006"],
+      "priority": 2,
+      "notes": "Extend BASE spray filters for pitch type, contact type, result, and exit-velocity band."
+    },
+    {
+      "id": "HIT-010",
+      "app": "HittingApp",
+      "feature": "Contact-point views",
+      "strategy": "merge",
+      "target": "Hitting / Contact Profile",
+      "source_route": "team_hitting",
+      "metric_dependencies": ["METRIC-006"],
+      "priority": 2,
+      "notes": "Add only if the selected master meets contact-coordinate coverage thresholds."
+    },
+    {
+      "id": "PIT-001",
+      "app": "PitchingApp",
+      "feature": "Performance tables, percentiles, and time series",
+      "strategy": "merge",
+      "target": "Pitching / Statline, Splits, and Trends",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-002", "METRIC-004", "METRIC-005", "METRIC-006", "METRIC-011"],
+      "priority": 2,
+      "notes": "BASE owns the shared tables; import missing trends and percentiles only after the blank-UI defect is isolated."
+    },
+    {
+      "id": "PIT-002",
+      "app": "PitchingApp",
+      "feature": "Pitch metrics and pitch-shape percentiles",
+      "strategy": "merge",
+      "target": "Pitching / Arsenal Overview",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-006", "METRIC-011"],
+      "priority": 2,
+      "notes": "Use the shared arsenal table and add versioned percentile bands and plots."
+    },
+    {
+      "id": "PIT-003",
+      "app": "PitchingApp",
+      "feature": "Season Summary PDF",
+      "strategy": "reuse",
+      "target": "Pitching / Season Summaries",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-002", "METRIC-004", "METRIC-005", "METRIC-006"],
+      "priority": 2,
+      "notes": "Render from the same payload used by the interactive scouting page."
+    },
+    {
+      "id": "PIT-004",
+      "app": "PitchingApp",
+      "feature": "Pitch Decay",
+      "strategy": "reuse",
+      "target": "Pitching / Pitch Decay",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-006"],
+      "priority": 1,
+      "first_vertical_slice": true,
+      "notes": "First analytical migration slice: season and single-game velocity/movement decay for Texas State pitchers from the shared team route."
+    },
+    {
+      "id": "PIT-005",
+      "app": "PitchingApp",
+      "feature": "Pitch locations",
+      "strategy": "replace_with_base",
+      "target": "Pitching / Heatmaps",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-003", "METRIC-006"],
+      "priority": 3,
+      "notes": "BASE already supplies density, whiff, damage, and expected-outcome location surfaces."
+    },
+    {
+      "id": "PIT-006",
+      "app": "PitchingApp",
+      "feature": "Whiff, chase, called-strike, and barrel location views",
+      "strategy": "merge",
+      "target": "Pitching / Heatmaps",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-002", "METRIC-003", "METRIC-006"],
+      "priority": 2,
+      "notes": "Add explicit outcome layers to the existing BASE full-location surface controls."
+    },
+    {
+      "id": "PIT-007",
+      "app": "PitchingApp",
+      "feature": "Stuff+, xRV, and staff leaderboard",
+      "strategy": "defer",
+      "target": "Pitching / Model Metrics",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-007", "METRIC-011"],
+      "priority": 4,
+      "notes": "Blocked until model population, constants, hashes, and reference tables have production provenance."
+    },
+    {
+      "id": "PIT-008",
+      "app": "PitchingApp",
+      "feature": "Pitcher AAR and recent AAR archive",
+      "strategy": "merge",
+      "target": "Pitching / Game Review",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-002", "METRIC-003", "METRIC-004", "METRIC-005", "METRIC-006"],
+      "priority": 2,
+      "notes": "Use shared report payloads and app-state storage rather than an app-local archive."
+    },
+    {
+      "id": "PIT-009",
+      "app": "PitchingApp",
+      "feature": "Bullpen accumulation and reports",
+      "strategy": "reuse",
+      "target": "Pitching / Bullpens",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-006"],
+      "priority": 2,
+      "notes": "Keep bullpen data separate from NCAA game populations and label it in every output."
+    },
+    {
+      "id": "PIT-010",
+      "app": "PitchingApp",
+      "feature": "Pitching leaderboards",
+      "strategy": "replace_with_base",
+      "target": "Pitching / Leaderboards",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-002", "METRIC-004", "METRIC-005", "METRIC-006", "METRIC-008"],
+      "priority": 3,
+      "notes": "One shared leaderboard engine replaces the standalone results/process/totals tables."
+    },
+    {
+      "id": "PIT-011",
+      "app": "PitchingApp",
+      "feature": "Team report PDF",
+      "strategy": "merge",
+      "target": "Pitching / Team Game Review",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-002", "METRIC-003", "METRIC-004", "METRIC-005", "METRIC-006"],
+      "priority": 2,
+      "notes": "Consolidate preview/download calculation with BASE pitcher reports."
+    },
+    {
+      "id": "PIT-012",
+      "app": "PitchingApp",
+      "feature": "Team performance and release-point trends",
+      "strategy": "reuse",
+      "target": "Pitching / Team Trends",
+      "source_route": "team_pitching",
+      "metric_dependencies": ["METRIC-002", "METRIC-004", "METRIC-005", "METRIC-006", "METRIC-011"],
+      "priority": 2,
+      "notes": "Split model-dependent performance trends from descriptive release-point tracking."
+    },
+    {
+      "id": "DEF-001",
+      "app": "DefenseApp",
+      "feature": "Defensive leaderboards",
+      "strategy": "defer",
+      "target": "Defensive Analytics / Player Value",
+      "source_route": "defense",
+      "metric_dependencies": ["METRIC-010"],
+      "priority": 4,
+      "notes": "Do not publish player value until event and player-position opportunity identities are approved."
+    },
+    {
+      "id": "DEF-002",
+      "app": "DefenseApp",
+      "feature": "Player-position opportunities",
+      "strategy": "merge",
+      "target": "Defensive Analytics / Candidate Review",
+      "source_route": "defense",
+      "metric_dependencies": ["METRIC-010"],
+      "priority": 2,
+      "notes": "BASE already exposes geometric candidates; add Wally opportunities only as auditable player-position records."
+    },
+    {
+      "id": "DEF-003",
+      "app": "DefenseApp",
+      "feature": "Outfield 360 range and OAA",
+      "strategy": "defer",
+      "target": "Defensive Analytics / Outfield Range",
+      "source_route": "defense",
+      "metric_dependencies": ["METRIC-010"],
+      "priority": 4,
+      "notes": "Range visualization may migrate before value attribution; OAA waits for validation."
+    },
+    {
+      "id": "DEF-004",
+      "app": "DefenseApp",
+      "feature": "Infield ground/air OAA",
+      "strategy": "defer",
+      "target": "Defensive Analytics / Infield Range",
+      "source_route": "defense",
+      "metric_dependencies": ["METRIC-010"],
+      "priority": 4,
+      "notes": "Separate ground and air opportunity models and validate them independently."
+    },
+    {
+      "id": "DEF-005",
+      "app": "DefenseApp",
+      "feature": "Overall OAA",
+      "strategy": "defer",
+      "target": "Defensive Analytics / Player Value",
+      "source_route": "defense",
+      "metric_dependencies": ["METRIC-010"],
+      "priority": 4,
+      "notes": "Overall value is last in the defensive sequence, after position models and assignment review."
+    },
+    {
+      "id": "DEF-006",
+      "app": "DefenseApp",
+      "feature": "Single-game catcher receiving report",
+      "strategy": "reuse",
+      "target": "Defensive Analytics / Game Receiving",
+      "source_route": "defense",
+      "metric_dependencies": ["METRIC-003", "METRIC-009", "METRIC-011"],
+      "priority": 2,
+      "notes": "Extract pure call/location normalization and keep the PDF tied to the same payload."
+    },
+    {
+      "id": "DEF-007",
+      "app": "DefenseApp",
+      "feature": "Catcher season framing and percentiles",
+      "strategy": "reuse",
+      "target": "Defensive Analytics / Season Receiving",
+      "source_route": "defense",
+      "metric_dependencies": ["METRIC-003", "METRIC-009", "METRIC-011"],
+      "priority": 2,
+      "notes": "Use catcher fields from the primary national pitch master; do not deploy the duplicate catching file."
+    }
+  ],
+  "first_vertical_slice": {
+    "feature_id": "PIT-004",
+    "reason": "It adds a missing Team Pitching capability while exercising the shared team data route and avoiding unresolved outcome, PA, percentile, and OAA definitions.",
+    "acceptance": [
+      "Available for every Texas State pitcher present in the shared team source",
+      "No read from a Wally app-local data directory",
+      "Season and single-game views use the same filtered pitch payload",
+      "Pitch type is displayed with explicit provenance",
+      "Rows without finite velocity are excluded and disclosed",
+      "Synthetic output matches an approved Pitch Decay golden",
+      "Existing BASE and Wally baseline checks remain green",
+      "Browser journey renders with no console errors or indefinite loading state"
+    ]
+  }
+}

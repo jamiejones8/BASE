@@ -40,8 +40,14 @@ library(tibble)
 library(reactable)
 
 source(file.path(base_bootstrap_root, "team_config.R"), local = FALSE)
+base_source("R/data/source_contract.R", local = FALSE)
+base_source("R/performance/lazy_workspace.R", local = FALSE)
 base_source("R/data/data_access.R", local = FALSE)
+base_source("R/integrations/wally_pitching_workspace.R", local = FALSE)
+base_source("R/integrations/wally_hitting_workspace.R", local = FALSE)
+base_source("R/integrations/wally_scouting_workspace.R", local = FALSE)
 base_source("R/data/defense_data_access.R", local = FALSE)
+base_source("R/integrations/wally_defense_workspace.R", local = FALSE)
 base_source("R/data/defense_attribution.R", local = FALSE)
 base_source("R/data/pitch_retags.R", local = FALSE)
 
@@ -403,17 +409,30 @@ options(shiny.maxRequestSize = 10000000 * 1024^2)
 pdf(file = NULL)
 Sys.setenv(TZ='EST')
 
-message("Loading BrewStuff model from ", TEAM_CONFIG$data$brewstuff_model_file)
-model <- lgb.load(TEAM_CONFIG$data$brewstuff_model_file)
-Height26 <- tryCatch(
-  read_csv(TEAM_CONFIG$data$heights_file, show_col_types = FALSE),
-  error = function(e) tibble(
-    tm_name = character(), team_abbr = character(),
-    height = numeric(), set = numeric()
-  )
+delayedAssign(
+  "model",
+  {
+    message("Loading BrewStuff model on first use from ", TEAM_CONFIG$data$brewstuff_model_file)
+    lgb.load(TEAM_CONFIG$data$brewstuff_model_file)
+  },
+  assign.env = environment()
 )
-
-percentiledata <- read_csv(TEAM_CONFIG$data$percentile_table_file)
+delayedAssign(
+  "Height26",
+  tryCatch(
+    read_csv(TEAM_CONFIG$data$heights_file, show_col_types = FALSE),
+    error = function(e) tibble(
+      tm_name = character(), team_abbr = character(),
+      height = numeric(), set = numeric()
+    )
+  ),
+  assign.env = environment()
+)
+delayedAssign(
+  "percentiledata",
+  read_csv(TEAM_CONFIG$data$percentile_table_file),
+  assign.env = environment()
+)
 
 get_percentile <- function(value, stat, pitch_type, percentiledata) {
   if (is.na(value)) return(NA_real_)
@@ -2469,7 +2488,7 @@ season_pitcher_card_server <- function(input, output, session) {
 }
 
 
-base_media_server <- function(input, output, session) {
+base_media_server <- function(input, output, session, requested_player = NULL) {
 
   cm_selected <- reactiveVal(NULL)
   cm_selection_uids <- reactiveVal(NULL)
@@ -2489,15 +2508,11 @@ base_media_server <- function(input, output, session) {
     updateSelectizeInput(session, "cm_player_search", choices = choices_vec, server = TRUE, selected = "")
   })
 
-  observeEvent(input$cm_load, {
-    req(input$cm_player_search, nzchar(input$cm_player_search))
-    parts    <- strsplit(input$cm_player_search, "\\|\\|")[[1]]
-    raw_p    <- parts[1]
-    raw_team <- parts[2]
+  load_homebase_pitcher <- function(raw_p, raw_team) {
     player_data <- base_load_pitcher_rows(raw_team, raw_p)
     if (!nrow(player_data)) {
       showNotification("No 2026 college rows were found for that player.", type = "warning")
-      return()
+      return(invisible(FALSE))
     }
     college_n <- nrow(player_data)
     if (isTRUE(input$cm_include_cape)) {
@@ -2516,7 +2531,41 @@ base_media_server <- function(input, output, session) {
     cm_selected(pc)
     cm_source_summary(list(college = college_n, cape = cape_n))
     cm_selection_uids(NULL)
+    invisible(!is.null(pc))
+  }
+
+  observeEvent(input$cm_load, {
+    req(input$cm_player_search, nzchar(input$cm_player_search))
+    parts    <- strsplit(input$cm_player_search, "\\|\\|")[[1]]
+    raw_p    <- parts[1]
+    raw_team <- parts[2]
+    load_homebase_pitcher(raw_p, raw_team)
   })
+
+  if (is.function(requested_player)) {
+    observeEvent(requested_player(), {
+      requested <- requested_player()
+      req(nrow(base_pitcher_catalog) > 0, requested, nzchar(requested))
+      match <- base_pitcher_catalog %>%
+        filter(!is.na(Pitcher), !is.na(PitcherTeam)) %>%
+        distinct(Pitcher, PitcherTeam) %>%
+        filter(
+          base_player_key(pcard_format_pitcher_name(Pitcher)) ==
+            base_player_key(requested)
+        ) %>%
+        slice_head(n = 1)
+      if (!nrow(match)) {
+        showNotification(
+          paste0("No national pitching record is available yet for ", requested, "."),
+          type = "warning"
+        )
+        return()
+      }
+      value <- paste(match$Pitcher[[1]], match$PitcherTeam[[1]], sep = "||")
+      updateSelectizeInput(session, "cm_player_search", selected = value)
+      load_homebase_pitcher(match$Pitcher[[1]], match$PitcherTeam[[1]])
+    }, ignoreInit = FALSE)
+  }
 
   output$cm_source_note <- renderUI({
     counts <- cm_source_summary()
@@ -2602,23 +2651,39 @@ base_media_server <- function(input, output, session) {
 
       switch(key,
         pitch_type = wrap(tags$b("Pitch Type"),
-          checkboxGroupInput("cm_filter_pitch_type", NULL,
-                             choices = sort(unique(na.omit(d$TaggedPitchType_clean))), inline = TRUE)),
+          selectizeInput("cm_filter_pitch_type", NULL,
+                         choices = sort(unique(na.omit(d$TaggedPitchType_clean))),
+                         multiple = TRUE,
+                         options = list(plugins = list("remove_button"), placeholder = "Choose pitch types"),
+                         width = "100%")),
         prev_pitch = wrap(tags$b("Previous Pitch Type"),
-          checkboxGroupInput("cm_filter_prev_pitch", NULL,
-                             choices = sort(unique(na.omit(d$PrevPitchType))), inline = TRUE)),
+          selectizeInput("cm_filter_prev_pitch", NULL,
+                         choices = sort(unique(na.omit(d$PrevPitchType))),
+                         multiple = TRUE,
+                         options = list(plugins = list("remove_button"), placeholder = "Choose previous pitches"),
+                         width = "100%")),
         count = wrap(tags$b("Count Situation"),
-          checkboxGroupInput("cm_filter_count", NULL,
-                             choices = c("Early","Ahead","Even","3-2","Kill/Putaway"), inline = TRUE)),
+          selectizeInput("cm_filter_count", NULL,
+                         choices = c("Early","Ahead","Even","3-2","Kill/Putaway"),
+                         multiple = TRUE,
+                         options = list(plugins = list("remove_button"), placeholder = "Choose count situations"),
+                         width = "100%")),
         batted_ball = wrap(tags$b("Batted Ball"),
-          checkboxGroupInput("cm_filter_batted_ball", NULL,
-                             choices = c("Ground Ball","Line Drive","Fly Ball","Pop Up","Bunt"), inline = TRUE)),
+          selectizeInput("cm_filter_batted_ball", NULL,
+                         choices = c("Ground Ball","Line Drive","Fly Ball","Pop Up","Bunt"),
+                         multiple = TRUE,
+                         options = list(plugins = list("remove_button"), placeholder = "Choose batted-ball types"),
+                         width = "100%")),
         tto = wrap(tags$b("Times Through Order"),
-          checkboxGroupInput("cm_filter_tto", NULL, choices = c("1st","2nd","3rd+"), inline = TRUE)),
+          selectizeInput("cm_filter_tto", NULL, choices = c("1st","2nd","3rd+"), multiple = TRUE,
+                         options = list(plugins = list("remove_button"), placeholder = "Choose trips through the order"),
+                         width = "100%")),
         vs_team = wrap(tags$b("vs. Team"),
           if ("BatterTeam" %in% names(d))
-            checkboxGroupInput("cm_filter_vs_team", NULL,
-                               choices = sort(unique(na.omit(d$BatterTeam))), inline = TRUE)
+            selectizeInput("cm_filter_vs_team", NULL,
+                           choices = sort(unique(na.omit(d$BatterTeam))), multiple = TRUE,
+                           options = list(plugins = list("remove_button"), placeholder = "Type a team name"),
+                           width = "100%")
           else tags$p("Not available in this data.", style = "font-size:12px; color:#8B8B96;")),
         velo = wrap(tags$b("Velocity (mph)"),
           tags$div(style = "display:flex; gap:8px; align-items:center;",
@@ -3279,10 +3344,26 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
 # ==========================================
 # PITCHER - MODELS (retained for compatibility; card tab no longer uses them)
 # ==========================================
-pitcher_model        <- readRDS(TEAM_CONFIG$data$pitcher_stuff_model_file)
-league_stats         <- readRDS(TEAM_CONFIG$data$pitcher_league_stats_file)
-xgb_fit              <- readRDS(TEAM_CONFIG$data$pitcher_location_model_file)
-league_stats_pitcher <- readRDS(TEAM_CONFIG$data$pitcher_location_league_stats_file)
+delayedAssign(
+  "pitcher_model",
+  readRDS(TEAM_CONFIG$data$pitcher_stuff_model_file),
+  assign.env = environment()
+)
+delayedAssign(
+  "league_stats",
+  readRDS(TEAM_CONFIG$data$pitcher_league_stats_file),
+  assign.env = environment()
+)
+delayedAssign(
+  "xgb_fit",
+  readRDS(TEAM_CONFIG$data$pitcher_location_model_file),
+  assign.env = environment()
+)
+delayedAssign(
+  "league_stats_pitcher",
+  readRDS(TEAM_CONFIG$data$pitcher_location_league_stats_file),
+  assign.env = environment()
+)
 
 # ==========================================
 # HITTER DATA SOURCE + REPORT HELPERS (from basetest.R)
@@ -3388,7 +3469,7 @@ season_data <- tryCatch({
       )), ~ suppressWarnings(as.numeric(.x))))
   }
   if ("Notes" %in% names(df)) df$Notes <- as.character(df$Notes)
-  df$DataSource <- "2026 College Season"
+  df$DataSource <- BASE_NCAA_D1_SOURCE_LABEL
   message("Loaded ", SEASON_DATA_FILE, " — rows: ", nrow(df))
   df
 }, error = function(e) {
@@ -3587,9 +3668,9 @@ base_media_ui <- function() {
     "))),
     tags$div(
       class = "hub-main base-page base-media-page",
-      tags$h2("BASE Media",
+      tags$h2("HomeBASE",
               style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 16px;"),
-      tags$p("Search any pitcher in the configured college database.",
+      tags$p("Search the national player directory and open an individual BASE snapshot.",
              style = "color:#5F6B7A; font-size:14px; margin-bottom:20px;"),
 
       tags$div(
@@ -4309,6 +4390,13 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 # ==========================================
 BASE_NAV_TABS <- c(
   hub                = "tab_home",
+  postgame_reports   = "tab_postgame_reports",
+  team_pitching      = "tab_team_pitching",
+  team_hitting       = "tab_team_hitting",
+  opponent_scouting  = "tab_opponent_scouting",
+  defense_workspace  = "tab_defense_workspace",
+  homebase           = "tab_homebase",
+  data_processing    = "tab_data_processing",
   catcher            = "tab_catcher",
   hitter             = "tab_hitter",
   hitter_scouting    = "tab_hitter_scouting",
@@ -4318,7 +4406,7 @@ BASE_NAV_TABS <- c(
   pitcher_mock       = "tab_pcard_mock",
   team_analytics_app = "tab_leaderboards",
   season_pitcher     = "tab_season_pitcher",
-  base_media         = "tab_base_media"
+  base_media         = "tab_homebase"
 )
 
 base_nav_click_js <- function(target) {
@@ -4563,6 +4651,85 @@ home_quick_link <- function(label, description, target, number) {
   )
 }
 
+workspace_tool_card <- function(title, description, target = NULL, eyebrow = NULL,
+                                status = "Open tool", onclick = NULL) {
+  enabled <- !is.null(target) && nzchar(target)
+  tags$button(
+    type = "button",
+    class = paste("base-workspace-tool", if (!enabled) "is-pending" else ""),
+    onclick = if (enabled) (onclick %||% base_nav_click_js(target)) else NULL,
+    disabled = if (!enabled) "disabled" else NULL,
+    if (!is.null(eyebrow)) tags$span(class = "base-tool-eyebrow", eyebrow),
+    tags$strong(title),
+    tags$p(description),
+    tags$span(class = "base-tool-action", status, HTML(" &rarr;"))
+  )
+}
+
+workspace_landing_ui <- function(title, eyebrow, description, cards) {
+  tagList(
+    tags$div(
+      class = "hub-main base-page base-workspace-landing",
+      tags$div(class = "base-eyebrow", eyebrow),
+      tags$h2(title),
+      tags$p(class = "base-workspace-description", description),
+      tags$div(class = "base-workspace-tool-grid", cards)
+    ),
+    tags$div(class = "hub-footer", base_brand_footer())
+  )
+}
+
+postgame_reports_workspace_ui <- function() {
+  workspace_landing_ui(
+    "Postgame Reports",
+    "PDF report generators",
+    "Generate the three existing BASE reports without changing their calculations or layouts.",
+    list(
+      workspace_tool_card(
+        "Pitching Report", "Build the existing postgame pitcher report and PDF.",
+        "pitcher", "Pitching"
+      ),
+      workspace_tool_card(
+        "Hitting Report", "Build the existing postgame hitter report and PDF.",
+        "hitter", "Hitting"
+      ),
+      workspace_tool_card(
+        "Catching Report", "Build the existing receiving and game-management PDF.",
+        "catcher", "Catching"
+      )
+    )
+  )
+}
+
+opponent_scouting_workspace_ui <- function() {
+  base_opponent_scouting_workspace_ui()
+}
+
+data_processing_workspace_ui <- function() {
+  open_retagger <- paste0(
+    base_nav_click_js("pitcher_player"),
+    "window.setTimeout(function(){",
+    "var retag=document.querySelector(\"#cpp-page .cpp-retag-card\");",
+    "if(retag){retag.scrollIntoView({behavior:'smooth',block:'center'});}",
+    "},250);"
+  )
+  workspace_landing_ui(
+    "Data Processing",
+    "Prepare, validate, and correct",
+    "Operational tools live here so reporting and scouting workspaces remain focused on analysis.",
+    list(
+      workspace_tool_card(
+        "Pitch Retagger", "Persistent pitch-type corrections with source and PitchUID provenance.",
+        "pitcher_player", "Open retagger", onclick = open_retagger
+      ),
+      workspace_tool_card(
+        "Source Health", "Coverage, freshness, schema, and runtime-build validation.",
+        status = "Integration queued"
+      )
+    )
+  )
+}
+
 home_tab_ui <- function() {
   tagList(
     tags$head(tags$style(HTML("
@@ -4597,12 +4764,13 @@ home_tab_ui <- function() {
           ),
           tags$div(
             class = "home-quick-grid",
-            home_quick_link("Pitcher Reports", "Postgame pitch and outing analysis", "pitcher", "01"),
-            home_quick_link("Pitcher Scouting", "Search the full college player pool", "pitcher_player", "02"),
-            home_quick_link("Hitter Scouting", "Analyze opposing-hitter tendencies", "hitter_scouting", "03"),
-            home_quick_link("Defensive Analytics", "Explore positioning and batted-ball context", "defense", "04"),
-            home_quick_link("Leaderboards", "Team rankings and performance trends", "team_analytics_app", "05"),
-            home_quick_link("Catcher Reports", "Receiving and game-management reports", "catcher", "06")
+            home_quick_link("Postgame Reports", "Pitching, hitting, and catching PDFs", "postgame_reports", "01"),
+            home_quick_link("Pitching", "Staff performance, bullpens, trends, and reports", "team_pitching", "02"),
+            home_quick_link("Hitting", "Lineups, team trends, and hitter development", "team_hitting", "03"),
+            home_quick_link("Opponent Scouting", "Scout NCAA pitchers and hitters", "opponent_scouting", "04"),
+            home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "05"),
+            home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "06"),
+            home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "07")
           )
         ),
         tags$section(
@@ -4663,7 +4831,7 @@ ui <- navbarPage(
       tags$link(rel = "icon", href = base_supercat_logo_url()),
       tags$link(rel = "stylesheet",
         href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"),
-      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=18"),
+      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=19"),
       tags$style(HTML(base_brand_css(include_leaderboards = FALSE))),
       tags$style(HTML("
         #base-splash {
@@ -4733,6 +4901,14 @@ ui <- navbarPage(
         });
       "))
     ),
+    tags$button(
+      id = "base-shell-home",
+      type = "button",
+      onclick = base_nav_click_js("hub"),
+      `aria-label` = "Return to BASE Home",
+      tags$img(src = base_supercat_logo_url(), alt = ""),
+      tags$span("Home")
+    ),
     tags$div(
       id = "base-splash",
       tags$div(id = "splash-logo", tags$img(src = base_supercat_logo_url())),
@@ -4742,6 +4918,13 @@ ui <- navbarPage(
     )
   ),
   tabPanel("Home",             value = "tab_home",           home_tab_ui()),
+  tabPanel("Postgame Reports", value = "tab_postgame_reports", postgame_reports_workspace_ui()),
+  tabPanel("Pitching",         value = "tab_team_pitching",  base_team_pitching_workspace_ui()),
+  tabPanel("Hitting",          value = "tab_team_hitting",   base_team_hitting_workspace_ui()),
+  tabPanel("Opponent Scouting", value = "tab_opponent_scouting", opponent_scouting_workspace_ui()),
+  tabPanel("Defense Workspace", value = "tab_defense_workspace", base_team_defense_workspace_ui()),
+  tabPanel("HomeBASE",         value = "tab_homebase",       base_media_ui()),
+  tabPanel("Data Processing",  value = "tab_data_processing", data_processing_workspace_ui()),
   tabPanel("Pitcher Reports",  value = "tab_pitcher",        pitcher_card_ui()),
   tabPanel("Hitter Reports",   value = "tab_hitter",         hitter_ui()),
   tabPanel("Catcher Reports",  value = "tab_catcher",        catcher_ui()),
@@ -4756,7 +4939,6 @@ ui <- navbarPage(
         tags$div(class = "base-eyebrow", "In development"),
         tags$h2("Umpire Reports"),
         tags$p("This workspace is being prepared for a future BASE release.")))),
-  tabPanel("BASE Media", value = "tab_base_media", base_media_ui()),
   tabPanel("Pitcher Card (Mock)", value = "tab_pcard_mock", pcard_report_ui())
 )
 
@@ -4769,7 +4951,50 @@ server <- function(input, output, session) {
     target <- unname(BASE_NAV_TABS[input$nav_to])
     if (length(target) && !is.na(target)) updateNavbarPage(session, "base_nav", selected = target)
   })
-  team_analytics_env$server(input, output, session)
+  base_lazy_workspace_server(
+    input, session, "tab_leaderboards",
+    initialize = function() team_analytics_env$server(input, output, session),
+    id = "leaderboards"
+  )
+  base_lazy_workspace_server(
+    input, session, "tab_team_pitching",
+    initialize = function() base_team_pitching_workspace_server(
+      input,
+      output,
+      session,
+      startup_rows = season_data
+    ),
+    id = "team_pitching"
+  )
+  base_lazy_workspace_server(
+    input, session, "tab_team_hitting",
+    initialize = function() base_team_hitting_workspace_server(
+      input,
+      output,
+      session,
+      startup_rows = season_data
+    ),
+    id = "team_hitting"
+  )
+  base_lazy_workspace_server(
+    input, session, "tab_opponent_scouting",
+    initialize = function() base_opponent_scouting_workspace_server(
+      input,
+      output,
+      session
+    ),
+    id = "opponent_scouting"
+  )
+  base_lazy_workspace_server(
+    input, session, "tab_defense_workspace",
+    initialize = function() base_team_defense_workspace_server(
+      input,
+      output,
+      session,
+      startup_rows = season_data
+    ),
+    id = "team_defense"
+  )
 
   catcher_data <- reactive({
     combine_with_manual(season_data, input$catcher_manual_enabled, input$catcher_manual_csv)
@@ -5001,40 +5226,13 @@ server <- function(input, output, session) {
     )
   })
 
-pcard_selected <- reactiveVal(NULL)
+  homebase_requested <- reactiveVal(NULL)
+  pcard_selected <- reactiveVal(NULL)
 
   observeEvent(input$roster_pitcher_click, {
-    req(!is.null(season_data), input$roster_pitcher_click)
-    clicked_display <- input$roster_pitcher_click
-
-    updateNavbarPage(session, "base_nav", selected = "tab_pcard_mock")   # NEW — navigate immediately
-
-    team_pitchers <- season_data %>%
-      filter(base_team_matches(PitcherTeam)) %>%
-      distinct(Pitcher)
-
-    norm_name <- function(x) trimws(tolower(x))
-
-    matched <- team_pitchers %>%
-      filter(norm_name(pcard_format_pitcher_name(Pitcher)) == norm_name(clicked_display))
-
-    if (nrow(matched) == 0) {
-      showNotification(
-        paste0("No Trackman data found yet for ", clicked_display, "."),
-        type = "warning"
-      )
-      pcard_selected(NULL)
-      return()
-    }
-
-    pc <- tryCatch(
-      pcard_build_all(season_data, matched$Pitcher[1]),
-      error = function(e) {
-        showNotification(paste("Pitcher card build failed:", e$message), type = "error")
-        NULL
-      }
-    )
-    pcard_selected(pc)
+    req(input$roster_pitcher_click)
+    homebase_requested(input$roster_pitcher_click)
+    updateNavbarPage(session, "base_nav", selected = "tab_homebase")
   }, ignoreInit = TRUE)
 
   output$pcard_missing_msg <- renderUI({
@@ -5370,43 +5568,72 @@ pcard_selected <- reactiveVal(NULL)
   # ==========================================
   # CAPE PITCHER PLAYER PAGE
   # ==========================================
-  cape_pitcher_player_page_server(
-    input,
-    output,
-    session,
-    catalog_data = base_pitcher_catalog,
-    player_loader = base_load_pitcher_rows,
-    supplement_data = cape26_data
+  base_lazy_workspace_server(
+    input, session, "tab_pitcher_player",
+    initialize = function() cape_pitcher_player_page_server(
+      input,
+      output,
+      session,
+      catalog_data = base_pitcher_catalog,
+      player_loader = base_load_pitcher_rows,
+      supplement_data = cape26_data
+    ),
+    id = "opposing_pitchers"
   )
 
   # ==========================================
   # HITTER SCOUTING PAGE
   # ==========================================
-  hitter_scouting_page_server(
-    input,
-    output,
-    session,
-    catalog_loader = base_get_hitter_catalog,
-    player_loader = base_load_hitter_rows,
-    supplement_data = cape26_data
+  base_lazy_workspace_server(
+    input, session, "tab_hitter_scouting",
+    initialize = function() hitter_scouting_page_server(
+      input,
+      output,
+      session,
+      catalog_loader = base_get_hitter_catalog,
+      player_loader = base_load_hitter_rows,
+      supplement_data = cape26_data
+    ),
+    id = "opposing_hitters"
   )
 
   # ==========================================
   # DEFENSIVE ANALYTICS PAGE
   # ==========================================
-  defense_page_server(input, output, session)
+  base_lazy_workspace_server(
+    input, session, "tab_defense",
+    initialize = function() defense_page_server(input, output, session),
+    id = "defense"
+  )
 
   # ==========================================
   # PITCHER SERVER LOGIC -> BrewSummaryCard
   # ==========================================
-  pitcher_card_server(input, output, session)
+  base_lazy_workspace_server(
+    input, session, "tab_pitcher",
+    initialize = function() pitcher_card_server(input, output, session),
+    id = "postgame_pitching"
+  )
 
   # ==========================================
   # SEASON PITCHER CARD SERVER (College26)
   # ==========================================
-  season_pitcher_card_server(input, output, session)
+  base_lazy_workspace_server(
+    input, session, "tab_season_pitcher",
+    initialize = function() season_pitcher_card_server(input, output, session),
+    id = "season_pitcher_card"
+  )
 
-  base_media_server(input, output, session)
+  base_lazy_workspace_server(
+    input, session, "tab_homebase",
+    initialize = function() base_media_server(
+      input,
+      output,
+      session,
+      requested_player = homebase_requested
+    ),
+    id = "homebase"
+  )
 
 }
 

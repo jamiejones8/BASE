@@ -19,14 +19,34 @@ completed **2026 college season**. Team-report menus default to and remain
 scoped to Texas State (`TEX_BOB`), while scouting tabs expose every team and
 player in the complete College26 source.
 
+## Unified application shell
+
+Home is the directory for seven focused workspaces: Postgame Reports,
+Pitching, Hitting, Opponent Scouting, Defensive Analytics, HomeBASE, and Data
+Processing. The legacy global navbar is hidden and a persistent Home control
+remains available from every page.
+
+Pitching, Hitting, Defense, and Opponent Scouting are completed Wally workspace
+integrations. All twelve original Pitching tabs, all ten original Hitting
+workflows, all seven original Defense workflows, and all six ScoutingApp report
+workflows run inside BASE. They initialize only when first opened and use
+scoped BASE styling. Interactive catcher analysis lives in Defense while the
+unchanged catcher PDF generator remains under Postgame Reports. See
+[`docs/wallyapps/PITCHING_INTEGRATION.md`](docs/wallyapps/PITCHING_INTEGRATION.md),
+[`docs/wallyapps/HITTING_INTEGRATION.md`](docs/wallyapps/HITTING_INTEGRATION.md),
+[`docs/wallyapps/DEFENSE_INTEGRATION.md`](docs/wallyapps/DEFENSE_INTEGRATION.md),
+and [`docs/wallyapps/SCOUTING_INTEGRATION.md`](docs/wallyapps/SCOUTING_INTEGRATION.md).
+
 ## 2026 data model
 
-- The complete `College26.parquet` master file is stored in the private
-  `jamiejones8/base-app-data` Storage Bucket and mounted read-only inside the
-  BASE Space at `/base-data/College26.parquet`.
-- The same private bucket contains a generated `derived2026/` runtime layer:
+- The selected integration source is WallyApps' complete 2026 Division I
+  pitching/hitting Parquet: 2,041,154 season rows across 351 team codes and 212
+  fields. It replaces the older `College26.parquet` build input after parity
+  validation; source routing is recorded in
+  [`config/baseball_data_sources.json`](config/baseball_data_sources.json).
+- The private data bucket contains a generated `derived2026/` runtime layer:
   compact player catalogs, 64 stable pitcher hash partitions, and a
-  16,266-row Texas State subset. The bucket is mounted read-only, so the app
+  small Texas State subset. The bucket is mounted read-only, so the app
   does not download data at startup or depend on another Space or Dataset.
 - Startup loads only the Texas State subset for team reports. All-college
   scouting menus use compact catalogs. Pitcher Scouting reads one hash
@@ -35,9 +55,11 @@ player in the complete College26 source.
 - If a generated hitter catalog is not present, BASE builds it once from the
   mounted partitions and caches it at `/base-data/app_state/hitter-catalog.rds`.
   This adds hitter search without duplicating the full pitch-level dataset.
-- The 201-column master remains untouched beside the runtime projection. New
-  features can query it or add its fields to a regenerated projection, so
-  optimization never discards source data.
+- The large master is a staging/build input, not an app-local dependency. After
+  cutover, production keeps one query-optimized national pitch dataset; the
+  source master moves to cold archive instead of remaining as a second mounted
+  copy. Small catalogs and the Texas State startup cache are permitted derived
+  artifacts.
 - `data/external/CapeCod26.parquet` is a supplemental source. When a selected college player
   has a name match in the Cape dataset, scouting pages can include those Cape
   pitches without changing the player's college affiliation.
@@ -80,9 +102,11 @@ home scoreboard, and the primary mark on the analytics hub card.
    used to recognize the team in `PitcherTeam` and `BatterTeam` columns.
 3. Put team logos and card images in `www/`. The embedded leaderboards can
    resolve its configured logo directly from that shared folder.
-4. Retain the full master in the deployment's `/base-data` bucket, then run
-   `scripts/build/build_runtime_dataset.py` to create the query-on-demand runtime
-   layer. Configure `BASE_RUNTIME_ROOT` to its mounted directory. Set
+4. Stage the full master, then run `scripts/build/build_runtime_dataset.py` with
+   `--season 2026` to create the one-copy query-on-demand runtime. Configure
+   `BASE_NCAA_D1_MASTER_FILE` for provenance/build tooling and
+   `BASE_RUNTIME_ROOT` for application reads. After validated cutover, archive
+   the staged master rather than mounting both large copies. Set
    `BASE_CAPE_DATA_FILE` for an optional player supplement.
 5. Set `BASE_ROSTER_FILE` and `BASE_SCHEDULE_FILE` for the college roster and
    schedule. Templates are available in `config_examples/`.

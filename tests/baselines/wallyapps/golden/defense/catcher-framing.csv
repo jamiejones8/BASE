@@ -1,0 +1,18 @@
+"metric_id","metric","metric_order","metric_type","better","value","chances","numerator","min_chances","d1_average","percentile"
+"strikes_stolen","Strikes Stolen",1,"stolen_rate","high",0.416666666666667,12,5,25,0.0775,100
+"balls_lost","Balls Lost",2,"lost_rate","low",0.625,40,25,25,0.1175,0
+"bottom_buffer","Bottom Buffer",3,"called_strike_rate","high",,0,0,10,-0.0025,
+"top_buffer","Top Buffer",4,"called_strike_rate","high",,0,0,10,-0.0025,
+"glove_side_buffer","Glove Side Buffer",5,"called_strike_rate","high",,0,0,10,-0.0025,
+"arm_side_buffer","Arm Side Buffer",6,"called_strike_rate","high",,0,0,10,-0.0025,
+"rhp","RHP",7,"net_rate","high",-0.447368421052632,38,-17,25,-0.0025,0
+"lhp","LHP",8,"net_rate","high",-0.214285714285714,14,-3,25,-0.0025,0
+"fastballs_sinkers","Fastballs/Sinkers",9,"net_rate","high",-0.6875,16,-11,25,-0.0025,0
+"breaking_balls","Breaking Balls",10,"net_rate","high",-0.214285714285714,28,-6,25,-0.0025,0
+"soft","Soft",11,"net_rate","high",-0.375,8,-3,25,-0.0025,0
+"lhp_fastballs_sinkers","LHP Fastballs/Sinkers",12,"net_rate","high",-0.5,4,-2,10,-0.0025,0
+"lhp_breaking_balls","LHP Breaking Balls",13,"net_rate","high",-0.142857142857143,7,-1,10,-0.0025,0
+"lhp_soft","LHP Soft",14,"net_rate","high",0,3,0,10,-0.0025,52
+"rhp_fastballs_sinkers","RHP Fastballs/Sinkers",15,"net_rate","high",-0.75,12,-9,10,-0.0025,0
+"rhp_breaking_balls","RHP Breaking Balls",16,"net_rate","high",-0.238095238095238,21,-5,10,-0.0025,0
+"rhp_soft","RHP Soft",17,"net_rate","high",-0.6,5,-3,10,-0.0025,0

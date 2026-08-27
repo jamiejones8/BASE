@@ -21,16 +21,31 @@ options(shiny.maxRequestSize = 500 * 1024^2)
 # development retains the repository-relative fallbacks from TEAM_CONFIG.
 SCOUT_MODELS_FILE <- TEAM_CONFIG$data$scout_models_file
 XWGRID_FILE <- TEAM_CONFIG$data$xwoba_grid_file
-message(">>> Loading scouting models from ", SCOUT_MODELS_FILE)
+.scout_asset_cache <- new.env(parent = emptyenv())
 
-MODELS <- tryCatch(if (file.exists(SCOUT_MODELS_FILE)) readRDS(SCOUT_MODELS_FILE) else NULL,
-                   error = function(e) { message(">>> readRDS pitch_models.rds failed: ",
-                                                  conditionMessage(e)); NULL })
-XWGRID <- tryCatch(if (file.exists(XWGRID_FILE)) readRDS(XWGRID_FILE) else NULL,
-                   error = function(e) { message(">>> readRDS xwOBA grid failed: ",
-                                                  conditionMessage(e)); NULL })
-if (is.null(MODELS)) message(">>> MODELS is NULL — Stuff+/Location+/Pitching+ and all grades will be blank.")
-if (is.null(XWGRID)) message(">>> XWGRID is NULL — xwOBA columns will be blank.")
+scout_load_asset <- function(key, path, label) {
+  if (exists(key, envir = .scout_asset_cache, inherits = FALSE)) {
+    return(get(key, envir = .scout_asset_cache, inherits = FALSE))
+  }
+  message(">>> Loading ", label, " on first use from ", path)
+  value <- tryCatch(
+    if (file.exists(path)) readRDS(path) else NULL,
+    error = function(e) {
+      message(">>> ", label, " load failed: ", conditionMessage(e))
+      NULL
+    }
+  )
+  assign(key, value, envir = .scout_asset_cache)
+  value
+}
+
+scout_models <- function() {
+  scout_load_asset("models", SCOUT_MODELS_FILE, "pitch scoring models")
+}
+
+scout_xwgrid <- function() {
+  scout_load_asset("xwgrid", XWGRID_FILE, "xwOBA grid")
+}
 # Linear-weights for full xwOBA (≈ recent MLB run-value scale)
 WOBA_BB <- 0.69; WOBA_HBP <- 0.72
 
@@ -63,8 +78,10 @@ arm_slot_label <- function(deg) dplyr::case_when(
 #  columns using the trained models. Mirrors score_and_store.R exactly.
 # ============================================================================
 score_pitches <- function(df) {
-  if (is.null(MODELS)) return(df)
-  PTL <- MODELS$pt_levels; HSIGN <- -1
+  models <- scout_models()
+  if (is.null(models)) return(df)
+  xwgrid <- scout_xwgrid()
+  PTL <- models$pt_levels; HSIGN <- -1
   numv <- function(x) suppressWarnings(as.numeric(x))
   src <- c("TaggedPitchType","AutoPitchType","PitcherThrows","RelSpeed","SpinRate",
            "Extension","RelSide","RelHeight","HorzBreak","InducedVertBreak","SpinAxis",
@@ -101,20 +118,20 @@ score_pitches <- function(df) {
     mutate(velo_dif = release_speed - fb_velo, ivb_dif = fb_ivb - pfx_z,
            break_dif = (fb_xmax*.5 + fb_xmin*.5) - pfx_x, spin_dif = spin_axis - fb_axis)
   for (lv in PTL) g[[paste0("pt_", lv)]] <- as.integer(g$pt == lv)
-  allf <- unique(c(MODELS$stuff$feats, MODELS$loc$feats, MODELS$pitch$feats))
+  allf <- unique(c(models$stuff$feats, models$loc$feats, models$pitch$feats))
   for (f in allf) if (!f %in% names(g)) g[[f]] <- NA_real_
   s1 <- function(m) { mdl <- xgboost::xgb.load.raw(m$model_raw)
     round(100 - 10 * ((predict(mdl, as.matrix(g[, m$feats])) - m$mean) / m$sd)) }
-  df$StuffPlus    <- s1(MODELS$stuff)
-  df$LocationPlus <- s1(MODELS$loc)
-  df$PitchingPlus <- s1(MODELS$pitch)
-  prp <- predict(xgboost::xgb.load.raw(MODELS$pitch$model_raw), as.matrix(g[, MODELS$pitch$feats]))
-  df$xRV <- round(-(prp - MODELS$pitch$mean), 4)
-  if (!is.null(XWGRID)) {
+  df$StuffPlus    <- s1(models$stuff)
+  df$LocationPlus <- s1(models$loc)
+  df$PitchingPlus <- s1(models$pitch)
+  prp <- predict(xgboost::xgb.load.raw(models$pitch$model_raw), as.matrix(g[, models$pitch$feats]))
+  df$xRV <- round(-(prp - models$pitch$mean), 4)
+  if (!is.null(xwgrid)) {
     lk <- function(ev, la) { out <- rep(NA_real_, length(ev)); ok <- !is.na(ev) & !is.na(la)
-      ei <- findInterval(ev, XWGRID$ev_edges); li <- findInterval(la, XWGRID$la_edges)
-      v <- ok & ei >= 1 & ei < length(XWGRID$ev_edges) & li >= 1 & li < length(XWGRID$la_edges)
-      out[v] <- XWGRID$grid[cbind(ei[v], li[v])]; out }
+      ei <- findInterval(ev, xwgrid$ev_edges); li <- findInterval(la, xwgrid$la_edges)
+      v <- ok & ei >= 1 & ei < length(xwgrid$ev_edges) & li >= 1 & li < length(xwgrid$la_edges)
+      out[v] <- xwgrid$grid[cbind(ei[v], li[v])]; out }
     df$xwOBA <- round(lk(numv(df$ExitSpeed), numv(df$Angle)), 3)
   }
   df
@@ -122,8 +139,9 @@ score_pitches <- function(df) {
 
 # Debug: show exactly what the Stuff+ model ingests per pitch + its raw output.
 debug_inputs <- function(d) {
-  if (is.null(MODELS)) return(data.frame(Note = "pitch_models.rds not loaded — no debug."))
-  numv <- function(x) suppressWarnings(as.numeric(x)); HSIGN <- -1; PTL <- MODELS$pt_levels
+  models <- scout_models()
+  if (is.null(models)) return(data.frame(Note = "pitch_models.rds not loaded — no debug."))
+  numv <- function(x) suppressWarnings(as.numeric(x)); HSIGN <- -1; PTL <- models$pt_levels
   for (cc in c("TaggedPitchType","AutoPitchType","PitcherThrows","RelSpeed","SpinRate",
                "Extension","RelSide","RelHeight","HorzBreak","InducedVertBreak","SpinAxis",
                "PlateLocSide","PlateLocHeight","Balls","Strikes","BatterSide","Pitcher"))
@@ -158,10 +176,10 @@ debug_inputs <- function(d) {
     mutate(velo_dif = release_speed - fb_velo, ivb_dif = fb_ivb - pfx_z,
            break_dif = (fb_xmax*.5 + fb_xmin*.5) - pfx_x, spin_dif = spin_axis - fb_axis)
   for (lv in PTL) g[[paste0("pt_", lv)]] <- as.integer(g$pt == lv)
-  for (f in MODELS$stuff$feats) if (!f %in% names(g)) g[[f]] <- NA_real_
-  mdl <- xgboost::xgb.load.raw(MODELS$stuff$model_raw)
-  g$rawRV <- predict(mdl, as.matrix(g[, MODELS$stuff$feats]))
-  g$St <- round(100 - 10 * ((g$rawRV - MODELS$stuff$mean) / MODELS$stuff$sd))
+  for (f in models$stuff$feats) if (!f %in% names(g)) g[[f]] <- NA_real_
+  mdl <- xgboost::xgb.load.raw(models$stuff$model_raw)
+  g$rawRV <- predict(mdl, as.matrix(g[, models$stuff$feats]))
+  g$St <- round(100 - 10 * ((g$rawRV - models$stuff$mean) / models$stuff$sd))
   g %>% filter(!is.na(PitchType)) %>% group_by(Pitch = PitchType) %>%
     summarise(N = dplyr::n(), Velo = round(mean(release_speed, na.rm = TRUE), 1),
       `pfx_z ft` = round(mean(pfx_z, na.rm = TRUE), 2),
@@ -193,9 +211,10 @@ prep_pitches <- function(df) {
   for (c in need_num) df[[c]] <- suppressWarnings(as.numeric(df[[c]]))
   # If the plus columns aren't already present (i.e. a raw TrackMan upload),
   # compute them live from the trained models.
-  if (!is.null(MODELS) && all(is.na(df$StuffPlus)))
+  if (all(is.na(df$StuffPlus))) {
     df <- tryCatch(score_pitches(df),
                    error = function(e) { message(">>> SCORING ERROR: ", conditionMessage(e)); df })
+  }
   if (!"Date"   %in% names(df)) df$Date   <- NA
   if (!"GameID" %in% names(df)) df$GameID <- paste(df$Date, df$Inning, sep = "_")
 

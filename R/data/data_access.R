@@ -3,6 +3,10 @@
 BASE_RUNTIME_ROOT <- TEAM_CONFIG$data$runtime_root
 BASE_PITCHER_DATASET_DIR <- TEAM_CONFIG$data$pitcher_dataset_dir
 BASE_PITCHER_CATALOG_FILE <- TEAM_CONFIG$data$pitcher_catalog_file
+BASE_NCAA_D1_SOURCE_LABEL <- base_data_source_label(
+  "ncaa_d1_pitch_events_2026",
+  "2026 NCAA Division I"
+)
 
 base_pitcher_catalog <- tryCatch({
   if (!file.exists(BASE_PITCHER_CATALOG_FILE)) {
@@ -77,7 +81,7 @@ base_load_pitcher_rows <- function(team, pitcher) {
     collect() %>%
     tibble::as_tibble()
   if ("Notes" %in% names(rows)) rows$Notes <- as.character(rows$Notes)
-  rows$DataSource <- "2026 College Season"
+  rows$DataSource <- BASE_NCAA_D1_SOURCE_LABEL
   message(
     "Loaded player on demand: ", pitcher, " (", team, ") — ",
     format(nrow(rows), big.mark = ","), " pitches from bucket ", bucket_value
@@ -291,7 +295,7 @@ base_load_hitter_rows <- function(team, hitter) {
     tibble::as_tibble()
 
   if ("Notes" %in% names(rows)) rows$Notes <- as.character(rows$Notes)
-  rows$DataSource <- "2026 College Season"
+  rows$DataSource <- BASE_NCAA_D1_SOURCE_LABEL
   message(
     "Loaded hitter on demand: ", hitter, " (", team, ") — ",
     format(nrow(rows), big.mark = ","), " pitches across ",

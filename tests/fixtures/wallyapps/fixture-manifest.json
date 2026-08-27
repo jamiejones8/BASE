@@ -1,0 +1,24 @@
+{
+  "defense": {
+    "BobcatsDefense2026.csv": 96,
+    "BobcatsDefenseBattedBalls.csv": 96,
+    "Catchers - 2026 Season-cleaned.csv": 92
+  },
+  "edge_cases": {
+    "missing_optional_columns.csv": 2
+  },
+  "hitting": {
+    "2025 Fall -cleaned.csv": 92,
+    "2025 Season -cleaned.csv": 92,
+    "2026 Season - cleaned.csv": 92,
+    "2026 Squads - cleaned.csv": 92
+  },
+  "pitching": {
+    "2025 Fall -cleaned.csv": 92,
+    "2025 Season -cleaned.csv": 92,
+    "2026 Season - cleaned.csv": 92,
+    "2026 Squads - cleaned.csv": 92,
+    "Bullpens - cleaned.csv": 92
+  },
+  "synthetic_only": true
+}

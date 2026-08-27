@@ -1,0 +1,11 @@
+{
+  "app": "PitchingApp",
+  "fixture_rows_loaded": 460,
+  "non_bullpen_rows": 368,
+  "plate_appearances": 97,
+  "observed_walk_count": 0,
+  "expected_fixture_korbb_walk_rows": 16,
+  "observed_walk_encoding_mismatch": true,
+  "golden_tables": ["statline.csv", "process-metrics.csv", "pitch-type-performance.csv", "called-stuff.csv"],
+  "golden_visuals": ["strike-zone.png", "strike-zone.pdf", "pitch-movement.png", "pitch-movement.pdf"]
+}

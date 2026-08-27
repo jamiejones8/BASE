@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "decision_status": "selected_for_integration",
+  "primary_season": 2026,
+  "scope": "NCAA Division I plus explicitly labeled Texas State internal data",
+  "storage_policy": {
+    "deployed_large_copy_limit": 1,
+    "rule": "Deploy one query-optimized canonical pitch-event dataset. Do not place the raw national master or app-local national copies beside it after cutover.",
+    "migration_exception": "A temporary staging copy is allowed only while its row counts, schema, PitchUID uniqueness, and feature parity are validated.",
+    "small_derivatives": [
+      "player and team catalogs",
+      "the Texas State startup subset",
+      "model and percentile reference tables",
+      "persistent pitch-retag overrides"
+    ]
+  },
+  "sources": {
+    "ncaa_d1_pitch_events_2026": {
+      "status": "selected",
+      "label": "2026 NCAA Division I",
+      "authority": "WallyApps full Division I pitching/hitting export",
+      "development_path": "WallyApps/D1 Files/D1 Pitching:Hitting File.parquet",
+      "deployment_master_env": "BASE_NCAA_D1_MASTER_FILE",
+      "deployment_runtime_env": "BASE_RUNTIME_ROOT",
+      "season_filter": 2026,
+      "identity_key": "PitchUID",
+      "coverage_evidence": {
+        "rows": 2041154,
+        "team_codes": 351,
+        "date_min": "2026-02-13",
+        "date_max": "2026-06-21",
+        "source_total_columns": 212,
+        "missing_base_core_columns": 0,
+        "duplicate_pitch_uid_rows_in_unfiltered_source": 0
+      },
+      "consumers": [
+        "BASE team hitting and pitching reports",
+        "BASE NCAA opponent pitcher scouting",
+        "BASE NCAA opponent hitter scouting",
+        "BASE national leaderboards",
+        "migrated Wally hitting features",
+        "migrated Wally pitching features",
+        "catching pitch context",
+        "defense pitch and batted-ball context"
+      ]
+    },
+    "texas_state_internal_pitch_events": {
+      "status": "supplement_pending_normalization",
+      "label": "Texas State internal and historical",
+      "authority": "Texas State Wally app team exports",
+      "deployment_env": "BASE_TEAM_SUPPLEMENT_DATASET_DIR",
+      "scope": [
+        "Texas State 2025 season",
+        "Texas State 2025 fall",
+        "Texas State 2026 squads",
+        "Texas State bullpens",
+        "2026 season pitches absent from the national master"
+      ],
+      "identity_precedence": [
+        "PitchUID",
+        "PlayID",
+        "GameUID + PitchNo + Date",
+        "GameID + PitchNo + Date + Time"
+      ],
+      "rules": [
+        "Never expose this source as complete NCAA coverage.",
+        "Keep internal, scrimmage, and bullpen competition labels distinct.",
+        "Prefer the national master when a PitchUID exists in both sources.",
+        "Normalize hitting and pitching exports into one event stream instead of retaining app-specific copies."
+      ]
+    },
+    "ncaa_d1_defense_alignment_2026": {
+      "status": "selected_as_narrow_companion",
+      "label": "2026 NCAA Division I defense alignment",
+      "authority": "WallyApps Division I defense export",
+      "development_path": "WallyApps/D1 Files/D1 Defense File.parquet",
+      "deployment_env": "BASE_NCAA_D1_DEFENSE_FILE",
+      "identity_precedence": [
+        "PitchUID",
+        "GameUID + PitchNo + Date"
+      ],
+      "rules": [
+        "Store alignment-only fields plus audit keys; obtain pitch, hitter, contact, and outcome context from ncaa_d1_pitch_events_2026.",
+        "Retain unmatched defense rows because 530472 unique defense PitchUID values are not present in the pitch master."
+      ]
+    },
+    "ncaa_d1_catching_2026": {
+      "status": "derive_from_primary",
+      "label": "2026 NCAA Division I catching",
+      "authority": "ncaa_d1_pitch_events_2026",
+      "rules": [
+        "Do not deploy D1 Catching File.parquet as a second national pitch-event copy.",
+        "Use catcher, throw, framing, pitch-location, and confidence columns already present in the primary master.",
+        "The standalone catching export has 100 percent PitchUID overlap with the primary master."
+      ]
+    },
+    "reference_metrics": {
+      "status": "separate_small_tables",
+      "catcher_framing_deployment_env": "BASE_CATCHER_FRAMING_REFERENCE_FILE",
+      "rules": [
+        "Called Stuff, xRV, pitch percentile, catcher percentile, and model artifacts remain versioned references, not pitch-event sources.",
+        "Each metric must record its population, season, formula version, and generated-at timestamp before production cutover."
+      ]
+    },
+    "pitch_retag_overrides": {
+      "status": "selected_as_override_layer",
+      "label": "Persistent pitch-type overrides",
+      "deployment_env": "BASE_RETAG_DB_FILE",
+      "rules": [
+        "Key overrides by data source and PitchUID.",
+        "Never rewrite or fork the canonical national master to store a retag.",
+        "Expose original value, effective value, provenance, saved-at time, and revert behavior in Data Processing."
+      ]
+    },
+    "juco_statistics": {
+      "status": "separate_domain",
+      "rules": [
+        "JUCO aggregate statistics are not NCAA Division I pitch events and must not be unioned into the canonical pitch table."
+      ]
+    }
+  },
+  "feature_routes": {
+    "postgame_reports": [
+      "ncaa_d1_pitch_events_2026",
+      "texas_state_internal_pitch_events",
+      "reference_metrics"
+    ],
+    "team_pitching": [
+      "ncaa_d1_pitch_events_2026",
+      "texas_state_internal_pitch_events",
+      "reference_metrics",
+      "pitch_retag_overrides"
+    ],
+    "team_hitting": [
+      "ncaa_d1_pitch_events_2026",
+      "texas_state_internal_pitch_events",
+      "reference_metrics",
+      "pitch_retag_overrides"
+    ],
+    "team_game_reports_2026": [
+      "ncaa_d1_pitch_events_2026",
+      "texas_state_internal_pitch_events"
+    ],
+    "national_pitcher_scouting": [
+      "ncaa_d1_pitch_events_2026",
+      "reference_metrics"
+    ],
+    "national_hitter_scouting": [
+      "ncaa_d1_pitch_events_2026",
+      "reference_metrics"
+    ],
+    "national_leaderboards": [
+      "ncaa_d1_pitch_events_2026",
+      "reference_metrics"
+    ],
+    "catching": [
+      "ncaa_d1_pitch_events_2026",
+      "reference_metrics"
+    ],
+    "defense": [
+      "ncaa_d1_defense_alignment_2026",
+      "ncaa_d1_pitch_events_2026",
+      "reference_metrics"
+    ],
+    "homebase": [
+      "ncaa_d1_pitch_events_2026",
+      "texas_state_internal_pitch_events",
+      "reference_metrics",
+      "pitch_retag_overrides"
+    ],
+    "data_processing": [
+      "ncaa_d1_pitch_events_2026",
+      "texas_state_internal_pitch_events",
+      "ncaa_d1_defense_alignment_2026",
+      "pitch_retag_overrides"
+    ],
+    "texas_state_history_and_internal": [
+      "texas_state_internal_pitch_events",
+      "reference_metrics"
+    ],
+    "juco": [
+      "juco_statistics"
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+D1 Files/
+*.parquet
+.DS_Store
+scripts/

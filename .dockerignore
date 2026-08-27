@@ -1,9 +1,39 @@
 .git
+.DS_Store
+**/.DS_Store
 .runtime-builder-deps
 .runtime-build-output*
 scripts/__pycache__
+**/__pycache__
 data/D1 Defense File.parquet
 .runtime-build-output-defense/
+
+# Only migrated workspace sources and their small reference/assets enter the
+# production context. Private season files, model artifacts, and unmigrated
+# applications remain excluded.
+WallyApps/*
+!WallyApps/PitchingApp/
+!WallyApps/HittingApp/
+!WallyApps/DefenseApp/
+!WallyApps/ScoutingApp/
+WallyApps/PitchingApp/*
+!WallyApps/PitchingApp/PitchingApp.R
+!WallyApps/PitchingApp/www/
+!WallyApps/PitchingApp/data/
+WallyApps/PitchingApp/data/*
+!WallyApps/PitchingApp/data/called_stuff_baseline.csv
+!WallyApps/PitchingApp/data/d1_pitch_metric_percentile_reference.csv
+!WallyApps/PitchingApp/data/player_heights.csv
+!WallyApps/PitchingApp/data/xrv_metrics.csv
+WallyApps/HittingApp/*
+!WallyApps/HittingApp/HittingApp.R
+!WallyApps/HittingApp/www/
+WallyApps/DefenseApp/*
+!WallyApps/DefenseApp/DefenseApp.R
+!WallyApps/DefenseApp/www/
+WallyApps/ScoutingApp/*
+!WallyApps/ScoutingApp/ScoutingApp.R
+!WallyApps/ScoutingApp/www/
 data/external/CapeCod26.parquet
 models/shared/brewstuff.model
 models/shared/pitch_models.rds

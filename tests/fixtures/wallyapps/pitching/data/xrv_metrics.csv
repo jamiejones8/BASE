@@ -1,0 +1,461 @@
+source_file,row_in_file,xrv,arm_angle,xiVB,iVB_oe
+2025 Season -cleaned.csv,1,-0.03,39.4,-1.5,-1.0
+2025 Season -cleaned.csv,2,-0.025,40.8,-1.0,-0.5
+2025 Season -cleaned.csv,3,-0.02,42.2,-0.5,0.0
+2025 Season -cleaned.csv,4,-0.015,43.6,0.0,0.5
+2025 Season -cleaned.csv,5,-0.01,45.0,0.5,1.0
+2025 Season -cleaned.csv,6,-0.005,46.4,1.0,1.5
+2025 Season -cleaned.csv,7,0.0,47.8,1.5,-1.5
+2025 Season -cleaned.csv,8,0.005,49.2,2.0,-1.0
+2025 Season -cleaned.csv,9,0.01,50.6,-2.0,-0.5
+2025 Season -cleaned.csv,10,0.015,52.0,-1.5,0.0
+2025 Season -cleaned.csv,11,0.02,53.4,-1.0,0.5
+2025 Season -cleaned.csv,12,0.025,54.8,-0.5,1.0
+2025 Season -cleaned.csv,13,0.03,56.2,0.0,1.5
+2025 Season -cleaned.csv,14,0.035,57.6,0.5,-1.5
+2025 Season -cleaned.csv,15,-0.035,59.0,1.0,-1.0
+2025 Season -cleaned.csv,16,-0.03,60.4,1.5,-0.5
+2025 Season -cleaned.csv,17,-0.025,61.8,2.0,0.0
+2025 Season -cleaned.csv,18,-0.02,63.2,-2.0,0.5
+2025 Season -cleaned.csv,19,-0.015,64.6,-1.5,1.0
+2025 Season -cleaned.csv,20,-0.01,38.0,-1.0,1.5
+2025 Season -cleaned.csv,21,-0.005,39.4,-0.5,-1.5
+2025 Season -cleaned.csv,22,0.0,40.8,0.0,-1.0
+2025 Season -cleaned.csv,23,0.005,42.2,0.5,-0.5
+2025 Season -cleaned.csv,24,0.01,43.6,1.0,0.0
+2025 Season -cleaned.csv,25,0.015,45.0,1.5,0.5
+2025 Season -cleaned.csv,26,0.02,46.4,2.0,1.0
+2025 Season -cleaned.csv,27,0.025,47.8,-2.0,1.5
+2025 Season -cleaned.csv,28,0.03,49.2,-1.5,-1.5
+2025 Season -cleaned.csv,29,0.035,50.6,-1.0,-1.0
+2025 Season -cleaned.csv,30,-0.035,52.0,-0.5,-0.5
+2025 Season -cleaned.csv,31,-0.03,53.4,0.0,0.0
+2025 Season -cleaned.csv,32,-0.025,54.8,0.5,0.5
+2025 Season -cleaned.csv,33,-0.02,56.2,1.0,1.0
+2025 Season -cleaned.csv,34,-0.015,57.6,1.5,1.5
+2025 Season -cleaned.csv,35,-0.01,59.0,2.0,-1.5
+2025 Season -cleaned.csv,36,-0.005,60.4,-2.0,-1.0
+2025 Season -cleaned.csv,37,0.0,61.8,-1.5,-0.5
+2025 Season -cleaned.csv,38,0.005,63.2,-1.0,0.0
+2025 Season -cleaned.csv,39,0.01,64.6,-0.5,0.5
+2025 Season -cleaned.csv,40,0.015,38.0,0.0,1.0
+2025 Season -cleaned.csv,41,0.02,39.4,0.5,1.5
+2025 Season -cleaned.csv,42,0.025,40.8,1.0,-1.5
+2025 Season -cleaned.csv,43,0.03,42.2,1.5,-1.0
+2025 Season -cleaned.csv,44,0.035,43.6,2.0,-0.5
+2025 Season -cleaned.csv,45,-0.035,45.0,-2.0,0.0
+2025 Season -cleaned.csv,46,-0.03,46.4,-1.5,0.5
+2025 Season -cleaned.csv,47,-0.025,47.8,-1.0,1.0
+2025 Season -cleaned.csv,48,-0.02,49.2,-0.5,1.5
+2025 Season -cleaned.csv,49,-0.015,50.6,0.0,-1.5
+2025 Season -cleaned.csv,50,-0.01,52.0,0.5,-1.0
+2025 Season -cleaned.csv,51,-0.005,53.4,1.0,-0.5
+2025 Season -cleaned.csv,52,0.0,54.8,1.5,0.0
+2025 Season -cleaned.csv,53,0.005,56.2,2.0,0.5
+2025 Season -cleaned.csv,54,0.01,57.6,-2.0,1.0
+2025 Season -cleaned.csv,55,0.015,59.0,-1.5,1.5
+2025 Season -cleaned.csv,56,0.02,60.4,-1.0,-1.5
+2025 Season -cleaned.csv,57,0.025,61.8,-0.5,-1.0
+2025 Season -cleaned.csv,58,0.03,63.2,0.0,-0.5
+2025 Season -cleaned.csv,59,0.035,64.6,0.5,0.0
+2025 Season -cleaned.csv,60,-0.035,38.0,1.0,0.5
+2025 Season -cleaned.csv,61,-0.03,39.4,1.5,1.0
+2025 Season -cleaned.csv,62,-0.025,40.8,2.0,1.5
+2025 Season -cleaned.csv,63,-0.02,42.2,-2.0,-1.5
+2025 Season -cleaned.csv,64,-0.015,43.6,-1.5,-1.0
+2025 Season -cleaned.csv,65,-0.01,45.0,-1.0,-0.5
+2025 Season -cleaned.csv,66,-0.005,46.4,-0.5,0.0
+2025 Season -cleaned.csv,67,0.0,47.8,0.0,0.5
+2025 Season -cleaned.csv,68,0.005,49.2,0.5,1.0
+2025 Season -cleaned.csv,69,0.01,50.6,1.0,1.5
+2025 Season -cleaned.csv,70,0.015,52.0,1.5,-1.5
+2025 Season -cleaned.csv,71,0.02,53.4,2.0,-1.0
+2025 Season -cleaned.csv,72,0.025,54.8,-2.0,-0.5
+2025 Season -cleaned.csv,73,0.03,56.2,-1.5,0.0
+2025 Season -cleaned.csv,74,0.035,57.6,-1.0,0.5
+2025 Season -cleaned.csv,75,-0.035,59.0,-0.5,1.0
+2025 Season -cleaned.csv,76,-0.03,60.4,0.0,1.5
+2025 Season -cleaned.csv,77,-0.025,61.8,0.5,-1.5
+2025 Season -cleaned.csv,78,-0.02,63.2,1.0,-1.0
+2025 Season -cleaned.csv,79,-0.015,64.6,1.5,-0.5
+2025 Season -cleaned.csv,80,-0.01,38.0,2.0,0.0
+2025 Season -cleaned.csv,81,-0.005,39.4,-2.0,0.5
+2025 Season -cleaned.csv,82,0.0,40.8,-1.5,1.0
+2025 Season -cleaned.csv,83,0.005,42.2,-1.0,1.5
+2025 Season -cleaned.csv,84,0.01,43.6,-0.5,-1.5
+2025 Season -cleaned.csv,85,0.015,45.0,0.0,-1.0
+2025 Season -cleaned.csv,86,0.02,46.4,0.5,-0.5
+2025 Season -cleaned.csv,87,0.025,47.8,1.0,0.0
+2025 Season -cleaned.csv,88,0.03,49.2,1.5,0.5
+2025 Season -cleaned.csv,89,0.035,50.6,2.0,1.0
+2025 Season -cleaned.csv,90,-0.035,52.0,-2.0,1.5
+2025 Season -cleaned.csv,91,-0.03,53.4,-1.5,-1.5
+2025 Season -cleaned.csv,92,-0.025,54.8,-1.0,-1.0
+2025 Fall -cleaned.csv,1,-0.03,39.4,-1.5,-1.0
+2025 Fall -cleaned.csv,2,-0.025,40.8,-1.0,-0.5
+2025 Fall -cleaned.csv,3,-0.02,42.2,-0.5,0.0
+2025 Fall -cleaned.csv,4,-0.015,43.6,0.0,0.5
+2025 Fall -cleaned.csv,5,-0.01,45.0,0.5,1.0
+2025 Fall -cleaned.csv,6,-0.005,46.4,1.0,1.5
+2025 Fall -cleaned.csv,7,0.0,47.8,1.5,-1.5
+2025 Fall -cleaned.csv,8,0.005,49.2,2.0,-1.0
+2025 Fall -cleaned.csv,9,0.01,50.6,-2.0,-0.5
+2025 Fall -cleaned.csv,10,0.015,52.0,-1.5,0.0
+2025 Fall -cleaned.csv,11,0.02,53.4,-1.0,0.5
+2025 Fall -cleaned.csv,12,0.025,54.8,-0.5,1.0
+2025 Fall -cleaned.csv,13,0.03,56.2,0.0,1.5
+2025 Fall -cleaned.csv,14,0.035,57.6,0.5,-1.5
+2025 Fall -cleaned.csv,15,-0.035,59.0,1.0,-1.0
+2025 Fall -cleaned.csv,16,-0.03,60.4,1.5,-0.5
+2025 Fall -cleaned.csv,17,-0.025,61.8,2.0,0.0
+2025 Fall -cleaned.csv,18,-0.02,63.2,-2.0,0.5
+2025 Fall -cleaned.csv,19,-0.015,64.6,-1.5,1.0
+2025 Fall -cleaned.csv,20,-0.01,38.0,-1.0,1.5
+2025 Fall -cleaned.csv,21,-0.005,39.4,-0.5,-1.5
+2025 Fall -cleaned.csv,22,0.0,40.8,0.0,-1.0
+2025 Fall -cleaned.csv,23,0.005,42.2,0.5,-0.5
+2025 Fall -cleaned.csv,24,0.01,43.6,1.0,0.0
+2025 Fall -cleaned.csv,25,0.015,45.0,1.5,0.5
+2025 Fall -cleaned.csv,26,0.02,46.4,2.0,1.0
+2025 Fall -cleaned.csv,27,0.025,47.8,-2.0,1.5
+2025 Fall -cleaned.csv,28,0.03,49.2,-1.5,-1.5
+2025 Fall -cleaned.csv,29,0.035,50.6,-1.0,-1.0
+2025 Fall -cleaned.csv,30,-0.035,52.0,-0.5,-0.5
+2025 Fall -cleaned.csv,31,-0.03,53.4,0.0,0.0
+2025 Fall -cleaned.csv,32,-0.025,54.8,0.5,0.5
+2025 Fall -cleaned.csv,33,-0.02,56.2,1.0,1.0
+2025 Fall -cleaned.csv,34,-0.015,57.6,1.5,1.5
+2025 Fall -cleaned.csv,35,-0.01,59.0,2.0,-1.5
+2025 Fall -cleaned.csv,36,-0.005,60.4,-2.0,-1.0
+2025 Fall -cleaned.csv,37,0.0,61.8,-1.5,-0.5
+2025 Fall -cleaned.csv,38,0.005,63.2,-1.0,0.0
+2025 Fall -cleaned.csv,39,0.01,64.6,-0.5,0.5
+2025 Fall -cleaned.csv,40,0.015,38.0,0.0,1.0
+2025 Fall -cleaned.csv,41,0.02,39.4,0.5,1.5
+2025 Fall -cleaned.csv,42,0.025,40.8,1.0,-1.5
+2025 Fall -cleaned.csv,43,0.03,42.2,1.5,-1.0
+2025 Fall -cleaned.csv,44,0.035,43.6,2.0,-0.5
+2025 Fall -cleaned.csv,45,-0.035,45.0,-2.0,0.0
+2025 Fall -cleaned.csv,46,-0.03,46.4,-1.5,0.5
+2025 Fall -cleaned.csv,47,-0.025,47.8,-1.0,1.0
+2025 Fall -cleaned.csv,48,-0.02,49.2,-0.5,1.5
+2025 Fall -cleaned.csv,49,-0.015,50.6,0.0,-1.5
+2025 Fall -cleaned.csv,50,-0.01,52.0,0.5,-1.0
+2025 Fall -cleaned.csv,51,-0.005,53.4,1.0,-0.5
+2025 Fall -cleaned.csv,52,0.0,54.8,1.5,0.0
+2025 Fall -cleaned.csv,53,0.005,56.2,2.0,0.5
+2025 Fall -cleaned.csv,54,0.01,57.6,-2.0,1.0
+2025 Fall -cleaned.csv,55,0.015,59.0,-1.5,1.5
+2025 Fall -cleaned.csv,56,0.02,60.4,-1.0,-1.5
+2025 Fall -cleaned.csv,57,0.025,61.8,-0.5,-1.0
+2025 Fall -cleaned.csv,58,0.03,63.2,0.0,-0.5
+2025 Fall -cleaned.csv,59,0.035,64.6,0.5,0.0
+2025 Fall -cleaned.csv,60,-0.035,38.0,1.0,0.5
+2025 Fall -cleaned.csv,61,-0.03,39.4,1.5,1.0
+2025 Fall -cleaned.csv,62,-0.025,40.8,2.0,1.5
+2025 Fall -cleaned.csv,63,-0.02,42.2,-2.0,-1.5
+2025 Fall -cleaned.csv,64,-0.015,43.6,-1.5,-1.0
+2025 Fall -cleaned.csv,65,-0.01,45.0,-1.0,-0.5
+2025 Fall -cleaned.csv,66,-0.005,46.4,-0.5,0.0
+2025 Fall -cleaned.csv,67,0.0,47.8,0.0,0.5
+2025 Fall -cleaned.csv,68,0.005,49.2,0.5,1.0
+2025 Fall -cleaned.csv,69,0.01,50.6,1.0,1.5
+2025 Fall -cleaned.csv,70,0.015,52.0,1.5,-1.5
+2025 Fall -cleaned.csv,71,0.02,53.4,2.0,-1.0
+2025 Fall -cleaned.csv,72,0.025,54.8,-2.0,-0.5
+2025 Fall -cleaned.csv,73,0.03,56.2,-1.5,0.0
+2025 Fall -cleaned.csv,74,0.035,57.6,-1.0,0.5
+2025 Fall -cleaned.csv,75,-0.035,59.0,-0.5,1.0
+2025 Fall -cleaned.csv,76,-0.03,60.4,0.0,1.5
+2025 Fall -cleaned.csv,77,-0.025,61.8,0.5,-1.5
+2025 Fall -cleaned.csv,78,-0.02,63.2,1.0,-1.0
+2025 Fall -cleaned.csv,79,-0.015,64.6,1.5,-0.5
+2025 Fall -cleaned.csv,80,-0.01,38.0,2.0,0.0
+2025 Fall -cleaned.csv,81,-0.005,39.4,-2.0,0.5
+2025 Fall -cleaned.csv,82,0.0,40.8,-1.5,1.0
+2025 Fall -cleaned.csv,83,0.005,42.2,-1.0,1.5
+2025 Fall -cleaned.csv,84,0.01,43.6,-0.5,-1.5
+2025 Fall -cleaned.csv,85,0.015,45.0,0.0,-1.0
+2025 Fall -cleaned.csv,86,0.02,46.4,0.5,-0.5
+2025 Fall -cleaned.csv,87,0.025,47.8,1.0,0.0
+2025 Fall -cleaned.csv,88,0.03,49.2,1.5,0.5
+2025 Fall -cleaned.csv,89,0.035,50.6,2.0,1.0
+2025 Fall -cleaned.csv,90,-0.035,52.0,-2.0,1.5
+2025 Fall -cleaned.csv,91,-0.03,53.4,-1.5,-1.5
+2025 Fall -cleaned.csv,92,-0.025,54.8,-1.0,-1.0
+2026 Squads - cleaned.csv,1,-0.03,39.4,-1.5,-1.0
+2026 Squads - cleaned.csv,2,-0.025,40.8,-1.0,-0.5
+2026 Squads - cleaned.csv,3,-0.02,42.2,-0.5,0.0
+2026 Squads - cleaned.csv,4,-0.015,43.6,0.0,0.5
+2026 Squads - cleaned.csv,5,-0.01,45.0,0.5,1.0
+2026 Squads - cleaned.csv,6,-0.005,46.4,1.0,1.5
+2026 Squads - cleaned.csv,7,0.0,47.8,1.5,-1.5
+2026 Squads - cleaned.csv,8,0.005,49.2,2.0,-1.0
+2026 Squads - cleaned.csv,9,0.01,50.6,-2.0,-0.5
+2026 Squads - cleaned.csv,10,0.015,52.0,-1.5,0.0
+2026 Squads - cleaned.csv,11,0.02,53.4,-1.0,0.5
+2026 Squads - cleaned.csv,12,0.025,54.8,-0.5,1.0
+2026 Squads - cleaned.csv,13,0.03,56.2,0.0,1.5
+2026 Squads - cleaned.csv,14,0.035,57.6,0.5,-1.5
+2026 Squads - cleaned.csv,15,-0.035,59.0,1.0,-1.0
+2026 Squads - cleaned.csv,16,-0.03,60.4,1.5,-0.5
+2026 Squads - cleaned.csv,17,-0.025,61.8,2.0,0.0
+2026 Squads - cleaned.csv,18,-0.02,63.2,-2.0,0.5
+2026 Squads - cleaned.csv,19,-0.015,64.6,-1.5,1.0
+2026 Squads - cleaned.csv,20,-0.01,38.0,-1.0,1.5
+2026 Squads - cleaned.csv,21,-0.005,39.4,-0.5,-1.5
+2026 Squads - cleaned.csv,22,0.0,40.8,0.0,-1.0
+2026 Squads - cleaned.csv,23,0.005,42.2,0.5,-0.5
+2026 Squads - cleaned.csv,24,0.01,43.6,1.0,0.0
+2026 Squads - cleaned.csv,25,0.015,45.0,1.5,0.5
+2026 Squads - cleaned.csv,26,0.02,46.4,2.0,1.0
+2026 Squads - cleaned.csv,27,0.025,47.8,-2.0,1.5
+2026 Squads - cleaned.csv,28,0.03,49.2,-1.5,-1.5
+2026 Squads - cleaned.csv,29,0.035,50.6,-1.0,-1.0
+2026 Squads - cleaned.csv,30,-0.035,52.0,-0.5,-0.5
+2026 Squads - cleaned.csv,31,-0.03,53.4,0.0,0.0
+2026 Squads - cleaned.csv,32,-0.025,54.8,0.5,0.5
+2026 Squads - cleaned.csv,33,-0.02,56.2,1.0,1.0
+2026 Squads - cleaned.csv,34,-0.015,57.6,1.5,1.5
+2026 Squads - cleaned.csv,35,-0.01,59.0,2.0,-1.5
+2026 Squads - cleaned.csv,36,-0.005,60.4,-2.0,-1.0
+2026 Squads - cleaned.csv,37,0.0,61.8,-1.5,-0.5
+2026 Squads - cleaned.csv,38,0.005,63.2,-1.0,0.0
+2026 Squads - cleaned.csv,39,0.01,64.6,-0.5,0.5
+2026 Squads - cleaned.csv,40,0.015,38.0,0.0,1.0
+2026 Squads - cleaned.csv,41,0.02,39.4,0.5,1.5
+2026 Squads - cleaned.csv,42,0.025,40.8,1.0,-1.5
+2026 Squads - cleaned.csv,43,0.03,42.2,1.5,-1.0
+2026 Squads - cleaned.csv,44,0.035,43.6,2.0,-0.5
+2026 Squads - cleaned.csv,45,-0.035,45.0,-2.0,0.0
+2026 Squads - cleaned.csv,46,-0.03,46.4,-1.5,0.5
+2026 Squads - cleaned.csv,47,-0.025,47.8,-1.0,1.0
+2026 Squads - cleaned.csv,48,-0.02,49.2,-0.5,1.5
+2026 Squads - cleaned.csv,49,-0.015,50.6,0.0,-1.5
+2026 Squads - cleaned.csv,50,-0.01,52.0,0.5,-1.0
+2026 Squads - cleaned.csv,51,-0.005,53.4,1.0,-0.5
+2026 Squads - cleaned.csv,52,0.0,54.8,1.5,0.0
+2026 Squads - cleaned.csv,53,0.005,56.2,2.0,0.5
+2026 Squads - cleaned.csv,54,0.01,57.6,-2.0,1.0
+2026 Squads - cleaned.csv,55,0.015,59.0,-1.5,1.5
+2026 Squads - cleaned.csv,56,0.02,60.4,-1.0,-1.5
+2026 Squads - cleaned.csv,57,0.025,61.8,-0.5,-1.0
+2026 Squads - cleaned.csv,58,0.03,63.2,0.0,-0.5
+2026 Squads - cleaned.csv,59,0.035,64.6,0.5,0.0
+2026 Squads - cleaned.csv,60,-0.035,38.0,1.0,0.5
+2026 Squads - cleaned.csv,61,-0.03,39.4,1.5,1.0
+2026 Squads - cleaned.csv,62,-0.025,40.8,2.0,1.5
+2026 Squads - cleaned.csv,63,-0.02,42.2,-2.0,-1.5
+2026 Squads - cleaned.csv,64,-0.015,43.6,-1.5,-1.0
+2026 Squads - cleaned.csv,65,-0.01,45.0,-1.0,-0.5
+2026 Squads - cleaned.csv,66,-0.005,46.4,-0.5,0.0
+2026 Squads - cleaned.csv,67,0.0,47.8,0.0,0.5
+2026 Squads - cleaned.csv,68,0.005,49.2,0.5,1.0
+2026 Squads - cleaned.csv,69,0.01,50.6,1.0,1.5
+2026 Squads - cleaned.csv,70,0.015,52.0,1.5,-1.5
+2026 Squads - cleaned.csv,71,0.02,53.4,2.0,-1.0
+2026 Squads - cleaned.csv,72,0.025,54.8,-2.0,-0.5
+2026 Squads - cleaned.csv,73,0.03,56.2,-1.5,0.0
+2026 Squads - cleaned.csv,74,0.035,57.6,-1.0,0.5
+2026 Squads - cleaned.csv,75,-0.035,59.0,-0.5,1.0
+2026 Squads - cleaned.csv,76,-0.03,60.4,0.0,1.5
+2026 Squads - cleaned.csv,77,-0.025,61.8,0.5,-1.5
+2026 Squads - cleaned.csv,78,-0.02,63.2,1.0,-1.0
+2026 Squads - cleaned.csv,79,-0.015,64.6,1.5,-0.5
+2026 Squads - cleaned.csv,80,-0.01,38.0,2.0,0.0
+2026 Squads - cleaned.csv,81,-0.005,39.4,-2.0,0.5
+2026 Squads - cleaned.csv,82,0.0,40.8,-1.5,1.0
+2026 Squads - cleaned.csv,83,0.005,42.2,-1.0,1.5
+2026 Squads - cleaned.csv,84,0.01,43.6,-0.5,-1.5
+2026 Squads - cleaned.csv,85,0.015,45.0,0.0,-1.0
+2026 Squads - cleaned.csv,86,0.02,46.4,0.5,-0.5
+2026 Squads - cleaned.csv,87,0.025,47.8,1.0,0.0
+2026 Squads - cleaned.csv,88,0.03,49.2,1.5,0.5
+2026 Squads - cleaned.csv,89,0.035,50.6,2.0,1.0
+2026 Squads - cleaned.csv,90,-0.035,52.0,-2.0,1.5
+2026 Squads - cleaned.csv,91,-0.03,53.4,-1.5,-1.5
+2026 Squads - cleaned.csv,92,-0.025,54.8,-1.0,-1.0
+2026 Season - cleaned.csv,1,-0.03,39.4,-1.5,-1.0
+2026 Season - cleaned.csv,2,-0.025,40.8,-1.0,-0.5
+2026 Season - cleaned.csv,3,-0.02,42.2,-0.5,0.0
+2026 Season - cleaned.csv,4,-0.015,43.6,0.0,0.5
+2026 Season - cleaned.csv,5,-0.01,45.0,0.5,1.0
+2026 Season - cleaned.csv,6,-0.005,46.4,1.0,1.5
+2026 Season - cleaned.csv,7,0.0,47.8,1.5,-1.5
+2026 Season - cleaned.csv,8,0.005,49.2,2.0,-1.0
+2026 Season - cleaned.csv,9,0.01,50.6,-2.0,-0.5
+2026 Season - cleaned.csv,10,0.015,52.0,-1.5,0.0
+2026 Season - cleaned.csv,11,0.02,53.4,-1.0,0.5
+2026 Season - cleaned.csv,12,0.025,54.8,-0.5,1.0
+2026 Season - cleaned.csv,13,0.03,56.2,0.0,1.5
+2026 Season - cleaned.csv,14,0.035,57.6,0.5,-1.5
+2026 Season - cleaned.csv,15,-0.035,59.0,1.0,-1.0
+2026 Season - cleaned.csv,16,-0.03,60.4,1.5,-0.5
+2026 Season - cleaned.csv,17,-0.025,61.8,2.0,0.0
+2026 Season - cleaned.csv,18,-0.02,63.2,-2.0,0.5
+2026 Season - cleaned.csv,19,-0.015,64.6,-1.5,1.0
+2026 Season - cleaned.csv,20,-0.01,38.0,-1.0,1.5
+2026 Season - cleaned.csv,21,-0.005,39.4,-0.5,-1.5
+2026 Season - cleaned.csv,22,0.0,40.8,0.0,-1.0
+2026 Season - cleaned.csv,23,0.005,42.2,0.5,-0.5
+2026 Season - cleaned.csv,24,0.01,43.6,1.0,0.0
+2026 Season - cleaned.csv,25,0.015,45.0,1.5,0.5
+2026 Season - cleaned.csv,26,0.02,46.4,2.0,1.0
+2026 Season - cleaned.csv,27,0.025,47.8,-2.0,1.5
+2026 Season - cleaned.csv,28,0.03,49.2,-1.5,-1.5
+2026 Season - cleaned.csv,29,0.035,50.6,-1.0,-1.0
+2026 Season - cleaned.csv,30,-0.035,52.0,-0.5,-0.5
+2026 Season - cleaned.csv,31,-0.03,53.4,0.0,0.0
+2026 Season - cleaned.csv,32,-0.025,54.8,0.5,0.5
+2026 Season - cleaned.csv,33,-0.02,56.2,1.0,1.0
+2026 Season - cleaned.csv,34,-0.015,57.6,1.5,1.5
+2026 Season - cleaned.csv,35,-0.01,59.0,2.0,-1.5
+2026 Season - cleaned.csv,36,-0.005,60.4,-2.0,-1.0
+2026 Season - cleaned.csv,37,0.0,61.8,-1.5,-0.5
+2026 Season - cleaned.csv,38,0.005,63.2,-1.0,0.0
+2026 Season - cleaned.csv,39,0.01,64.6,-0.5,0.5
+2026 Season - cleaned.csv,40,0.015,38.0,0.0,1.0
+2026 Season - cleaned.csv,41,0.02,39.4,0.5,1.5
+2026 Season - cleaned.csv,42,0.025,40.8,1.0,-1.5
+2026 Season - cleaned.csv,43,0.03,42.2,1.5,-1.0
+2026 Season - cleaned.csv,44,0.035,43.6,2.0,-0.5
+2026 Season - cleaned.csv,45,-0.035,45.0,-2.0,0.0
+2026 Season - cleaned.csv,46,-0.03,46.4,-1.5,0.5
+2026 Season - cleaned.csv,47,-0.025,47.8,-1.0,1.0
+2026 Season - cleaned.csv,48,-0.02,49.2,-0.5,1.5
+2026 Season - cleaned.csv,49,-0.015,50.6,0.0,-1.5
+2026 Season - cleaned.csv,50,-0.01,52.0,0.5,-1.0
+2026 Season - cleaned.csv,51,-0.005,53.4,1.0,-0.5
+2026 Season - cleaned.csv,52,0.0,54.8,1.5,0.0
+2026 Season - cleaned.csv,53,0.005,56.2,2.0,0.5
+2026 Season - cleaned.csv,54,0.01,57.6,-2.0,1.0
+2026 Season - cleaned.csv,55,0.015,59.0,-1.5,1.5
+2026 Season - cleaned.csv,56,0.02,60.4,-1.0,-1.5
+2026 Season - cleaned.csv,57,0.025,61.8,-0.5,-1.0
+2026 Season - cleaned.csv,58,0.03,63.2,0.0,-0.5
+2026 Season - cleaned.csv,59,0.035,64.6,0.5,0.0
+2026 Season - cleaned.csv,60,-0.035,38.0,1.0,0.5
+2026 Season - cleaned.csv,61,-0.03,39.4,1.5,1.0
+2026 Season - cleaned.csv,62,-0.025,40.8,2.0,1.5
+2026 Season - cleaned.csv,63,-0.02,42.2,-2.0,-1.5
+2026 Season - cleaned.csv,64,-0.015,43.6,-1.5,-1.0
+2026 Season - cleaned.csv,65,-0.01,45.0,-1.0,-0.5
+2026 Season - cleaned.csv,66,-0.005,46.4,-0.5,0.0
+2026 Season - cleaned.csv,67,0.0,47.8,0.0,0.5
+2026 Season - cleaned.csv,68,0.005,49.2,0.5,1.0
+2026 Season - cleaned.csv,69,0.01,50.6,1.0,1.5
+2026 Season - cleaned.csv,70,0.015,52.0,1.5,-1.5
+2026 Season - cleaned.csv,71,0.02,53.4,2.0,-1.0
+2026 Season - cleaned.csv,72,0.025,54.8,-2.0,-0.5
+2026 Season - cleaned.csv,73,0.03,56.2,-1.5,0.0
+2026 Season - cleaned.csv,74,0.035,57.6,-1.0,0.5
+2026 Season - cleaned.csv,75,-0.035,59.0,-0.5,1.0
+2026 Season - cleaned.csv,76,-0.03,60.4,0.0,1.5
+2026 Season - cleaned.csv,77,-0.025,61.8,0.5,-1.5
+2026 Season - cleaned.csv,78,-0.02,63.2,1.0,-1.0
+2026 Season - cleaned.csv,79,-0.015,64.6,1.5,-0.5
+2026 Season - cleaned.csv,80,-0.01,38.0,2.0,0.0
+2026 Season - cleaned.csv,81,-0.005,39.4,-2.0,0.5
+2026 Season - cleaned.csv,82,0.0,40.8,-1.5,1.0
+2026 Season - cleaned.csv,83,0.005,42.2,-1.0,1.5
+2026 Season - cleaned.csv,84,0.01,43.6,-0.5,-1.5
+2026 Season - cleaned.csv,85,0.015,45.0,0.0,-1.0
+2026 Season - cleaned.csv,86,0.02,46.4,0.5,-0.5
+2026 Season - cleaned.csv,87,0.025,47.8,1.0,0.0
+2026 Season - cleaned.csv,88,0.03,49.2,1.5,0.5
+2026 Season - cleaned.csv,89,0.035,50.6,2.0,1.0
+2026 Season - cleaned.csv,90,-0.035,52.0,-2.0,1.5
+2026 Season - cleaned.csv,91,-0.03,53.4,-1.5,-1.5
+2026 Season - cleaned.csv,92,-0.025,54.8,-1.0,-1.0
+Bullpens - cleaned.csv,1,-0.03,39.4,-1.5,-1.0
+Bullpens - cleaned.csv,2,-0.025,40.8,-1.0,-0.5
+Bullpens - cleaned.csv,3,-0.02,42.2,-0.5,0.0
+Bullpens - cleaned.csv,4,-0.015,43.6,0.0,0.5
+Bullpens - cleaned.csv,5,-0.01,45.0,0.5,1.0
+Bullpens - cleaned.csv,6,-0.005,46.4,1.0,1.5
+Bullpens - cleaned.csv,7,0.0,47.8,1.5,-1.5
+Bullpens - cleaned.csv,8,0.005,49.2,2.0,-1.0
+Bullpens - cleaned.csv,9,0.01,50.6,-2.0,-0.5
+Bullpens - cleaned.csv,10,0.015,52.0,-1.5,0.0
+Bullpens - cleaned.csv,11,0.02,53.4,-1.0,0.5
+Bullpens - cleaned.csv,12,0.025,54.8,-0.5,1.0
+Bullpens - cleaned.csv,13,0.03,56.2,0.0,1.5
+Bullpens - cleaned.csv,14,0.035,57.6,0.5,-1.5
+Bullpens - cleaned.csv,15,-0.035,59.0,1.0,-1.0
+Bullpens - cleaned.csv,16,-0.03,60.4,1.5,-0.5
+Bullpens - cleaned.csv,17,-0.025,61.8,2.0,0.0
+Bullpens - cleaned.csv,18,-0.02,63.2,-2.0,0.5
+Bullpens - cleaned.csv,19,-0.015,64.6,-1.5,1.0
+Bullpens - cleaned.csv,20,-0.01,38.0,-1.0,1.5
+Bullpens - cleaned.csv,21,-0.005,39.4,-0.5,-1.5
+Bullpens - cleaned.csv,22,0.0,40.8,0.0,-1.0
+Bullpens - cleaned.csv,23,0.005,42.2,0.5,-0.5
+Bullpens - cleaned.csv,24,0.01,43.6,1.0,0.0
+Bullpens - cleaned.csv,25,0.015,45.0,1.5,0.5
+Bullpens - cleaned.csv,26,0.02,46.4,2.0,1.0
+Bullpens - cleaned.csv,27,0.025,47.8,-2.0,1.5
+Bullpens - cleaned.csv,28,0.03,49.2,-1.5,-1.5
+Bullpens - cleaned.csv,29,0.035,50.6,-1.0,-1.0
+Bullpens - cleaned.csv,30,-0.035,52.0,-0.5,-0.5
+Bullpens - cleaned.csv,31,-0.03,53.4,0.0,0.0
+Bullpens - cleaned.csv,32,-0.025,54.8,0.5,0.5
+Bullpens - cleaned.csv,33,-0.02,56.2,1.0,1.0
+Bullpens - cleaned.csv,34,-0.015,57.6,1.5,1.5
+Bullpens - cleaned.csv,35,-0.01,59.0,2.0,-1.5
+Bullpens - cleaned.csv,36,-0.005,60.4,-2.0,-1.0
+Bullpens - cleaned.csv,37,0.0,61.8,-1.5,-0.5
+Bullpens - cleaned.csv,38,0.005,63.2,-1.0,0.0
+Bullpens - cleaned.csv,39,0.01,64.6,-0.5,0.5
+Bullpens - cleaned.csv,40,0.015,38.0,0.0,1.0
+Bullpens - cleaned.csv,41,0.02,39.4,0.5,1.5
+Bullpens - cleaned.csv,42,0.025,40.8,1.0,-1.5
+Bullpens - cleaned.csv,43,0.03,42.2,1.5,-1.0
+Bullpens - cleaned.csv,44,0.035,43.6,2.0,-0.5
+Bullpens - cleaned.csv,45,-0.035,45.0,-2.0,0.0
+Bullpens - cleaned.csv,46,-0.03,46.4,-1.5,0.5
+Bullpens - cleaned.csv,47,-0.025,47.8,-1.0,1.0
+Bullpens - cleaned.csv,48,-0.02,49.2,-0.5,1.5
+Bullpens - cleaned.csv,49,-0.015,50.6,0.0,-1.5
+Bullpens - cleaned.csv,50,-0.01,52.0,0.5,-1.0
+Bullpens - cleaned.csv,51,-0.005,53.4,1.0,-0.5
+Bullpens - cleaned.csv,52,0.0,54.8,1.5,0.0
+Bullpens - cleaned.csv,53,0.005,56.2,2.0,0.5
+Bullpens - cleaned.csv,54,0.01,57.6,-2.0,1.0
+Bullpens - cleaned.csv,55,0.015,59.0,-1.5,1.5
+Bullpens - cleaned.csv,56,0.02,60.4,-1.0,-1.5
+Bullpens - cleaned.csv,57,0.025,61.8,-0.5,-1.0
+Bullpens - cleaned.csv,58,0.03,63.2,0.0,-0.5
+Bullpens - cleaned.csv,59,0.035,64.6,0.5,0.0
+Bullpens - cleaned.csv,60,-0.035,38.0,1.0,0.5
+Bullpens - cleaned.csv,61,-0.03,39.4,1.5,1.0
+Bullpens - cleaned.csv,62,-0.025,40.8,2.0,1.5
+Bullpens - cleaned.csv,63,-0.02,42.2,-2.0,-1.5
+Bullpens - cleaned.csv,64,-0.015,43.6,-1.5,-1.0
+Bullpens - cleaned.csv,65,-0.01,45.0,-1.0,-0.5
+Bullpens - cleaned.csv,66,-0.005,46.4,-0.5,0.0
+Bullpens - cleaned.csv,67,0.0,47.8,0.0,0.5
+Bullpens - cleaned.csv,68,0.005,49.2,0.5,1.0
+Bullpens - cleaned.csv,69,0.01,50.6,1.0,1.5
+Bullpens - cleaned.csv,70,0.015,52.0,1.5,-1.5
+Bullpens - cleaned.csv,71,0.02,53.4,2.0,-1.0
+Bullpens - cleaned.csv,72,0.025,54.8,-2.0,-0.5
+Bullpens - cleaned.csv,73,0.03,56.2,-1.5,0.0
+Bullpens - cleaned.csv,74,0.035,57.6,-1.0,0.5
+Bullpens - cleaned.csv,75,-0.035,59.0,-0.5,1.0
+Bullpens - cleaned.csv,76,-0.03,60.4,0.0,1.5
+Bullpens - cleaned.csv,77,-0.025,61.8,0.5,-1.5
+Bullpens - cleaned.csv,78,-0.02,63.2,1.0,-1.0
+Bullpens - cleaned.csv,79,-0.015,64.6,1.5,-0.5
+Bullpens - cleaned.csv,80,-0.01,38.0,2.0,0.0
+Bullpens - cleaned.csv,81,-0.005,39.4,-2.0,0.5
+Bullpens - cleaned.csv,82,0.0,40.8,-1.5,1.0
+Bullpens - cleaned.csv,83,0.005,42.2,-1.0,1.5
+Bullpens - cleaned.csv,84,0.01,43.6,-0.5,-1.5
+Bullpens - cleaned.csv,85,0.015,45.0,0.0,-1.0
+Bullpens - cleaned.csv,86,0.02,46.4,0.5,-0.5
+Bullpens - cleaned.csv,87,0.025,47.8,1.0,0.0
+Bullpens - cleaned.csv,88,0.03,49.2,1.5,0.5
+Bullpens - cleaned.csv,89,0.035,50.6,2.0,1.0
+Bullpens - cleaned.csv,90,-0.035,52.0,-2.0,1.5
+Bullpens - cleaned.csv,91,-0.03,53.4,-1.5,-1.5
+Bullpens - cleaned.csv,92,-0.025,54.8,-1.0,-1.0

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build BASE's query-on-demand 2026 runtime data without altering the master.
+"""Build BASE's canonical query-on-demand NCAA Division I runtime.
 
-The output keeps every pitch row needed by current features, partitions pitcher
-data into stable hash buckets, writes a compact player catalog, and writes the
-configured team's much smaller season file for startup-time reports.
+The selected season is copied exactly once into stable pitcher hash partitions.
+Compact catalogs and the configured team's small startup cache are the only
+derived copies. The source master is a staging/build input, not a second file
+that should remain beside the deployed runtime after cutover.
 """
 
 from __future__ import annotations
@@ -28,6 +29,16 @@ def valid_text(value: object) -> bool:
     return value is not None and str(value).strip() != ""
 
 
+def select_season(table: pa.Table, season: int) -> pa.Table:
+    values = table["Date"].to_pylist()
+    wanted = str(season)
+    mask = pa.array(
+        [value is not None and str(value)[:4] == wanted for value in values],
+        type=pa.bool_(),
+    )
+    return table.filter(mask)
+
+
 def build(args: argparse.Namespace) -> None:
     source = Path(args.source).resolve()
     output = Path(args.output).resolve()
@@ -39,7 +50,7 @@ def build(args: argparse.Namespace) -> None:
 
     parquet = pq.ParquetFile(source)
     source_schema = parquet.schema_arrow
-    required = {"Pitcher", "PitcherTeam"}
+    required = {"Date", "PitchUID", "Pitcher", "PitcherTeam", "Batter", "BatterTeam"}
     missing = sorted(required.difference(source_schema.names))
     if missing:
         raise ValueError(f"Source is missing required columns: {', '.join(missing)}")
@@ -52,7 +63,10 @@ def build(args: argparse.Namespace) -> None:
     bucket_buffer_rows: dict[int, int] = defaultdict(int)
     team_writer: pq.ParquetWriter | None = None
     team_path = team_root / f"{args.team_code}.parquet"
-    total_rows = 0
+    source_rows = 0
+    selected_rows = 0
+    excluded_season_rows = 0
+    seen_pitch_uids: set[str] = set()
     pitcher_rows = 0
     team_rows = 0
 
@@ -81,7 +95,28 @@ def build(args: argparse.Namespace) -> None:
 
     for batch_index, batch in enumerate(parquet.iter_batches(batch_size=args.batch_size)):
         table = pa.Table.from_batches([batch])
-        total_rows += table.num_rows
+        source_rows += table.num_rows
+        before_filter = table.num_rows
+        table = select_season(table, args.season)
+        excluded_season_rows += before_filter - table.num_rows
+        selected_rows += table.num_rows
+        if not table.num_rows:
+            continue
+
+        pitch_uids = table["PitchUID"].to_pylist()
+        missing_pitch_uids = [value for value in pitch_uids if not valid_text(value)]
+        if missing_pitch_uids:
+            raise ValueError(
+                f"Selected {args.season} source contains {len(missing_pitch_uids)} row(s) without PitchUID"
+            )
+        normalized_uids = [str(value).strip() for value in pitch_uids]
+        batch_unique = set(normalized_uids)
+        if len(batch_unique) != len(normalized_uids):
+            raise ValueError(f"Selected {args.season} source contains duplicate PitchUID values in one batch")
+        repeated = batch_unique.intersection(seen_pitch_uids)
+        if repeated:
+            raise ValueError(f"Selected {args.season} source repeats PitchUID values across batches")
+        seen_pitch_uids.update(batch_unique)
 
         pitcher_names = table["Pitcher"].to_pylist()
         pitcher_teams = table["PitcherTeam"].to_pylist()
@@ -207,8 +242,13 @@ def build(args: argparse.Namespace) -> None:
 
     metadata = {
         "source": source.name,
-        "source_rows": total_rows,
+        "source_id": args.source_id,
+        "source_rows": source_rows,
         "source_columns": len(source_schema.names),
+        "selected_season": args.season,
+        "selected_rows": selected_rows,
+        "excluded_season_rows": excluded_season_rows,
+        "unique_pitch_uids": len(seen_pitch_uids),
         "pitcher_rows": pitcher_rows,
         "pitcher_catalog_rows": len(catalog_records),
         "hitter_catalog_rows": len(hitter_records),
@@ -225,6 +265,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, help="Runtime parquet containing all 2026 pitch rows")
     parser.add_argument("--output", required=True, help="Destination directory")
+    parser.add_argument("--source-id", default="ncaa_d1_pitch_events_2026")
+    parser.add_argument("--season", type=int, default=2026)
     parser.add_argument("--buckets", type=int, default=64)
     parser.add_argument("--batch-size", type=int, default=100_000)
     parser.add_argument("--bucket-buffer-rows", type=int, default=10_000)

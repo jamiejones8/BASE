@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "method": "Each app was launched from synthetic fixtures and opened in a fresh in-app browser tab at a 1280x720 viewport.",
+  "apps": {
+    "HittingApp": {
+      "title": "Bobcats Hitting Reports",
+      "status": "rendered",
+      "console_errors": 0,
+      "screenshot": "golden/hitting/app-shell.jpg"
+    },
+    "PitchingApp": {
+      "title": "Bobcats Pitching Reports",
+      "status": "confirmed_stalled_output",
+      "console_errors": 6,
+      "loading_indicators_after_7_seconds": 48,
+      "error_output_id": "performance_percentiles",
+      "error_summary": "Shiny client received progress/recalculation messages while the output state was already running or idle.",
+      "screenshot": "golden/pitching/app-shell.jpg"
+    },
+    "DefenseApp": {
+      "title": "Bobcats Defense Reports",
+      "status": "rendered",
+      "console_errors": 0,
+      "screenshot": "golden/defense/app-shell.jpg"
+    }
+  }
+}

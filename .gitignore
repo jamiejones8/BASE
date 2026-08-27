@@ -3,6 +3,41 @@
 .runtime-builder-deps/
 .runtime-build-output*/
 scripts/__pycache__/
+**/__pycache__/
 app_state/
 data/D1 Defense File.parquet
 .runtime-build-output-defense/
+.baseline-runtime/
+
+# WallyApps is an imported migration working copy. Keep its source visible,
+# but never version local sessions, deployment metadata, scraped browser state,
+# private baseball data, or unreviewed model artifacts.
+/WallyApps/**/.DS_Store
+/WallyApps/**/.RData
+/WallyApps/**/.Rhistory
+/WallyApps/**/.Rapp.history
+/WallyApps/**/.Renviron
+/WallyApps/**/.Rproj.user/
+/WallyApps/**/Rplots.pdf
+/WallyApps/**/rsconnect/
+/WallyApps/**/.browser-profile*/
+/WallyApps/**/__pycache__/
+/WallyApps/**/*.pyc
+/WallyApps/**/catboost_info/
+/WallyApps/**/tmp/
+/WallyApps/**/*.parquet
+/WallyApps/**/*.pkl
+/WallyApps/JucoStatsApp/data/raw_njcaa/
+/WallyApps/JucoStatsApp/data/debug_njcaa/
+/WallyApps/JucoStatsApp/data/juco_player_stats_latest.csv
+/WallyApps/D1 Files/
+/WallyApps/HittingApp/data/
+/WallyApps/PitchingApp/data/*
+!/WallyApps/PitchingApp/data/called_stuff_baseline.csv
+!/WallyApps/PitchingApp/data/d1_pitch_metric_percentile_reference.csv
+!/WallyApps/PitchingApp/data/player_heights.csv
+!/WallyApps/PitchingApp/data/xrv_metrics.csv
+/WallyApps/PitchingApp/models/
+/WallyApps/DefenseApp/data/
+/WallyApps/ScoutingApp/data/
+/WallyApps/ScoutingApp/outputs/

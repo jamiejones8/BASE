@@ -1,0 +1,90 @@
+{
+  "application_sources": {
+    "DefenseApp": {
+      "path": "WallyApps/DefenseApp/DefenseApp.R",
+      "sha256": "f8d6d6e5c09b04b9b29c04387d99e3454d2878d040fa2aea03d58ca4210f95e3"
+    },
+    "HittingApp": {
+      "path": "WallyApps/HittingApp/HittingApp.R",
+      "sha256": "2cf36599ca819f1dd8a58d5852e6ed690493c481d7c56895f5e72ae961ae9b03"
+    },
+    "PitchingApp": {
+      "path": "WallyApps/PitchingApp/PitchingApp.R",
+      "sha256": "293c9bf293c7343e97a7248dcfedc0b9f28031388200d3169bcbd182a18ac30e"
+    },
+    "ScoutingApp": {
+      "path": "WallyApps/ScoutingApp/ScoutingApp.R",
+      "sha256": "013034fe65378356135ccac9c94d713c87d8f9031acb37f26988179bdce28173"
+    }
+  },
+  "docker": {
+    "version": null
+  },
+  "node": {
+    "playwright_installed": false,
+    "version": "v24.14.0"
+  },
+  "notes": [
+    "R packages live in the ignored .baseline-runtime/R directory.",
+    "The standalone Shiny apps consume synthetic CSV fixtures and precomputed model/reference CSVs.",
+    "CatBoost, scikit-learn, and Playwright are not required to calculate the checked-in standalone goldens."
+  ],
+  "operating_system": {
+    "machine": "arm64",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "purpose": "Local, baseline-only runtime for reproducing untouched WallyApps outputs",
+  "python": {
+    "implementation": "CPython",
+    "packages": {
+      "catboost": null,
+      "numpy": "2.5.0",
+      "pandas": "3.0.4",
+      "playwright": null,
+      "pyarrow": "24.0.0",
+      "scikit-learn": null
+    },
+    "version": "3.14.5"
+  },
+  "r": {
+    "packages": {
+      "DT": "0.34.0",
+      "bslib": "0.9.0",
+      "cowplot": "1.2.0",
+      "curl": "7.0.0",
+      "data.table": "1.17.8",
+      "dplyr": "1.2.1",
+      "ggplot2": "4.0.0",
+      "ggplotify": "0.1.3",
+      "ggpubr": "1.0.0",
+      "ggtext": "0.1.2",
+      "glue": "1.8.0",
+      "gridExtra": "2.3.1",
+      "hms": "1.1.3",
+      "htmltools": "0.5.8.1",
+      "jpeg": "0.1.11",
+      "jsonlite": "2.0.0",
+      "lubridate": "1.9.4",
+      "magrittr": "2.0.4",
+      "patchwork": "1.3.2",
+      "plotly": "4.12.1",
+      "png": "0.1.8",
+      "purrr": "1.2.2",
+      "ragg": "1.5.2",
+      "readr": "2.1.5",
+      "readxl": "1.5.0",
+      "rlang": "1.2.0",
+      "scales": "1.4.0",
+      "shiny": "1.11.1",
+      "shinyWidgets": "0.9.1",
+      "shinycssloaders": "1.1.0",
+      "stringr": "1.5.2",
+      "tidyr": "1.3.2",
+      "tidyverse": "2.0.0"
+    },
+    "platform": "aarch64-apple-darwin20",
+    "version": "R version 4.5.2 (2025-10-31)"
+  },
+  "schema_version": 1
+}

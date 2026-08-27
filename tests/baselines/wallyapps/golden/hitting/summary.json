@@ -1,0 +1,9 @@
+{
+  "app": "HittingApp",
+  "fixture_rows_loaded": 736,
+  "team_rows": 736,
+  "plate_appearances": 128,
+  "observed_case_insensitive_duplicate_load": true,
+  "golden_tables": ["overall.csv", "by-pitch-type.csv", "pitch-usage.csv", "swing-decisions.csv"],
+  "golden_visuals": ["strike-zone.png", "strike-zone.pdf"]
+}

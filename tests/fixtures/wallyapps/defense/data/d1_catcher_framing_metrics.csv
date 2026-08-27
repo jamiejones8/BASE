@@ -1,0 +1,681 @@
+metric_id,metric,Catcher,value,chances,numerator,metric_order,better
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 001,-0.02,100,-2.0,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 002,-0.015,103,-1.545,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 003,-0.01,106,-1.06,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 004,-0.005,109,-0.545,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 005,0.0,112,0.0,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 006,0.005,115,0.575,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 007,0.01,118,1.18,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 008,0.015,121,1.815,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 009,0.02,124,2.48,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 010,0.025,127,3.175,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 011,0.03,130,3.9,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 012,0.035,133,4.655,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 013,0.04,136,5.44,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 014,0.045,139,6.255,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 015,0.05,142,7.1,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 016,0.055,145,7.975,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 017,0.06,148,8.88,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 018,0.065,151,9.815,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 019,0.07,154,10.78,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 020,0.075,157,11.775,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 021,0.08,160,12.8,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 022,0.085,163,13.855,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 023,0.09,166,14.94,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 024,0.095,169,16.055,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 025,0.1,172,17.2,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 026,0.105,175,18.375,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 027,0.11,178,19.58,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 028,0.115,181,20.815,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 029,0.12,184,22.08,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 030,0.125,187,23.375,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 031,0.13,190,24.7,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 032,0.135,193,26.055,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 033,0.14,196,27.44,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 034,0.145,199,28.855,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 035,0.15,202,30.3,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 036,0.155,205,31.775,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 037,0.16,208,33.28,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 038,0.165,211,34.815,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 039,0.17,214,36.38,1,high
+strikes_stolen,Strikes Stolen,D1 Fixture Catcher 040,0.175,217,37.975,1,high
+balls_lost,Balls Lost,D1 Fixture Catcher 001,0.02,100,2.0,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 002,0.025,103,2.575,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 003,0.03,106,3.18,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 004,0.035,109,3.815,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 005,0.04,112,4.48,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 006,0.045,115,5.175,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 007,0.05,118,5.9,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 008,0.055,121,6.655,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 009,0.06,124,7.44,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 010,0.065,127,8.255,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 011,0.07,130,9.1,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 012,0.075,133,9.975,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 013,0.08,136,10.88,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 014,0.085,139,11.815,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 015,0.09,142,12.78,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 016,0.095,145,13.775,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 017,0.1,148,14.8,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 018,0.105,151,15.855,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 019,0.11,154,16.94,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 020,0.115,157,18.055,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 021,0.12,160,19.2,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 022,0.125,163,20.375,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 023,0.13,166,21.58,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 024,0.135,169,22.815,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 025,0.14,172,24.08,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 026,0.145,175,25.375,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 027,0.15,178,26.7,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 028,0.155,181,28.055,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 029,0.16,184,29.44,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 030,0.165,187,30.855,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 031,0.17,190,32.3,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 032,0.175,193,33.775,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 033,0.18,196,35.28,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 034,0.185,199,36.815,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 035,0.19,202,38.38,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 036,0.195,205,39.975,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 037,0.2,208,41.6,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 038,0.205,211,43.255,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 039,0.21,214,44.94,2,low
+balls_lost,Balls Lost,D1 Fixture Catcher 040,0.215,217,46.655,2,low
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 001,-0.1,100,-10.0,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 002,-0.095,103,-9.785,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 003,-0.09,106,-9.54,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 004,-0.085,109,-9.265,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 005,-0.08,112,-8.96,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 006,-0.075,115,-8.625,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 007,-0.07,118,-8.26,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 008,-0.065,121,-7.865,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 009,-0.06,124,-7.44,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 010,-0.055,127,-6.985,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 011,-0.05,130,-6.5,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 012,-0.045,133,-5.985,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 013,-0.04,136,-5.44,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 014,-0.035,139,-4.865,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 015,-0.03,142,-4.26,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 016,-0.025,145,-3.625,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 017,-0.02,148,-2.96,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 018,-0.015,151,-2.265,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 019,-0.01,154,-1.54,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 020,-0.005,157,-0.785,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 021,0.0,160,0.0,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 022,0.005,163,0.815,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 023,0.01,166,1.66,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 024,0.015,169,2.535,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 025,0.02,172,3.44,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 026,0.025,175,4.375,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 027,0.03,178,5.34,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 028,0.035,181,6.335,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 029,0.04,184,7.36,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 030,0.045,187,8.415,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 031,0.05,190,9.5,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 032,0.055,193,10.615,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 033,0.06,196,11.76,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 034,0.065,199,12.935,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 035,0.07,202,14.14,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 036,0.075,205,15.375,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 037,0.08,208,16.64,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 038,0.085,211,17.935,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 039,0.09,214,19.26,3,high
+bottom_buffer,Bottom Buffer,D1 Fixture Catcher 040,0.095,217,20.615,3,high
+top_buffer,Top Buffer,D1 Fixture Catcher 001,-0.1,100,-10.0,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 002,-0.095,103,-9.785,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 003,-0.09,106,-9.54,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 004,-0.085,109,-9.265,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 005,-0.08,112,-8.96,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 006,-0.075,115,-8.625,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 007,-0.07,118,-8.26,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 008,-0.065,121,-7.865,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 009,-0.06,124,-7.44,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 010,-0.055,127,-6.985,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 011,-0.05,130,-6.5,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 012,-0.045,133,-5.985,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 013,-0.04,136,-5.44,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 014,-0.035,139,-4.865,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 015,-0.03,142,-4.26,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 016,-0.025,145,-3.625,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 017,-0.02,148,-2.96,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 018,-0.015,151,-2.265,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 019,-0.01,154,-1.54,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 020,-0.005,157,-0.785,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 021,0.0,160,0.0,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 022,0.005,163,0.815,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 023,0.01,166,1.66,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 024,0.015,169,2.535,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 025,0.02,172,3.44,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 026,0.025,175,4.375,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 027,0.03,178,5.34,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 028,0.035,181,6.335,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 029,0.04,184,7.36,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 030,0.045,187,8.415,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 031,0.05,190,9.5,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 032,0.055,193,10.615,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 033,0.06,196,11.76,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 034,0.065,199,12.935,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 035,0.07,202,14.14,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 036,0.075,205,15.375,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 037,0.08,208,16.64,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 038,0.085,211,17.935,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 039,0.09,214,19.26,4,high
+top_buffer,Top Buffer,D1 Fixture Catcher 040,0.095,217,20.615,4,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 001,-0.1,100,-10.0,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 002,-0.095,103,-9.785,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 003,-0.09,106,-9.54,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 004,-0.085,109,-9.265,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 005,-0.08,112,-8.96,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 006,-0.075,115,-8.625,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 007,-0.07,118,-8.26,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 008,-0.065,121,-7.865,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 009,-0.06,124,-7.44,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 010,-0.055,127,-6.985,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 011,-0.05,130,-6.5,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 012,-0.045,133,-5.985,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 013,-0.04,136,-5.44,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 014,-0.035,139,-4.865,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 015,-0.03,142,-4.26,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 016,-0.025,145,-3.625,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 017,-0.02,148,-2.96,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 018,-0.015,151,-2.265,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 019,-0.01,154,-1.54,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 020,-0.005,157,-0.785,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 021,0.0,160,0.0,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 022,0.005,163,0.815,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 023,0.01,166,1.66,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 024,0.015,169,2.535,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 025,0.02,172,3.44,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 026,0.025,175,4.375,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 027,0.03,178,5.34,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 028,0.035,181,6.335,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 029,0.04,184,7.36,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 030,0.045,187,8.415,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 031,0.05,190,9.5,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 032,0.055,193,10.615,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 033,0.06,196,11.76,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 034,0.065,199,12.935,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 035,0.07,202,14.14,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 036,0.075,205,15.375,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 037,0.08,208,16.64,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 038,0.085,211,17.935,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 039,0.09,214,19.26,5,high
+glove_side_buffer,Glove Side Buffer,D1 Fixture Catcher 040,0.095,217,20.615,5,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 001,-0.1,100,-10.0,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 002,-0.095,103,-9.785,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 003,-0.09,106,-9.54,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 004,-0.085,109,-9.265,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 005,-0.08,112,-8.96,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 006,-0.075,115,-8.625,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 007,-0.07,118,-8.26,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 008,-0.065,121,-7.865,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 009,-0.06,124,-7.44,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 010,-0.055,127,-6.985,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 011,-0.05,130,-6.5,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 012,-0.045,133,-5.985,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 013,-0.04,136,-5.44,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 014,-0.035,139,-4.865,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 015,-0.03,142,-4.26,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 016,-0.025,145,-3.625,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 017,-0.02,148,-2.96,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 018,-0.015,151,-2.265,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 019,-0.01,154,-1.54,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 020,-0.005,157,-0.785,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 021,0.0,160,0.0,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 022,0.005,163,0.815,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 023,0.01,166,1.66,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 024,0.015,169,2.535,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 025,0.02,172,3.44,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 026,0.025,175,4.375,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 027,0.03,178,5.34,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 028,0.035,181,6.335,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 029,0.04,184,7.36,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 030,0.045,187,8.415,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 031,0.05,190,9.5,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 032,0.055,193,10.615,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 033,0.06,196,11.76,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 034,0.065,199,12.935,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 035,0.07,202,14.14,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 036,0.075,205,15.375,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 037,0.08,208,16.64,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 038,0.085,211,17.935,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 039,0.09,214,19.26,6,high
+arm_side_buffer,Arm Side Buffer,D1 Fixture Catcher 040,0.095,217,20.615,6,high
+rhp,RHP,D1 Fixture Catcher 001,-0.1,100,-10.0,7,high
+rhp,RHP,D1 Fixture Catcher 002,-0.095,103,-9.785,7,high
+rhp,RHP,D1 Fixture Catcher 003,-0.09,106,-9.54,7,high
+rhp,RHP,D1 Fixture Catcher 004,-0.085,109,-9.265,7,high
+rhp,RHP,D1 Fixture Catcher 005,-0.08,112,-8.96,7,high
+rhp,RHP,D1 Fixture Catcher 006,-0.075,115,-8.625,7,high
+rhp,RHP,D1 Fixture Catcher 007,-0.07,118,-8.26,7,high
+rhp,RHP,D1 Fixture Catcher 008,-0.065,121,-7.865,7,high
+rhp,RHP,D1 Fixture Catcher 009,-0.06,124,-7.44,7,high
+rhp,RHP,D1 Fixture Catcher 010,-0.055,127,-6.985,7,high
+rhp,RHP,D1 Fixture Catcher 011,-0.05,130,-6.5,7,high
+rhp,RHP,D1 Fixture Catcher 012,-0.045,133,-5.985,7,high
+rhp,RHP,D1 Fixture Catcher 013,-0.04,136,-5.44,7,high
+rhp,RHP,D1 Fixture Catcher 014,-0.035,139,-4.865,7,high
+rhp,RHP,D1 Fixture Catcher 015,-0.03,142,-4.26,7,high
+rhp,RHP,D1 Fixture Catcher 016,-0.025,145,-3.625,7,high
+rhp,RHP,D1 Fixture Catcher 017,-0.02,148,-2.96,7,high
+rhp,RHP,D1 Fixture Catcher 018,-0.015,151,-2.265,7,high
+rhp,RHP,D1 Fixture Catcher 019,-0.01,154,-1.54,7,high
+rhp,RHP,D1 Fixture Catcher 020,-0.005,157,-0.785,7,high
+rhp,RHP,D1 Fixture Catcher 021,0.0,160,0.0,7,high
+rhp,RHP,D1 Fixture Catcher 022,0.005,163,0.815,7,high
+rhp,RHP,D1 Fixture Catcher 023,0.01,166,1.66,7,high
+rhp,RHP,D1 Fixture Catcher 024,0.015,169,2.535,7,high
+rhp,RHP,D1 Fixture Catcher 025,0.02,172,3.44,7,high
+rhp,RHP,D1 Fixture Catcher 026,0.025,175,4.375,7,high
+rhp,RHP,D1 Fixture Catcher 027,0.03,178,5.34,7,high
+rhp,RHP,D1 Fixture Catcher 028,0.035,181,6.335,7,high
+rhp,RHP,D1 Fixture Catcher 029,0.04,184,7.36,7,high
+rhp,RHP,D1 Fixture Catcher 030,0.045,187,8.415,7,high
+rhp,RHP,D1 Fixture Catcher 031,0.05,190,9.5,7,high
+rhp,RHP,D1 Fixture Catcher 032,0.055,193,10.615,7,high
+rhp,RHP,D1 Fixture Catcher 033,0.06,196,11.76,7,high
+rhp,RHP,D1 Fixture Catcher 034,0.065,199,12.935,7,high
+rhp,RHP,D1 Fixture Catcher 035,0.07,202,14.14,7,high
+rhp,RHP,D1 Fixture Catcher 036,0.075,205,15.375,7,high
+rhp,RHP,D1 Fixture Catcher 037,0.08,208,16.64,7,high
+rhp,RHP,D1 Fixture Catcher 038,0.085,211,17.935,7,high
+rhp,RHP,D1 Fixture Catcher 039,0.09,214,19.26,7,high
+rhp,RHP,D1 Fixture Catcher 040,0.095,217,20.615,7,high
+lhp,LHP,D1 Fixture Catcher 001,-0.1,100,-10.0,8,high
+lhp,LHP,D1 Fixture Catcher 002,-0.095,103,-9.785,8,high
+lhp,LHP,D1 Fixture Catcher 003,-0.09,106,-9.54,8,high
+lhp,LHP,D1 Fixture Catcher 004,-0.085,109,-9.265,8,high
+lhp,LHP,D1 Fixture Catcher 005,-0.08,112,-8.96,8,high
+lhp,LHP,D1 Fixture Catcher 006,-0.075,115,-8.625,8,high
+lhp,LHP,D1 Fixture Catcher 007,-0.07,118,-8.26,8,high
+lhp,LHP,D1 Fixture Catcher 008,-0.065,121,-7.865,8,high
+lhp,LHP,D1 Fixture Catcher 009,-0.06,124,-7.44,8,high
+lhp,LHP,D1 Fixture Catcher 010,-0.055,127,-6.985,8,high
+lhp,LHP,D1 Fixture Catcher 011,-0.05,130,-6.5,8,high
+lhp,LHP,D1 Fixture Catcher 012,-0.045,133,-5.985,8,high
+lhp,LHP,D1 Fixture Catcher 013,-0.04,136,-5.44,8,high
+lhp,LHP,D1 Fixture Catcher 014,-0.035,139,-4.865,8,high
+lhp,LHP,D1 Fixture Catcher 015,-0.03,142,-4.26,8,high
+lhp,LHP,D1 Fixture Catcher 016,-0.025,145,-3.625,8,high
+lhp,LHP,D1 Fixture Catcher 017,-0.02,148,-2.96,8,high
+lhp,LHP,D1 Fixture Catcher 018,-0.015,151,-2.265,8,high
+lhp,LHP,D1 Fixture Catcher 019,-0.01,154,-1.54,8,high
+lhp,LHP,D1 Fixture Catcher 020,-0.005,157,-0.785,8,high
+lhp,LHP,D1 Fixture Catcher 021,0.0,160,0.0,8,high
+lhp,LHP,D1 Fixture Catcher 022,0.005,163,0.815,8,high
+lhp,LHP,D1 Fixture Catcher 023,0.01,166,1.66,8,high
+lhp,LHP,D1 Fixture Catcher 024,0.015,169,2.535,8,high
+lhp,LHP,D1 Fixture Catcher 025,0.02,172,3.44,8,high
+lhp,LHP,D1 Fixture Catcher 026,0.025,175,4.375,8,high
+lhp,LHP,D1 Fixture Catcher 027,0.03,178,5.34,8,high
+lhp,LHP,D1 Fixture Catcher 028,0.035,181,6.335,8,high
+lhp,LHP,D1 Fixture Catcher 029,0.04,184,7.36,8,high
+lhp,LHP,D1 Fixture Catcher 030,0.045,187,8.415,8,high
+lhp,LHP,D1 Fixture Catcher 031,0.05,190,9.5,8,high
+lhp,LHP,D1 Fixture Catcher 032,0.055,193,10.615,8,high
+lhp,LHP,D1 Fixture Catcher 033,0.06,196,11.76,8,high
+lhp,LHP,D1 Fixture Catcher 034,0.065,199,12.935,8,high
+lhp,LHP,D1 Fixture Catcher 035,0.07,202,14.14,8,high
+lhp,LHP,D1 Fixture Catcher 036,0.075,205,15.375,8,high
+lhp,LHP,D1 Fixture Catcher 037,0.08,208,16.64,8,high
+lhp,LHP,D1 Fixture Catcher 038,0.085,211,17.935,8,high
+lhp,LHP,D1 Fixture Catcher 039,0.09,214,19.26,8,high
+lhp,LHP,D1 Fixture Catcher 040,0.095,217,20.615,8,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 001,-0.1,100,-10.0,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 002,-0.095,103,-9.785,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 003,-0.09,106,-9.54,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 004,-0.085,109,-9.265,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 005,-0.08,112,-8.96,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 006,-0.075,115,-8.625,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 007,-0.07,118,-8.26,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 008,-0.065,121,-7.865,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 009,-0.06,124,-7.44,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 010,-0.055,127,-6.985,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 011,-0.05,130,-6.5,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 012,-0.045,133,-5.985,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 013,-0.04,136,-5.44,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 014,-0.035,139,-4.865,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 015,-0.03,142,-4.26,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 016,-0.025,145,-3.625,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 017,-0.02,148,-2.96,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 018,-0.015,151,-2.265,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 019,-0.01,154,-1.54,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 020,-0.005,157,-0.785,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 021,0.0,160,0.0,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 022,0.005,163,0.815,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 023,0.01,166,1.66,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 024,0.015,169,2.535,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 025,0.02,172,3.44,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 026,0.025,175,4.375,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 027,0.03,178,5.34,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 028,0.035,181,6.335,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 029,0.04,184,7.36,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 030,0.045,187,8.415,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 031,0.05,190,9.5,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 032,0.055,193,10.615,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 033,0.06,196,11.76,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 034,0.065,199,12.935,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 035,0.07,202,14.14,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 036,0.075,205,15.375,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 037,0.08,208,16.64,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 038,0.085,211,17.935,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 039,0.09,214,19.26,9,high
+fastballs_sinkers,Fastballs/Sinkers,D1 Fixture Catcher 040,0.095,217,20.615,9,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 001,-0.1,100,-10.0,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 002,-0.095,103,-9.785,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 003,-0.09,106,-9.54,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 004,-0.085,109,-9.265,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 005,-0.08,112,-8.96,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 006,-0.075,115,-8.625,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 007,-0.07,118,-8.26,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 008,-0.065,121,-7.865,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 009,-0.06,124,-7.44,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 010,-0.055,127,-6.985,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 011,-0.05,130,-6.5,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 012,-0.045,133,-5.985,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 013,-0.04,136,-5.44,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 014,-0.035,139,-4.865,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 015,-0.03,142,-4.26,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 016,-0.025,145,-3.625,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 017,-0.02,148,-2.96,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 018,-0.015,151,-2.265,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 019,-0.01,154,-1.54,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 020,-0.005,157,-0.785,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 021,0.0,160,0.0,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 022,0.005,163,0.815,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 023,0.01,166,1.66,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 024,0.015,169,2.535,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 025,0.02,172,3.44,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 026,0.025,175,4.375,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 027,0.03,178,5.34,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 028,0.035,181,6.335,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 029,0.04,184,7.36,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 030,0.045,187,8.415,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 031,0.05,190,9.5,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 032,0.055,193,10.615,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 033,0.06,196,11.76,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 034,0.065,199,12.935,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 035,0.07,202,14.14,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 036,0.075,205,15.375,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 037,0.08,208,16.64,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 038,0.085,211,17.935,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 039,0.09,214,19.26,10,high
+breaking_balls,Breaking Balls,D1 Fixture Catcher 040,0.095,217,20.615,10,high
+soft,Soft,D1 Fixture Catcher 001,-0.1,100,-10.0,11,high
+soft,Soft,D1 Fixture Catcher 002,-0.095,103,-9.785,11,high
+soft,Soft,D1 Fixture Catcher 003,-0.09,106,-9.54,11,high
+soft,Soft,D1 Fixture Catcher 004,-0.085,109,-9.265,11,high
+soft,Soft,D1 Fixture Catcher 005,-0.08,112,-8.96,11,high
+soft,Soft,D1 Fixture Catcher 006,-0.075,115,-8.625,11,high
+soft,Soft,D1 Fixture Catcher 007,-0.07,118,-8.26,11,high
+soft,Soft,D1 Fixture Catcher 008,-0.065,121,-7.865,11,high
+soft,Soft,D1 Fixture Catcher 009,-0.06,124,-7.44,11,high
+soft,Soft,D1 Fixture Catcher 010,-0.055,127,-6.985,11,high
+soft,Soft,D1 Fixture Catcher 011,-0.05,130,-6.5,11,high
+soft,Soft,D1 Fixture Catcher 012,-0.045,133,-5.985,11,high
+soft,Soft,D1 Fixture Catcher 013,-0.04,136,-5.44,11,high
+soft,Soft,D1 Fixture Catcher 014,-0.035,139,-4.865,11,high
+soft,Soft,D1 Fixture Catcher 015,-0.03,142,-4.26,11,high
+soft,Soft,D1 Fixture Catcher 016,-0.025,145,-3.625,11,high
+soft,Soft,D1 Fixture Catcher 017,-0.02,148,-2.96,11,high
+soft,Soft,D1 Fixture Catcher 018,-0.015,151,-2.265,11,high
+soft,Soft,D1 Fixture Catcher 019,-0.01,154,-1.54,11,high
+soft,Soft,D1 Fixture Catcher 020,-0.005,157,-0.785,11,high
+soft,Soft,D1 Fixture Catcher 021,0.0,160,0.0,11,high
+soft,Soft,D1 Fixture Catcher 022,0.005,163,0.815,11,high
+soft,Soft,D1 Fixture Catcher 023,0.01,166,1.66,11,high
+soft,Soft,D1 Fixture Catcher 024,0.015,169,2.535,11,high
+soft,Soft,D1 Fixture Catcher 025,0.02,172,3.44,11,high
+soft,Soft,D1 Fixture Catcher 026,0.025,175,4.375,11,high
+soft,Soft,D1 Fixture Catcher 027,0.03,178,5.34,11,high
+soft,Soft,D1 Fixture Catcher 028,0.035,181,6.335,11,high
+soft,Soft,D1 Fixture Catcher 029,0.04,184,7.36,11,high
+soft,Soft,D1 Fixture Catcher 030,0.045,187,8.415,11,high
+soft,Soft,D1 Fixture Catcher 031,0.05,190,9.5,11,high
+soft,Soft,D1 Fixture Catcher 032,0.055,193,10.615,11,high
+soft,Soft,D1 Fixture Catcher 033,0.06,196,11.76,11,high
+soft,Soft,D1 Fixture Catcher 034,0.065,199,12.935,11,high
+soft,Soft,D1 Fixture Catcher 035,0.07,202,14.14,11,high
+soft,Soft,D1 Fixture Catcher 036,0.075,205,15.375,11,high
+soft,Soft,D1 Fixture Catcher 037,0.08,208,16.64,11,high
+soft,Soft,D1 Fixture Catcher 038,0.085,211,17.935,11,high
+soft,Soft,D1 Fixture Catcher 039,0.09,214,19.26,11,high
+soft,Soft,D1 Fixture Catcher 040,0.095,217,20.615,11,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 001,-0.1,100,-10.0,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 002,-0.095,103,-9.785,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 003,-0.09,106,-9.54,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 004,-0.085,109,-9.265,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 005,-0.08,112,-8.96,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 006,-0.075,115,-8.625,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 007,-0.07,118,-8.26,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 008,-0.065,121,-7.865,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 009,-0.06,124,-7.44,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 010,-0.055,127,-6.985,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 011,-0.05,130,-6.5,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 012,-0.045,133,-5.985,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 013,-0.04,136,-5.44,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 014,-0.035,139,-4.865,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 015,-0.03,142,-4.26,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 016,-0.025,145,-3.625,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 017,-0.02,148,-2.96,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 018,-0.015,151,-2.265,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 019,-0.01,154,-1.54,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 020,-0.005,157,-0.785,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 021,0.0,160,0.0,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 022,0.005,163,0.815,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 023,0.01,166,1.66,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 024,0.015,169,2.535,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 025,0.02,172,3.44,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 026,0.025,175,4.375,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 027,0.03,178,5.34,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 028,0.035,181,6.335,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 029,0.04,184,7.36,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 030,0.045,187,8.415,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 031,0.05,190,9.5,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 032,0.055,193,10.615,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 033,0.06,196,11.76,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 034,0.065,199,12.935,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 035,0.07,202,14.14,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 036,0.075,205,15.375,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 037,0.08,208,16.64,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 038,0.085,211,17.935,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 039,0.09,214,19.26,12,high
+lhp_fastballs_sinkers,LHP Fastballs/Sinkers,D1 Fixture Catcher 040,0.095,217,20.615,12,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 001,-0.1,100,-10.0,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 002,-0.095,103,-9.785,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 003,-0.09,106,-9.54,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 004,-0.085,109,-9.265,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 005,-0.08,112,-8.96,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 006,-0.075,115,-8.625,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 007,-0.07,118,-8.26,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 008,-0.065,121,-7.865,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 009,-0.06,124,-7.44,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 010,-0.055,127,-6.985,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 011,-0.05,130,-6.5,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 012,-0.045,133,-5.985,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 013,-0.04,136,-5.44,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 014,-0.035,139,-4.865,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 015,-0.03,142,-4.26,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 016,-0.025,145,-3.625,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 017,-0.02,148,-2.96,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 018,-0.015,151,-2.265,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 019,-0.01,154,-1.54,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 020,-0.005,157,-0.785,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 021,0.0,160,0.0,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 022,0.005,163,0.815,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 023,0.01,166,1.66,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 024,0.015,169,2.535,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 025,0.02,172,3.44,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 026,0.025,175,4.375,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 027,0.03,178,5.34,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 028,0.035,181,6.335,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 029,0.04,184,7.36,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 030,0.045,187,8.415,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 031,0.05,190,9.5,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 032,0.055,193,10.615,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 033,0.06,196,11.76,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 034,0.065,199,12.935,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 035,0.07,202,14.14,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 036,0.075,205,15.375,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 037,0.08,208,16.64,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 038,0.085,211,17.935,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 039,0.09,214,19.26,13,high
+lhp_breaking_balls,LHP Breaking Balls,D1 Fixture Catcher 040,0.095,217,20.615,13,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 001,-0.1,100,-10.0,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 002,-0.095,103,-9.785,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 003,-0.09,106,-9.54,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 004,-0.085,109,-9.265,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 005,-0.08,112,-8.96,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 006,-0.075,115,-8.625,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 007,-0.07,118,-8.26,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 008,-0.065,121,-7.865,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 009,-0.06,124,-7.44,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 010,-0.055,127,-6.985,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 011,-0.05,130,-6.5,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 012,-0.045,133,-5.985,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 013,-0.04,136,-5.44,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 014,-0.035,139,-4.865,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 015,-0.03,142,-4.26,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 016,-0.025,145,-3.625,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 017,-0.02,148,-2.96,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 018,-0.015,151,-2.265,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 019,-0.01,154,-1.54,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 020,-0.005,157,-0.785,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 021,0.0,160,0.0,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 022,0.005,163,0.815,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 023,0.01,166,1.66,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 024,0.015,169,2.535,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 025,0.02,172,3.44,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 026,0.025,175,4.375,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 027,0.03,178,5.34,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 028,0.035,181,6.335,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 029,0.04,184,7.36,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 030,0.045,187,8.415,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 031,0.05,190,9.5,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 032,0.055,193,10.615,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 033,0.06,196,11.76,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 034,0.065,199,12.935,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 035,0.07,202,14.14,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 036,0.075,205,15.375,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 037,0.08,208,16.64,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 038,0.085,211,17.935,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 039,0.09,214,19.26,14,high
+lhp_soft,LHP Soft,D1 Fixture Catcher 040,0.095,217,20.615,14,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 001,-0.1,100,-10.0,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 002,-0.095,103,-9.785,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 003,-0.09,106,-9.54,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 004,-0.085,109,-9.265,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 005,-0.08,112,-8.96,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 006,-0.075,115,-8.625,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 007,-0.07,118,-8.26,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 008,-0.065,121,-7.865,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 009,-0.06,124,-7.44,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 010,-0.055,127,-6.985,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 011,-0.05,130,-6.5,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 012,-0.045,133,-5.985,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 013,-0.04,136,-5.44,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 014,-0.035,139,-4.865,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 015,-0.03,142,-4.26,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 016,-0.025,145,-3.625,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 017,-0.02,148,-2.96,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 018,-0.015,151,-2.265,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 019,-0.01,154,-1.54,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 020,-0.005,157,-0.785,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 021,0.0,160,0.0,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 022,0.005,163,0.815,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 023,0.01,166,1.66,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 024,0.015,169,2.535,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 025,0.02,172,3.44,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 026,0.025,175,4.375,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 027,0.03,178,5.34,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 028,0.035,181,6.335,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 029,0.04,184,7.36,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 030,0.045,187,8.415,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 031,0.05,190,9.5,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 032,0.055,193,10.615,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 033,0.06,196,11.76,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 034,0.065,199,12.935,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 035,0.07,202,14.14,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 036,0.075,205,15.375,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 037,0.08,208,16.64,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 038,0.085,211,17.935,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 039,0.09,214,19.26,15,high
+rhp_fastballs_sinkers,RHP Fastballs/Sinkers,D1 Fixture Catcher 040,0.095,217,20.615,15,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 001,-0.1,100,-10.0,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 002,-0.095,103,-9.785,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 003,-0.09,106,-9.54,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 004,-0.085,109,-9.265,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 005,-0.08,112,-8.96,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 006,-0.075,115,-8.625,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 007,-0.07,118,-8.26,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 008,-0.065,121,-7.865,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 009,-0.06,124,-7.44,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 010,-0.055,127,-6.985,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 011,-0.05,130,-6.5,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 012,-0.045,133,-5.985,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 013,-0.04,136,-5.44,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 014,-0.035,139,-4.865,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 015,-0.03,142,-4.26,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 016,-0.025,145,-3.625,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 017,-0.02,148,-2.96,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 018,-0.015,151,-2.265,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 019,-0.01,154,-1.54,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 020,-0.005,157,-0.785,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 021,0.0,160,0.0,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 022,0.005,163,0.815,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 023,0.01,166,1.66,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 024,0.015,169,2.535,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 025,0.02,172,3.44,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 026,0.025,175,4.375,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 027,0.03,178,5.34,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 028,0.035,181,6.335,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 029,0.04,184,7.36,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 030,0.045,187,8.415,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 031,0.05,190,9.5,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 032,0.055,193,10.615,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 033,0.06,196,11.76,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 034,0.065,199,12.935,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 035,0.07,202,14.14,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 036,0.075,205,15.375,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 037,0.08,208,16.64,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 038,0.085,211,17.935,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 039,0.09,214,19.26,16,high
+rhp_breaking_balls,RHP Breaking Balls,D1 Fixture Catcher 040,0.095,217,20.615,16,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 001,-0.1,100,-10.0,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 002,-0.095,103,-9.785,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 003,-0.09,106,-9.54,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 004,-0.085,109,-9.265,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 005,-0.08,112,-8.96,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 006,-0.075,115,-8.625,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 007,-0.07,118,-8.26,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 008,-0.065,121,-7.865,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 009,-0.06,124,-7.44,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 010,-0.055,127,-6.985,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 011,-0.05,130,-6.5,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 012,-0.045,133,-5.985,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 013,-0.04,136,-5.44,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 014,-0.035,139,-4.865,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 015,-0.03,142,-4.26,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 016,-0.025,145,-3.625,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 017,-0.02,148,-2.96,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 018,-0.015,151,-2.265,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 019,-0.01,154,-1.54,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 020,-0.005,157,-0.785,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 021,0.0,160,0.0,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 022,0.005,163,0.815,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 023,0.01,166,1.66,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 024,0.015,169,2.535,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 025,0.02,172,3.44,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 026,0.025,175,4.375,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 027,0.03,178,5.34,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 028,0.035,181,6.335,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 029,0.04,184,7.36,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 030,0.045,187,8.415,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 031,0.05,190,9.5,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 032,0.055,193,10.615,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 033,0.06,196,11.76,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 034,0.065,199,12.935,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 035,0.07,202,14.14,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 036,0.075,205,15.375,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 037,0.08,208,16.64,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 038,0.085,211,17.935,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 039,0.09,214,19.26,17,high
+rhp_soft,RHP Soft,D1 Fixture Catcher 040,0.095,217,20.615,17,high

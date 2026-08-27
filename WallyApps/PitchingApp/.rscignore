@@ -1,0 +1,13 @@
+.DS_Store
+.RData
+.Rhistory
+.Rapp.history
+.Rproj.user/
+*.Rproj
+rsconnect/
+catboost_info/
+models/
+scripts/
+data/*.parquet
+data/.DS_Store
+www/.DS_Store

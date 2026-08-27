@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "policy": "No formula becomes canonical until Jamie Jones and Austin Wallace approve the decision item.",
+  "decisions": [
+    {
+      "id": "METRIC-001",
+      "metric": "wOBA weights",
+      "status": "decision_required",
+      "wallyapps": "BB=.690, HBP=.720, 1B=.880, 2B=1.247, 3B=1.578, HR=2.031",
+      "base": "BB=.69, HBP=.72, 1B=.89, 2B=1.27, 3B=1.62, HR=2.10",
+      "evidence": [
+        "WallyApps/HittingApp/HittingApp.R:37",
+        "WallyApps/PitchingApp/PitchingApp.R:504",
+        "leaderboards/helpers/calculate_hitter_stats.R:9"
+      ],
+      "integration_rule": "Centralize a versioned weight set after approval; keep the golden outputs on the current Wally weights until then."
+    },
+    {
+      "id": "METRIC-002",
+      "metric": "Barrel",
+      "status": "decision_required",
+      "wallyapps": "Hitting: BIP and EV>=95 and LA 5..35. Pitching: BIP and EV>=95 and LA 5..40, plus Fall-2025 calibration and a 2026-02-27..2026-03-01 exclusion path.",
+      "base": "BIP and ((EV>=95 and LA 5..30) or (EV>=105 and LA 5..40)).",
+      "evidence": [
+        "WallyApps/HittingApp/HittingApp.R:99",
+        "WallyApps/PitchingApp/PitchingApp.R:651",
+        "WallyApps/PitchingApp/PitchingApp.R:4731",
+        "WallyApps/PitchingApp/PitchingApp.R:6848",
+        "leaderboards/helpers/calculate_hitter_stats.R:148"
+      ],
+      "integration_rule": "Treat the definition and any historical calibration as separate, versioned rules; do not silently normalize historical outputs."
+    },
+    {
+      "id": "METRIC-003",
+      "metric": "Strike zone",
+      "status": "decision_required",
+      "wallyapps": "Core hitting/pitching zone is +/-9.97 inches and 18.29..44.08 inches; catcher framing uses +/-10 inches and 18..42 inches.",
+      "base": "Leaderboard zone is approximately +/-0.83 feet and 1.6..3.5 feet with explicit grid buckets; other BASE reports use 1.5..3.5 feet.",
+      "evidence": [
+        "WallyApps/HittingApp/HittingApp.R:73",
+        "WallyApps/PitchingApp/PitchingApp.R:4307",
+        "WallyApps/DefenseApp/DefenseApp.R:1061",
+        "leaderboards/helpers/calculate_hitter_stats.R:72",
+        "R/reports/Pitcher_Card.R:207"
+      ],
+      "integration_rule": "Name the zones by purpose (performance, framing, display) and centralize unit conversion before sharing any rate calculation."
+    },
+    {
+      "id": "METRIC-004",
+      "metric": "Plate-appearance identity and terminal outcomes",
+      "status": "decision_required",
+      "wallyapps": "Hitting builds PA IDs from game/inning/PA fields. Pitching ensure_pa primarily starts a new PA after selected terminal pitch conditions and does not recognize KorBB='Walk' as terminal.",
+      "base": "Leaderboard PA index increments on PitchofPA==1 within batter ordering.",
+      "evidence": [
+        "WallyApps/HittingApp/HittingApp.R:1142",
+        "WallyApps/PitchingApp/PitchingApp.R:4213",
+        "leaderboards/helpers/calculate_hitter_stats.R:132"
+      ],
+      "integration_rule": "Define one game-scoped PA key and one terminal-event normalizer before comparing rate or counting metrics."
+    },
+    {
+      "id": "METRIC-005",
+      "metric": "Walk counting",
+      "status": "confirmed_defect",
+      "wallyapps": "Pitching count_statline accepts KorBB BB/IBB but not the source encoding 'Walk'; the synthetic baseline therefore records zero walks despite terminal Walk rows.",
+      "base": "Leaderboard hitting explicitly tests KorBB=='Walk'.",
+      "evidence": [
+        "WallyApps/PitchingApp/PitchingApp.R:29",
+        "leaderboards/helpers/calculate_hitter_stats.R:169",
+        "tests/baselines/wallyapps/golden/pitching/summary.json"
+      ],
+      "integration_rule": "Preserve this observed output as a regression fixture; fix only in the shared outcome normalizer with an approved expected-output update."
+    },
+    {
+      "id": "METRIC-006",
+      "metric": "Pitch-type precedence",
+      "status": "decision_required",
+      "wallyapps": "Hitting prefers PitchType, then TaggedPitchType, AutoPitchType, PitchName, and pitch_type_canon. Pitching has paths preferring a custom PitchType and other paths preferring PitchType/Tagged/Auto.",
+      "base": "BASE consumers are not yet governed by one shared pitch-type provenance field.",
+      "evidence": [
+        "WallyApps/HittingApp/HittingApp.R:358",
+        "WallyApps/PitchingApp/PitchingApp.R:4772",
+        "WallyApps/PitchingApp/PitchingApp.R:7286"
+      ],
+      "integration_rule": "Store raw tagged, automatic, and model values separately; publish one canonical value plus provenance and confidence."
+    },
+    {
+      "id": "METRIC-007",
+      "metric": "xRV standardization",
+      "status": "decision_required",
+      "wallyapps": "Pitching hard-codes D1 mean 0.011851966103058702 and standard deviation 0.04737620444754918.",
+      "base": "BASE has model paths but no documented shared version contract matching these constants.",
+      "evidence": [
+        "WallyApps/PitchingApp/PitchingApp.R:250",
+        "R/config/team_config.R:318"
+      ],
+      "integration_rule": "Move constants into a versioned model manifest with training population, date window, and model hash."
+    },
+    {
+      "id": "METRIC-008",
+      "metric": "FIP constant",
+      "status": "decision_required",
+      "wallyapps": "Pitching uses 3.214 unless FIP_CONST already exists.",
+      "base": "No single project-wide FIP season/version contract was found.",
+      "evidence": [
+        "WallyApps/PitchingApp/PitchingApp.R:1930"
+      ],
+      "integration_rule": "Key the constant by season/competition and expose it in report metadata."
+    },
+    {
+      "id": "METRIC-009",
+      "metric": "Catcher framing",
+      "status": "candidate_for_reuse",
+      "wallyapps": "Defense standardizes called pitches and locations, evaluates stolen/lost calls and 15 split metrics, then adds D1 percentile references with minimum-chance rules.",
+      "base": "BASE has catcher UI assets but no equivalent centralized framing contract identified in Step 1.",
+      "evidence": [
+        "WallyApps/DefenseApp/DefenseApp.R:1805",
+        "WallyApps/DefenseApp/DefenseApp.R:2047"
+      ],
+      "integration_rule": "Extract the pure standardization and aggregation functions first; keep percentile data versioned and private-data provenance explicit."
+    },
+    {
+      "id": "METRIC-010",
+      "metric": "Defense opportunity and OAA",
+      "status": "decision_required",
+      "wallyapps": "Defense explodes one batted-ball row across seven position opportunities and summarizes made/missed/error outcomes and OAA-like values.",
+      "base": "BASE defense UI exists, but a shared opportunity key and comparison contract are not established.",
+      "evidence": [
+        "WallyApps/DefenseApp/DefenseApp.R:1223",
+        "WallyApps/DefenseApp/DefenseApp.R:1270"
+      ],
+      "integration_rule": "Keep event identity separate from player-position opportunity identity to prevent double counting at team level."
+    },
+    {
+      "id": "METRIC-011",
+      "metric": "Reference populations and percentiles",
+      "status": "provenance_required",
+      "wallyapps": "Called Stuff, pitch-metric, xRV, and catcher framing outputs consume local reference CSVs.",
+      "base": "Private model/reference storage exists, but imported Wally artifacts do not yet share its provenance schema.",
+      "evidence": [
+        "tests/fixtures/wallyapps/pitching/data/called_stuff_baseline.csv",
+        "tests/fixtures/wallyapps/pitching/data/d1_pitch_metric_percentile_reference.csv",
+        "tests/fixtures/wallyapps/defense/data/d1_catcher_framing_metrics.csv"
+      ],
+      "integration_rule": "Require population, season window, sample thresholds, generation code, and content hash before production migration."
+    },
+    {
+      "id": "METRIC-012",
+      "metric": "Input deduplication",
+      "status": "confirmed_defect",
+      "wallyapps": "Hitting searches both data and Data; on a case-insensitive filesystem the same four fixture files load twice (736 rows rather than 368).",
+      "base": "BASE data access is path/config driven.",
+      "evidence": [
+        "tests/baselines/wallyapps/golden/hitting/summary.json",
+        "R/data/data_access.R"
+      ],
+      "integration_rule": "Resolve and normalize absolute file paths, then deduplicate before reading; update goldens only with explicit defect-fix approval."
+    }
+  ]
+}

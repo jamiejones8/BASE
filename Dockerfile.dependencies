@@ -25,6 +25,7 @@ RUN install2.r --error \
     bslib shinyjs DT data.table stringr \
     base64enc pdftools \
     plotly gridExtra png sysfonts showtext rsvg \
-    shinyBS glue tibble rvest
+    shinyBS shinyWidgets shinycssloaders glue tibble rvest \
+    cowplot ggplotify ggpubr ggtext hms jpeg lubridate ragg readxl
 
 RUN Rscript -e "install.packages(c('arrow','lightgbm'), repos='https://packagemanager.posit.co/cran/latest')"

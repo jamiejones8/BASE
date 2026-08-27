@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "navigation": {
+    "global_navbar": "hidden",
+    "persistent_control": {
+      "type": "home_button",
+      "position": "top_left",
+      "target": "home"
+    },
+    "workspace_navigation": "Each workspace owns its secondary tabs; individual tools are not global top-level navigation items.",
+    "home_layout": "Preserve the current BASE scoreboard, command-card area, and roster section."
+  },
+  "home": {
+    "id": "home",
+    "title": "Home",
+    "roles": [
+      "Application directory",
+      "Texas State roster directory",
+      "Schedule and team snapshot"
+    ]
+  },
+  "workspaces": [
+    {
+      "id": "postgame_reports",
+      "order": 1,
+      "title": "Postgame Reports",
+      "description": "Generate the existing BASE postgame PDFs for each position group.",
+      "implementation_policy": "Group the existing generators without changing their calculations or report layouts during the navigation migration.",
+      "tools": [
+        {
+          "id": "postgame_pitching_pdf",
+          "title": "Pitching Report",
+          "existing_base_tab": "tab_pitcher"
+        },
+        {
+          "id": "postgame_hitting_pdf",
+          "title": "Hitting Report",
+          "existing_base_tab": "tab_hitter"
+        },
+        {
+          "id": "postgame_catching_pdf",
+          "title": "Catching Report",
+          "existing_base_tab": "tab_catcher"
+        }
+      ]
+    },
+    {
+      "id": "team_pitching",
+      "order": 2,
+      "title": "Pitching",
+      "description": "Evaluate Texas State pitchers, bullpen work, staff trends, and pitching leaderboards.",
+      "implementation_policy": "Use Wally PitchingApp processing and workflows where stronger, restyled to the BASE design system and connected to shared sources.",
+      "source_route": "team_pitching",
+      "tools": [
+        "Pitcher performance",
+        "Pitch metrics",
+        "Season summaries",
+        "Pitch decay",
+        "Locations and outcome locations",
+        "Bullpens",
+        "Pitching trends",
+        "Pitching leaderboards",
+        "Team and game reviews"
+      ]
+    },
+    {
+      "id": "team_hitting",
+      "order": 3,
+      "title": "Hitting",
+      "description": "Evaluate Texas State hitters, build lineups, review team trends, and compare hitting performance.",
+      "implementation_policy": "Use Wally HittingApp processing and workflows where stronger, restyled to the BASE design system and connected to shared sources.",
+      "source_route": "team_hitting",
+      "tools": [
+        "Hitter performance",
+        "Lineup Builder",
+        "Damage and whiff views",
+        "Swing decisions",
+        "Ball flight and contact point",
+        "Hitting trends",
+        "Hitting leaderboards",
+        "Team and game reviews"
+      ]
+    },
+    {
+      "id": "opponent_scouting",
+      "order": 4,
+      "title": "Opponent Scouting",
+      "description": "Build opponent hitter and pitcher cards, pitch-type sheets, heat maps, and matchup grids.",
+      "implementation_policy": "Use Wally ScoutingApp as the complete Opponent Scouting workspace, preserving its report calculations, controls, previews, ordering, matchup grid, FTP integration, and PDF downloads inside the BASE visual shell.",
+      "tools": [
+        "Hitter Card",
+        "Pitch Type Tables",
+        "Heat Maps",
+        "Pitcher Card",
+        "Stuff Sheet",
+        "Matchup Grid"
+      ],
+      "source_routes": [
+        "national_pitcher_scouting",
+        "national_hitter_scouting"
+      ],
+      "compatibility_tabs": [
+        "tab_pitcher_player",
+        "tab_hitter_scouting"
+      ]
+    },
+    {
+      "id": "defense",
+      "order": 5,
+      "title": "Defensive Analytics",
+      "description": "Analyze positioning, opportunities, range, player value, and catcher receiving.",
+      "implementation_policy": "Combine BASE defensive attribution with Wally opportunity, range/OAA, and framing features only after their metric gates pass.",
+      "source_route": "defense",
+      "tools": [
+        "Positioning",
+        "Opportunities and candidate review",
+        "Infield and outfield range",
+        "Defensive leaderboards and OAA after validation",
+        "Interactive catcher framing and receiving statistics"
+      ],
+      "catching_policy": "Interactive catcher statistics live here; the existing catcher PDF generator remains in Postgame Reports. Both use shared catching calculations."
+    },
+    {
+      "id": "homebase",
+      "order": 6,
+      "title": "HomeBASE",
+      "description": "Search any available player and open a role-aware individual snapshot.",
+      "implementation_policy": "Rename and replace BASE Media. Support national search plus direct Texas State roster-card navigation.",
+      "source_route": "homebase",
+      "entry_points": [
+        {
+          "type": "global_player_search",
+          "scope": "All players in national pitcher and hitter catalogs plus available team supplements"
+        },
+        {
+          "type": "texas_state_roster_card",
+          "scope": "Open the selected Texas State player directly from the home roster"
+        }
+      ],
+      "identity_policy": "Prefer stable player ID. When unavailable, disambiguate normalized name by team and role; never silently merge same-name players.",
+      "initial_scope": "Navigation, search, identity, and player context only; profile content will be designed later."
+    },
+    {
+      "id": "data_processing",
+      "order": 7,
+      "title": "Data Processing",
+      "description": "Prepare, validate, and correct data used throughout BASE.",
+      "implementation_policy": "Visible to all users for now. Persistent mutations must still disclose source, target, and saved status.",
+      "source_route": "data_processing",
+      "tools": [
+        {
+          "id": "pitch_retagger",
+          "title": "Pitch Retagger",
+          "existing_base_tab": "tab_pitcher_player",
+          "storage": "Separate SQLite override layer keyed by data source and PitchUID",
+          "navigation": "Data Processing deep-links directly to the persistent retag controls without creating a second server or pitch-data copy."
+        },
+        "Data-source health and coverage",
+        "Future upload, validation, and preparation utilities"
+      ]
+    }
+  ]
+}

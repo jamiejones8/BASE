@@ -1,0 +1,17 @@
+app.R
+PitchingApp.R
+data/2025 Fall -cleaned.csv
+data/2025 Season -cleaned.csv
+data/2026 Season - cleaned.csv
+data/2026 Squads - cleaned.csv
+data/Bullpens - cleaned.csv
+data/called_stuff_baseline.csv
+data/d1_pitch_metric_percentile_reference.csv
+data/player_heights.csv
+data/xrv_metrics.csv
+www/Battershape.png
+www/Bobcatlogo.png
+www/baseballTS logo gold.png
+www/baseballTS logo.jpg
+www/bobcat state of texas logo.webp
+www/txstlogo.jpeg
