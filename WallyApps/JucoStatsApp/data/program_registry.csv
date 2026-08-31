@@ -1,0 +1,54 @@
+program_name,stats_team_name,source_group,njcaa_region,state,include
+Alvin College,Alvin College,Region 14,14,TX,TRUE
+Angelina College,Angelina College,Region 14,14,TX,TRUE
+Blinn College,Blinn College,Region 14,14,TX,TRUE
+Bossier Parish Community College,Bossier Parish CC,Region 14,14,LA,TRUE
+Coastal Bend College,Coastal Bend College,Region 14,14,TX,TRUE
+Galveston College,Galveston College,Region 14,14,TX,TRUE
+Navarro College,Navarro College,Region 14,14,TX,TRUE
+Northeast Texas Community College,Northeast Texas CC,Region 14,14,TX,TRUE
+Panola College,Panola College,Region 14,14,TX,TRUE
+Paris Junior College,Paris Junior College,Region 14,14,TX,TRUE
+San Jacinto College-North,San Jacinto College-North,Region 14,14,TX,TRUE
+Tyler Junior College,Tyler Junior College,Region 14,14,TX,TRUE
+Wharton County Junior College,Wharton County Junior College,Region 14,14,TX,TRUE
+Amarillo College,Amarillo College,Region 5,5,TX,TRUE
+Cisco College,Cisco College,Region 5,5,TX,TRUE
+Clarendon College,Clarendon College,Region 5,5,TX,TRUE
+Collin County Community College,Collin County Community College,Region 5,5,TX,TRUE
+Dallas College Brookhaven,Dallas College Brookhaven,Region 5,5,TX,TRUE
+Dallas College Cedar Valley,Dallas College Cedar Valley,Region 5,5,TX,TRUE
+Dallas College Eastfield,Dallas College Eastfield,Region 5,5,TX,TRUE
+Dallas College Mountain View,Dallas College Mountain View,Region 5,5,TX,TRUE
+Dallas College North Lake,Dallas College North Lake,Region 5,5,TX,TRUE
+Dallas College Richland,Dallas College Richland,Region 5,5,TX,TRUE
+El Paso Community College,El Paso CC,Region 5,5,TX,TRUE
+Frank Phillips College,Frank Phillips College,Region 5,5,TX,TRUE
+Grayson College,Grayson College,Region 5,5,TX,TRUE
+Hill College,Hill College,Region 5,5,TX,TRUE
+Howard College,Howard College,Region 5,5,TX,TRUE
+McLennan Community College,McLennan CC,Region 5,5,TX,TRUE
+Midland College,Midland College,Region 5,5,TX,TRUE
+New Mexico Junior College,New Mexico Junior College,Region 5,5,NM,TRUE
+New Mexico Military Institute,New Mexico Military Institute,Region 5,5,NM,TRUE
+North Central Texas College,North Central Texas College,Region 5,5,TX,TRUE
+Odessa College,Odessa College,Region 5,5,TX,TRUE
+Ranger College,Ranger College,Region 5,5,TX,TRUE
+South Plains College,South Plains College,Region 5,5,TX,TRUE
+Southwestern Christian College,Southwestern Christian College,Region 5,5,TX,TRUE
+Temple College,Temple College,Region 5,5,TX,TRUE
+Vernon College,Vernon College,Region 5,5,TX,TRUE
+Weatherford College,Weatherford College,Region 5,5,TX,TRUE
+Western Texas College,Western Texas College,Region 5,5,TX,TRUE
+Seminole State College (OK),Seminole State College (OK),Extra,2,OK,TRUE
+Eastern Oklahoma State College,Eastern Oklahoma State College,Extra,2,OK,TRUE
+Connors State College,Connors State College,Extra,2,OK,TRUE
+Johnson County Community College,Johnson County CC,Extra,6,KS,TRUE
+Wabash Valley College,Wabash Valley College,Extra,24,IL,TRUE
+Iowa Western Community College,Iowa Western CC,Extra,11,IA,TRUE
+Walters State Community College,Walters State CC,Extra,7,TN,TRUE
+Louisiana State University Eunice,Louisiana State University Eunice,Extra,23,LA,TRUE
+Cowley County Community College,Cowley County CC,Extra,6,KS,TRUE
+Yavapai College,Yavapai College,Extra,1,AZ,TRUE
+Central Arizona College,Central Arizona College,Extra,1,AZ,TRUE
+Salt Lake Community College,Salt Lake CC,Extra,18,UT,TRUE

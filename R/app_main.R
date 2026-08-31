@@ -46,6 +46,7 @@ base_source("R/data/data_access.R", local = FALSE)
 base_source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 base_source("R/integrations/wally_hitting_workspace.R", local = FALSE)
 base_source("R/integrations/wally_scouting_workspace.R", local = FALSE)
+base_source("R/integrations/wally_juco_stats_workspace.R", local = FALSE)
 base_source("R/data/defense_data_access.R", local = FALSE)
 base_source("R/integrations/wally_defense_workspace.R", local = FALSE)
 base_source("R/data/defense_attribution.R", local = FALSE)
@@ -4394,6 +4395,7 @@ BASE_NAV_TABS <- c(
   team_pitching      = "tab_team_pitching",
   team_hitting       = "tab_team_hitting",
   opponent_scouting  = "tab_opponent_scouting",
+  juco_stats         = "tab_juco_stats",
   defense_workspace  = "tab_defense_workspace",
   homebase           = "tab_homebase",
   data_processing    = "tab_data_processing",
@@ -4773,9 +4775,10 @@ home_tab_ui <- function() {
             home_quick_link("Pitching", "Staff performance, bullpens, trends, and reports", "team_pitching", "02", "pitching.jpg"),
             home_quick_link("Hitting", "Lineups, team trends, and hitter development", "team_hitting", "03", "hitting.jpg"),
             home_quick_link("Opponent Scouting", "Scout NCAA pitchers and hitters", "opponent_scouting", "04", "opponentscouting.jpg"),
-            home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "05", "defenseiveanalytics.webp"),
-            home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "06", "homeBASE.jpg"),
-            home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "07")
+            home_quick_link("JUCO Stats", "Compare junior-college hitters and pitchers", "juco_stats", "05"),
+            home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "06", "defenseiveanalytics.webp"),
+            home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "07", "homeBASE.jpg"),
+            home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "08")
           )
         ),
         tags$section(
@@ -4836,7 +4839,7 @@ ui <- navbarPage(
       tags$link(rel = "icon", href = base_supercat_logo_url()),
       tags$link(rel = "stylesheet",
         href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"),
-      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=23"),
+      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=24"),
       tags$style(HTML(base_brand_css(include_leaderboards = FALSE))),
       tags$style(HTML("
         #base-splash {
@@ -4927,6 +4930,7 @@ ui <- navbarPage(
   tabPanel("Pitching",         value = "tab_team_pitching",  base_team_pitching_workspace_ui()),
   tabPanel("Hitting",          value = "tab_team_hitting",   base_team_hitting_workspace_ui()),
   tabPanel("Opponent Scouting", value = "tab_opponent_scouting", opponent_scouting_workspace_ui()),
+  tabPanel("JUCO Stats",       value = "tab_juco_stats",     base_juco_stats_workspace_ui()),
   tabPanel("Defense Workspace", value = "tab_defense_workspace", base_team_defense_workspace_ui()),
   tabPanel("HomeBASE",         value = "tab_homebase",       base_media_ui()),
   tabPanel("Data Processing",  value = "tab_data_processing", data_processing_workspace_ui()),
@@ -4966,8 +4970,7 @@ server <- function(input, output, session) {
     initialize = function() base_team_pitching_workspace_server(
       input,
       output,
-      session,
-      startup_rows = season_data
+      session
     ),
     id = "team_pitching"
   )
@@ -4976,8 +4979,7 @@ server <- function(input, output, session) {
     initialize = function() base_team_hitting_workspace_server(
       input,
       output,
-      session,
-      startup_rows = season_data
+      session
     ),
     id = "team_hitting"
   )
@@ -4989,6 +4991,11 @@ server <- function(input, output, session) {
       session
     ),
     id = "opponent_scouting"
+  )
+  base_lazy_workspace_server(
+    input, session, "tab_juco_stats",
+    initialize = function() base_juco_stats_workspace_server(input, output, session),
+    id = "juco_stats"
   )
   base_lazy_workspace_server(
     input, session, "tab_defense_workspace",

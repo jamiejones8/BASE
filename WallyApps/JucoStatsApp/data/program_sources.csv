@@ -1,0 +1,148 @@
+program_name,stats_team_name,source_group,njcaa_region,state,source_kind,source_url,include
+Central Arizona College,Central Arizona College,Extra,1,AZ,fielding,https://www.vaquerosports.com/sports/bsb/2025-26/teams?view=lineup&pos=f,TRUE
+Central Arizona College,Central Arizona College,Extra,1,AZ,hitting,https://www.vaquerosports.com/sports/bsb/2025-26/teams?view=lineup&pos=h,TRUE
+Central Arizona College,Central Arizona College,Extra,1,AZ,pitching,https://www.vaquerosports.com/sports/bsb/2025-26/teams?view=lineup&pos=p,TRUE
+Connors State College,Connors State College,Extra,2,OK,fielding,https://www.connorsathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=f,TRUE
+Connors State College,Connors State College,Extra,2,OK,hitting,https://www.connorsathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=h,TRUE
+Connors State College,Connors State College,Extra,2,OK,pitching,https://www.connorsathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=p,TRUE
+Cowley County Community College,Cowley County CC,Extra,6,KS,fielding,https://kjccc.prestosports.com/sports/bsb/2025-26/teams/cowleycountycommunitycollege?view=lineup&pos=f,TRUE
+Cowley County Community College,Cowley County CC,Extra,6,KS,hitting,https://kjccc.prestosports.com/sports/bsb/2025-26/teams/cowleycountycommunitycollege?view=lineup&pos=h,TRUE
+Cowley County Community College,Cowley County CC,Extra,6,KS,pitching,https://kjccc.prestosports.com/sports/bsb/2025-26/teams/cowleycountycommunitycollege?view=lineup&pos=p,TRUE
+Eastern Oklahoma State College,Eastern Oklahoma State College,Extra,2,OK,fielding,https://www.eoscathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=f,TRUE
+Eastern Oklahoma State College,Eastern Oklahoma State College,Extra,2,OK,hitting,https://www.eoscathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=h,TRUE
+Eastern Oklahoma State College,Eastern Oklahoma State College,Extra,2,OK,pitching,https://www.eoscathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=p,TRUE
+Iowa Western Community College,Iowa Western CC,Extra,11,IA,fielding,https://www.goreivers.com/sports/bsb/2025-26/teams?view=lineup&pos=f,TRUE
+Iowa Western Community College,Iowa Western CC,Extra,11,IA,hitting,https://www.goreivers.com/sports/bsb/2025-26/teams?view=lineup&pos=h,TRUE
+Iowa Western Community College,Iowa Western CC,Extra,11,IA,pitching,https://www.goreivers.com/sports/bsb/2025-26/teams?view=lineup&pos=p,TRUE
+Johnson County Community College,Johnson County CC,Extra,6,KS,fielding,https://kjccc.prestosports.com/sports/bsb/2025-26/teams/johnsoncountycommunitycollege?view=lineup&pos=f,TRUE
+Johnson County Community College,Johnson County CC,Extra,6,KS,hitting,https://kjccc.prestosports.com/sports/bsb/2025-26/teams/johnsoncountycommunitycollege?view=lineup&pos=h,TRUE
+Johnson County Community College,Johnson County CC,Extra,6,KS,pitching,https://kjccc.prestosports.com/sports/bsb/2025-26/teams/johnsoncountycommunitycollege?view=lineup&pos=p,TRUE
+Louisiana State University Eunice,Louisiana State University Eunice,Extra,23,LA,sidearm_stats,https://athletics.lsue.edu/sports/baseball/stats,TRUE
+Salt Lake Community College,Salt Lake CC,Extra,18,UT,sidearm_stats,https://slccbruins.com/sports/baseball/stats,TRUE
+Seminole State College (OK),Seminole State College (OK),Extra,2,OK,fielding,https://sscathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=f,TRUE
+Seminole State College (OK),Seminole State College (OK),Extra,2,OK,hitting,https://sscathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=h,TRUE
+Seminole State College (OK),Seminole State College (OK),Extra,2,OK,pitching,https://sscathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=p,TRUE
+Wabash Valley College,Wabash Valley College,Extra,24,IL,fielding,https://www.wvcwarriorathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=f,TRUE
+Wabash Valley College,Wabash Valley College,Extra,24,IL,hitting,https://www.wvcwarriorathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=h,TRUE
+Wabash Valley College,Wabash Valley College,Extra,24,IL,pitching,https://www.wvcwarriorathletics.com/sports/bsb/2025-26/teams?view=lineup&pos=p,TRUE
+Alvin College,Alvin College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/alvincollege?view=lineup&pos=f,TRUE
+Alvin College,Alvin College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/alvincollege?view=lineup&pos=h,TRUE
+Alvin College,Alvin College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/alvincollege?view=lineup&pos=p,TRUE
+Angelina College,Angelina College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/angelinacollege?view=lineup&pos=f,TRUE
+Angelina College,Angelina College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/angelinacollege?view=lineup&pos=h,TRUE
+Angelina College,Angelina College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/angelinacollege?view=lineup&pos=p,TRUE
+Blinn College,Blinn College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/blinncollege?view=lineup&pos=f,TRUE
+Blinn College,Blinn College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/blinncollege?view=lineup&pos=h,TRUE
+Blinn College,Blinn College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/blinncollege?view=lineup&pos=p,TRUE
+Bossier Parish Community College,Bossier Parish CC,Region 14,14,LA,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/bossierparishcommunitycollege?view=lineup&pos=f,TRUE
+Bossier Parish Community College,Bossier Parish CC,Region 14,14,LA,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/bossierparishcommunitycollege?view=lineup&pos=h,TRUE
+Bossier Parish Community College,Bossier Parish CC,Region 14,14,LA,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/bossierparishcommunitycollege?view=lineup&pos=p,TRUE
+Coastal Bend College,Coastal Bend College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/coastalbendcollege?view=lineup&pos=f,TRUE
+Coastal Bend College,Coastal Bend College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/coastalbendcollege?view=lineup&pos=h,TRUE
+Coastal Bend College,Coastal Bend College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/coastalbendcollege?view=lineup&pos=p,TRUE
+Galveston College,Galveston College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/galvestoncollege?view=lineup&pos=f,TRUE
+Galveston College,Galveston College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/galvestoncollege?view=lineup&pos=h,TRUE
+Galveston College,Galveston College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/galvestoncollege?view=lineup&pos=p,TRUE
+Navarro College,Navarro College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/navarrocollege?view=lineup&pos=f,TRUE
+Navarro College,Navarro College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/navarrocollege?view=lineup&pos=h,TRUE
+Navarro College,Navarro College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/navarrocollege?view=lineup&pos=p,TRUE
+Northeast Texas Community College,Northeast Texas CC,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/northeasttexascommunitycollege?view=lineup&pos=f,TRUE
+Northeast Texas Community College,Northeast Texas CC,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/northeasttexascommunitycollege?view=lineup&pos=h,TRUE
+Northeast Texas Community College,Northeast Texas CC,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/northeasttexascommunitycollege?view=lineup&pos=p,TRUE
+Panola College,Panola College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/panolacollege?view=lineup&pos=f,TRUE
+Panola College,Panola College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/panolacollege?view=lineup&pos=h,TRUE
+Panola College,Panola College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/panolacollege?view=lineup&pos=p,TRUE
+Paris Junior College,Paris Junior College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/parisjuniorcollege?view=lineup&pos=f,TRUE
+Paris Junior College,Paris Junior College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/parisjuniorcollege?view=lineup&pos=h,TRUE
+Paris Junior College,Paris Junior College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/parisjuniorcollege?view=lineup&pos=p,TRUE
+San Jacinto College-North,San Jacinto College-North,Region 14,14,TX,sidearm_stats,https://sanjacsports.com/sports/baseball/stats,TRUE
+Tyler Junior College,Tyler Junior College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/tylerjuniorcollege?view=lineup&pos=f,TRUE
+Tyler Junior College,Tyler Junior College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/tylerjuniorcollege?view=lineup&pos=h,TRUE
+Tyler Junior College,Tyler Junior College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/tylerjuniorcollege?view=lineup&pos=p,TRUE
+Wharton County Junior College,Wharton County Junior College,Region 14,14,TX,fielding,https://region14.prestosports.com/sports/bsb/2025-26/teams/whartoncountyjuniorcollege?view=lineup&pos=f,TRUE
+Wharton County Junior College,Wharton County Junior College,Region 14,14,TX,hitting,https://region14.prestosports.com/sports/bsb/2025-26/teams/whartoncountyjuniorcollege?view=lineup&pos=h,TRUE
+Wharton County Junior College,Wharton County Junior College,Region 14,14,TX,pitching,https://region14.prestosports.com/sports/bsb/2025-26/teams/whartoncountyjuniorcollege?view=lineup&pos=p,TRUE
+Amarillo College,Amarillo College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/amarillocollege?view=lineup&pos=f,TRUE
+Amarillo College,Amarillo College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/amarillocollege?view=lineup&pos=h,TRUE
+Amarillo College,Amarillo College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/amarillocollege?view=lineup&pos=p,TRUE
+Cisco College,Cisco College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/ciscocollege?view=lineup&pos=f,TRUE
+Cisco College,Cisco College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/ciscocollege?view=lineup&pos=h,TRUE
+Cisco College,Cisco College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/ciscocollege?view=lineup&pos=p,TRUE
+Clarendon College,Clarendon College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/clarendoncollege?view=lineup&pos=f,TRUE
+Clarendon College,Clarendon College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/clarendoncollege?view=lineup&pos=h,TRUE
+Clarendon College,Clarendon College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/clarendoncollege?view=lineup&pos=p,TRUE
+Collin County Community College,Collin County Community College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/collincountycommunitycollege?view=lineup&pos=f,TRUE
+Collin County Community College,Collin County Community College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/collincountycommunitycollege?view=lineup&pos=h,TRUE
+Collin County Community College,Collin County Community College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/collincountycommunitycollege?view=lineup&pos=p,TRUE
+Dallas College Brookhaven,Dallas College Brookhaven,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegebrookhaven?view=lineup&pos=f,TRUE
+Dallas College Brookhaven,Dallas College Brookhaven,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegebrookhaven?view=lineup&pos=h,TRUE
+Dallas College Brookhaven,Dallas College Brookhaven,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegebrookhaven?view=lineup&pos=p,TRUE
+Dallas College Cedar Valley,Dallas College Cedar Valley,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegecedarvalley?view=lineup&pos=f,TRUE
+Dallas College Cedar Valley,Dallas College Cedar Valley,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegecedarvalley?view=lineup&pos=h,TRUE
+Dallas College Cedar Valley,Dallas College Cedar Valley,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegecedarvalley?view=lineup&pos=p,TRUE
+Dallas College Eastfield,Dallas College Eastfield,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegeeastfield?view=lineup&pos=f,TRUE
+Dallas College Eastfield,Dallas College Eastfield,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegeeastfield?view=lineup&pos=h,TRUE
+Dallas College Eastfield,Dallas College Eastfield,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegeeastfield?view=lineup&pos=p,TRUE
+Dallas College Mountain View,Dallas College Mountain View,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegemountainview?view=lineup&pos=f,TRUE
+Dallas College Mountain View,Dallas College Mountain View,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegemountainview?view=lineup&pos=h,TRUE
+Dallas College Mountain View,Dallas College Mountain View,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegemountainview?view=lineup&pos=p,TRUE
+Dallas College North Lake,Dallas College North Lake,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegenorthlake?view=lineup&pos=f,TRUE
+Dallas College North Lake,Dallas College North Lake,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegenorthlake?view=lineup&pos=h,TRUE
+Dallas College North Lake,Dallas College North Lake,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegenorthlake?view=lineup&pos=p,TRUE
+Dallas College Richland,Dallas College Richland,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegerichland?view=lineup&pos=f,TRUE
+Dallas College Richland,Dallas College Richland,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegerichland?view=lineup&pos=h,TRUE
+Dallas College Richland,Dallas College Richland,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/dallascollegerichland?view=lineup&pos=p,TRUE
+El Paso Community College,El Paso CC,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/elpasocommunitycollege?view=lineup&pos=f,TRUE
+El Paso Community College,El Paso CC,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/elpasocommunitycollege?view=lineup&pos=h,TRUE
+El Paso Community College,El Paso CC,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/elpasocommunitycollege?view=lineup&pos=p,TRUE
+Frank Phillips College,Frank Phillips College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/frankphillipscollege?view=lineup&pos=f,TRUE
+Frank Phillips College,Frank Phillips College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/frankphillipscollege?view=lineup&pos=h,TRUE
+Frank Phillips College,Frank Phillips College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/frankphillipscollege?view=lineup&pos=p,TRUE
+Grayson College,Grayson College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/graysoncollege?view=lineup&pos=f,TRUE
+Grayson College,Grayson College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/graysoncollege?view=lineup&pos=h,TRUE
+Grayson College,Grayson College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/graysoncollege?view=lineup&pos=p,TRUE
+Hill College,Hill College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/hillcollege?view=lineup&pos=f,TRUE
+Hill College,Hill College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/hillcollege?view=lineup&pos=h,TRUE
+Hill College,Hill College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/hillcollege?view=lineup&pos=p,TRUE
+Howard College,Howard College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/howardcollege?view=lineup&pos=f,TRUE
+Howard College,Howard College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/howardcollege?view=lineup&pos=h,TRUE
+Howard College,Howard College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/howardcollege?view=lineup&pos=p,TRUE
+McLennan Community College,McLennan CC,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/mclennancommunitycollege?view=lineup&pos=f,TRUE
+McLennan Community College,McLennan CC,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/mclennancommunitycollege?view=lineup&pos=h,TRUE
+McLennan Community College,McLennan CC,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/mclennancommunitycollege?view=lineup&pos=p,TRUE
+Midland College,Midland College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/midlandcollege?view=lineup&pos=f,TRUE
+Midland College,Midland College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/midlandcollege?view=lineup&pos=h,TRUE
+Midland College,Midland College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/midlandcollege?view=lineup&pos=p,TRUE
+New Mexico Junior College,New Mexico Junior College,Region 5,5,NM,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/newmexicojuniorcollege?view=lineup&pos=f,TRUE
+New Mexico Junior College,New Mexico Junior College,Region 5,5,NM,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/newmexicojuniorcollege?view=lineup&pos=h,TRUE
+New Mexico Junior College,New Mexico Junior College,Region 5,5,NM,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/newmexicojuniorcollege?view=lineup&pos=p,TRUE
+New Mexico Military Institute,New Mexico Military Institute,Region 5,5,NM,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/newmexicomilitaryinstitute?view=lineup&pos=f,TRUE
+New Mexico Military Institute,New Mexico Military Institute,Region 5,5,NM,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/newmexicomilitaryinstitute?view=lineup&pos=h,TRUE
+New Mexico Military Institute,New Mexico Military Institute,Region 5,5,NM,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/newmexicomilitaryinstitute?view=lineup&pos=p,TRUE
+North Central Texas College,North Central Texas College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/northcentraltexascollege?view=lineup&pos=f,TRUE
+North Central Texas College,North Central Texas College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/northcentraltexascollege?view=lineup&pos=h,TRUE
+North Central Texas College,North Central Texas College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/northcentraltexascollege?view=lineup&pos=p,TRUE
+Odessa College,Odessa College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/odessacollege?view=lineup&pos=f,TRUE
+Odessa College,Odessa College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/odessacollege?view=lineup&pos=h,TRUE
+Odessa College,Odessa College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/odessacollege?view=lineup&pos=p,TRUE
+Ranger College,Ranger College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/rangercollege?view=lineup&pos=f,TRUE
+Ranger College,Ranger College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/rangercollege?view=lineup&pos=h,TRUE
+Ranger College,Ranger College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/rangercollege?view=lineup&pos=p,TRUE
+South Plains College,South Plains College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/southplainscollege?view=lineup&pos=f,TRUE
+South Plains College,South Plains College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/southplainscollege?view=lineup&pos=h,TRUE
+South Plains College,South Plains College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/southplainscollege?view=lineup&pos=p,TRUE
+Southwestern Christian College,Southwestern Christian College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/southwesternchristiancollege?view=lineup&pos=f,TRUE
+Southwestern Christian College,Southwestern Christian College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/southwesternchristiancollege?view=lineup&pos=h,TRUE
+Southwestern Christian College,Southwestern Christian College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/southwesternchristiancollege?view=lineup&pos=p,TRUE
+Temple College,Temple College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/templecollege?view=lineup&pos=f,TRUE
+Temple College,Temple College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/templecollege?view=lineup&pos=h,TRUE
+Temple College,Temple College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/templecollege?view=lineup&pos=p,TRUE
+Vernon College,Vernon College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/vernoncollege?view=lineup&pos=f,TRUE
+Vernon College,Vernon College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/vernoncollege?view=lineup&pos=h,TRUE
+Vernon College,Vernon College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/vernoncollege?view=lineup&pos=p,TRUE
+Weatherford College,Weatherford College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/weatherfordcollege?view=lineup&pos=f,TRUE
+Weatherford College,Weatherford College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/weatherfordcollege?view=lineup&pos=h,TRUE
+Weatherford College,Weatherford College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/weatherfordcollege?view=lineup&pos=p,TRUE
+Western Texas College,Western Texas College,Region 5,5,TX,fielding,https://region5.prestosports.com/sports/bsb/2025-26/teams/westerntexascollege?view=lineup&pos=f,TRUE
+Western Texas College,Western Texas College,Region 5,5,TX,hitting,https://region5.prestosports.com/sports/bsb/2025-26/teams/westerntexascollege?view=lineup&pos=h,TRUE
+Western Texas College,Western Texas College,Region 5,5,TX,pitching,https://region5.prestosports.com/sports/bsb/2025-26/teams/westerntexascollege?view=lineup&pos=p,TRUE

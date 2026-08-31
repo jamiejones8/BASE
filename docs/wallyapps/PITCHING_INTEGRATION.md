@@ -27,28 +27,26 @@ handlers remain owned by Wally's server. The standalone application still
 loads its original files when run by itself, so the locked comparison baseline
 continues to test the original workflow.
 
-## Shared data route
+## Folder data route
 
 When hosted by BASE, `R/integrations/wally_pitching_workspace.R` injects one
-prepared Texas State payload before Wally's feature engineering runs:
+prepared payload built exclusively from these files in
+`WallyApps/PitchingApp/data` before Wally's feature engineering runs:
 
-- canonical 2026 game rows come from the configured Texas State startup
-  partition, or are queried from the selected NCAA Division I master if the
-  partition is unavailable;
-- the small Texas State season, fall, squad, and bullpen files are retained as
-  labeled supplements;
-- the canonical NCAA row wins when the same `PitchUID` appears in both;
-- internal and bullpen rows keep their source labels and never become national
-  records;
-- the national 2.04-million-row master is never copied into the Pitching app.
+- `2025 Season -cleaned.csv` maps to the 2025 Season checkbox;
+- `2025 Fall -cleaned.csv` maps to the 2025 Fall checkbox;
+- `2026 Squads - cleaned.csv` maps to the 2026 Squads checkbox;
+- `2026 Season - cleaned.csv` maps to the 2026 Season checkbox; and
+- `Bullpens - cleaned.csv` supplies bullpen mode and the Bullpens tab.
 
-The 2025 supplement is Texas State-only history, not a full 2025 NCAA archive.
-Only 2026 is configured as the complete national season.
+The integrated Pitching workspace no longer blends these rows with the shared
+BASE startup partition or NCAA master. Duplicate pitch IDs across the folder
+files are still removed, and each row retains its source filename.
 
 ## Navigation and appearance
 
 The compatibility `navbarPage` still owns routing, but its global navbar is
-hidden. Seven ordered cards on Home open the approved workspaces, and a fixed
+hidden. Eight ordered cards on Home open the approved workspaces, and a fixed
 Home control remains in the upper-left corner. Existing tool pages remain as
 hidden compatibility routes while their parent workspaces are migrated.
 
@@ -67,7 +65,8 @@ reactives. The temporary prepared-data cache is cleared after initialization.
 
 `scripts/tests/test_wally_pitching_integration.R` verifies:
 
-- canonical-over-supplement `PitchUID` precedence;
+- resolution of the five required PitchingApp folder files;
+- duplicate removal across folder files;
 - retention of a unique bullpen event;
 - exposure of all twelve Wally tabs;
 - successful registration of the original server graph; and

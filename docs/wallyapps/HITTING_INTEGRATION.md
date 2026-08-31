@@ -28,23 +28,19 @@ Internal IDs that overlapped Pitching are workspace-prefixed; visible labels,
 tab order, calculations, and downloads are unchanged. This prevents
 cross-workspace reactive coupling in BASE's shared Shiny session.
 
-## Shared data route
+## Folder data route
 
-The BASE host injects one prepared Texas State hitting payload before Wally's
-feature engineering runs:
+The BASE host now builds Hitting's payload exclusively from these files in
+`WallyApps/HittingApp/data` before Wally's feature engineering runs:
 
-- canonical 2026 game rows come from the configured Texas State startup
-  partition or, as a fallback, a filtered query against the selected NCAA
-  Division I master;
-- Hitting's distinct Texas State 2025 season, 2025 fall, 2026 squad, and 2026
-  season exports remain development supplements and are not copied into the
-  production image;
-- canonical rows take precedence over supplements with the same `PitchUID` or
-  stable event key;
-- supplement rows retain an explicit `Texas State internal` source label;
-- only 2026 is treated as complete national coverage; 2025 remains team-only
-  history; and
-- the full national master is never loaded or duplicated inside HittingApp.
+- `2025 Season -cleaned.csv` maps to the 2025 Season checkbox;
+- `2025 Fall -cleaned.csv` maps to the 2025 Fall checkbox;
+- `2026 Squads - cleaned.csv` maps to the 2026 Squads checkbox; and
+- `2026 Season - cleaned.csv` maps to the 2026 Season checkbox.
+
+The integrated Hitting workspace no longer blends these rows with the shared
+BASE startup partition or NCAA master. Duplicate event IDs across the folder
+files are still removed, and each row retains its source filename.
 
 This route is intentionally separate from national opponent scouting. Hitting
 evaluates Texas State hitters; Opponent Scouting continues to query all NCAA
@@ -69,8 +65,8 @@ server reactives. The temporary prepared-data cache is cleared after startup.
 
 `scripts/tests/test_wally_hitting_integration.R` verifies:
 
-- canonical-over-supplement event precedence;
-- retention of a unique labeled team supplement;
+- resolution of the four required HittingApp folder files;
+- duplicate removal across folder files;
 - all ten Wally top-level tabs and the isolated BASE layout;
 - successful registration of Wally's original server graph; and
 - live Performance and Lineup Builder fixture payloads.

@@ -38,17 +38,29 @@
         "BASE NCAA opponent pitcher scouting",
         "BASE NCAA opponent hitter scouting",
         "BASE national leaderboards",
-        "migrated Wally hitting features",
-        "migrated Wally pitching features",
         "catching pitch context",
         "defense pitch and batted-ball context"
       ]
     },
     "texas_state_internal_pitch_events": {
-      "status": "supplement_pending_normalization",
+      "status": "selected_app_local_files",
       "label": "Texas State internal and historical",
       "authority": "Texas State Wally app team exports",
-      "deployment_env": "BASE_TEAM_SUPPLEMENT_DATASET_DIR",
+      "development_paths": {
+        "hitting": [
+          "WallyApps/HittingApp/data/2025 Season -cleaned.csv",
+          "WallyApps/HittingApp/data/2025 Fall -cleaned.csv",
+          "WallyApps/HittingApp/data/2026 Squads - cleaned.csv",
+          "WallyApps/HittingApp/data/2026 Season - cleaned.csv"
+        ],
+        "pitching": [
+          "WallyApps/PitchingApp/data/2025 Season -cleaned.csv",
+          "WallyApps/PitchingApp/data/2025 Fall -cleaned.csv",
+          "WallyApps/PitchingApp/data/2026 Squads - cleaned.csv",
+          "WallyApps/PitchingApp/data/2026 Season - cleaned.csv",
+          "WallyApps/PitchingApp/data/Bullpens - cleaned.csv"
+        ]
+      },
       "scope": [
         "Texas State 2025 season",
         "Texas State 2025 fall",
@@ -65,8 +77,8 @@
       "rules": [
         "Never expose this source as complete NCAA coverage.",
         "Keep internal, scrimmage, and bullpen competition labels distinct.",
-        "Prefer the national master when a PitchUID exists in both sources.",
-        "Normalize hitting and pitching exports into one event stream instead of retaining app-specific copies."
+        "Use the HittingApp and PitchingApp folder files directly for their integrated BASE workspaces.",
+        "Do not blend the Wally workspace payloads with the national master."
       ]
     },
     "ncaa_d1_defense_alignment_2026": {
@@ -126,16 +138,12 @@
       "reference_metrics"
     ],
     "team_pitching": [
-      "ncaa_d1_pitch_events_2026",
       "texas_state_internal_pitch_events",
-      "reference_metrics",
-      "pitch_retag_overrides"
+      "reference_metrics"
     ],
     "team_hitting": [
-      "ncaa_d1_pitch_events_2026",
       "texas_state_internal_pitch_events",
-      "reference_metrics",
-      "pitch_retag_overrides"
+      "reference_metrics"
     ],
     "team_game_reports_2026": [
       "ncaa_d1_pitch_events_2026",

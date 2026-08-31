@@ -30,9 +30,21 @@ data/D1 Defense File.parquet
 /WallyApps/JucoStatsApp/data/raw_njcaa/
 /WallyApps/JucoStatsApp/data/debug_njcaa/
 /WallyApps/JucoStatsApp/data/juco_player_stats_latest.csv
+/WallyApps/JucoStatsApp/data/d1_hitting_metric_percentile_reference.csv
+/WallyApps/JucoStatsApp/data/d1_pitch_metric_percentile_reference.csv
 /WallyApps/D1 Files/
-/WallyApps/HittingApp/data/
+!/WallyApps/HittingApp/data/
+/WallyApps/HittingApp/data/*
+!/WallyApps/HittingApp/data/2025 Fall -cleaned.csv
+!/WallyApps/HittingApp/data/2025 Season -cleaned.csv
+!/WallyApps/HittingApp/data/2026 Season - cleaned.csv
+!/WallyApps/HittingApp/data/2026 Squads - cleaned.csv
 /WallyApps/PitchingApp/data/*
+!/WallyApps/PitchingApp/data/2025 Fall -cleaned.csv
+!/WallyApps/PitchingApp/data/2025 Season -cleaned.csv
+!/WallyApps/PitchingApp/data/2026 Season - cleaned.csv
+!/WallyApps/PitchingApp/data/2026 Squads - cleaned.csv
+!/WallyApps/PitchingApp/data/Bullpens - cleaned.csv
 !/WallyApps/PitchingApp/data/called_stuff_baseline.csv
 !/WallyApps/PitchingApp/data/d1_pitch_metric_percentile_reference.csv
 !/WallyApps/PitchingApp/data/player_heights.csv

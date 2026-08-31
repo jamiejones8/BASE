@@ -18,37 +18,25 @@ BASE_WALLY_HITTING_REQUIRED_PACKAGES <- c(
 .base_team_hitting_cache <- new.env(parent = emptyenv())
 .base_wally_hitting_state <- new.env(parent = emptyenv())
 
+BASE_WALLY_HITTING_DATA_FILES <- c(
+  S25 = "2025 Season -cleaned.csv",
+  F25 = "2025 Fall -cleaned.csv",
+  SQ26 = "2026 Squads - cleaned.csv",
+  S26 = "2026 Season - cleaned.csv"
+)
+
 base_hitting_dev_supplement_paths <- function() {
   root <- base_project_path("WallyApps", "HittingApp", "data")
-  file.path(root, c(
-    "2025 Season -cleaned.csv",
-    "2025 Fall -cleaned.csv",
-    "2026 Squads - cleaned.csv",
-    "2026 Season - cleaned.csv"
-  ))
+  file.path(root, unname(BASE_WALLY_HITTING_DATA_FILES))
 }
 
 base_hitting_supplement_paths <- function() {
-  root <- TEAM_CONFIG$data$team_supplement_dataset_dir
-  mounted <- if (dir.exists(root)) {
-    list.files(
-      root,
-      pattern = "\\.(csv|parquet)$",
-      full.names = TRUE,
-      recursive = TRUE,
-      ignore.case = TRUE
-    )
-  } else character()
-  if (length(mounted)) {
-    keep <- grepl("season|fall|squad", basename(mounted), ignore.case = TRUE)
-    mounted <- mounted[keep]
-    if (length(mounted)) return(sort(unique(mounted)))
-  }
-
-  # Development reads Wally's existing small team exports in place. They are
-  # never copied into the BASE runtime or treated as a second national source.
   paths <- base_hitting_dev_supplement_paths()
-  paths[file.exists(paths)]
+  missing <- paths[!file.exists(paths)]
+  if (length(missing)) {
+    stop("Wally HittingApp data files are missing: ", paste(basename(missing), collapse = ", "))
+  }
+  paths
 }
 
 base_read_hitting_source <- function(path) {
@@ -64,6 +52,10 @@ base_read_hitting_source <- function(path) {
   }
   rows$source_file <- basename(path)
   rows$row_in_file <- seq_len(nrow(rows))
+  season_group <- names(BASE_WALLY_HITTING_DATA_FILES)[
+    match(basename(path), BASE_WALLY_HITTING_DATA_FILES)
+  ]
+  rows$SeasonGroup <- season_group
   rows
 }
 
@@ -150,10 +142,9 @@ base_hitting_event_key <- function(rows) {
   )
 }
 
-base_prepare_team_hitting_data <- function(startup_rows = NULL) {
-  canonical <- base_hitting_canonical_rows(startup_rows)
-  supplement <- base_hitting_supplement_rows()
-  sources <- Filter(function(frame) nrow(frame) > 0L, list(canonical, supplement))
+base_prepare_team_hitting_data <- function(source_rows = NULL) {
+  folder_rows <- source_rows %||% base_hitting_supplement_rows()
+  sources <- Filter(function(frame) nrow(frame) > 0L, list(folder_rows))
   if (!length(sources)) return(tibble::tibble())
 
   # Wally reads mixed exports as character before a single type-conversion
@@ -183,15 +174,15 @@ base_prepare_team_hitting_data <- function(startup_rows = NULL) {
   suppressMessages(readr::type_convert(rows, col_types = spec))
 }
 
-base_load_team_hitting_data <- function(startup_rows = NULL, refresh = FALSE) {
+base_load_team_hitting_data <- function(source_rows = NULL, refresh = FALSE) {
   key <- "team_hitting"
   if (!isTRUE(refresh) && exists(key, envir = .base_team_hitting_cache, inherits = FALSE)) {
     return(base::get(key, envir = .base_team_hitting_cache, inherits = FALSE))
   }
-  rows <- base_prepare_team_hitting_data(startup_rows)
+  rows <- base_prepare_team_hitting_data(source_rows)
   assign(key, rows, envir = .base_team_hitting_cache)
   message(
-    "Prepared shared Texas State hitting payload: ",
+    "Prepared Wally HittingApp folder payload: ",
     format(nrow(rows), big.mark = ","), " rows"
   )
   rows
@@ -472,12 +463,12 @@ base_team_hitting_workspace_ui <- function() {
       tags$div(
         tags$div(class = "base-eyebrow", "Texas State player development"),
         tags$h1("Hitting"),
-        tags$p("Wally's complete hitting workflow, connected to the shared BASE data layer.")
+        tags$p("Wally's complete hitting workflow, using its season files in WallyApps/HittingApp/data.")
       ),
       tags$div(
         class = "base-source-chip",
         tags$span(class = "home-status-dot"),
-        "Shared 2026 NCAA source + labeled team supplements"
+        "HittingApp folder CSVs"
       )
     ),
     tags$div(
@@ -491,8 +482,8 @@ base_team_hitting_workspace_ui <- function() {
   )
 }
 
-base_team_hitting_workspace_server <- function(input, output, session, startup_rows = NULL) {
-  team_rows <- base_load_team_hitting_data(startup_rows)
+base_team_hitting_workspace_server <- function(input, output, session) {
+  team_rows <- base_load_team_hitting_data()
   workspace <- base_wally_hitting_environment(team_rows)
   base_clear_team_hitting_cache()
   output$base_team_hitting_app <- shiny::renderUI({

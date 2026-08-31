@@ -836,7 +836,8 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 .base-workspace-page .base-pitching-workspace,
 .base-workspace-page .base-hitting-workspace,
 .base-workspace-page .base-defense-workspace,
-.base-workspace-page .base-scouting-workspace {
+.base-workspace-page .base-scouting-workspace,
+.base-workspace-page .base-juco-workspace {
   width: 100%;
   min-width: 0;
   max-width: 100%;

@@ -142,7 +142,7 @@ The current feature-level decisions are recorded in
 
 ## Shell implementation sequence
 
-1. Add the workspace registry, seven ordered Home cards, hidden global navbar,
+1. Add the workspace registry, eight ordered Home cards, hidden global navbar,
    and persistent top-left Home button.
 2. Create workspace landing shells and route the existing BASE PDF and opponent
    scouting pages into their approved parents without changing their servers.

@@ -19,34 +19,26 @@ BASE_WALLY_PITCHING_REQUIRED_PACKAGES <- c(
 .base_team_pitching_cache <- new.env(parent = emptyenv())
 .base_wally_pitching_state <- new.env(parent = emptyenv())
 
+BASE_WALLY_PITCHING_DATA_FILES <- c(
+  S25 = "2025 Season -cleaned.csv",
+  F25 = "2025 Fall -cleaned.csv",
+  SQ26 = "2026 Squads - cleaned.csv",
+  S26 = "2026 Season - cleaned.csv",
+  BP = "Bullpens - cleaned.csv"
+)
+
 base_pitching_dev_supplement_paths <- function() {
   root <- base_project_path("WallyApps", "PitchingApp", "data")
-  file.path(root, c(
-    "2025 Season -cleaned.csv",
-    "2025 Fall -cleaned.csv",
-    "2026 Squads - cleaned.csv",
-    "2026 Season - cleaned.csv",
-    "Bullpens - cleaned.csv"
-  ))
+  file.path(root, unname(BASE_WALLY_PITCHING_DATA_FILES))
 }
 
 base_pitching_supplement_paths <- function() {
-  root <- TEAM_CONFIG$data$team_supplement_dataset_dir
-  mounted <- if (dir.exists(root)) {
-    list.files(
-      root,
-      pattern = "\\.(csv|parquet)$",
-      full.names = TRUE,
-      recursive = TRUE,
-      ignore.case = TRUE
-    )
-  } else character()
-  if (length(mounted)) return(sort(unique(mounted)))
-
-  # Development uses the existing small team files in place. They are not
-  # copied into a second app-specific runtime.
   paths <- base_pitching_dev_supplement_paths()
-  paths[file.exists(paths)]
+  missing <- paths[!file.exists(paths)]
+  if (length(missing)) {
+    stop("Wally PitchingApp data files are missing: ", paste(basename(missing), collapse = ", "))
+  }
+  paths
 }
 
 base_read_pitching_source <- function(path) {
@@ -62,6 +54,10 @@ base_read_pitching_source <- function(path) {
   }
   rows$source_file <- basename(path)
   rows$row_in_file <- seq_len(nrow(rows))
+  source_group <- names(BASE_WALLY_PITCHING_DATA_FILES)[
+    match(basename(path), BASE_WALLY_PITCHING_DATA_FILES)
+  ]
+  rows$SeasonGroup <- if (identical(source_group, "BP")) NA_character_ else source_group
   rows
 }
 
@@ -144,10 +140,9 @@ base_pitching_event_key <- function(rows) {
   )
 }
 
-base_prepare_team_pitching_data <- function(startup_rows = NULL) {
-  canonical <- base_pitching_canonical_rows(startup_rows)
-  supplement <- base_pitching_supplement_rows()
-  sources <- Filter(function(frame) nrow(frame) > 0L, list(canonical, supplement))
+base_prepare_team_pitching_data <- function(source_rows = NULL) {
+  folder_rows <- source_rows %||% base_pitching_supplement_rows()
+  sources <- Filter(function(frame) nrow(frame) > 0L, list(folder_rows))
   if (!length(sources)) return(tibble::tibble())
 
   # Wally's original loader reads mixed exports as character and then performs
@@ -178,15 +173,15 @@ base_prepare_team_pitching_data <- function(startup_rows = NULL) {
   rows
 }
 
-base_load_team_pitching_data <- function(startup_rows = NULL, refresh = FALSE) {
+base_load_team_pitching_data <- function(source_rows = NULL, refresh = FALSE) {
   key <- "team_pitching"
   if (!isTRUE(refresh) && exists(key, envir = .base_team_pitching_cache, inherits = FALSE)) {
     return(base::get(key, envir = .base_team_pitching_cache, inherits = FALSE))
   }
-  rows <- base_prepare_team_pitching_data(startup_rows)
+  rows <- base_prepare_team_pitching_data(source_rows)
   assign(key, rows, envir = .base_team_pitching_cache)
   message(
-    "Prepared shared Texas State pitching payload: ",
+    "Prepared Wally PitchingApp folder payload: ",
     format(nrow(rows), big.mark = ","), " rows"
   )
   rows
@@ -674,13 +669,13 @@ base_team_pitching_workspace_ui <- function() {
         tags$div(class = "base-eyebrow", "Texas State player development"),
         tags$h1("Pitching"),
         tags$p(
-          "Wally's complete pitching workflow, connected to the shared BASE data layer."
+          "Wally's complete pitching workflow, using its season and bullpen files in WallyApps/PitchingApp/data."
         )
       ),
       tags$div(
         class = "base-source-chip",
         tags$span(class = "home-status-dot"),
-        "Shared 2026 NCAA source + labeled team supplements"
+        "PitchingApp folder CSVs"
       )
     ),
     tags$div(
@@ -694,8 +689,8 @@ base_team_pitching_workspace_ui <- function() {
   )
 }
 
-base_team_pitching_workspace_server <- function(input, output, session, startup_rows = NULL) {
-  team_rows <- base_load_team_pitching_data(startup_rows)
+base_team_pitching_workspace_server <- function(input, output, session) {
+  team_rows <- base_load_team_pitching_data()
   workspace <- base_wally_pitching_environment(team_rows)
   base_clear_team_pitching_cache()
   output$base_team_pitching_app <- shiny::renderUI({

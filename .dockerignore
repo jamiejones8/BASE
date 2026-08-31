@@ -16,11 +16,17 @@ WallyApps/*
 !WallyApps/HittingApp/
 !WallyApps/DefenseApp/
 !WallyApps/ScoutingApp/
+!WallyApps/JucoStatsApp/
 WallyApps/PitchingApp/*
 !WallyApps/PitchingApp/PitchingApp.R
 !WallyApps/PitchingApp/www/
 !WallyApps/PitchingApp/data/
 WallyApps/PitchingApp/data/*
+!WallyApps/PitchingApp/data/2025 Fall -cleaned.csv
+!WallyApps/PitchingApp/data/2025 Season -cleaned.csv
+!WallyApps/PitchingApp/data/2026 Season - cleaned.csv
+!WallyApps/PitchingApp/data/2026 Squads - cleaned.csv
+!WallyApps/PitchingApp/data/Bullpens - cleaned.csv
 !WallyApps/PitchingApp/data/called_stuff_baseline.csv
 !WallyApps/PitchingApp/data/d1_pitch_metric_percentile_reference.csv
 !WallyApps/PitchingApp/data/player_heights.csv
@@ -28,12 +34,25 @@ WallyApps/PitchingApp/data/*
 WallyApps/HittingApp/*
 !WallyApps/HittingApp/HittingApp.R
 !WallyApps/HittingApp/www/
+!WallyApps/HittingApp/data/
+WallyApps/HittingApp/data/*
+!WallyApps/HittingApp/data/2025 Fall -cleaned.csv
+!WallyApps/HittingApp/data/2025 Season -cleaned.csv
+!WallyApps/HittingApp/data/2026 Season - cleaned.csv
+!WallyApps/HittingApp/data/2026 Squads - cleaned.csv
 WallyApps/DefenseApp/*
 !WallyApps/DefenseApp/DefenseApp.R
 !WallyApps/DefenseApp/www/
 WallyApps/ScoutingApp/*
 !WallyApps/ScoutingApp/ScoutingApp.R
 !WallyApps/ScoutingApp/www/
+WallyApps/JucoStatsApp/*
+!WallyApps/JucoStatsApp/app.R
+!WallyApps/JucoStatsApp/www/
+!WallyApps/JucoStatsApp/data/
+WallyApps/JucoStatsApp/data/*
+!WallyApps/JucoStatsApp/data/juco_player_stats_inventory_sample.csv
+!WallyApps/JucoStatsApp/data/player_profiles.csv
 data/external/CapeCod26.parquet
 models/shared/brewstuff.model
 models/shared/pitch_models.rds

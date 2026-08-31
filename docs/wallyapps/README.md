@@ -67,7 +67,7 @@ State historical/internal data becomes a labeled supplement. See
 
 ## Application structure
 
-Step 4 organizes the integrated product around seven Home workspaces rather
+Step 4 organizes the integrated product around eight Home workspaces rather
 than a flat global navbar. Postgame Reports contains only the three existing
 BASE PDF generators; separate Pitching and Hitting workspaces own team
 analysis; Opponent Scouting retains national pitcher/hitter search; Defense

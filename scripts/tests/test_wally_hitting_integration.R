@@ -20,27 +20,30 @@ fixture_path <- file.path(
 )
 fixture <- readr::read_csv(fixture_path, show_col_types = FALSE)
 fixture$BatterTeam <- TEAM_CONFIG$data_code
-fixture$source_file <- "2026 Season - canonical.parquet"
+fixture$source_file <- "2026 Season - cleaned.csv"
 fixture$row_in_file <- seq_len(nrow(fixture))
 fixture$SeasonGroup <- "S26"
-fixture$DataSource <- BASE_NCAA_D1_SOURCE_LABEL
+fixture$DataSource <- "Texas State internal — 2026 Season - cleaned.csv"
+fixture$.base_source_priority <- 2L
 
-# Canonical data must win a duplicate PitchUID, while distinct team-only
-# history/squad events remain available as labeled supplements.
+# The integrated workspace must use the four CSVs in HittingApp/data.
+expected_files <- c(
+  "2025 Season -cleaned.csv", "2025 Fall -cleaned.csv",
+  "2026 Squads - cleaned.csv", "2026 Season - cleaned.csv"
+)
+if (!identical(basename(base_hitting_supplement_paths()), expected_files)) {
+  fail("Hitting workspace does not resolve the four HittingApp folder CSVs.")
+}
+
+# Folder rows still deduplicate repeated pitch IDs across selected season files.
 supplement <- fixture[1:2, , drop = FALSE]
 supplement$source_file <- "2026 Squads - cleaned.csv"
 supplement$DataSource <- "Texas State internal — 2026 Squads - cleaned.csv"
 supplement$PitchUID[[2]] <- "fixture-unique-hitting-supplement"
-supplement$.base_source_priority <- 2L
-base_hitting_supplement_rows <- function() supplement
 
-prepared <- base_prepare_team_hitting_data(fixture)
+prepared <- base_prepare_team_hitting_data(dplyr::bind_rows(fixture, supplement))
 if (sum(prepared$PitchUID == fixture$PitchUID[[1]], na.rm = TRUE) != 1L) {
-  fail("Canonical/supplement duplicate pitch was not removed.")
-}
-canonical_row <- prepared[prepared$PitchUID == fixture$PitchUID[[1]], , drop = FALSE]
-if (!identical(canonical_row$DataSource[[1]], BASE_NCAA_D1_SOURCE_LABEL)) {
-  fail("Canonical source did not win duplicate precedence.")
+  fail("Duplicate folder pitch was not removed.")
 }
 if (!any(prepared$PitchUID == "fixture-unique-hitting-supplement", na.rm = TRUE)) {
   fail("Unique hitting supplement row was lost.")
@@ -96,6 +99,6 @@ shiny::testServer(workspace$server, {
 
 cat(
   "Wally Hitting integration passed:", nrow(prepared),
-  "prepared rows,", length(expected_tabs),
+  "folder-backed rows,", length(expected_tabs),
   "tabs, Performance, and Lineup Builder server smoke tests.\n"
 )

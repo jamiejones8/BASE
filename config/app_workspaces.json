@@ -49,7 +49,7 @@
       "order": 2,
       "title": "Pitching",
       "description": "Evaluate Texas State pitchers, bullpen work, staff trends, and pitching leaderboards.",
-      "implementation_policy": "Use Wally PitchingApp processing and workflows where stronger, restyled to the BASE design system and connected to shared sources.",
+      "implementation_policy": "Use Wally PitchingApp processing and workflows, restyled to the BASE design system and sourced from the season, squad, and bullpen CSVs in WallyApps/PitchingApp/data.",
       "source_route": "team_pitching",
       "tools": [
         "Pitcher performance",
@@ -68,7 +68,7 @@
       "order": 3,
       "title": "Hitting",
       "description": "Evaluate Texas State hitters, build lineups, review team trends, and compare hitting performance.",
-      "implementation_policy": "Use Wally HittingApp processing and workflows where stronger, restyled to the BASE design system and connected to shared sources.",
+      "implementation_policy": "Use Wally HittingApp processing and workflows, restyled to the BASE design system and sourced from the season and squad CSVs in WallyApps/HittingApp/data.",
       "source_route": "team_hitting",
       "tools": [
         "Hitter performance",
@@ -105,8 +105,19 @@
       ]
     },
     {
-      "id": "defense",
+      "id": "juco_stats",
       "order": 5,
+      "title": "JUCO Stats",
+      "description": "Search and compare junior-college hitting and pitching leaderboards.",
+      "implementation_policy": "Host Wally's JucoStatsApp inside the BASE shell while preserving its filters, percentile shading, and standalone workflow.",
+      "tools": [
+        "Hitting leaderboard",
+        "Pitching leaderboard"
+      ]
+    },
+    {
+      "id": "defense",
+      "order": 6,
       "title": "Defensive Analytics",
       "description": "Analyze positioning, opportunities, range, player value, and catcher receiving.",
       "implementation_policy": "Combine BASE defensive attribution with Wally opportunity, range/OAA, and framing features only after their metric gates pass.",
@@ -122,7 +133,7 @@
     },
     {
       "id": "homebase",
-      "order": 6,
+      "order": 7,
       "title": "HomeBASE",
       "description": "Search any available player and open a role-aware individual snapshot.",
       "implementation_policy": "Rename and replace BASE Media. Support national search plus direct Texas State roster-card navigation.",
@@ -142,7 +153,7 @@
     },
     {
       "id": "data_processing",
-      "order": 7,
+      "order": 8,
       "title": "Data Processing",
       "description": "Prepare, validate, and correct data used throughout BASE.",
       "implementation_policy": "Visible to all users for now. Persistent mutations must still disclose source, target, and saved status.",

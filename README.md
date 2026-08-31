@@ -21,21 +21,26 @@ player in the complete College26 source.
 
 ## Unified application shell
 
-Home is the directory for seven focused workspaces: Postgame Reports,
-Pitching, Hitting, Opponent Scouting, Defensive Analytics, HomeBASE, and Data
-Processing. The legacy global navbar is hidden and a persistent Home control
-remains available from every page.
+Home is the directory for eight focused workspaces: Postgame Reports,
+Pitching, Hitting, Opponent Scouting, JUCO Stats, Defensive Analytics,
+HomeBASE, and Data Processing. The legacy global navbar is hidden and a
+persistent Home control remains available from every page.
 
-Pitching, Hitting, Defense, and Opponent Scouting are completed Wally workspace
+Pitching, Hitting, Defense, Opponent Scouting, and JUCO Stats are Wally workspace
 integrations. All twelve original Pitching tabs, all ten original Hitting
 workflows, all seven original Defense workflows, and all six ScoutingApp report
-workflows run inside BASE. They initialize only when first opened and use
+workflows run inside BASE, alongside the JUCO hitting and pitching leaderboards.
+They initialize only when first opened and use
 scoped BASE styling. Interactive catcher analysis lives in Defense while the
 unchanged catcher PDF generator remains under Postgame Reports. See
 [`docs/wallyapps/PITCHING_INTEGRATION.md`](docs/wallyapps/PITCHING_INTEGRATION.md),
 [`docs/wallyapps/HITTING_INTEGRATION.md`](docs/wallyapps/HITTING_INTEGRATION.md),
 [`docs/wallyapps/DEFENSE_INTEGRATION.md`](docs/wallyapps/DEFENSE_INTEGRATION.md),
 and [`docs/wallyapps/SCOUTING_INTEGRATION.md`](docs/wallyapps/SCOUTING_INTEGRATION.md).
+
+The integrated Pitching and Hitting workspaces use the season, squad, and
+bullpen CSV files stored in their respective `WallyApps/*/data` folders. Their
+player-menu checkboxes map directly to those filenames.
 
 ## 2026 data model
 

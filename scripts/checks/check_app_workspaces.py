@@ -17,6 +17,7 @@ WALLY_PITCHING_PATH = ROOT / "WallyApps" / "PitchingApp" / "PitchingApp.R"
 WALLY_HITTING_PATH = ROOT / "WallyApps" / "HittingApp" / "HittingApp.R"
 WALLY_DEFENSE_PATH = ROOT / "WallyApps" / "DefenseApp" / "DefenseApp.R"
 WALLY_SCOUTING_PATH = ROOT / "WallyApps" / "ScoutingApp" / "ScoutingApp.R"
+WALLY_JUCO_PATH = ROOT / "WallyApps" / "JucoStatsApp" / "app.R"
 
 
 def fail(message: str) -> None:
@@ -33,6 +34,7 @@ def main() -> int:
         "team_pitching",
         "team_hitting",
         "opponent_scouting",
+        "juco_stats",
         "defense",
         "homebase",
         "data_processing",
@@ -40,8 +42,8 @@ def main() -> int:
     ids = [item.get("id") for item in workspaces]
     if ids != expected_ids:
         fail(f"Workspace order differs from the approved hierarchy: {ids}")
-    if [item.get("order") for item in workspaces] != list(range(1, 8)):
-        fail("Workspace order values must be contiguous from 1 through 7.")
+    if [item.get("order") for item in workspaces] != list(range(1, 9)):
+        fail("Workspace order values must be contiguous from 1 through 8.")
 
     navigation = config.get("navigation", {})
     if navigation.get("global_navbar") != "hidden":
@@ -122,6 +124,7 @@ def main() -> int:
         "tab_team_pitching",
         "tab_team_hitting",
         "tab_opponent_scouting",
+        "tab_juco_stats",
         "tab_defense_workspace",
         "tab_homebase",
         "tab_data_processing",
@@ -135,13 +138,14 @@ def main() -> int:
         '"team_pitching", "02"',
         '"team_hitting", "03"',
         '"opponent_scouting", "04"',
-        '"defense_workspace", "05"',
-        '"homebase", "06"',
-        '"data_processing", "07"',
+        '"juco_stats", "05"',
+        '"defense_workspace", "06"',
+        '"homebase", "07"',
+        '"data_processing", "08"',
     ]
     card_positions = [app_source.find(target) for target in card_targets]
     if any(position < 0 for position in card_positions) or card_positions != sorted(card_positions):
-        fail("Home cards are missing or differ from the approved seven-workspace order.")
+        fail("Home cards are missing or differ from the approved eight-workspace order.")
 
     if 'id = "base-shell-home"' not in app_source:
         fail("The persistent Home control is not implemented in the app shell.")
@@ -155,6 +159,12 @@ def main() -> int:
         fail("Opponent Scouting is not registered for lazy initialization.")
     if "base_opponent_scouting_workspace_ui()" not in app_source:
         fail("Opponent Scouting does not render the integrated ScoutingApp workspace.")
+    if 'base_source("R/integrations/wally_juco_stats_workspace.R"' not in app_source:
+        fail("The JUCO Stats workspace adapter is not sourced by BASE.")
+    if 'input, session, "tab_juco_stats"' not in app_source:
+        fail("JUCO Stats is not registered for lazy initialization.")
+    if "base_juco_stats_workspace_ui()" not in app_source:
+        fail("JUCO Stats does not render the integrated JucoStatsApp workspace.")
     if '#cpp-page .cpp-retag-card' not in app_source:
         fail("The Data Processing card does not deep-link to the persistent retagger.")
     if "body > nav.navbar { display: none !important; }" not in style_source:
@@ -175,6 +185,7 @@ def main() -> int:
         "Wally Hitting": WALLY_HITTING_PATH.read_text(encoding="utf-8"),
         "Wally Defense": WALLY_DEFENSE_PATH.read_text(encoding="utf-8"),
         "Wally Scouting": WALLY_SCOUTING_PATH.read_text(encoding="utf-8"),
+        "Wally JUCO": WALLY_JUCO_PATH.read_text(encoding="utf-8"),
     }
     source_ids = {name: shiny_ids(source) for name, source in integrated_sources.items()}
     names = list(source_ids)
@@ -187,7 +198,7 @@ def main() -> int:
                     f"{shared_ids}"
                 )
 
-    print("BASE workspace hierarchy and unified shell are valid: Home plus 7 ordered workspaces.")
+    print("BASE workspace hierarchy and unified shell are valid: Home plus 8 ordered workspaces.")
     return 0
 
 
