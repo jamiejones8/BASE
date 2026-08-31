@@ -34,9 +34,9 @@ def main() -> int:
         "team_pitching",
         "team_hitting",
         "opponent_scouting",
-        "juco_stats",
         "defense",
         "homebase",
+        "juco_stats",
         "data_processing",
     ]
     ids = [item.get("id") for item in workspaces]
@@ -138,10 +138,11 @@ def main() -> int:
         '"team_pitching", "02"',
         '"team_hitting", "03"',
         '"opponent_scouting", "04"',
-        '"juco_stats", "05"',
-        '"defense_workspace", "06"',
-        '"homebase", "07"',
+        '"defense_workspace", "05"',
+        '"homebase", "06"',
+        '"juco_stats", "07"',
         '"data_processing", "08"',
+        '"player_health", "09"',
     ]
     card_positions = [app_source.find(target) for target in card_targets]
     if any(position < 0 for position in card_positions) or card_positions != sorted(card_positions):
@@ -160,11 +161,11 @@ def main() -> int:
     if "base_opponent_scouting_workspace_ui()" not in app_source:
         fail("Opponent Scouting does not render the integrated ScoutingApp workspace.")
     if 'base_source("R/integrations/wally_juco_stats_workspace.R"' not in app_source:
-        fail("The JUCO Stats workspace adapter is not sourced by BASE.")
+        fail("The JUCO Scouting workspace adapter is not sourced by BASE.")
     if 'input, session, "tab_juco_stats"' not in app_source:
-        fail("JUCO Stats is not registered for lazy initialization.")
+        fail("JUCO Scouting is not registered for lazy initialization.")
     if "base_juco_stats_workspace_ui()" not in app_source:
-        fail("JUCO Stats does not render the integrated JucoStatsApp workspace.")
+        fail("JUCO Scouting does not render the integrated JucoStatsApp workspace.")
     if '#cpp-page .cpp-retag-card' not in app_source:
         fail("The Data Processing card does not deep-link to the persistent retagger.")
     if "body > nav.navbar { display: none !important; }" not in style_source:

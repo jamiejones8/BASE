@@ -751,13 +751,13 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 .home-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
 .home-section-heading h2 { margin: 5px 0 0; color: var(--base-ink); font-family: var(--base-font-display); font-size: 29px; font-weight: 600; }
 .home-data-status { padding: 8px 12px; border: 1px solid var(--base-border); border-radius: 999px; background: rgba(255,255,255,0.70); color: var(--base-muted); font-size: 11px; font-weight: 600; }
-.home-quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; }
+.home-quick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .home-quick-link {
   position: relative;
   display: block;
-  height: 126px;
-  min-height: 126px;
-  max-height: 126px;
+  height: 150px;
+  min-height: 150px;
+  max-height: 150px;
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--base-border);
@@ -770,6 +770,9 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 }
 .home-quick-link:hover { border-color: var(--base-border-strong); box-shadow: var(--base-shadow); transform: translateY(-2px); }
 .home-quick-link:focus { border-color: var(--base-maroon); outline: 3px solid rgba(80,18,20,0.10); outline-offset: 2px; }
+.home-quick-link.is-placeholder { cursor: default; opacity: .78; }
+.home-quick-link.is-placeholder:hover { border-color: var(--base-border); box-shadow: var(--base-shadow-sm); transform: none; }
+.home-quick-link.is-placeholder .home-quick-arrow { bottom: 19px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .home-quick-image {
   position: absolute;
   inset: 0;
@@ -777,15 +780,14 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
   height: 100% !important;
   max-width: none !important;
   object-fit: cover !important;
-  object-position: center;
+  object-position: 50% 50%;
   transition: transform 260ms ease;
 }
-.home-quick-link[data-target='postgame_reports'] .home-quick-image { object-position: 50% 48%; }
-.home-quick-link[data-target='team_pitching'] .home-quick-image { object-position: 72% 55%; }
-.home-quick-link[data-target='team_hitting'] .home-quick-image { object-position: 54% 48%; }
-.home-quick-link[data-target='opponent_scouting'] .home-quick-image { object-position: 50% 42%; }
-.home-quick-link[data-target='defense_workspace'] .home-quick-image { object-position: 50% 50%; }
-.home-quick-link[data-target='homebase'] .home-quick-image { object-position: 68% 10%; }
+.home-quick-link[data-target="team_pitching"] .home-quick-image { object-position: 50% 8%; }
+.home-quick-link[data-target="team_hitting"] .home-quick-image { object-position: 58% 8%; }
+.home-quick-link[data-target="opponent_scouting"] .home-quick-image { object-position: 50% 8%; }
+.home-quick-link[data-target="defense_workspace"] .home-quick-image { object-position: 50% 8%; }
+.home-quick-link[data-target="homebase"] .home-quick-image { object-position: 50% 2%; }
 .home-quick-link:hover .home-quick-image { transform: scale(1.035); }
 .home-quick-shade {
   position: absolute;

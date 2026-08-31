@@ -4640,12 +4640,18 @@ opponent_logo <- function(abbr) {
 
 home_quick_link <- function(label, description, target, number, image = NULL) {
   has_image <- !is.null(image) && nzchar(image)
+  enabled <- !is.null(target) && target %in% names(BASE_NAV_TABS)
   tags$button(
     type = "button",
-    class = paste("home-quick-link", if (has_image) "has-image" else "has-no-image"),
-    onclick = base_nav_click_js(target),
+    class = paste(
+      "home-quick-link",
+      if (has_image) "has-image" else "has-no-image",
+      if (!enabled) "is-placeholder" else ""
+    ),
+    onclick = if (enabled) base_nav_click_js(target) else NULL,
+    disabled = if (!enabled) "disabled" else NULL,
     `data-target` = target,
-    `aria-label` = paste(label, description),
+    `aria-label` = paste(label, description, if (!enabled) "Coming soon" else ""),
     if (has_image) {
       tags$img(class = "home-quick-image", src = image, alt = "", `aria-hidden` = "true")
     },
@@ -4654,7 +4660,7 @@ home_quick_link <- function(label, description, target, number, image = NULL) {
       class = "home-quick-copy",
       tags$strong(label)
     ),
-    tags$span(class = "home-quick-arrow", HTML("&rarr;"))
+    tags$span(class = "home-quick-arrow", if (enabled) HTML("&rarr;") else "Soon")
   )
 }
 
@@ -4773,12 +4779,13 @@ home_tab_ui <- function() {
             class = "home-quick-grid",
             home_quick_link("Postgame Reports", "Pitching, hitting, and catching PDFs", "postgame_reports", "01", "postgamereports.jpg"),
             home_quick_link("Pitching", "Staff performance, bullpens, trends, and reports", "team_pitching", "02", "pitching.jpg"),
-            home_quick_link("Hitting", "Lineups, team trends, and hitter development", "team_hitting", "03", "hitting.jpg"),
-            home_quick_link("Opponent Scouting", "Scout NCAA pitchers and hitters", "opponent_scouting", "04", "opponentscouting.jpg"),
-            home_quick_link("JUCO Stats", "Compare junior-college hitters and pitchers", "juco_stats", "05"),
-            home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "06", "defenseiveanalytics.webp"),
-            home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "07", "homeBASE.jpg"),
-            home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "08")
+            home_quick_link("Hitting", "Lineups, team trends, and hitter development", "team_hitting", "03", "hitting-card.jpg"),
+            home_quick_link("Opponent Scouting", "Scout NCAA pitchers and hitters", "opponent_scouting", "04", "opponentscouting-card.jpg"),
+            home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "05", "defenseiveanalytics.webp"),
+            home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "06", "homeBASE.jpg"),
+            home_quick_link("JUCO Scouting", "Compare junior-college hitters and pitchers", "juco_stats", "07", "jucoscouting.png"),
+            home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "08"),
+            home_quick_link("Player Health", "Player availability and health tools", "player_health", "09")
           )
         ),
         tags$section(
@@ -4839,7 +4846,7 @@ ui <- navbarPage(
       tags$link(rel = "icon", href = base_supercat_logo_url()),
       tags$link(rel = "stylesheet",
         href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"),
-      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=24"),
+      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=27"),
       tags$style(HTML(base_brand_css(include_leaderboards = FALSE))),
       tags$style(HTML("
         #base-splash {
@@ -4930,9 +4937,9 @@ ui <- navbarPage(
   tabPanel("Pitching",         value = "tab_team_pitching",  base_team_pitching_workspace_ui()),
   tabPanel("Hitting",          value = "tab_team_hitting",   base_team_hitting_workspace_ui()),
   tabPanel("Opponent Scouting", value = "tab_opponent_scouting", opponent_scouting_workspace_ui()),
-  tabPanel("JUCO Stats",       value = "tab_juco_stats",     base_juco_stats_workspace_ui()),
   tabPanel("Defense Workspace", value = "tab_defense_workspace", base_team_defense_workspace_ui()),
   tabPanel("HomeBASE",         value = "tab_homebase",       base_media_ui()),
+  tabPanel("JUCO Scouting",    value = "tab_juco_stats",     base_juco_stats_workspace_ui()),
   tabPanel("Data Processing",  value = "tab_data_processing", data_processing_workspace_ui()),
   tabPanel("Pitcher Reports",  value = "tab_pitcher",        pitcher_card_ui()),
   tabPanel("Hitter Reports",   value = "tab_hitter",         hitter_ui()),

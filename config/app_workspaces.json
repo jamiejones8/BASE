@@ -105,19 +105,8 @@
       ]
     },
     {
-      "id": "juco_stats",
-      "order": 5,
-      "title": "JUCO Stats",
-      "description": "Search and compare junior-college hitting and pitching leaderboards.",
-      "implementation_policy": "Host Wally's JucoStatsApp inside the BASE shell while preserving its filters, percentile shading, and standalone workflow.",
-      "tools": [
-        "Hitting leaderboard",
-        "Pitching leaderboard"
-      ]
-    },
-    {
       "id": "defense",
-      "order": 6,
+      "order": 5,
       "title": "Defensive Analytics",
       "description": "Analyze positioning, opportunities, range, player value, and catcher receiving.",
       "implementation_policy": "Combine BASE defensive attribution with Wally opportunity, range/OAA, and framing features only after their metric gates pass.",
@@ -133,7 +122,7 @@
     },
     {
       "id": "homebase",
-      "order": 7,
+      "order": 6,
       "title": "HomeBASE",
       "description": "Search any available player and open a role-aware individual snapshot.",
       "implementation_policy": "Rename and replace BASE Media. Support national search plus direct Texas State roster-card navigation.",
@@ -150,6 +139,17 @@
       ],
       "identity_policy": "Prefer stable player ID. When unavailable, disambiguate normalized name by team and role; never silently merge same-name players.",
       "initial_scope": "Navigation, search, identity, and player context only; profile content will be designed later."
+    },
+    {
+      "id": "juco_stats",
+      "order": 7,
+      "title": "JUCO Scouting",
+      "description": "Search and compare junior-college hitting and pitching leaderboards.",
+      "implementation_policy": "Host Wally's JucoStatsApp inside the BASE shell while preserving its filters, percentile shading, and standalone workflow.",
+      "tools": [
+        "Hitting leaderboard",
+        "Pitching leaderboard"
+      ]
     },
     {
       "id": "data_processing",

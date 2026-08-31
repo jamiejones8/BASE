@@ -993,7 +993,7 @@ ui <- if (JUCO_EMBEDDED_MODE) {
   )
 } else {
   page_navbar(
-    title = "JUCO Stats Leaderboards",
+    title = "JUCO Scouting",
     theme = txst_theme,
     header = head_css,
     juco_hitting_panel,

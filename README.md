@@ -22,11 +22,11 @@ player in the complete College26 source.
 ## Unified application shell
 
 Home is the directory for eight focused workspaces: Postgame Reports,
-Pitching, Hitting, Opponent Scouting, JUCO Stats, Defensive Analytics,
-HomeBASE, and Data Processing. The legacy global navbar is hidden and a
+Pitching, Hitting, Opponent Scouting, Defensive Analytics, HomeBASE,
+JUCO Scouting, and Data Processing. The legacy global navbar is hidden and a
 persistent Home control remains available from every page.
 
-Pitching, Hitting, Defense, Opponent Scouting, and JUCO Stats are Wally workspace
+Pitching, Hitting, Defense, Opponent Scouting, and JUCO Scouting are Wally workspace
 integrations. All twelve original Pitching tabs, all ten original Hitting
 workflows, all seven original Defense workflows, and all six ScoutingApp report
 workflows run inside BASE, alongside the JUCO hitting and pitching leaderboards.

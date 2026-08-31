@@ -24,7 +24,7 @@ base_wally_juco_environment <- function() {
     !vapply(BASE_WALLY_JUCO_REQUIRED_PACKAGES, requireNamespace, logical(1), quietly = TRUE)
   ]
   if (length(missing)) {
-    stop("JUCO Stats dependencies are missing: ", paste(missing, collapse = ", "))
+    stop("JUCO Scouting dependencies are missing: ", paste(missing, collapse = ", "))
   }
   if (!file.exists(BASE_WALLY_JUCO_FILE)) {
     stop("Wally JucoStatsApp source is unavailable at ", BASE_WALLY_JUCO_FILE)
@@ -58,7 +58,7 @@ base_juco_stats_workspace_ui <- function() {
       class = "base-workspace-heading",
       tags$div(
         tags$div(class = "base-eyebrow", "Junior-college scouting pool"),
-        tags$h1("JUCO Stats"),
+        tags$h1("JUCO Scouting"),
         tags$p("Search and compare junior-college hitting and pitching leaderboards.")
       ),
       tags$div(
@@ -71,7 +71,7 @@ base_juco_stats_workspace_ui <- function() {
       id = "base-juco-loading",
       class = "base-workspace-loading",
       tags$div(class = "base-loading-mark", "B"),
-      tags$strong("Preparing JUCO Stats"),
+      tags$strong("Preparing JUCO Scouting"),
       tags$span("The workspace loads once, when first opened.")
     ),
     shiny::uiOutput("base_juco_stats_app")
