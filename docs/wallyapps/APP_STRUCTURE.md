@@ -21,7 +21,7 @@ report and visualization.
 
 | Order | Workspace | Purpose |
 |---:|---|---|
-| 1 | Postgame Reports | The three existing BASE PDF generators only |
+| 1 | Postgame Reports | Hitting, pitching, and catching AAR workflows |
 | 2 | Pitching | Texas State pitcher evaluation, bullpens, trends, and leaderboards |
 | 3 | Hitting | Texas State hitter evaluation, lineup planning, trends, and leaderboards |
 | 4 | Opponent Scouting | National opposing-pitcher and opposing-hitter scouting |
@@ -34,15 +34,16 @@ for now.
 
 ## Postgame Reports
 
-Postgame Reports is deliberately narrow. It contains only the existing BASE:
+Postgame Reports is deliberately narrow. It contains the three Wally AAR workflows:
 
-1. Pitching PDF generator;
-2. Hitting PDF generator;
-3. Catching PDF generator.
+1. Pitching AAR;
+2. Hitting AAR;
+3. Catching AAR.
 
 Grouping these pages must not change report calculations, layouts, or download
-behavior. Wally team analysis, AAR views, trends, and leaderboards do not move
-into this workspace merely because they concern a completed game.
+behavior. The AARs are removed from their former Pitching, Hitting, and
+Defensive Analytics tab sets; trends, leaderboards, and other team analysis
+remain in those workspaces.
 
 ## Pitching
 
@@ -88,9 +89,8 @@ validation gates.
 Catching intentionally appears in two workflows without duplicating its
 calculation engine:
 
-- Postgame Reports generates the existing catcher PDF;
-- Defensive Analytics provides interactive game and season receiving/framing
-  statistics.
+- Postgame Reports provides the single-game catcher AAR and PDF;
+- Defensive Analytics provides season receiving/framing statistics.
 
 Both eventually consume one shared catcher calculation payload and the same
 versioned reference population.

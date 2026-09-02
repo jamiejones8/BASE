@@ -324,17 +324,20 @@ base_pitching_embedded_head <- function() {
         position: relative;
       }
       .base-pitching-workspace table.dataTable tbody td:has(> .cf-cell) {
-        padding: 0 !important;
+        padding: 2px !important;
+        background: #fff !important;
       }
       .base-pitching-workspace table.dataTable tbody td > .cf-cell {
-        display: flex !important;
+        display: block !important;
         width: 100% !important;
-        min-height: 36px;
-        padding: 8px 10px !important;
+        min-height: 32px;
+        margin: 0 !important;
+        padding: 6px 8px !important;
         box-sizing: border-box !important;
-        align-items: center;
-        justify-content: center;
-        border-radius: 0 !important;
+        border: 2px solid #fff !important;
+        border-radius: 4px !important;
+        background-clip: padding-box !important;
+        text-align: center;
       }
       .base-pitching-workspace .shiny-spinner-output-container,
       .base-pitching-workspace .shiny-html-output,
@@ -653,6 +656,7 @@ base_wally_pitching_environment <- function(team_rows) {
     keep.source = FALSE
   )
   if (!inherits(workspace$ui, c("shiny.tag", "shiny.tag.list", "list")) ||
+      !inherits(workspace$base_pitching_postgame_ui, c("shiny.tag", "shiny.tag.list", "list")) ||
       !is.function(workspace$server)) {
     stop("Wally PitchingApp did not expose a usable UI and server.")
   }
@@ -695,6 +699,13 @@ base_team_pitching_workspace_server <- function(input, output, session) {
   base_clear_team_pitching_cache()
   output$base_team_pitching_app <- shiny::renderUI({
     tags$div(class = "base-pitching-workspace", workspace$ui)
+  })
+  output$base_postgame_pitching_aar <- shiny::renderUI({
+    tags$div(
+      class = "base-pitching-workspace base-postgame-aar",
+      workspace$head_css,
+      workspace$base_pitching_postgame_ui
+    )
   })
   workspace$server(input, output, session)
   shinyjs::hide("base-pitching-loading")

@@ -27,12 +27,13 @@ JUCO Scouting, and Data Processing. The legacy global navbar is hidden and a
 persistent Home control remains available from every page.
 
 Pitching, Hitting, Defense, Opponent Scouting, and JUCO Scouting are Wally workspace
-integrations. All twelve original Pitching tabs, all ten original Hitting
-workflows, all seven original Defense workflows, and all six ScoutingApp report
-workflows run inside BASE, alongside the JUCO hitting and pitching leaderboards.
+integrations. Their team-analysis workflows run inside BASE, while the hitting,
+pitching, and catching AARs are grouped under Postgame Reports. All six
+ScoutingApp report workflows run inside BASE alongside the JUCO hitting and
+pitching leaderboards.
 They initialize only when first opened and use
-scoped BASE styling. Interactive catcher analysis lives in Defense while the
-unchanged catcher PDF generator remains under Postgame Reports. See
+scoped BASE styling. Catcher season analysis lives in Defense while the
+single-game catcher AAR lives under Postgame Reports. See
 [`docs/wallyapps/PITCHING_INTEGRATION.md`](docs/wallyapps/PITCHING_INTEGRATION.md),
 [`docs/wallyapps/HITTING_INTEGRATION.md`](docs/wallyapps/HITTING_INTEGRATION.md),
 [`docs/wallyapps/DEFENSE_INTEGRATION.md`](docs/wallyapps/DEFENSE_INTEGRATION.md),

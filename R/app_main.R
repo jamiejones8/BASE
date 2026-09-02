@@ -4693,24 +4693,52 @@ workspace_landing_ui <- function(title, eyebrow, description, cards) {
 }
 
 postgame_reports_workspace_ui <- function() {
-  workspace_landing_ui(
-    "Postgame Reports",
-    "PDF report generators",
-    "Generate the three existing BASE reports without changing their calculations or layouts.",
-    list(
-      workspace_tool_card(
-        "Pitching Report", "Build the existing postgame pitcher report and PDF.",
-        "pitcher", "Pitching"
+  tagList(
+    tags$head(tags$style(HTML("
+      .base-postgame-page { padding-bottom: 48px; }
+      .base-postgame-page > .nav { margin: 0 0 18px; }
+      .base-postgame-page .base-postgame-aar { min-width: 0; }
+      .base-postgame-page .base-report-builder { display:grid; gap:18px; width:100%; min-width:0; }
+      .base-postgame-page .base-report-controls {
+        display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)) auto;
+        gap:12px; align-items:end; padding:14px; border:1px solid rgba(80,18,20,.14);
+        border-radius:10px; background:rgba(255,255,255,.92);
+      }
+      .base-postgame-page .base-report-controls-team { grid-template-columns:minmax(260px,1fr); }
+      .base-postgame-page .base-report-controls .form-group { margin-bottom:0; }
+      .base-postgame-page .base-report-preview {
+        width:100%; min-width:0; overflow-x:auto; padding:12px;
+        border:1px solid rgba(80,18,20,.14); border-radius:10px; background:#e9e6e1;
+      }
+      .base-postgame-page .base-report-preview .shiny-image-output {
+        height:auto!important; margin:0 auto 18px; background:#fff;
+        box-shadow:0 6px 18px rgba(30,22,18,.16);
+      }
+      .base-postgame-page .base-report-preview-portrait .shiny-image-output { width:1050px!important; }
+      .base-postgame-page .base-report-preview .shiny-image-output img {
+        display:block; width:100%!important; height:auto!important;
+      }
+      @media(max-width:900px){
+        .base-postgame-page .base-report-controls,
+        .base-postgame-page .base-report-controls-team { grid-template-columns:1fr; }
+      }
+    "))),
+    tags$div(
+      class = "hub-main base-page base-postgame-page",
+      tags$div(class = "base-eyebrow", "After action reports"),
+      tags$h2("Postgame Reports"),
+      tags$p(
+        class = "base-workspace-description",
+        "Build, preview, and download the hitting, pitching, and catching AARs in one workspace."
       ),
-      workspace_tool_card(
-        "Hitting Report", "Build the existing postgame hitter report and PDF.",
-        "hitter", "Hitting"
-      ),
-      workspace_tool_card(
-        "Catching Report", "Build the existing receiving and game-management PDF.",
-        "catcher", "Catching"
+      bslib::navset_tab(
+        id = "base_postgame_report_tabs",
+        bslib::nav_panel("Pitching AAR", shiny::uiOutput("base_postgame_pitching_aar")),
+        bslib::nav_panel("Hitting AAR", shiny::uiOutput("base_postgame_hitting_aar")),
+        bslib::nav_panel("Catching AAR", shiny::uiOutput("base_postgame_catching_aar"))
       )
-    )
+    ),
+    tags$div(class = "hub-footer", base_brand_footer())
   )
 }
 
@@ -4784,7 +4812,7 @@ home_tab_ui <- function() {
             home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "05", "defenseiveanalytics.webp"),
             home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "06", "homeBASE.jpg"),
             home_quick_link("JUCO Scouting", "Compare junior-college hitters and pitchers", "juco_stats", "07", "jucoscouting.png"),
-            home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "08"),
+            home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "08", "dataprocessing.jpg"),
             home_quick_link("Player Health", "Player availability and health tools", "player_health", "09")
           )
         ),
@@ -4973,7 +5001,7 @@ server <- function(input, output, session) {
     id = "leaderboards"
   )
   base_lazy_workspace_server(
-    input, session, "tab_team_pitching",
+    input, session, c("tab_team_pitching", "tab_postgame_reports"),
     initialize = function() base_team_pitching_workspace_server(
       input,
       output,
@@ -4982,7 +5010,7 @@ server <- function(input, output, session) {
     id = "team_pitching"
   )
   base_lazy_workspace_server(
-    input, session, "tab_team_hitting",
+    input, session, c("tab_team_hitting", "tab_postgame_reports"),
     initialize = function() base_team_hitting_workspace_server(
       input,
       output,
@@ -5005,7 +5033,7 @@ server <- function(input, output, session) {
     id = "juco_stats"
   )
   base_lazy_workspace_server(
-    input, session, "tab_defense_workspace",
+    input, session, c("tab_defense_workspace", "tab_postgame_reports"),
     initialize = function() base_team_defense_workspace_server(
       input,
       output,

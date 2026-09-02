@@ -2139,12 +2139,12 @@ add_d1_percentiles <- function(metrics, baseline = d1_catcher_framing_baseline) 
 percentile_color <- function(pct) {
   if (!is.finite(pct)) return("#BFC9CA")
   dplyr::case_when(
-    pct >= 90 ~ "#E33434",
-    pct >= 75 ~ "#DC735F",
-    pct >= 60 ~ "#D39383",
-    pct >= 40 ~ "#AAC6CB",
-    pct >= 25 ~ "#8CAAD2",
-    TRUE ~ "#5D7EBC"
+    pct >= 90 ~ "#1B5E20",
+    pct >= 75 ~ "#2E7D32",
+    pct >= 60 ~ "#66A96B",
+    pct >= 40 ~ "#E3B2B2",
+    pct >= 25 ~ "#DF7777",
+    TRUE ~ "#B71C1C"
   )
 }
 
@@ -2343,9 +2343,9 @@ head_css <- htmltools::tags$head(
     .cr-percentile-title{font-weight:800;color:#222;font-size:1rem;line-height:1.1}
     .cr-percentile-subtitle{font-size:.78rem;font-weight:800;color:#078197;text-align:right;line-height:1.1}
     .cr-percentile-scale{display:grid;grid-template-columns:1fr 1fr 1fr;margin:0 44px 4px 126px;font-size:.62rem;font-weight:800;letter-spacing:.02em}
-    .cr-percentile-scale span:nth-child(1){color:#3464B8;text-align:left}
+    .cr-percentile-scale span:nth-child(1){color:#B71C1C;text-align:left}
     .cr-percentile-scale span:nth-child(2){color:#A4BEC1;text-align:center}
-    .cr-percentile-scale span:nth-child(3){color:#D9252E;text-align:right}
+    .cr-percentile-scale span:nth-child(3){color:#1B5E20;text-align:right}
     .cr-percentile-rows{flex:1;display:flex;flex-direction:column;justify-content:space-between}
     .cr-percentile-row{display:grid;grid-template-columns:118px minmax(110px,1fr) 42px;gap:7px;align-items:center;min-height:28px}
     .cr-percentile-label{font-size:.72rem;line-height:1.05;text-align:right;color:#444;white-space:normal}
@@ -2399,6 +2399,75 @@ if (isTRUE(get0("BASE_DEFENSE_EMBEDDED", inherits = FALSE, ifnotfound = FALSE)))
 } else {
   base_defense_page <- page_sidebar
 }
+
+base_catching_postgame_choices <- character(0)
+if (nrow(catching_df) && "Catcher" %in% names(catching_df)) {
+  catcher_values <- unique(nz_chr(catching_df$Catcher))
+  catcher_values <- catcher_values[nzchar(catcher_values)]
+  if (length(catcher_values)) {
+    catcher_labels <- name_display(catcher_values)
+    catcher_order <- order(catcher_labels)
+    base_catching_postgame_choices <- stats::setNames(
+      catcher_values[catcher_order],
+      catcher_labels[catcher_order]
+    )
+  }
+}
+
+base_catching_postgame_game_choices <- character(0)
+if (length(base_catching_postgame_choices)) {
+  default_catcher <- unname(base_catching_postgame_choices[[1]])
+  default_rows <- catching_df %>% dplyr::filter(.data$Catcher == default_catcher)
+  default_games <- tibble::tibble(
+    gid = as.character(default_rows$CustomGameID),
+    gdate = default_rows$GameDate,
+    season = default_rows$SeasonGroup,
+    home = coalesce_chr_cols(default_rows, c("HomeTeam")),
+    away = coalesce_chr_cols(default_rows, c("AwayTeam")),
+    team = coalesce_chr_cols(default_rows, c("CatcherTeam", "PitcherTeam"))
+  ) %>%
+    dplyr::filter(!is.na(.data$gid), nzchar(.data$gid)) %>%
+    dplyr::distinct(.data$gid, .data$gdate, .data$season, .data$home, .data$away, .data$team) %>%
+    dplyr::arrange(dplyr::desc(.data$gdate), dplyr::desc(.data$gid))
+  base_catching_postgame_game_choices <- catcher_game_choices(default_games)
+}
+
+base_catching_postgame_ui <- tagList(
+  div(
+    class = "mb-2 d-flex align-items-center justify-content-between",
+    div(
+      style = "display:flex; gap:12px; align-items:center; flex-wrap:wrap;",
+      selectInput(
+        "def_AARCatcher", "Catcher",
+        choices = base_catching_postgame_choices,
+        selected = if (length(base_catching_postgame_choices)) unname(base_catching_postgame_choices[[1]]) else NULL,
+        width = "260px"
+      ),
+      selectInput(
+        "def_AARCatchGame", "Game (most recent first)",
+        choices = base_catching_postgame_game_choices,
+        selected = if (length(base_catching_postgame_game_choices)) unname(base_catching_postgame_game_choices[[1]]) else NULL,
+        width = "320px"
+      ),
+      downloadButton("def_catcher_framing_pdf", "Download Catcher Receiving (PDF)", class = "btn btn-primary")
+    )
+  ),
+  fluidRow(
+    column(
+      width = 5,
+      div(class = "defense-panel", div(class = "mb-2", tableOutput("def_catcher_ball_to_strike_stats")), plotOutput("def_catcher_ball_to_strike_plot", height = "620px"))
+    ),
+    column(width = 2, div(class = "defense-panel", plotOutput("def_catcher_pitch_legend", height = "620px", width = "100%"))),
+    column(
+      width = 5,
+      div(class = "defense-panel", div(class = "mb-2", tableOutput("def_catcher_strike_to_ball_stats")), plotOutput("def_catcher_strike_to_ball_plot", height = "620px"))
+    )
+  ),
+  fluidRow(
+    column(width = 6, div(class = "defense-panel", style = "width:100%; overflow-x:auto;", DTOutput("def_catcher_ball_to_strike_tbl"))),
+    column(width = 6, div(class = "defense-panel", style = "width:100%; overflow-x:auto;", DTOutput("def_catcher_strike_to_ball_tbl")))
+  )
+)
 
 # -------------------- UI --------------------
 ui <- base_defense_page(
@@ -2525,33 +2594,9 @@ ui <- base_defense_page(
       div(class = "defense-panel", withSpinner(plotOutput("oaa_plot", height = "520px"), type = 4, color = "#501214")),
       div(class = "defense-panel", withSpinner(DTOutput("oaa_table"), type = 4, color = "#501214"))
     ),
-    nav_panel(
-      "Catcher Reports",
-      div(
-        class = "mb-2 d-flex align-items-center justify-content-between",
-        div(
-          style = "display:flex; gap:12px; align-items:center; flex-wrap:wrap;",
-          selectInput("def_AARCatcher", "Catcher", choices = character(0), selected = NULL, width = "260px"),
-          selectInput("def_AARCatchGame", "Game (most recent first)", choices = character(0), selected = NULL, width = "320px"),
-          downloadButton("def_catcher_framing_pdf", "Download Catcher Receiving (PDF)", class = "btn btn-primary")
-        )
-      ),
-      fluidRow(
-        column(
-          width = 5,
-          div(class = "defense-panel", div(class = "mb-2", tableOutput("def_catcher_ball_to_strike_stats")), plotOutput("def_catcher_ball_to_strike_plot", height = "620px"))
-        ),
-        column(width = 2, div(class = "defense-panel", plotOutput("def_catcher_pitch_legend", height = "620px", width = "100%"))),
-        column(
-          width = 5,
-          div(class = "defense-panel", div(class = "mb-2", tableOutput("def_catcher_strike_to_ball_stats")), plotOutput("def_catcher_strike_to_ball_plot", height = "620px"))
-        )
-      ),
-      fluidRow(
-        column(width = 6, div(class = "defense-panel", style = "width:100%; overflow-x:auto;", DTOutput("def_catcher_ball_to_strike_tbl"))),
-        column(width = 6, div(class = "defense-panel", style = "width:100%; overflow-x:auto;", DTOutput("def_catcher_strike_to_ball_tbl")))
-      )
-    ),
+    if (!isTRUE(get0("BASE_DEFENSE_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))) {
+      nav_panel("Catcher Reports", base_catching_postgame_ui)
+    },
     nav_panel(
       "Catcher Season",
       div(

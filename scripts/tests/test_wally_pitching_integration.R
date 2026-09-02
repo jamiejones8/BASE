@@ -52,6 +52,16 @@ if (!any(prepared$PitchUID == "fixture-unique-bullpen-pitch", na.rm = TRUE)) {
 
 workspace <- base_wally_pitching_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Pitching server is unavailable.")
+if (!grepl("rgba\\(227,52,52", workspace$.severity_fill(1, "coach"))) {
+  fail("Coach-facing Pitching shading is not red for favorable values.")
+}
+if (!grepl("rgba\\(46,125,50", workspace$.severity_fill(1, "player"))) {
+  fail("Player-facing Pitching shading is not green for favorable values.")
+}
+aar_fill <- workspace$aar_severity_fill(.40, .30)
+if (!grepl("^#[0-9A-Fa-f]{6}$", aar_fill) || grepl("rgba", aar_fill, fixed = TRUE)) {
+  fail("Pitching AAR shading is not using PDF-safe hexadecimal colors.")
+}
 
 html <- paste(as.character(workspace$ui), collapse = "")
 if (grepl("<body", html, fixed = TRUE)) {
@@ -63,22 +73,34 @@ if (!grepl("base-pitching-embedded-layout", html, fixed = TRUE)) {
 expected_tabs <- c(
   "Performance", "Pitch Metrics", "Season Summary", "Pitch Decay",
   "Locations", "Whiffs / Chases / Called Strikes / Barrels", "Stuff+",
-  "AAR", "Bullpens", "Leaderboard", "Team Report", "Team Trends"
+  "Bullpens", "Leaderboard", "Team Report", "Team Trends"
 )
 missing_tabs <- expected_tabs[!vapply(expected_tabs, grepl, logical(1), x = html, fixed = TRUE)]
 if (length(missing_tabs)) {
   fail("Embedded Pitching UI is missing tabs: ", paste(missing_tabs, collapse = ", "))
 }
+if (grepl(">AAR<", html, fixed = TRUE)) {
+  fail("Pitching AAR is still present in the Pitching workspace.")
+}
+postgame_html <- paste(as.character(workspace$base_pitching_postgame_ui), collapse = "")
+if (!grepl("aar_dl", postgame_html, fixed = TRUE) ||
+    !grepl("pitch_aar_season_groups", postgame_html, fixed = TRUE)) {
+  fail("Pitching AAR was not exposed to the Postgame Reports workspace.")
+}
 
 pitcher <- as.character(workspace$txst_pitchers[[1]])
 games <- unname(workspace$games_txst)
+aar_render_payload <- NULL
 shiny::testServer(workspace$server, {
   session$setInputs(
     PitcherInput = pitcher,
     season_groups = "S26",
     Bullpens = FALSE,
     GameInput = games,
-    BatterHand = c("L", "R")
+    BatterHand = c("L", "R"),
+    pitch_aar_season_groups = "S26",
+    aar_pitcher = pitcher,
+    aar_game = games[[1]]
   )
   session$flushReact()
   decay <- pitch_decay_base()
@@ -86,9 +108,31 @@ shiny::testServer(workspace$server, {
     fail("Pitch Decay did not return its preserved Wally payload.")
   }
   if (!nrow(decay$pitches)) fail("Pitch Decay returned no fixture pitches.")
+  recent_aars <- aar_recent_reports()
+  if (!nrow(recent_aars)) fail("Moved Pitching AAR archive returned no fixture rows.")
+  gp <- aar_game_data()
+  sp <- aar_season_data()
+  aar_date <- as.Date("2026-03-15")
+  aar_render_payload <<- list(game = gp, season = sp, date = aar_date)
   invisible(output$pitch_decay_table)
   invisible(output$pitch_decay_velocity)
 })
+
+aar_pdf <- tempfile(fileext = ".pdf")
+on.exit(unlink(aar_pdf), add = TRUE)
+workspace$render_AAR_pdf(
+  game_p = aar_render_payload$game,
+  season_p = aar_render_payload$season,
+  pitcher_name = pitcher,
+  game_date = aar_render_payload$date,
+  opponent = "Fixture Opponent",
+  outfile = aar_pdf,
+  arm_angle_deg = NULL,
+  season_col_label = "Season"
+)
+if (!file.exists(aar_pdf) || file.info(aar_pdf)$size <= 0) {
+  fail("Pitching AAR PDF did not render successfully.")
+}
 
 cat(
   "Wally Pitching integration passed:", nrow(prepared),

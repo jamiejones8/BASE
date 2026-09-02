@@ -138,7 +138,10 @@ base_wally_defense_environment <- function(startup_rows = NULL) {
   workspace$BASE_DEFENSE_THEME <- bslib::bs_theme(version = 3, primary = TEAM_CONFIG$colors$primary)
   workspace$BASE_DEFENSE_HEAD <- base_defense_embedded_head()
   sys.source(BASE_WALLY_DEFENSE_FILE, envir = workspace, chdir = TRUE, keep.source = FALSE)
-  if (!is.function(workspace$server)) stop("Wally DefenseApp did not expose a usable server.")
+  if (!inherits(workspace$base_catching_postgame_ui, c("shiny.tag", "shiny.tag.list", "list")) ||
+      !is.function(workspace$server)) {
+    stop("Wally DefenseApp did not expose a usable UI and server.")
+  }
   assign("environment", workspace, envir = .base_wally_defense_state)
   workspace
 }
@@ -159,6 +162,13 @@ base_team_defense_workspace_ui <- function() {
 base_team_defense_workspace_server <- function(input, output, session, startup_rows = NULL) {
   workspace <- base_wally_defense_environment(startup_rows)
   output$base_team_defense_app <- shiny::renderUI(tags$div(class = "base-defense-workspace", workspace$ui))
+  output$base_postgame_catching_aar <- shiny::renderUI({
+    tags$div(
+      class = "base-defense-workspace base-postgame-aar",
+      workspace$head_css,
+      workspace$base_catching_postgame_ui
+    )
+  })
   workspace$server(input, output, session)
   shinyjs::hide("base-defense-loading")
   invisible(workspace)

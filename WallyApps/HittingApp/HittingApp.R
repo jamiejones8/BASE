@@ -55,6 +55,41 @@ safe_ratio <- function(a,b) ifelse(b > 0, a/b, NA_real_)
 to_num     <- function(x) if (is.numeric(x)) x else suppressWarnings(readr::parse_number(as.character(x)))
 nz_chr     <- function(x) ifelse(is.na(x), "", as.character(x))
 pick_first <- function(cands, in_df) { cands <- cands[cands %in% names(in_df)]; if (length(cands)) cands[[1]] else NA_character_ }
+
+# Reuse the expected-contact grid and PA weights from the older CAPS workflow.
+.hitting_xwoba_cache <- new.env(parent = emptyenv())
+hitting_xwoba_grid <- function() {
+  key <- "grid"
+  if (exists(key, envir = .hitting_xwoba_cache, inherits = FALSE)) {
+    return(get(key, envir = .hitting_xwoba_cache, inherits = FALSE))
+  }
+  configured <- get0("BASE_HITTING_XWOBA_GRID_PATH", inherits = FALSE, ifnotfound = "")
+  env_path <- Sys.getenv("BASE_XWGRID_FILE", unset = "")
+  candidates <- unique(c(
+    configured,
+    env_path,
+    file.path("..", "..", "models", "shared", "xwoba_grid.rds")
+  ))
+  candidates <- candidates[nzchar(candidates) & file.exists(candidates)]
+  value <- if (length(candidates)) {
+    tryCatch(readRDS(candidates[[1]]), error = function(e) NULL)
+  } else NULL
+  assign(key, value, envir = .hitting_xwoba_cache)
+  value
+}
+
+hitting_xwoba_lookup <- function(ev, la, grid = hitting_xwoba_grid()) {
+  ev <- to_num(ev); la <- to_num(la)
+  out <- rep(NA_real_, max(length(ev), length(la)))
+  if (is.null(grid) || !all(c("ev_edges", "la_edges", "grid") %in% names(grid))) return(out)
+  ei <- findInterval(ev, grid$ev_edges)
+  li <- findInterval(la, grid$la_edges)
+  ok <- is.finite(ev) & is.finite(la) &
+    ei >= 1 & ei < length(grid$ev_edges) &
+    li >= 1 & li < length(grid$la_edges)
+  out[ok] <- grid$grid[cbind(ei[ok], li[ok])]
+  out
+}
 name_display <- function(x){
   x <- as.character(x)
   vapply(x, function(s){
@@ -727,10 +762,21 @@ bucket_color <- local({
     rgba(if (p >= 0.5) "#E33434" else "#5D7EBC", alpha)
   }
 })
-STAT_GOOD_FILL <- "rgba(227,52,52,0.30)"
-STAT_BAD_FILL <- "rgba(93,126,188,0.30)"
-STAT_GOOD_SOLID <- "#F3B9B9"
-STAT_BAD_SOLID <- "#C7D4EA"
+STAT_GOOD_FILL <- "rgba(46,125,50,0.30)"
+STAT_BAD_FILL <- "rgba(214,40,40,0.30)"
+STAT_GOOD_SOLID <- "#CFE8D2"
+STAT_BAD_SOLID <- "#F4CCCC"
+
+player_severity_hex <- function(score) {
+  if (!is.finite(score)) return("")
+  score <- pmin(pmax(score, -1), 1)
+  severity <- abs(score)
+  if (severity < 0.08) return("")
+  base <- grDevices::col2rgb(if (score > 0) "#2E7D32" else "#D62828")
+  alpha <- 0.16 + 0.72 * severity^0.80
+  mixed <- round(255 * (1 - alpha) + base[, 1] * alpha)
+  grDevices::rgb(mixed[1], mixed[2], mixed[3], maxColorValue = 255)
+}
 shade_columns9 <- function(df_in, cols, lower_better = character(0), percent_cols = character(0)) {
   out <- df_in; cols <- intersect(cols, names(out))
   for (nm in cols) {
@@ -824,12 +870,14 @@ head_css <- htmltools::tags$head(
       }
 
       .cf-cell{
-        display:inline-block;padding:2px 6px;border-radius:4px;min-width:3ch;text-align:center;
+        display:block;width:100%;min-height:32px;padding:6px 8px;margin:0;
+        border:2px solid #fff;border-radius:4px;background-clip:padding-box;
+        box-sizing:border-box;min-width:3ch;text-align:center;
       }
-      /* Leaderboard: make conditional fill span the whole cell */
+      /* Leaderboard: keep each conditional fill inset from its neighbors. */
       #hit_leaderboard_table td > .cf-cell{
-        display:block;width:100%;height:100%;
-        padding:6px 8px;margin:-6px -8px;box-sizing:content-box;
+        display:block;width:100%;min-height:32px;
+        padding:6px 8px;margin:0;box-sizing:border-box;
       }
 
       /* Keep card/table containers white, but allow DT cells to override bg */
@@ -1102,13 +1150,16 @@ summarize_overall <- function(d){
   if (is.null(d) || !is.data.frame(d) || nrow(d) == 0) {
     return(tibble::tibble(
       PA = 0,
-      wOBA = NA_real_, wOBAcon = NA_real_,
+      wOBA = NA_real_, wOBAcon = NA_real_, xwOBA = NA_real_, xwOBAcon = NA_real_,
       OBP = NA_real_, SLG = NA_real_, OPS = NA_real_,
       hRV = NA_real_,
       `K%` = NA_real_, `BB%` = NA_real_, `Barrel%` = NA_real_,
       `Contact%` = NA_real_, `Z-Contact%` = NA_real_, `Whiff%` = NA_real_, `IZ-Whiff%` = NA_real_,
+      `Swing%` = NA_real_, `IZ-Swing%` = NA_real_,
       `Chase%` = NA_real_, `Pre2K Chase%` = NA_real_, `2K Chase%` = NA_real_,
-      `EV>95%` = NA_real_, `90th EV` = NA_real_, `LD+FB%` = NA_real_, `Airpull%` = NA_real_
+      MaxEV = NA_real_, `90th EV` = NA_real_, `EV>95%` = NA_real_, `10-35*%` = NA_real_,
+      `GB%` = NA_real_, `LD%` = NA_real_, `FB%` = NA_real_, `PU%` = NA_real_,
+      `Foul Ball%` = NA_real_, `LD+FB%` = NA_real_, `Airpull%` = NA_real_
     ))
   }
   
@@ -1135,13 +1186,19 @@ summarize_overall <- function(d){
   contact <- sum(is_swing & !is_whiff, na.rm = TRUE)
   
   zone_swings <- is_swing & (in_zone %in% TRUE)
+  foul_contact <- grepl("foul", nz_chr(pitch_call), ignore.case = TRUE)
+  bip_contact <- grepl("in\\s*play|inplay|ball\\s*in\\s*play", nz_chr(pitch_call), ignore.case = TRUE)
   
   contact_pct   <- safe_ratio(contact, swings)
   whiff_pct     <- safe_ratio(whiffs, swings)
+  swing_pct     <- safe_ratio(swings, n)
+  izswing_pct   <- safe_ratio(sum(zone_swings, na.rm = TRUE), sum(in_zone %in% TRUE, na.rm = TRUE))
   zcontact_pct  <- safe_ratio(sum((is_swing & !is_whiff) & (in_zone %in% TRUE), na.rm = TRUE),
                               sum(zone_swings, na.rm = TRUE))
   izwhiff_pct   <- safe_ratio(sum(is_whiff & (in_zone %in% TRUE), na.rm = TRUE),
                               sum(zone_swings, na.rm = TRUE))
+  foul_ball_pct <- safe_ratio(sum(foul_contact, na.rm = TRUE),
+                              sum(foul_contact | bip_contact, na.rm = TRUE))
   
   # Chase% (O-Swing%): swings at out-of-zone / out-of-zone pitches
   out_zone <- in_zone %in% FALSE
@@ -1203,6 +1260,22 @@ summarize_overall <- function(d){
   # wOBAcon: only BIP PA; BB/HBP/K excluded naturally by bip flag
   w_con <- ifelse(bip_pa %in% TRUE, w, 0)
   wOBAcon <- safe_ratio(sum(w_con, na.rm = TRUE), bip_den)
+
+  # CAPS expected-wOBA logic: grid value on contact, fixed BB/HBP weights,
+  # zero for strikeouts, and intentional walks excluded from the PA mean.
+  contact_xw <- .get_num(pa_last, c("xwOBA", "xwoba", "ExpectedWOBA", "ExpectedwOBA"))
+  grid_xw <- hitting_xwoba_lookup(ev_pa, la_pa)
+  contact_xw[!is.finite(contact_xw)] <- grid_xw[!is.finite(contact_xw)]
+  xwOBAcon <- .safe_mean(contact_xw[(bip_pa %in% TRUE) & is.finite(contact_xw)])
+  pa_xw <- dplyr::case_when(
+    ev_type == "IBB" ~ NA_real_,
+    ev_type == "K" ~ 0,
+    ev_type == "BB" ~ woba_weights$BB,
+    ev_type == "HBP" ~ woba_weights$HBP,
+    bip_pa %in% TRUE ~ contact_xw,
+    TRUE ~ NA_real_
+  )
+  xwOBA <- .safe_mean(pa_xw)
   
   barrel_flag <- if (exists("is_barrel_txst", inherits = TRUE)) {
     is_barrel_txst(pc_last, pr_last, ev_pa, la_pa)
@@ -1212,12 +1285,24 @@ summarize_overall <- function(d){
   barrel_pct <- safe_ratio(sum(barrel_flag %in% TRUE, na.rm = TRUE), bip_den)
   
   ev95_pct <- safe_ratio(sum((bip_pa %in% TRUE) & is.finite(ev_pa) & ev_pa >= 95, na.rm = TRUE), bip_den)
+
+  max_ev <- if (bip_den > 0 && any(is.finite(ev_pa[bip_pa %in% TRUE]))) {
+    max(ev_pa[bip_pa %in% TRUE], na.rm = TRUE)
+  } else NA_real_
   
   ev90 <- if (bip_den > 0 && any(is.finite(ev_pa[bip_pa %in% TRUE]))) {
     suppressWarnings(as.numeric(stats::quantile(ev_pa[bip_pa %in% TRUE], 0.90, na.rm = TRUE)))
   } else NA_real_
   
-  ldfb_pct <- safe_ratio(sum((bip_pa %in% TRUE) & is.finite(la_pa) & la_pa >= 10, na.rm = TRUE), bip_den)
+  # Launch-angle rates use only classifiable BIP. A BIP with no measured LA
+  # cannot be assigned to a bucket and therefore must not dilute all four.
+  bip_la_den <- sum((bip_pa %in% TRUE) & is.finite(la_pa), na.rm = TRUE)
+  ldfb_pct <- safe_ratio(sum((bip_pa %in% TRUE) & is.finite(la_pa) & la_pa >= 10, na.rm = TRUE), bip_la_den)
+  sweet_spot_pct <- safe_ratio(sum((bip_pa %in% TRUE) & is.finite(la_pa) & la_pa >= 10 & la_pa <= 35, na.rm = TRUE), bip_la_den)
+  gb_pct <- safe_ratio(sum((bip_pa %in% TRUE) & is.finite(la_pa) & la_pa < 5, na.rm = TRUE), bip_la_den)
+  ld_pct <- safe_ratio(sum((bip_pa %in% TRUE) & is.finite(la_pa) & la_pa >= 5 & la_pa < 25, na.rm = TRUE), bip_la_den)
+  fb_pct <- safe_ratio(sum((bip_pa %in% TRUE) & is.finite(la_pa) & la_pa >= 25 & la_pa <= 50, na.rm = TRUE), bip_la_den)
+  pu_pct <- safe_ratio(sum((bip_pa %in% TRUE) & is.finite(la_pa) & la_pa > 50, na.rm = TRUE), bip_la_den)
   
   # Airpull% (BIP + air (LA>=10) + pulled)
   bats_pa <- if ("bats" %in% names(pa_last)) nz_chr(pa_last$bats) else NA_character_
@@ -1304,6 +1389,8 @@ summarize_overall <- function(d){
     PA = PA,
     wOBA = wOBA,
     wOBAcon = wOBAcon,
+    xwOBA = xwOBA,
+    xwOBAcon = xwOBAcon,
     OBP = obp,
     SLG = slg,
     OPS = ops,
@@ -1315,11 +1402,20 @@ summarize_overall <- function(d){
     `Z-Contact%` = zcontact_pct,
     `Whiff%` = whiff_pct,
     `IZ-Whiff%` = izwhiff_pct,
+    `Swing%` = swing_pct,
+    `IZ-Swing%` = izswing_pct,
     `Chase%` = chase_pct,
     `Pre2K Chase%` = pre2k_chase,
     `2K Chase%` = two_k_chase,
-    `EV>95%` = ev95_pct,
+    MaxEV = max_ev,
     `90th EV` = ev90,
+    `EV>95%` = ev95_pct,
+    `10-35*%` = sweet_spot_pct,
+    `GB%` = gb_pct,
+    `LD%` = ld_pct,
+    `FB%` = fb_pct,
+    `PU%` = pu_pct,
+    `Foul Ball%` = foul_ball_pct,
     `LD+FB%` = ldfb_pct,
     `Airpull%` = airpull_pct
   )
@@ -1331,12 +1427,15 @@ summarize_by_pitchtype <- function(d){
     return(tibble::tibble(
       PitchType = character(),
       PA = integer(),
-      wOBA = double(), wOBAcon = double(),
+      wOBA = double(), wOBAcon = double(), xwOBA = double(), xwOBAcon = double(),
       OBP = double(), SLG = double(), OPS = double(), hRV = double(),
       `K%` = double(), `BB%` = double(), `Barrel%` = double(),
       `Contact%` = double(), `Z-Contact%` = double(), `Whiff%` = double(), `IZ-Whiff%` = double(),
+      `Swing%` = double(), `IZ-Swing%` = double(),
       `Chase%` = double(), `Pre2K Chase%` = double(), `2K Chase%` = double(),
-      `EV>95%` = double(), `90th EV` = double(), `LD+FB%` = double(), `Airpull%` = double()
+      MaxEV = double(), `90th EV` = double(), `EV>95%` = double(), `10-35*%` = double(),
+      `GB%` = double(), `LD%` = double(), `FB%` = double(), `PU%` = double(),
+      `Foul Ball%` = double(), `LD+FB%` = double(), `Airpull%` = double()
     ))
   }
   
@@ -1363,12 +1462,19 @@ dplyr::bind_rows(out, totals)
 }
 
 performance_timeseries_choices <- c(
-  "wOBA", "wOBAcon", "OBP", "SLG", "OPS",
+  "wOBA", "wOBAcon", "xwOBA", "xwOBAcon", "OBP", "SLG", "OPS",
   "K%", "BB%", "Barrel%",
-  "Contact%", "Z-Contact%", "Whiff%", "IZ-Whiff%",
+  "Swing%", "IZ-Swing%", "Whiff%", "IZ-Whiff%",
   "Chase%", "Pre2K Chase%", "2K Chase%",
-  "EV>95%", "90th EV", "LD+FB%", "Airpull%",
+  "MaxEV", "90th EV", "EV>95%", "10-35*%", "GB%", "LD%", "FB%", "PU%", "Foul Ball%", "Airpull%",
   "Heater Usage", "Breaker Usage", "Soft Usage"
+)
+
+performance_table_metrics <- c(
+  "PA", "wOBA", "wOBAcon", "xwOBA", "xwOBAcon", "OBP", "SLG", "OPS", "hRV",
+  "K%", "BB%", "Barrel%",
+  "Swing%", "IZ-Swing%", "Whiff%", "IZ-Whiff%", "Chase%", "Pre2K Chase%", "2K Chase%",
+  "MaxEV", "90th EV", "EV>95%", "10-35*%", "GB%", "LD%", "FB%", "PU%", "Foul Ball%", "Airpull%"
 )
 
 contact_type_levels <- c("Pop Up", "Fly Ball", "Line Drive", "Ground Ball")
@@ -1474,6 +1580,67 @@ if (isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE)))
 } else {
   base_hitting_page <- page_sidebar
 }
+
+base_hitting_postgame_ui <- tagList(
+  if (isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))) {
+    div(
+      class = "aar-card",
+      style = "display:flex; gap:12px; align-items:end; flex-wrap:wrap;",
+      selectInput(
+        "aar_hitter", "Hitter", choices = hitters_txst,
+        selected = if (length(hitters_txst)) hitters_txst[[1]] else NULL,
+        width = "280px"
+      ),
+      checkboxGroupInput(
+        "hit_aar_season_groups", "Quick-select seasons",
+        choices = SEASON_CHOICES, selected = "S26", inline = TRUE
+      )
+    )
+  },
+  div(
+    class="mb-2 d-flex align-items-center justify-content-between",
+    div(
+      style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;",
+      selectInput(
+        "AARGame",
+        "Game (most recent first)",
+        choices = character(0),
+        selected = NULL,
+        width = "420px"
+      ),
+      downloadButton("hit_aar_pdf", "Download AAR (PDF)", class = "btn btn-primary")
+    )
+  ),
+  uiOutput("aar_header"),
+  fluidRow(
+    column(
+      width = 6,
+      div(
+        class="aar-card aar-table",
+        style="width:100%; overflow-x:auto;",
+        DTOutput("aar_table")
+      )
+    ),
+    column(
+      width = 6,
+      div(class="aar-card", plotOutput("aar_strike", height = "620px"))
+    )
+  ),
+  fluidRow(
+    column(
+      width = 4,
+      div(class="aar-card", plotOutput("aar_spray", height = "520px"))
+    ),
+    column(
+      width = 4,
+      div(class="aar-card", plotOutput("aar_contact", height = "520px"))
+    ),
+    column(
+      width = 4,
+      div(class="aar-card", uiOutput("aar_kpi"))
+    )
+  )
+)
 
 # -------------------- UI --------------------
 ui <- base_hitting_page(
@@ -1631,66 +1798,9 @@ ui <- base_hitting_page(
         )
       )
     ),
-    nav_panel(
-      title = "Game Reports (AAR)",
-      div(
-        class="mb-2 d-flex align-items-center justify-content-between",
-        div(
-          style="display:flex; gap:12px; align-items:center;",
-          selectInput(
-            "AARGame",
-            "Game (most recent first)",
-            choices = character(0),
-            selected = NULL,
-            width = "420px"
-          ),
-          downloadButton("hit_aar_pdf", "Download AAR (PDF)", class = "btn btn-primary")
-        )
-      ),
-      # --- Exportable header starts BELOW buttons ---
-      uiOutput("aar_header"),
-      fluidRow(
-        # Top-left: Swing Decisions (numbered)
-        column(
-          width = 6,
-          div(
-            class="aar-card aar-table",
-            style="width:100%; overflow-x:auto;",
-            DTOutput("aar_table")
-          )
-        ),
-        # Top-right: Strike Zone (catcher POV) with numbers + legends
-        column(
-          width = 6,
-          div(class="aar-card",
-              plotOutput("aar_strike", height = "620px")
-          )
-        )
-      ),
-      fluidRow(
-        # Bottom-left: Spray chart with same numbers + legends
-        column(
-          width = 4,
-          div(class="aar-card",
-              plotOutput("aar_spray", height = "520px")
-          )
-        ),
-        # Bottom-middle: Contact point (overhead)
-        column(
-          width = 4,
-          div(class="aar-card",
-              plotOutput("aar_contact", height = "520px")
-          )
-        ),
-        # Bottom-right: HIT STRIKES HARD KPIs
-        column(
-          width = 4,
-          div(class="aar-card",
-              uiOutput("aar_kpi")
-          )
-        )
-      )
-    ),
+    if (!isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))) {
+      nav_panel(title = "Game Reports (AAR)", base_hitting_postgame_ui)
+    },
     
     nav_panel(
       title = "Leaderboard",
@@ -2494,14 +2604,10 @@ team_hit_statline_bits <- function(d) {
 
 d1_shade_fill <- function(val, d1, lower_better = FALSE) {
   if (!is.finite(val) || !is.finite(d1) || d1 == 0) return("")
-  if (lower_better) {
-    if (val <= d1 * 0.95) return(STAT_GOOD_SOLID)
-    if (val >= d1 * 1.05) return(STAT_BAD_SOLID)
-  } else {
-    if (val >= d1 * 1.05) return(STAT_GOOD_SOLID)
-    if (val <= d1 * 0.95) return(STAT_BAD_SOLID)
-  }
-  ""
+  span <- max(abs(d1) * 0.25, 0.05)
+  score <- (val - d1) / span
+  if (isTRUE(lower_better)) score <- -score
+  player_severity_hex(score)
 }
 
 build_hitter_process_table <- function(game_p, season_p, season_header = "Season") {
@@ -3377,14 +3483,40 @@ format_perf_table <- function(tbl){
   if ("IZWhiff%" %in% names(tbl) && !("IZ-Whiff%" %in% names(tbl))) {
     tbl <- dplyr::rename(tbl, `IZ-Whiff%` = `IZWhiff%`)
   }
+  for (nm in c("xwOBA", "xwOBAcon", "Swing%", "IZ-Swing%", "MaxEV",
+               "10-35*%", "GB%", "LD%", "FB%", "PU%", "Foul Ball%")) {
+    if (!(nm %in% names(tbl))) tbl[[nm]] <- NA_real_
+  }
   if (!("Z-Swing%" %in% names(tbl))) {
     tbl$`Z-Swing%` <- NA_real_
   }
-  
-  tbl %>%
+
+  # Allocate rounding remainders so the four displayed BIP buckets always
+  # total exactly 100.0%, rather than occasionally showing 99.9/100.1.
+  partition_cols <- c("GB%", "LD%", "FB%", "PU%")
+  partition_fmt <- matrix(NA_character_, nrow = nrow(tbl), ncol = length(partition_cols),
+                          dimnames = list(NULL, partition_cols))
+  if (nrow(tbl)) {
+    for (i in seq_len(nrow(tbl))) {
+      vals <- as.numeric(unlist(tbl[i, partition_cols, drop = FALSE], use.names = FALSE))
+      if (!all(is.finite(vals)) || sum(vals) <= 0) next
+      raw_tenths <- vals / sum(vals) * 1000
+      shown_tenths <- floor(raw_tenths)
+      remainder <- as.integer(1000 - sum(shown_tenths))
+      if (remainder > 0) {
+        add_to <- order(raw_tenths - shown_tenths, decreasing = TRUE)[seq_len(remainder)]
+        shown_tenths[add_to] <- shown_tenths[add_to] + 1
+      }
+      partition_fmt[i, ] <- sprintf("%.1f%%", shown_tenths / 10)
+    }
+  }
+
+  out <- tbl %>%
     dplyr::mutate(
       wOBA      = ifelse(is.finite(wOBA), sprintf("%.3f", wOBA), NA),
       wOBAcon   = ifelse(is.finite(wOBAcon), sprintf("%.3f", wOBAcon), NA),
+      xwOBA     = ifelse(is.finite(xwOBA), sprintf("%.3f", xwOBA), NA),
+      xwOBAcon  = ifelse(is.finite(xwOBAcon), sprintf("%.3f", xwOBAcon), NA),
       OBP       = ifelse(is.finite(OBP), sprintf("%.3f", OBP), NA),
       SLG       = ifelse(is.finite(SLG), sprintf("%.3f", SLG), NA),
       OPS       = ifelse(is.finite(OPS), sprintf("%.3f", OPS), NA),
@@ -3396,15 +3528,26 @@ format_perf_table <- function(tbl){
       `Z-Contact%` = ifelse(is.na(`Z-Contact%`), NA, sprintf("%.1f%%", 100 * `Z-Contact%`)),
       `Whiff%`     = ifelse(is.na(`Whiff%`), NA, sprintf("%.1f%%", 100 * `Whiff%`)),
       `IZ-Whiff%` = ifelse(is.finite(`IZ-Whiff%`), sprintf("%.1f%%", 100*`IZ-Whiff%`), NA),
+      `Swing%`     = ifelse(is.finite(`Swing%`), sprintf("%.1f%%", 100 * `Swing%`), NA),
+      `IZ-Swing%`  = ifelse(is.finite(`IZ-Swing%`), sprintf("%.1f%%", 100 * `IZ-Swing%`), NA),
       `Z-Swing%`   = ifelse(is.finite(`Z-Swing%`), sprintf("%.1f%%", 100 * `Z-Swing%`), NA),
       `Chase%`     = ifelse(is.na(`Chase%`), NA, sprintf("%.1f%%", 100 * `Chase%`)),
       `Pre2K Chase%` = ifelse(is.na(`Pre2K Chase%`), NA, sprintf("%.1f%%", 100 * `Pre2K Chase%`)),
       `2K Chase%`    = ifelse(is.na(`2K Chase%`),   NA, sprintf("%.1f%%", 100 * `2K Chase%`)),
-      `EV>95%`    = sprintf("%.1f%%", 100 * `EV>95%`),
+      MaxEV       = ifelse(is.finite(MaxEV), sprintf("%.1f", MaxEV), NA),
       `90th EV`   = ifelse(is.finite(`90th EV`), sprintf("%.1f", `90th EV`), NA),
+      `EV>95%`    = sprintf("%.1f%%", 100 * `EV>95%`),
+      `10-35*%`   = ifelse(is.finite(`10-35*%`), sprintf("%.1f%%", 100 * `10-35*%`), NA),
+      `GB%`       = ifelse(is.finite(`GB%`), sprintf("%.1f%%", 100 * `GB%`), NA),
+      `LD%`       = ifelse(is.finite(`LD%`), sprintf("%.1f%%", 100 * `LD%`), NA),
+      `FB%`       = ifelse(is.finite(`FB%`), sprintf("%.1f%%", 100 * `FB%`), NA),
+      `PU%`       = ifelse(is.finite(`PU%`), sprintf("%.1f%%", 100 * `PU%`), NA),
+      `Foul Ball%` = ifelse(is.finite(`Foul Ball%`), sprintf("%.1f%%", 100 * `Foul Ball%`), NA),
       `LD+FB%`    = sprintf("%.1f%%", 100 * `LD+FB%`),
       `Airpull%`  = ifelse(is.na(`Airpull%`), NA, sprintf("%.1f%%", 100 * `Airpull%`))
     )
+  out[partition_cols] <- as.data.frame(partition_fmt, stringsAsFactors = FALSE)
+  out
 }
 
 # -------------------- D1 shading helpers (shared) --------------------
@@ -3413,7 +3556,7 @@ D1_PCT <- c(
   `Contact%`=0.771, `Z-Contact%`=0.843,
   `Whiff%`=0.229, `IZ-Whiff%`=0.157,
   `Chase%`=0.242, `Pre2K Chase%`=0.192, `2K Chase%`=0.363,
-  `Z-Swing%`=0.680,
+  `Z-Swing%`=0.680, `IZ-Swing%`=0.680,
   `LD+FB%`=0.477
 )
 D1_PCT_PTYPE <- list(
@@ -3421,7 +3564,10 @@ D1_PCT_PTYPE <- list(
   SPIN     = list(whiff = 0.32, chase = 0.25),
   SOFT     = list(whiff = 0.32, chase = 0.27)
 )
-D1_NON <- c(wOBA=0.363, wOBAcon=0.395, OBP=0.384, SLG=0.441, OPS=0.825, `90th EV`=103.1)
+D1_NON <- c(
+  wOBA=0.363, wOBAcon=0.395, xwOBA=0.363, xwOBAcon=0.395,
+  OBP=0.384, SLG=0.441, OPS=0.825, `90th EV`=103.1
+)
 lower_better <- c("K%","Whiff%","IZ-Whiff%","Chase%","Pre2K Chase%","2K Chase%")
 
 shade_cell <- function(txt, bg){
@@ -3431,17 +3577,24 @@ shade_cell <- function(txt, bg){
   sprintf("<span class='cf-cell' style='background-color:%s;color:%s;font-weight:700'>%s</span>", bg, fg, txt)
 }
 
-stat_severity_fill <- function(score) {
+severity_rgba_fill <- function(score, palette = c("coach", "player")) {
+  palette <- match.arg(palette)
   if (!is.finite(score)) return("")
   score <- pmin(pmax(score, -1), 1)
   severity <- abs(score)
   if (severity < 0.08) return("")
-  rgb <- grDevices::col2rgb(if (score > 0) "#E33434" else "#5D7EBC")
+  colors <- if (identical(palette, "player")) c(good = "#2E7D32", bad = "#D62828") else c(good = "#E33434", bad = "#5D7EBC")
+  rgb <- grDevices::col2rgb(if (score > 0) colors[["good"]] else colors[["bad"]])
   alpha <- 0.16 + 0.72 * severity^0.80
   sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], alpha)
 }
 
-apply_d1_shading <- function(tbl_num, tbl_fmt){
+stat_severity_fill <- function(score) severity_rgba_fill(score, "coach")
+player_severity_fill <- function(score) severity_rgba_fill(score, "player")
+
+apply_d1_shading <- function(tbl_num, tbl_fmt, palette = c("coach", "player")){
+  palette <- match.arg(palette)
+  fill_fun <- if (identical(palette, "player")) player_severity_fill else stat_severity_fill
   out <- tbl_fmt
   
   # Continuous severity: benchmark is neutral; +/- 5 points reaches full intensity.
@@ -3451,45 +3604,57 @@ apply_d1_shading <- function(tbl_num, tbl_fmt){
     low_better <- nm %in% lower_better
     score <- (v - avg) / 0.05
     if (low_better) score <- -score
-    bg <- vapply(score, stat_severity_fill, FUN.VALUE = character(1))
+    bg <- vapply(score, fill_fun, FUN.VALUE = character(1))
     out[[nm]] <- mapply(shade_cell, out[[nm]], bg, USE.NAMES = FALSE)
   }
   
   # non-% stats: wOBA/wOBAcon +/- .025; 90th EV +/- 2.5 (per CELL)
   if ("wOBA" %in% names(tbl_num) && "wOBA" %in% names(out)) {
     v <- tbl_num$wOBA; avg <- D1_NON[["wOBA"]]
-    bg <- vapply((v - avg) / 0.025, stat_severity_fill, FUN.VALUE = character(1))
+    bg <- vapply((v - avg) / 0.025, fill_fun, FUN.VALUE = character(1))
     out$wOBA <- mapply(shade_cell, out$wOBA, bg, USE.NAMES = FALSE)
   }
   
   if ("wOBAcon" %in% names(tbl_num) && "wOBAcon" %in% names(out)) {
     v <- tbl_num$wOBAcon; avg <- D1_NON[["wOBAcon"]]
-    bg <- vapply((v - avg) / 0.025, stat_severity_fill, FUN.VALUE = character(1))
+    bg <- vapply((v - avg) / 0.025, fill_fun, FUN.VALUE = character(1))
     out$wOBAcon <- mapply(shade_cell, out$wOBAcon, bg, USE.NAMES = FALSE)
+  }
+
+  if ("xwOBA" %in% names(tbl_num) && "xwOBA" %in% names(out)) {
+    v <- tbl_num$xwOBA; avg <- D1_NON[["xwOBA"]]
+    bg <- vapply((v - avg) / 0.025, fill_fun, FUN.VALUE = character(1))
+    out$xwOBA <- mapply(shade_cell, out$xwOBA, bg, USE.NAMES = FALSE)
+  }
+
+  if ("xwOBAcon" %in% names(tbl_num) && "xwOBAcon" %in% names(out)) {
+    v <- tbl_num$xwOBAcon; avg <- D1_NON[["xwOBAcon"]]
+    bg <- vapply((v - avg) / 0.025, fill_fun, FUN.VALUE = character(1))
+    out$xwOBAcon <- mapply(shade_cell, out$xwOBAcon, bg, USE.NAMES = FALSE)
   }
   
   # OBP / SLG / OPS: +/- .100 (same green/red rule as wOBA)
   if ("OBP" %in% names(tbl_num) && "OBP" %in% names(out)) {
     v <- tbl_num$OBP; avg <- D1_NON[["OBP"]]
-    bg <- vapply((v - avg) / 0.100, stat_severity_fill, FUN.VALUE = character(1))
+    bg <- vapply((v - avg) / 0.100, fill_fun, FUN.VALUE = character(1))
     out$OBP <- mapply(shade_cell, out$OBP, bg, USE.NAMES = FALSE)
   }
   
   if ("SLG" %in% names(tbl_num) && "SLG" %in% names(out)) {
     v <- tbl_num$SLG; avg <- D1_NON[["SLG"]]
-    bg <- vapply((v - avg) / 0.100, stat_severity_fill, FUN.VALUE = character(1))
+    bg <- vapply((v - avg) / 0.100, fill_fun, FUN.VALUE = character(1))
     out$SLG <- mapply(shade_cell, out$SLG, bg, USE.NAMES = FALSE)
   }
   
   if ("OPS" %in% names(tbl_num) && "OPS" %in% names(out)) {
     v <- tbl_num$OPS; avg <- D1_NON[["OPS"]]
-    bg <- vapply((v - avg) / 0.100, stat_severity_fill, FUN.VALUE = character(1))
+    bg <- vapply((v - avg) / 0.100, fill_fun, FUN.VALUE = character(1))
     out$OPS <- mapply(shade_cell, out$OPS, bg, USE.NAMES = FALSE)
   }
   
   if ("90th EV" %in% names(tbl_num) && "90th EV" %in% names(out)) {
     v <- tbl_num[["90th EV"]]; avg <- D1_NON[["90th EV"]]
-    bg <- vapply((v - avg) / 2.5, stat_severity_fill, FUN.VALUE = character(1))
+    bg <- vapply((v - avg) / 2.5, fill_fun, FUN.VALUE = character(1))
     out[["90th EV"]] <- mapply(shade_cell, out[["90th EV"]], bg, USE.NAMES = FALSE)
   }
   
@@ -4561,7 +4726,7 @@ server <- function(input, output, session){
   }
 
   apply_leaderboard_shading <- function(tbl_num, tbl_fmt){
-    apply_d1_shading(tbl_num, tbl_fmt)
+    apply_d1_shading(tbl_num, tbl_fmt, palette = "player")
   }
 
   output$hit_leaderboard_table <- DT::renderDT({
@@ -5908,12 +6073,29 @@ server <- function(input, output, session){
   }
   ptype_shape_vals <- c("HARD"=21, "BREAK"=24, "SOFT"=22)  
   decision_fill <- c("SWING"="#B4975A", "TAKE"="#501214")  
+
+  aar_hitter_value <- reactive({
+    embedded_choice <- input$aar_hitter
+    if (!is.null(embedded_choice) && length(embedded_choice) && nzchar(embedded_choice[[1]])) {
+      return(as.character(embedded_choice[[1]]))
+    }
+    as.character(input$Hitter %||% "")
+  })
+
+  aar_season_group_values <- reactive({
+    embedded_choice <- input$hit_aar_season_groups
+    if (!is.null(embedded_choice)) return(as.character(embedded_choice))
+    as.character(input$hit_season_groups %||% character(0))
+  })
   
   # AAR data for a single selected game
   aar_game_data_for <- function(sel_game, use_full_game = FALSE){
-    req(input$Hitter)
+    aar_hitter <- aar_hitter_value()
+    req(nzchar(aar_hitter))
     
-    d <- if (isTRUE(use_full_game)) df else dat_filt()
+    # AAR controls are independent from the Hitting workspace sidebar because
+    # the report now lives in the unified Postgame Reports workspace.
+    d <- df
     d$is_swing <- d$pitch_call %in% SWING_LIKE
     d$is_swing[is.na(d$is_swing)] <- FALSE
     
@@ -5959,20 +6141,10 @@ server <- function(input, output, session){
       )
     
     # Keep only this hitter’s **real game** rows (or BP if toggled)
-    if (!isTRUE(use_full_game)) {
-      if (isTRUE(input$hit_Bullpens)) {
-        d <- d %>% dplyr::filter((.data$Batter == input$Hitter) | (.data$Pitcher == input$Hitter))
-      } else {
-        d <- d %>% dplyr::filter(.data$Batter == input$Hitter, !(is_bullpen %in% TRUE))
-      }
-    } else {
-      if (!isTRUE(input$hit_Bullpens)) {
-        d <- d %>% dplyr::filter(!(is_bullpen %in% TRUE))
-      }
-    }
+    d <- d %>% dplyr::filter(.data$Batter == aar_hitter, !(is_bullpen %in% TRUE))
     
     # Build the hitter's game list (newest → oldest) and pick the current selection
-    gf <- games_for_hitter()
+    gf <- games_for_aar_hitter()
     gids <- gf
     if (is.data.frame(gf)) gids <- gf$gid
     gids <- as.character(gids)
@@ -5985,11 +6157,7 @@ server <- function(input, output, session){
     validate(need(length(gids) > 0 && !is.null(sel) && nzchar(sel), "No games for this hitter."))
     
     # Filter to that single game id (BP vs Games use different id columns)
-    if (isTRUE(input$hit_Bullpens) && "CustomGameID_BP" %in% names(d)) {
-      d <- d %>% dplyr::filter(.data$CustomGameID_BP == sel)
-    } else {
-      d <- d %>% dplyr::filter(.data$CustomGameID == sel)
-    }
+    d <- d %>% dplyr::filter(.data$CustomGameID == sel)
     validate(need(nrow(d) > 0, "No rows in selected game."))
     
     # robust game-order sorting with fallbacks
@@ -6323,6 +6491,45 @@ server <- function(input, output, session){
         dplyr::arrange(dplyr::desc(gdate), dplyr::desc(gid))
     }
   })
+
+  games_for_aar_hitter <- reactive({
+    h <- aar_hitter_value()
+    if (!nzchar(h)) {
+      return(tibble::tibble(
+        gid = character(0), gdate = as.Date(character(0)), season = character(0)
+      ))
+    }
+    dd <- df %>% dplyr::filter(.data$Batter == h, !(is_bullpen %in% TRUE))
+    gd <- dplyr::coalesce(
+      dd$GameDate,
+      parse_date_any(dd$Date),
+      extract_date_from_filename(dd$source_file)
+    )
+    season_col <- if ("SeasonTag" %in% names(dd)) {
+      "SeasonTag"
+    } else if ("SeasonGroup" %in% names(dd)) {
+      "SeasonGroup"
+    } else {
+      NULL
+    }
+    sg <- if (!is.null(season_col)) as.character(dd[[season_col]]) else NA_character_
+    tibble::tibble(gid = dd$CustomGameID, gdate = gd, season = sg) %>%
+      dplyr::filter(!is.na(.data$gid), nzchar(.data$gid)) %>%
+      dplyr::distinct(.data$gid, .data$gdate, .data$season) %>%
+      dplyr::arrange(dplyr::desc(.data$gdate), dplyr::desc(.data$gid))
+  })
+
+  aar_game_choices <- reactive({
+    gf <- games_for_aar_hitter()
+    if (!nrow(gf)) return(character(0))
+    sg <- aar_season_group_values()
+    if (length(sg) && "season" %in% names(gf)) {
+      filtered <- gf$gid[gf$season %in% sg]
+      filtered <- filtered[!is.na(filtered) & nzchar(filtered)]
+      if (length(filtered)) return(unique(as.character(filtered)))
+    }
+    unique(as.character(gf$gid))
+  })
   
   all_game_choices_for_hitter <- reactive({
     gf <- games_for_hitter()
@@ -6391,40 +6598,22 @@ server <- function(input, output, session){
   
   # -------------------- AAR Game selector (single source of truth) --------------------
   observeEvent(
-    list(input$Hitter, input$hit_Bullpens),
+    list(aar_hitter_value(), aar_season_group_values()),
     {
-      ch <- all_game_choices_for_hitter()
+      ch <- aar_game_choices()
       if (!length(ch)) {
         updateSelectInput(session, "AARGame", choices = character(0), selected = NULL)
         return()
       }
-      
-      sel <- season_selected_game_ids()
-      pick <- if (length(sel)) sel[[1]] else NULL
-      
       updateSelectInput(
         session,
         "AARGame",
         choices  = ch,
-        selected = pick
+        selected = ch[[1]]
       )
     },
     ignoreInit = FALSE
   )
-  
-  observeEvent(input$hit_season_groups, {
-    ch  <- all_game_choices_for_hitter()
-    sel <- season_selected_game_ids()
-    pick <- if (length(sel)) sel[[1]] else NULL
-    
-    updateSelectInput(
-      session,
-      "AARGame",
-      choices  = ch,
-      selected = pick
-    )
-    
-  }, ignoreInit = TRUE)
   
   # -------------------- Performance Table --------------------
   output$perf_tbl <- DT::renderDT({
@@ -6439,17 +6628,18 @@ server <- function(input, output, session){
         table(class = "display",
               thead(
                 tr(class = "group-header",
-                   th(colspan = 11, ""),                                 # name/pt + PA + wOBA + wOBAcon + OBP + SLG + OPS + hRV + K + BB + Barrel
-                   th(colspan = 4, class = "group-label", "HIT"),
-                   th(colspan = 3, class = "group-label", "STRIKES"),
-                   th(colspan = 4, class = "group-label", "HARD")
+                   th(colspan = 13, ""),
+                   th(colspan = 7, class = "group-label", "SWING"),
+                   th(colspan = 10, class = "group-label", "BATTED BALL")
                 ),
                 tr(
-                  th(first_col_label), th("PA"), th("wOBA"), th("wOBAcon"), th("OBP"), th("SLG"), th("OPS"), th("hRV"),
+                  th(first_col_label), th("PA"), th("wOBA"), th("wOBAcon"), th("xwOBA"), th("xwOBAcon"),
+                  th("OBP"), th("SLG"), th("OPS"), th("hRV"),
                   th("K%"), th("BB%"), th("Barrel%"),
-                  th("Contact%"), th("Z-Contact%"), th("Whiff%"), th("IZ-Whiff%"),
+                  th("Swing%"), th("IZ-Swing%"), th("Whiff%"), th("IZ-Whiff%"),
                   th("Chase%"), th("Pre2K Chase%"), th("2K Chase%"),
-                  th("EV>95%"), th("90th EV"), th("LD+FB%"), th("Airpull%")
+                  th("MaxEV"), th("EV90"), th("EV>95%"), th("10-35*%"),
+                  th("GB%"), th("LD%"), th("FB%"), th("PU%"), th("Foul Ball%"), th("Airpull%")
                 )
               )
         )
@@ -6457,18 +6647,7 @@ server <- function(input, output, session){
     }
     
     make_row <- function(dd, label){
-      if (!nrow(dd)) {
-        tibble::tibble(
-          Name = label, PA = 0,
-          wOBA=NA_real_, wOBAcon=NA_real_, OBP=NA_real_, SLG=NA_real_, OPS=NA_real_, hRV=NA_real_,
-          `K%`=NA_real_, `BB%`=NA_real_, `Barrel%`=NA_real_,
-          `Contact%`=NA_real_, `Z-Contact%`=NA_real_, `Whiff%`=NA_real_, `IZ-Whiff%`=NA_real_,
-          `Chase%`=NA_real_, `Pre2K Chase%`=NA_real_, `2K Chase%`=NA_real_,
-          `EV>95%`=NA_real_, `90th EV`=NA_real_, `LD+FB%`=NA_real_, `Airpull%`=NA_real_
-        )
-      } else {
-        summarize_overall(dd) %>% dplyr::mutate(Name = label, .before = 1)
-      }
+      summarize_overall(dd) %>% dplyr::mutate(Name = label, .before = 1)
     }
     
     if (split_mode == "hand") {
@@ -6484,12 +6663,7 @@ server <- function(input, output, session){
       tbl_fmt <- tbl_num %>% format_perf_table()
       
       tbl_fmt <- apply_d1_shading(tbl_num, tbl_fmt) %>%
-        dplyr::select(
-          Name, PA, wOBA, wOBAcon, OBP, SLG, OPS, hRV, `K%`, `BB%`, `Barrel%`,
-          `Contact%`, `Z-Contact%`, `Whiff%`, `IZ-Whiff%`,
-          `Chase%`, `Pre2K Chase%`, `2K Chase%`,
-          `EV>95%`, `90th EV`, `LD+FB%`, `Airpull%`
-        )
+        dplyr::select(dplyr::all_of(c("Name", performance_table_metrics)))
       
       DT::datatable(
         tbl_fmt,
@@ -6504,7 +6678,7 @@ server <- function(input, output, session){
             "  if (data[0] === 'Totals') { $('td', row).css('font-weight', '800'); }",
             "}"
           ),
-          columnDefs = list(list(className = "grp-start", targets = c(11,15,18)))
+          columnDefs = list(list(className = "grp-start", targets = c(13,20)))
         )
       )
       
@@ -6513,12 +6687,7 @@ server <- function(input, output, session){
       
       tbl_fmt <- tbl_num %>% format_perf_table()
       tbl_fmt <- apply_d1_shading(tbl_num, tbl_fmt) %>%
-        dplyr::select(
-          PitchType, PA, wOBA, wOBAcon, OBP, SLG, OPS, hRV, `K%`, `BB%`, `Barrel%`,
-          `Contact%`, `Z-Contact%`, `Whiff%`, `IZ-Whiff%`,
-          `Chase%`, `Pre2K Chase%`, `2K Chase%`,
-          `EV>95%`, `90th EV`, `LD+FB%`, `Airpull%`
-        )
+        dplyr::select(dplyr::all_of(c("PitchType", performance_table_metrics)))
       
       DT::datatable(
         tbl_fmt,
@@ -6533,7 +6702,7 @@ server <- function(input, output, session){
             "  if (data[0] === 'Totals') { $('td', row).css('font-weight', '800'); }",
             "}"
           ),
-          columnDefs = list(list(className = "grp-start", targets = c(11,15,18)))
+          columnDefs = list(list(className = "grp-start", targets = c(13,20)))
         )
       )
     }
@@ -7665,7 +7834,7 @@ server <- function(input, output, session){
                                   gp = grid::gpar(fontface = 2, col = "#B4975A", cex = 0.9))
         title_bg <- grid::rectGrob(gp = grid::gpar(fill = "#501214", col = NA))
         
-        # Season shading (±5% vs D1)
+        # Season shading: continuous green/red severity vs the D1 mean.
         season_col <- which(names(t0) == season_label)
         if (length(season_col) == 1) {
           raw_season <- c(s_perf$`Whiff%`, s_perf$`Chase%`, s_perf$`Barrel%`)
@@ -7675,16 +7844,9 @@ server <- function(input, output, session){
             m <- metrics[i]
             v <- raw_season[i]
             b <- raw_d1[i]
-            if (!isTRUE(is.finite(v)) || !isTRUE(is.finite(b)) || b == 0) return("transparent")
             lower_better <- m %in% c("Whiffs","Chases")
-            if (lower_better) {
-              if (v <= b * 0.95) return(STAT_GOOD_SOLID)
-              if (v >= b * 1.05) return(STAT_BAD_SOLID)
-            } else {
-              if (v >= b * 1.05) return(STAT_GOOD_SOLID)
-              if (v <= b * 0.95) return(STAT_BAD_SOLID)
-            }
-            "transparent"
+            fill <- d1_shade_fill(v, b, lower_better)
+            if (nzchar(fill)) fill else "transparent"
           }, character(1))
           tg <- shade_table_col(tg, season_col, fills = shade, text_col = rep("black", length(shade)))
         }
@@ -7808,36 +7970,6 @@ server <- function(input, output, session){
     if (is.null(w)) w <- 600L
     as.integer((5/6) * w)
   })
-  observeEvent(list(input$Hitter, input$hit_Bullpens), {
-    hitter <- input$Hitter
-    if (is.null(hitter) || !length(hitter) || !nzchar(hitter[[1]])) return(NULL)
-    hitter <- hitter[[1]]
-    
-    if (isTRUE(input$hit_Bullpens)) {
-      if (nrow(bullpens_df)) {
-        d <- bullpens_df %>% dplyr::filter((Batter == hitter) | (Pitcher == hitter))
-        aar_choices <- sort(unique(stats::na.omit(d$CustomGameID_BP)))
-      } else {
-        aar_choices <- character(0)
-      }
-    } else {
-      d <- df %>%
-        dplyr::filter(!(is_bullpen %in% TRUE), Batter == hitter)
-      # order by GameDate desc, fallback to Date/source_file
-      gd <- dplyr::coalesce(d$GameDate, parse_date_any(d$Date), extract_date_from_filename(d$source_file))
-      d$.__gd <- gd
-      aar_choices <- d %>%
-        dplyr::distinct(CustomGameID, .__gd) %>%
-        dplyr::arrange(dplyr::desc(.__gd)) %>%
-        dplyr::pull(CustomGameID)
-    }
-    
-    if (length(aar_choices) == 0) aar_choices <- character(0)
-    updateSelectInput(session, "AARGame",
-                      choices = aar_choices,
-                      selected = if (length(aar_choices)) aar_choices[[1]] else NULL)
-  }, ignoreInit = FALSE)
-
   # ===== TruMedia-style ZONE KDE heatmap (RASTER only; no points; no contours) =====
   # Defensive fallbacks if not already defined
   if (!exists("strike_zone", inherits = TRUE)) {
@@ -8636,8 +8768,10 @@ server <- function(input, output, session){
     sg <- season_group_for_game(d_game)
     info <- season_info_from_group(sg)
     
-    # Season data aligned to performance table filters
-    d_season <- dat_filt()
+    # Season comparison follows the report's hitter and selected game's season,
+    # independently of the Hitting workspace sidebar.
+    d_season <- df %>%
+      dplyr::filter(.data$Batter == aar_hitter_value(), !(is_bullpen %in% TRUE))
     if (!is.na(info$group) && "SeasonGroup" %in% names(d_season)) {
       d_season <- d_season %>%
         dplyr::filter(toupper(trimws(.data$SeasonGroup)) == info$group)
@@ -8662,18 +8796,10 @@ server <- function(input, output, session){
   output$aar_kpi <- renderUI({
     tbl <- hsh_season_tbl()
     
-    # shade season vs D1 (±5% relative)
+    # Shade continuously by distance from the D1 mean.
     shade_for <- function(metric, season, d1){
-      if (!isTRUE(is.finite(season)) || !isTRUE(is.finite(d1)) || d1 == 0) return("")
       lower_better <- metric %in% c("Whiffs","Chases")
-      if (lower_better) {
-        if (season <= d1 * 0.95) return(STAT_GOOD_FILL)
-        if (season >= d1 * 1.05) return(STAT_BAD_FILL)
-      } else {
-        if (season >= d1 * 1.05) return(STAT_GOOD_FILL)
-        if (season <= d1 * 0.95) return(STAT_BAD_FILL)
-      }
-      ""
+      d1_shade_fill(season, d1, lower_better)
     }
     
     fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100 * x), "—")

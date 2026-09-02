@@ -7,7 +7,8 @@ the existing BASE session.
 
 ## Preserved behavior
 
-All twelve top-level Wally tabs remain present and in their existing order:
+The BASE Pitching workspace retains eleven team-analysis tabs in their
+existing order:
 
 1. Performance;
 2. Pitch Metrics;
@@ -16,11 +17,14 @@ All twelve top-level Wally tabs remain present and in their existing order:
 5. Locations;
 6. Whiffs / Chases / Called Strikes / Barrels;
 7. Stuff+;
-8. AAR;
-9. Bullpens;
-10. Leaderboard;
-11. Team Report;
-12. Team Trends.
+8. Bullpens;
+9. Leaderboard;
+10. Team Report;
+11. Team Trends.
+
+AAR Builder and Recent AARs are exposed in the unified Postgame Reports
+workspace with independent pitcher, season, and game controls. The standalone
+PitchingApp retains the AAR in its original tab.
 
 Nested tabs, output IDs, calculations, PDF builders, filters, and download
 handlers remain owned by Wally's server. The standalone application still
@@ -68,7 +72,7 @@ reactives. The temporary prepared-data cache is cleared after initialization.
 - resolution of the five required PitchingApp folder files;
 - duplicate removal across folder files;
 - retention of a unique bullpen event;
-- exposure of all twelve Wally tabs;
+- exposure of all eleven hosted Pitching tabs plus the moved AAR UI;
 - successful registration of the original server graph; and
 - a live Pitch Decay payload plus table and Plotly output.
 

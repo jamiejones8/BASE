@@ -33,7 +33,7 @@ nested_calls <- 0L
 shiny::testServer(
   function(input, output, session) {
     base_lazy_workspace_server(
-      input, session, "tab_target",
+      input, session, c("tab_target", "tab_alias"),
       initialize = function() {
         lazy_calls <<- lazy_calls + 1L
         output$late_output <- shiny::renderText("ready")
@@ -48,9 +48,9 @@ shiny::testServer(
     session$setInputs(base_nav = "tab_home")
     session$flushReact()
     if (lazy_calls != 0L) fail("Workspace initialized before its first visit.")
-    session$setInputs(base_nav = "tab_target")
+    session$setInputs(base_nav = "tab_alias")
     session$flushReact()
-    if (lazy_calls != 1L) fail("Workspace did not initialize on first visit.")
+    if (lazy_calls != 1L) fail("Workspace did not initialize from an alternate registered tab.")
     if (!identical(output$late_output, "ready")) {
       fail("A lazily registered output did not become available.")
     }

@@ -68,8 +68,8 @@ State historical/internal data becomes a labeled supplement. See
 ## Application structure
 
 Step 4 organizes the integrated product around eight Home workspaces rather
-than a flat global navbar. Postgame Reports contains only the three existing
-BASE PDF generators; separate Pitching and Hitting workspaces own team
+than a flat global navbar. Postgame Reports contains the hitting, pitching,
+and catching AAR workflows moved from their team workspaces; separate Pitching and Hitting workspaces own team
 analysis; Opponent Scouting retains national pitcher/hitter search; Defense
 owns interactive catcher framing; HomeBASE provides national player search and
 roster-card profiles; and Data Processing owns retagging. See
@@ -92,17 +92,17 @@ from BASE.
 ## Hitting integration
 
 The second complete Wally workspace is documented in
-[`HITTING_INTEGRATION.md`](HITTING_INTEGRATION.md). Hitting preserves all ten
-original workflows—including Lineup Builder, AAR, Leaderboard, team reporting,
-ball flight, and contact point—while receiving shared data, lazy loading, and a
-scoped BASE visual shell.
+[`HITTING_INTEGRATION.md`](HITTING_INTEGRATION.md). Hitting preserves its team
+analysis workflows while its AAR is hosted by Postgame Reports; both retain
+the original calculations and receive shared data, lazy loading, and a scoped
+BASE visual shell.
 
 ## Defense integration
 
 The third complete Wally workspace is documented in
-[`DEFENSE_INTEGRATION.md`](DEFENSE_INTEGRATION.md). Defense preserves all seven
-original workflows, including interactive game and season catcher receiving,
-while the existing catcher PDF generator remains under Postgame Reports.
+[`DEFENSE_INTEGRATION.md`](DEFENSE_INTEGRATION.md). Defense preserves its
+fielding and catcher-season workflows, while the single-game catcher AAR is
+hosted by Postgame Reports.
 
 ## Scouting integration
 

@@ -24,23 +24,26 @@
       "id": "postgame_reports",
       "order": 1,
       "title": "Postgame Reports",
-      "description": "Generate the existing BASE postgame PDFs for each position group.",
-      "implementation_policy": "Group the existing generators without changing their calculations or report layouts during the navigation migration.",
+      "description": "Build, preview, and download the hitting, pitching, and catching after action reports.",
+      "implementation_policy": "Host the AAR workflows moved from the Hitting, Pitching, and Defensive Analytics workspaces without changing their calculations or report layouts.",
       "tools": [
         {
-          "id": "postgame_pitching_pdf",
-          "title": "Pitching Report",
-          "existing_base_tab": "tab_pitcher"
+          "id": "pitching_aar",
+          "title": "Pitching AAR",
+          "source_workspace": "team_pitching",
+          "moved_from_tab": "AAR"
         },
         {
-          "id": "postgame_hitting_pdf",
-          "title": "Hitting Report",
-          "existing_base_tab": "tab_hitter"
+          "id": "hitting_aar",
+          "title": "Hitting AAR",
+          "source_workspace": "team_hitting",
+          "moved_from_tab": "Game Reports (AAR)"
         },
         {
-          "id": "postgame_catching_pdf",
-          "title": "Catching Report",
-          "existing_base_tab": "tab_catcher"
+          "id": "catching_aar",
+          "title": "Catching AAR",
+          "source_workspace": "defense",
+          "moved_from_tab": "Catcher Reports"
         }
       ]
     },
@@ -118,7 +121,7 @@
         "Defensive leaderboards and OAA after validation",
         "Interactive catcher framing and receiving statistics"
       ],
-      "catching_policy": "Interactive catcher statistics live here; the existing catcher PDF generator remains in Postgame Reports. Both use shared catching calculations."
+      "catching_policy": "Season-level catcher statistics live here; the single-game catcher AAR and its PDF live in Postgame Reports. Both use shared catching calculations."
     },
     {
       "id": "homebase",

@@ -71,7 +71,14 @@ base_lru_cache <- function(limit = 16L) {
 
 base_lazy_workspace_server <- function(input, session, tab_value, initialize,
                                        id = tab_value, nav_input = "base_nav") {
-  stopifnot(is.function(initialize), length(tab_value) == 1L, nzchar(tab_value))
+  stopifnot(
+    is.function(initialize),
+    length(tab_value) >= 1L,
+    all(!is.na(tab_value)),
+    all(nzchar(tab_value))
+  )
+  if (length(id) != 1L) id <- tab_value[[1]]
+  stopifnot(!is.na(id), nzchar(id))
 
   if (is.null(session$userData$base_lazy_workspaces)) {
     session$userData$base_lazy_workspaces <- new.env(parent = emptyenv())
@@ -95,7 +102,8 @@ base_lazy_workspace_server <- function(input, session, tab_value, initialize,
   })
 
   observer <- shiny::observeEvent(input[[nav_input]], {
-    if (!identical(input[[nav_input]], tab_value)) return()
+    active_tab <- input[[nav_input]]
+    if (is.null(active_tab) || !length(active_tab) || !(active_tab[[1]] %in% tab_value)) return()
     tryCatch(
       initialize_once(),
       error = function(e) {

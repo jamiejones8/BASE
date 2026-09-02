@@ -491,6 +491,28 @@ table.dataTable tbody td { border-color: var(--base-border) !important; }
 .table-striped > tbody > tr:nth-of-type(odd), table.dataTable.stripe > tbody > tr.odd { background: var(--base-surface-soft); }
 .table-hover > tbody > tr:hover, table.dataTable.hover > tbody > tr:hover { background: var(--base-surface-muted) !important; }
 
+/* Keep conditional fills visually separated so adjacent columns remain easy to scan. */
+table.dataTable tbody td:has(> .cf-cell) {
+  padding: 2px !important;
+  background-color: #fff !important;
+}
+table.dataTable tbody td > .cf-cell {
+  display: block !important;
+  width: 100% !important;
+  min-height: 32px;
+  margin: 0 !important;
+  padding: 6px 8px !important;
+  box-sizing: border-box !important;
+  border: 2px solid #fff !important;
+  border-radius: 4px !important;
+  background-clip: padding-box !important;
+  text-align: center;
+}
+table tbody td[style*="background-color"] {
+  border: 2px solid #fff !important;
+  background-clip: padding-box !important;
+}
+
 /* --------------------------------------------------------------------------
    Application hub
    -------------------------------------------------------------------------- */

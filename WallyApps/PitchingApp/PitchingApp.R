@@ -28,6 +28,17 @@ library(scales)
 library(lubridate)
 library(hms)
 
+.severity_hex_color <- function(score, good = "#2E7D32", bad = "#D62828") {
+  if (!is.finite(score)) return(NA_character_)
+  score <- pmin(pmax(score, -1), 1)
+  severity <- abs(score)
+  if (severity < 0.08) return(NA_character_)
+  base <- grDevices::col2rgb(if (score > 0) good else bad)
+  alpha <- 0.16 + 0.72 * severity^0.80
+  mixed <- round(255 * (1 - alpha) + base[, 1] * alpha)
+  grDevices::rgb(mixed[1], mixed[2], mixed[3], maxColorValue = 255)
+}
+
 count_statline <- function(df) {
   df <- tibble::as_tibble(df)
   
@@ -77,16 +88,9 @@ bench_fill <- function(value, bench, tol = 0.05, lower_better = FALSE) {
   
   if (!is.finite(v) || !is.finite(b) || b == 0) return(NA_character_)
   
-  rel <- (v - b) / b
-  if (isTRUE(lower_better)) rel <- -rel   # flip sign for lower-is-better stats
-  
-  if (rel >= 0) {
-    "#F3B9B9"        # good: high-percentile red
-  } else if (rel > -tol) {
-    NA_character_    # within 5% worse → no color
-  } else {
-    "#C7D4EA"        # bad: low-percentile blue
-  }
+  score <- (v - b) / max(abs(b) * 0.25, 0.05)
+  if (isTRUE(lower_better)) score <- -score
+  .severity_hex_color(score)
 }
 
 
@@ -505,7 +509,7 @@ compute_called_stuff <- function(d) {
   d
 }
 
-# wOBA / xwOBA helpers (as you had)
+# wOBA helpers
 woba_weights <- list(
   BB  = 0.690,  # unintentional walk
   HBP = 0.720,
@@ -514,23 +518,6 @@ woba_weights <- list(
   X3B = 1.578,
   HR  = 2.031
 )
-
-xwoba_from_evla <- function(ev, la) {
-  ev <- suppressWarnings(as.numeric(ev))
-  la <- suppressWarnings(as.numeric(la))
-  out <- rep(NA_real_, length(ev))
-  ok  <- is.finite(ev) & is.finite(la)
-  if (!any(ok)) return(out)
-  
-  evc <- pmin(pmax(ev[ok], 60), 120)  # clamp to [60, 120]
-  lac <- pmin(pmax(la[ok], -10), 60)  # clamp to [-10, 60]
-  
-  ev_term <- (evc - 60) / (120 - 60) * (0.70 - 0.20) + 0.20
-  la_pen  <- pmin(abs(lac - 27) / 20, 1)
-  
-  out[ok] <- pmax(0, pmin(1, ev_term - 0.25 * la_pen))
-  out
-}
 
 # D1 reference constants
 D1_REF <- list(
@@ -843,10 +830,9 @@ int_from <- function(df, names) {
 pct <- function(x) sprintf("%.1f%%", 100 * x)
 
 shade_vs_ref <- function(value, ref, tol = 0.01) {
-  if (is.na(value)) return("white")
-  if (value > ref + tol) return("#F3B9B9")
-  if (value < ref - tol) return("#C7D4EA")
-  "white"
+  if (!is.finite(value) || !is.finite(ref)) return("white")
+  fill <- .severity_hex_color((value - ref) / max(abs(ref) * 0.25, 0.05))
+  if (is.na(fill)) "white" else fill
 }
 
 # AAR-safe helpers (restored + de-duped)
@@ -2557,11 +2543,14 @@ txst_table_polish <- function(tbl, df) {
     for (i in seq_len(n_rows)) {
       is_even <- (i %% 2 == 0)
       fill <- if (is_even) "#F8F3EA" else "#FFFFFF"
+      row_text <- toupper(trimws(as.character(unlist(df[i, , drop = FALSE]))))
+      is_total <- any(grepl("^(GRAND )?TOTALS?$", row_text), na.rm = TRUE)
       for (j in seq_len(n_cols)) {
         tbl <- .tbl_bg(tbl,   row = i + 1, column = j, fill = fill,
                        color = "#D0D0D0", linewidth = 0.6)
         tbl <- .tbl_font(tbl, row = i + 1, column = j,
-                         size = 9.6, color = "#1a1a1a")
+                         size = 9.6, color = "#1a1a1a",
+                         face = if (is_total) "bold" else "plain")
       }
     }
   }
@@ -2573,6 +2562,16 @@ as_txst_table <- function(df) {
   tbl <- txst_table_header_style(tbl, ncol(df))
   tbl <- txst_table_polish(tbl, df)
   tbl
+}
+
+# Continuous AAR shading against the comparison mean. Green is favorable,
+# red is unfavorable, and opacity increases with distance from the mean.
+aar_severity_fill <- function(value, ref, lower_better = FALSE) {
+  if (!is.finite(value) || !is.finite(ref)) return(NA_character_)
+  span <- max(abs(ref) * 0.25, 0.05)
+  score <- (value - ref) / span
+  if (isTRUE(lower_better)) score <- -score
+  .severity_hex_color(score)
 }
 
 txst_count_breakdown_table <- function(df) {
@@ -2614,14 +2613,7 @@ txst_count_breakdown_table <- function(df) {
   }
   
   shade_cell <- function(val, ref, lower_better = FALSE) {
-    if (!is.finite(val) || !is.finite(ref)) return(NA_character_)
-    if (!lower_better) {
-    if (val >= ref) return("#F3B9B9")
-      return("#C7D4EA")
-    } else {
-    if (val <= ref) return("#F3B9B9")
-      return("#C7D4EA")
-    }
+    aar_severity_fill(val, ref, lower_better)
   }
   
   # Apply fills row-by-row to all count columns
@@ -2693,12 +2685,9 @@ txst_process_table <- function(df, season_col_label = "Season") {
     v
   }
   
-  # --- slider-aligned shading: high percentiles red, low percentiles blue ---
+  # --- player-facing shading: green is good, red is bad ---
   shade_cell <- function(val, ref, tol = 0.05) {
-    if (!is.finite(val) || !is.finite(ref)) return(NA_character_)
-    if (val >= ref) return("#F3B9B9")
-    if (val >= (ref - tol)) return(NA_character_)     # no color (within 5pp below)
-    "#C7D4EA"
+    aar_severity_fill(val, ref, lower_better = FALSE)
   }
   
   # Column indices in the rendered table
@@ -2782,10 +2771,7 @@ txst_ptperf_table <- function(df) {
   }
   fmt_pct <- function(v) ifelse(is.finite(v), sprintf("%.0f%%", 100 * v), "NA")
   shade_ref <- function(v, ref, tol) {
-    if (!is.finite(v) || !is.finite(ref)) return(NA_character_)
-    if (v > ref + tol) return("#F3B9B9")
-    if (v < ref - tol) return("#C7D4EA")
-    NA_character_
+    aar_severity_fill(v, ref, lower_better = FALSE)
   }
   
   # Map metric -> internal key + reference (support stacked + single-line headers)
@@ -4215,6 +4201,28 @@ render_AAR_pdf <- function(game_p, season_p, pitcher_name, game_date, opponent, 
   invisible(outfile)
 }
 
+render_pdf_page_png <- function(pdf_path, page = 1L, dpi = 160) {
+  if (!requireNamespace("pdftools", quietly = TRUE)) {
+    stop("The pdftools package is required to render report previews.")
+  }
+  bitmap <- pdftools::pdf_render_page(
+    pdf = pdf_path,
+    page = as.integer(page),
+    dpi = as.numeric(dpi)
+  )
+  png_path <- tempfile(fileext = ".png")
+  png::writePNG(bitmap, png_path)
+  png_path
+}
+
+render_plot_pdf_preview <- function(plot, width = 8.5, height = 14, dpi = 160) {
+  pdf_path <- tempfile(fileext = ".pdf")
+  on.exit(unlink(pdf_path), add = TRUE)
+  grDevices::pdf(pdf_path, width = width, height = height, useDingbats = FALSE)
+  tryCatch(print(plot), finally = grDevices::dev.off())
+  render_pdf_page_png(pdf_path, page = 1L, dpi = dpi)
+}
+
 # --- PA last-pitch helper (safe everywhere) ---
 get_pa_last <- function(d) {
   d <- ensure_pa(d)
@@ -4428,6 +4436,37 @@ PERF_TS_PERF_STATS_PTYPE <- setdiff(
 PERF_TS_STAT_COLORS <- setNames(scales::hue_pal()(length(PERF_TS_ALL_STATS)), PERF_TS_ALL_STATS)
 PERF_TS_ROLL_WINDOW <- 5
 XRV_TS_ROLL_WINDOW <- 25
+
+TEAM_CLASS_COLORS <- c(
+  Freshman = "#F4C430",
+  Sophomore = "#2563EB",
+  Junior = "#2E8B57",
+  Senior = "#D62828"
+)
+
+# Academic class for pitchers represented in the 2026 team data. Redshirt
+# designations are grouped with their underlying academic class for the chart.
+PITCHER_CLASS_2026 <- c(
+  "jonathan anders" = "Junior",
+  "alec beversdorf" = "Junior",
+  "will canalichio" = "Junior",
+  "tanner carson" = "Freshman",
+  "jackson cotton" = "Freshman",
+  "bennett fryman" = "Junior",
+  "jacob gholston" = "Junior",
+  "sam hall" = "Junior",
+  "nolan moore" = "Freshman",
+  "cade smith" = "Sophomore",
+  "titan targac" = "Freshman",
+  "jesus tovar" = "Junior",
+  "tyler walton" = "Freshman",
+  "cole wisenbaker" = "Junior"
+)
+
+pitcher_class_2026 <- function(x) {
+  cls <- unname(PITCHER_CLASS_2026[name_norm(x)])
+  ifelse(is.na(cls), "Unknown", cls)
+}
 
 valid_ts_pitch_type <- function(x) {
   x <- trimws(as.character(x %||% ""))
@@ -4646,7 +4685,7 @@ if (!("xrv" %in% names(df)) && !is.na(xrv_path) && nzchar(xrv_path)) {
   xrv_df <- tryCatch(
     readr::read_csv(xrv_path, show_col_types = FALSE),
     error = function(e) {
-      warning("Failed to read xRV metrics: ", conditionMessage(e))
+      warning("Failed to read model metrics: ", conditionMessage(e))
       tibble::tibble()
     }
   )
@@ -4740,9 +4779,15 @@ parse_date_any <- function(x) {
     }
   }
   
-  # 4) Last resort: base as.Date on the full string (won't error, just NA)
+  # 4) Last resort: parse each remaining value without letting one malformed
+  # game label abort the whole report archive.
   need <- is.na(out) & nzchar(x0)
-  if (any(need)) out[need] <- suppressWarnings(as.Date(x0[need]))
+  for (idx in which(need)) {
+    out[idx] <- tryCatch(
+      suppressWarnings(as.Date(x0[[idx]], tryFormats = c("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y"))),
+      error = function(e) as.Date(NA)
+    )
+  }
   
   out
 }
@@ -5734,10 +5779,11 @@ head_css <- htmltools::tags$head(
         /* ========== TABLE AESTHETICS (Performance & Movement/Metrics) ========== */
 
     /* Make conditional-format cells fill full cell area (big/solid shading) */
-    table.dataTable tbody td{ padding:8px 10px; position:relative; }
+    table.dataTable tbody td{ padding:2px; position:relative; }
     td > .cf-cell{
-      display:block; width:100%; height:100%;
-      padding:6px 8px; margin:-6px -8px; box-sizing:content-box;
+      display:block; width:100%; min-height:32px;
+      padding:6px 8px; margin:0; box-sizing:border-box;
+      border:2px solid #fff; border-radius:4px; background-clip:padding-box;
     }
 
     /* Remove heavy borders so shading is clean */
@@ -5827,6 +5873,9 @@ head_css <- htmltools::tags$head(
       display:block;
       width:100%;
       box-sizing:border-box;
+    }
+    .base-pitching-performance-tables .table-title.mt-3{
+      margin-top:22px !important;
     }
 
     .cr-percentile-column{display:flex}
@@ -5995,16 +6044,18 @@ parse_num <- function(v) {
   sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], a)
 }
 
-CF_GREEN <- .alpha_rgba("#E33434", a = 0.30)  # good: high-percentile red
-CF_RED   <- .alpha_rgba("#5D7EBC", a = 0.30)  # bad: low-percentile blue
+CF_GREEN <- .alpha_rgba("#E33434", a = 0.30)
+CF_RED   <- .alpha_rgba("#5D7EBC", a = 0.30)
 
-.severity_fill <- function(score) {
+.severity_fill <- function(score, palette = c("coach", "player")) {
+  palette <- match.arg(palette)
   if (!is.finite(score)) return(NA_character_)
   score <- pmin(pmax(score, -1), 1)
   severity <- abs(score)
   if (severity < 0.08) return(NA_character_)
   alpha <- 0.16 + 0.72 * severity^0.80
-  .alpha_rgba(if (score > 0) "#E33434" else "#5D7EBC", a = alpha)
+  colors <- if (identical(palette, "player")) c(good = "#2E7D32", bad = "#D62828") else c(good = "#E33434", bad = "#5D7EBC")
+  .alpha_rgba(if (score > 0) colors[["good"]] else colors[["bad"]], a = alpha)
 }
 
 .severity_text <- function(fill) {
@@ -6146,24 +6197,24 @@ ABS_RULES <- list(
 }
 
 # 5 percentage-point band around D1 avg (AAR-style)
-.fill_pct_vs_d1 <- function(value, avg_frac, band_pp = 5) {
+.fill_pct_vs_d1 <- function(value, avg_frac, band_pp = 5, palette = "coach") {
   v <- .as_fraction_if_percentish(parse_num(value))
   if (!is.finite(v) || !is.finite(avg_frac) || avg_frac <= 0) return(NA_character_)
   v_pp <- v * 100
   avg_pp <- avg_frac * 100
-  .severity_fill((v_pp - avg_pp) / band_pp)
+  .severity_fill((v_pp - avg_pp) / band_pp, palette)
 }
 
 # Lower-is-better variant
-.fill_pct_vs_d1_lower <- function(value, avg_frac, band_pp = 5) {
+.fill_pct_vs_d1_lower <- function(value, avg_frac, band_pp = 5, palette = "coach") {
   v <- .as_fraction_if_percentish(parse_num(value))
   if (!is.finite(v) || !is.finite(avg_frac) || avg_frac <= 0) return(NA_character_)
   v_pp <- v * 100
   avg_pp <- avg_frac * 100
-  .severity_fill((avg_pp - v_pp) / band_pp)
+  .severity_fill((avg_pp - v_pp) / band_pp, palette)
 }
 # Absolute rules for non-% columns
-.fill_abs_rule <- function(value, rule) {
+.fill_abs_rule <- function(value, rule, palette = "coach") {
   v <- parse_num(value)
   if (!is.finite(v)) return(NA_character_)
   
@@ -6172,25 +6223,25 @@ ABS_RULES <- list(
     if (v >= rule$no_min && v <= rule$no_max) return(NA_character_)
     span <- max((rule$no_max - rule$no_min) / 2, .Machine$double.eps)
     distance <- if (v < rule$no_min) rule$no_min - v else v - rule$no_max
-    return(.severity_fill(distance / span))
+    return(.severity_fill(distance / span, palette))
   }
 
   if (!is.null(rule$green_min) && !is.null(rule$red_max)) {
     midpoint <- (rule$green_min + rule$red_max) / 2
     span <- max(abs(rule$green_min - rule$red_max) / 2, .Machine$double.eps)
-    return(.severity_fill((v - midpoint) / span))
+    return(.severity_fill((v - midpoint) / span, palette))
   }
   if (!is.null(rule$green_max) && !is.null(rule$red_min)) {
     midpoint <- (rule$green_max + rule$red_min) / 2
     span <- max(abs(rule$red_min - rule$green_max) / 2, .Machine$double.eps)
-    return(.severity_fill((midpoint - v) / span))
+    return(.severity_fill((midpoint - v) / span, palette))
   }
   
   NA_character_
 }
 
 # RPM rule depends on PitchType row
-.fill_rpm_by_pitch <- function(value, pitch_type_chr) {
+.fill_rpm_by_pitch <- function(value, pitch_type_chr, palette = "coach") {
   v <- parse_num(value)
   if (!is.finite(v)) return(NA_character_)
   pt <- tolower(trimws(as.character(pitch_type_chr %||% "")))
@@ -6199,10 +6250,10 @@ ABS_RULES <- list(
   sl_cb_sw_ct <- pt %in% tolower(c("slider","curveball","curve ball","sweeper","cutter"))
   
   if (fb_sink) {
-    return(.severity_fill((v - mean(c(2386, 1986))) / ((2386 - 1986) / 2)))
+    return(.severity_fill((v - mean(c(2386, 1986))) / ((2386 - 1986) / 2), palette))
   }
   if (sl_cb_sw_ct) {
-    return(.severity_fill((v - mean(c(2558, 2158))) / ((2558 - 2158) / 2)))
+    return(.severity_fill((v - mean(c(2558, 2158))) / ((2558 - 2158) / 2), palette))
   }
   NA_character_
 }
@@ -6212,7 +6263,9 @@ shade_columns_txst <- function(out_df,
                                cols_to_color = NULL,
                                lower_better = character(0),
                                percent_cols = character(0),
+                               palette = c("coach", "player"),
                                ...) {
+  palette <- match.arg(palette)
   # --- compatibility shim (supports both cols= and cols_to_color=) ---
   if (is.null(cols_to_color)) cols_to_color <- cols
   if (is.null(cols_to_color)) cols_to_color <- character(0)
@@ -6258,23 +6311,23 @@ shade_columns_txst <- function(out_df,
         pitch_vals <- out[[pt_col]]
         avg_vec <- vapply(pitch_vals, d1_pct_avg_for_metric, metric = nm, FUN.VALUE = numeric(1))
         if (nm %in% lower_better) {
-          fills <- mapply(.fill_pct_vs_d1_lower, txt, avg_vec, SIMPLIFY = TRUE, USE.NAMES = FALSE)
+          fills <- mapply(.fill_pct_vs_d1_lower, txt, avg_vec, MoreArgs = list(palette = palette), SIMPLIFY = TRUE, USE.NAMES = FALSE)
         } else {
-          fills <- mapply(.fill_pct_vs_d1, txt, avg_vec, SIMPLIFY = TRUE, USE.NAMES = FALSE)
+          fills <- mapply(.fill_pct_vs_d1, txt, avg_vec, MoreArgs = list(palette = palette), SIMPLIFY = TRUE, USE.NAMES = FALSE)
         }
       } else {
         avg <- D1_PCT_AVG[[nm]]
         if (nm %in% lower_better) {
-          fills <- vapply(txt, .fill_pct_vs_d1_lower, avg_frac = avg, FUN.VALUE = character(1))
+          fills <- vapply(txt, .fill_pct_vs_d1_lower, avg_frac = avg, palette = palette, FUN.VALUE = character(1))
         } else {
-          fills <- vapply(txt, .fill_pct_vs_d1, avg_frac = avg, FUN.VALUE = character(1))
+          fills <- vapply(txt, .fill_pct_vs_d1, avg_frac = avg, palette = palette, FUN.VALUE = character(1))
         }
       }
     } else if (!is.null(abs_rule)) {
-      fills <- vapply(txt, .fill_abs_rule, rule = abs_rule, FUN.VALUE = character(1))
+      fills <- vapply(txt, .fill_abs_rule, rule = abs_rule, palette = palette, FUN.VALUE = character(1))
     } else if (is_rpm_col && !is.na(pt_col)) {
       pitch_vals <- out[[pt_col]]
-      fills <- mapply(.fill_rpm_by_pitch, txt, pitch_vals, SIMPLIFY = TRUE, USE.NAMES = FALSE)
+      fills <- mapply(.fill_rpm_by_pitch, txt, pitch_vals, MoreArgs = list(palette = palette), SIMPLIFY = TRUE, USE.NAMES = FALSE)
     } else {
       next
     }
@@ -6338,12 +6391,115 @@ if (isTRUE(get0("BASE_PITCHING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))
   base_pitching_page <- page_sidebar
 }
 
+base_pitching_postgame_ui <- tagList(
+  navset_tab(
+    id = "aar_tabs",
+    nav_panel(
+      "AAR Builder",
+      div(
+        class = "base-report-builder",
+        div(
+          class = "base-report-controls",
+          selectInput("aar_pitcher", "Pitcher:",
+                      choices = as_pitcher_choices(setdiff(txst_pitchers, EXCLUDE_PLAYERS)),
+                      selected = (setdiff(txst_pitchers, EXCLUDE_PLAYERS))[1]),
+          selectInput("aar_game", "Game:", choices = NULL, multiple = FALSE, selectize = FALSE),
+          textInput("aar_opp", "Opponent label (optional):", placeholder = "vs UTA"),
+          downloadButton("aar_dl", "Download AAR PDF")
+        ),
+        if (isTRUE(get0("BASE_PITCHING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))) {
+          div(
+            class = "base-report-controls base-report-controls-team",
+            checkboxGroupInput(
+              "pitch_aar_season_groups", "Quick-select seasons",
+              choices = SEASON_CHOICES, selected = "S26", inline = TRUE
+            )
+          )
+        },
+        div(
+          class = "base-report-preview base-report-preview-portrait",
+          div(class = "table-title mb-1", "AAR Page 1"),
+          imageOutput("aar_preview", height = "2400px"),
+          div(class = "table-title mt-3 mb-1", "AAR Page 2"),
+          imageOutput("aar_preview_page2", height = "2400px")
+        )
+      )
+    ),
+    nav_panel(
+      "Recent AARs",
+      div(class = "table-title mb-1", "Most Recent AARs"),
+      uiOutput("aar_recent_list_ui")
+    )
+  )
+)
+
 # -------------------- UI --------------------
 ui <- base_pitching_page(
   theme = txst_theme,
   title = app_title_link, 
-  head_css,                 
+  head_css,
+  tags$head(tags$style(HTML("
+    table.dataTable tbody tr.base-total-row td,
+    table.dataTable tbody tr.base-total-row td * {
+      font-weight: 800 !important;
+    }
+    .base-report-builder {
+      display: grid;
+      gap: 18px;
+      width: 100%;
+      min-width: 0;
+    }
+    .base-report-controls {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(180px, 1fr)) auto;
+      gap: 12px;
+      align-items: end;
+      padding: 14px;
+      border: 1px solid rgba(80,18,20,.14);
+      border-radius: 10px;
+      background: rgba(255,255,255,.92);
+    }
+    .base-report-controls-team {
+      grid-template-columns: minmax(260px, 1fr) auto;
+    }
+    .base-report-controls .form-group { margin-bottom: 0; }
+    .base-report-preview {
+      width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      padding: 12px;
+      border: 1px solid rgba(80,18,20,.14);
+      border-radius: 10px;
+      background: #e9e6e1;
+    }
+    .base-report-preview .shiny-image-output {
+      height: auto !important;
+      margin: 0 auto 18px;
+      background: #fff;
+      box-shadow: 0 6px 18px rgba(30,22,18,.16);
+    }
+    .base-report-preview-portrait .shiny-image-output { width: 1050px !important; }
+    .base-report-preview-landscape .shiny-image-output { width: 1180px !important; }
+    .base-report-preview .shiny-image-output img {
+      display: block;
+      width: 100% !important;
+      height: auto !important;
+    }
+    @media (max-width: 900px) {
+      .base-report-controls,
+      .base-report-controls-team { grid-template-columns: 1fr; }
+    }
+  "))),
   tags$script(HTML("
+    function baseMarkPitchingTotalRows(scope){
+      $(scope || document).find('table.dataTable').addBack('table.dataTable').find('tbody tr').each(function(){
+        var isTotal=$(this).find('td').toArray().some(function(cell){
+          return /^(GRAND\\s+)?TOTALS?$/.test($(cell).text().trim().toUpperCase());
+        });
+        $(this).toggleClass('base-total-row', isTotal);
+      });
+    }
+    $(document).on('draw.dt', function(e){ baseMarkPitchingTotalRows(e.target); });
     function baseKeepPitchingTabVisible(link){
       var $link=$(link), nav=$link.closest('.nav-tabs')[0];
       if(!nav) return;
@@ -6360,6 +6516,7 @@ ui <- base_pitching_page(
       var active=$('.nav-tabs .nav-link.active').text().trim();
       document.body.classList.toggle('aar-active', active==='AAR');
       $('.base-pitching-main .nav-tabs .nav-link.active').each(function(){baseKeepPitchingTabVisible(this);});
+      baseMarkPitchingTotalRows(document);
     },150); });
   ")),
   sidebar = sidebar(
@@ -6433,7 +6590,7 @@ ui <- base_pitching_page(
                     "perf_ts_stats",
                     NULL,
                     choices  = PERF_TS_MAIN_CHOICES,
-                    selected = c("K%","BB%","Barrel%"),
+                    selected = "wOBA",
                     multiple = TRUE,
                     options = list(
                       plugins = list("remove_button"),
@@ -6569,7 +6726,7 @@ ui <- base_pitching_page(
           ),
           div(class = "table-title mt-3 mb-1", "Pitch Summary"),
           withSpinner(DTOutput("xrv_season_pitch_table"), type = 4, color = "#501214"),
-          div(class = "table-title mt-3 mb-1", "xRV Rolling Average"),
+          div(class = "table-title mt-3 mb-1", "Stuff+ Rolling Average"),
           withSpinner(plotlyOutput("xrv_season_ts", height = "330px", width = "100%"), type = 4, color = "#501214")
         ),
         nav_panel(
@@ -6600,7 +6757,7 @@ ui <- base_pitching_page(
           ),
           div(class = "table-title mt-3 mb-1", "Pitch Summary"),
           withSpinner(DTOutput("xrv_game_pitch_table"), type = 4, color = "#501214"),
-          div(class = "table-title mt-3 mb-1", "xRV Rolling Average"),
+          div(class = "table-title mt-3 mb-1", "Stuff+ Rolling Average"),
           withSpinner(plotlyOutput("xrv_game_ts", height = "330px", width = "100%"), type = 4, color = "#501214")
         ),
         nav_panel(
@@ -6619,36 +6776,9 @@ ui <- base_pitching_page(
         )
       )
     ),
-    nav_panel(
-      "AAR",
-      navset_tab(
-        id = "aar_tabs",
-        nav_panel(
-          "AAR Builder",
-          sidebarLayout(
-            sidebarPanel(
-              selectInput("aar_pitcher", "Pitcher:",
-                          choices = as_pitcher_choices(setdiff(txst_pitchers, EXCLUDE_PLAYERS)),
-                          selected = (setdiff(txst_pitchers, EXCLUDE_PLAYERS))[1]),
-              selectInput("aar_game", "Game:", choices = NULL, multiple = FALSE, selectize = FALSE),
-              textInput("aar_opp", "Opponent label (optional):", placeholder = "vs UTA"),
-              downloadButton("aar_dl", "Download AAR PDF")
-            ),
-            mainPanel(
-              div(class = "table-title mb-1", "AAR Page 1"),
-              imageOutput("aar_preview", height = "2400px"),
-              div(class = "table-title mt-3 mb-1", "AAR Page 2"),
-              imageOutput("aar_preview_page2", height = "2400px")
-            )
-          )
-        ),
-        nav_panel(
-          "Recent AARs",
-          div(class = "table-title mb-1", "Most Recent AARs"),
-          uiOutput("aar_recent_list_ui")
-        )
-      )
-    ),
+    if (!isTRUE(get0("BASE_PITCHING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))) {
+      nav_panel("AAR", base_pitching_postgame_ui)
+    },
     nav_panel(
       title = "Bullpens",
       value = "bullpens",
@@ -6755,8 +6885,10 @@ ui <- base_pitching_page(
     ),
     nav_panel(
       title = "Team Report",
-      sidebarLayout(
-        sidebarPanel(
+      div(
+        class = "base-report-builder",
+        div(
+          class = "base-report-controls base-report-controls-team",
           selectInput(
             "team_game",
             "Game:",
@@ -6767,7 +6899,8 @@ ui <- base_pitching_page(
           ),
           downloadButton("team_report_dl", "Download Team Report PDF")
         ),
-        mainPanel(
+        div(
+          class = "base-report-preview base-report-preview-landscape",
           imageOutput("team_report_preview", height = "1000px")
         )
       )
@@ -6808,7 +6941,7 @@ ui <- base_pitching_page(
                 "team_ts_stats",
                 NULL,
                 choices  = PERF_TS_MAIN_CHOICES,
-                selected = c("K%","BB%","Barrel%"),
+                selected = "wOBA",
                 multiple = TRUE,
                 options = list(
                   plugins = list("remove_button"),
@@ -6834,6 +6967,7 @@ ui <- base_pitching_page(
         nav_panel(
           title = "Release Points",
           div(class = "table-title release-title mb-0", "Release Points"),
+          withSpinner(plotlyOutput("team_release_points_plot", height = "520px", width = "100%"), type = 4, color = "#501214"),
           withSpinner(DTOutput("team_release_points_table"), type = 4, color = "#501214")
         ),
         nav_panel(
@@ -7217,7 +7351,12 @@ server <- function(input, output, session){
     }
     
     need <- is.na(out) & nzchar(x0)
-    if (any(need)) out[need] <- suppressWarnings(as.Date(x0[need]))
+    for (idx in which(need)) {
+      out[idx] <- tryCatch(
+        suppressWarnings(as.Date(x0[[idx]], tryFormats = c("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y"))),
+        error = function(e) as.Date(NA)
+      )
+    }
     out
   }
   
@@ -7254,7 +7393,7 @@ server <- function(input, output, session){
   # ---- AAR cell shading helper (GLOBAL in server scope; used by DT tables) ----
   fill_vs_d1 <- function(val, d1,
                          band = 0,
-                        green = "#F3B9B9", red = "#C7D4EA", none = NA) {
+                        green = "#D6EBD3", red = "#F3B9B9", none = NA) {
     val <- suppressWarnings(as.numeric(val))
     d1  <- suppressWarnings(as.numeric(d1))
     band <- suppressWarnings(as.numeric(band))
@@ -7863,6 +8002,12 @@ server <- function(input, output, session){
     }
   )
 
+  aar_season_group_values <- reactive({
+    embedded_choice <- input$pitch_aar_season_groups
+    if (!is.null(embedded_choice)) return(as.character(embedded_choice))
+    as.character(input$season_groups %||% character(0))
+  })
+
   aar_season_info <- reactive({
     shiny::req(input$aar_game)
     
@@ -7989,34 +8134,30 @@ server <- function(input, output, session){
     evla <- resolve_ev_la_strict(d)
     ev <- evla$ev; la <- evla$la
     
-    d %>%
-      dplyr::mutate(
-        # Canonical events
-        CalledStrike    = PitchCall == "StrikeCalled",
-        SwingingStrike  = PitchCall == "StrikeSwinging",
-        Foul            = PitchCall %in% swing_calls[3:5],
-        IsStrike        = CalledStrike | SwingingStrike | Foul,
-        IsCalledStrike  = CalledStrike,
-        IsSwing         = .is_swing_event(PitchCall),
-        
-        # Zone + count names the AAR builder expects
-        InZone             = inZone == 1L,
-        StrikesBeforePitch = if ("StrikesPre" %in% names(.)) as.integer(StrikesPre) else NA_integer_,
-        
-        # Misc used by E&A and movement
-        HBP    = (("PlayResult" %in% names(.)) & grepl("(?i)hit by pitch|\\bHBP\\b", PlayResult)) |
-          (("KorBB"      %in% names(.)) & grepl("(?i)HBP", KorBB)),
-        Barrel = is_barrel_strict(PitchCall, ev, la),
-        
-        IVB = to_num(InducedVertBreak),
-        HB  = to_num(HorzBreak),
-        
-        BatterSide = dplyr::case_when(
-          BatterSide %in% c("L","Left","LHH","LH") ~ "L",
-          BatterSide %in% c("R","Right","RHH","RH") ~ "R",
-          TRUE ~ as.character(BatterSide)
-        )
-      )
+    # Use explicit vectors here rather than data-mask introspection; this keeps
+    # the AAR path stable when optional TrackMan columns are absent.
+    pitch_call <- if ("PitchCall" %in% names(d)) as.character(d$PitchCall) else rep("", nrow(d))
+    play_result <- if ("PlayResult" %in% names(d)) as.character(d$PlayResult) else rep("", nrow(d))
+    korbb <- if ("KorBB" %in% names(d)) as.character(d$KorBB) else rep("", nrow(d))
+    d$CalledStrike <- pitch_call == "StrikeCalled"
+    d$SwingingStrike <- pitch_call == "StrikeSwinging"
+    d$Foul <- pitch_call %in% swing_calls[3:5]
+    d$IsStrike <- d$CalledStrike | d$SwingingStrike | d$Foul
+    d$IsCalledStrike <- d$CalledStrike
+    d$IsSwing <- .is_swing_event(pitch_call)
+    d$InZone <- d$inZone == 1L
+    d$StrikesBeforePitch <- if ("StrikesPre" %in% names(d)) as.integer(d$StrikesPre) else rep(NA_integer_, nrow(d))
+    d$HBP <- grepl("(?i)hit by pitch|\\bHBP\\b", play_result) | grepl("(?i)HBP", korbb)
+    d$Barrel <- is_barrel_strict(pitch_call, ev, la)
+    d$IVB <- if ("InducedVertBreak" %in% names(d)) to_num(d$InducedVertBreak) else rep(NA_real_, nrow(d))
+    d$HB <- if ("HorzBreak" %in% names(d)) to_num(d$HorzBreak) else rep(NA_real_, nrow(d))
+    batter_side <- if ("BatterSide" %in% names(d)) as.character(d$BatterSide) else rep(NA_character_, nrow(d))
+    d$BatterSide <- dplyr::case_when(
+      batter_side %in% c("L","Left","LHH","LH") ~ "L",
+      batter_side %in% c("R","Right","RHH","RH") ~ "R",
+      TRUE ~ batter_side
+    )
+    d
   }
   aar_game_data <- reactive({
     req(input$aar_pitcher, input$aar_game)
@@ -8143,14 +8284,6 @@ server <- function(input, output, session){
         if (!is.finite(gdate)) gdate <- as.Date(NA)
       }
       
-      date_str <- if (!is.na(gdate)) format(gdate, "%B %d, %Y") else as.character(input$aar_game)
-      game_label <- if (nzchar(input$aar_opp)) paste(date_str, "-", input$aar_opp) else date_str
-      
-      if (is.na(gdate)) {
-        gd_vec <- parse_date_any(unique(gp$GameDate))
-        gdate  <- suppressWarnings(min(gd_vec, na.rm = TRUE))
-        if (!is.finite(gdate)) gdate <- as.Date(NA)
-      }
       # ---- FORCE the selected game date into the game dataset (prevents "last game" bleed) ----
       for (nm in intersect(c("GameDate","Date","PitchDate","Game_Date","UTCDate","LocalDate"), names(gp))) {
         gp[[nm]] <- as.Date(gdate)
@@ -8173,26 +8306,19 @@ server <- function(input, output, session){
       }
       
       
-      p <- compose_AAR_plot(
+      tmp_pdf <- tempfile(fileext = ".pdf")
+      on.exit(unlink(tmp_pdf), add = TRUE)
+      render_AAR_pdf(
         game_p           = gp,
         season_p         = sp,
         pitcher_name     = input$aar_pitcher,
-        game_label       = game_label,
+        game_date        = gdate,
+        opponent         = input$aar_opp %||% "",
+        outfile          = tmp_pdf,
         arm_angle_deg    = if (is.finite(deg)) deg else NULL,
         season_col_label = info$label
       )
-      
-      tmp_png <- tempfile(fileext = ".png")
-      
-      if (requireNamespace("ragg", quietly = TRUE)) {
-        ragg::agg_png(tmp_png, width = 1700, height = 2800, units = "px", res = 200, background = "white")
-        print(p)
-        dev.off()
-      } else {
-        png(tmp_png, width = 1700, height = 2800, res = 200)
-        print(p)
-        dev.off()
-      }
+      tmp_png <- render_pdf_page_png(tmp_pdf, page = 1L, dpi = 160)
       
       list(src = tmp_png, contentType = "image/png", width = "100%")
     }, error = function(e) {
@@ -8228,17 +8354,7 @@ server <- function(input, output, session){
       }
       
       p <- compose_AAR_pa_grid_plot(game_p = gp)
-      
-      tmp_png <- tempfile(fileext = ".png")
-      if (requireNamespace("ragg", quietly = TRUE)) {
-        ragg::agg_png(tmp_png, width = 1700, height = 2800, units = "px", res = 200, background = "white")
-        print(p)
-        dev.off()
-      } else {
-        png(tmp_png, width = 1700, height = 2800, res = 200)
-        print(p)
-        dev.off()
-      }
+      tmp_png <- render_plot_pdf_preview(p, width = 8.5, height = 14, dpi = 160)
       
       list(src = tmp_png, contentType = "image/png", width = "100%")
     }, error = function(e) {
@@ -8320,7 +8436,7 @@ server <- function(input, output, session){
     if (is.null(d) || !nrow(d)) return(tibble::tibble())
     if ("is_bullpen" %in% names(d)) d <- d %>% dplyr::filter(!(is_bullpen %in% TRUE))
     if ("PitchType" %in% names(d)) d <- d %>% dplyr::filter(!(as.character(PitchType) %in% "Bad data"))
-    sg <- input$season_groups %||% character(0)
+    sg <- aar_season_group_values()
     season_col <- if ("SeasonTag" %in% names(d)) "SeasonTag" else if ("SeasonGroup" %in% names(d)) "SeasonGroup" else NULL
     if (!is.null(season_col) && length(sg)) d <- d %>% dplyr::filter(.data[[season_col]] %in% sg)
     get_date_vec <- function(df) {
@@ -8433,7 +8549,10 @@ server <- function(input, output, session){
           aar_recent_preview(rows_now[idx, ])
           showModal(modalDialog(
             title = paste("AAR Preview:", name_display(rows_now$Pitcher[idx])),
-            imageOutput("aar_recent_preview_image", height = "1100px"),
+            div(
+              class = "base-report-preview base-report-preview-portrait",
+              imageOutput("aar_recent_preview_image", height = "2400px")
+            ),
             easyClose = TRUE,
             size = "l",
             footer = modalButton("Close")
@@ -8468,23 +8587,10 @@ server <- function(input, output, session){
       list(src = tmp, contentType = "image/png", width = "100%")
     }
     tryCatch({
-      payload <- build_aar_payload(sel$Pitcher[[1]], sel$CustomGameID[[1]], "")
-      p <- compose_AAR_plot(
-        game_p = payload$gp,
-        season_p = payload$sp,
-        pitcher_name = sel$Pitcher[[1]],
-        game_label = payload$game_label,
-        arm_angle_deg = if (is.finite(payload$deg)) payload$deg else NULL,
-        season_col_label = payload$season_label
-      )
-      tmp_png <- tempfile(fileext = ".png")
-      if (requireNamespace("ragg", quietly = TRUE)) {
-        ragg::agg_png(tmp_png, width = 1700, height = 2800, units = "px", res = 200, background = "white")
-      } else {
-        png(tmp_png, width = 1700, height = 2800, res = 200)
-      }
-      print(p)
-      dev.off()
+      tmp_pdf <- tempfile(fileext = ".pdf")
+      on.exit(unlink(tmp_pdf), add = TRUE)
+      render_aar_pdf_for(tmp_pdf, sel$Pitcher[[1]], sel$CustomGameID[[1]], "")
+      tmp_png <- render_pdf_page_png(tmp_pdf, page = 1L, dpi = 160)
       list(src = tmp_png, contentType = "image/png", width = "100%")
     }, error = function(e) {
       warning("[AAR recent preview] ", conditionMessage(e))
@@ -9266,7 +9372,6 @@ server <- function(input, output, session){
         RelHt = fmt_num1(RelHt),
         RelSide = fmt_num1(RelSide),
         Extension = fmt_num1(Extension),
-        `xRV (avg)` = fmt_num1(xRV_plus),
         `Stuff+ (avg)` = fmt_num1(Stuff_plus),
         `CSW%` = fmt_pct0(CSW_pct),
         `Whiff%` = fmt_pct0(Whiff_pct),
@@ -9284,7 +9389,6 @@ server <- function(input, output, session){
         InducedVertBreak = suppressWarnings(as.numeric(InducedVertBreak)),
         RelSpeed = suppressWarnings(as.numeric(RelSpeed)),
         SpinRate = suppressWarnings(as.numeric(SpinRate)),
-        xrv_plus = suppressWarnings(as.numeric(xrv_plus)),
         stuff_plus = suppressWarnings(as.numeric(stuff_plus))
       ) %>%
       dplyr::filter(is.finite(HorzBreak), is.finite(InducedVertBreak))
@@ -9323,7 +9427,6 @@ server <- function(input, output, session){
         IVB = mean(InducedVertBreak, na.rm = TRUE),
         Velo = mean(RelSpeed, na.rm = TRUE),
         Spin = mean(SpinRate, na.rm = TRUE),
-        xRV = mean(xrv_plus, na.rm = TRUE),
         Stuff = mean(stuff_plus, na.rm = TRUE),
         .groups = "drop"
       )
@@ -9336,7 +9439,6 @@ server <- function(input, output, session){
           IVB = mean(IVB, na.rm = TRUE),
           Velo = mean(Velo, na.rm = TRUE),
           Spin = mean(Spin, na.rm = TRUE),
-          xRV = mean(xRV, na.rm = TRUE),
           Stuff = mean(Stuff, na.rm = TRUE),
           HandGroup = "ALL",
           .groups = "drop"
@@ -9345,25 +9447,23 @@ server <- function(input, output, session){
 
     mv_avg$label <- if (isTRUE(split_hand)) {
       sprintf(
-        "%s %s Avg<br>Velo: %s<br>iVB: %s<br>HB: %s<br>Spin: %s<br>xRV+: %s<br>Stuff+: %s",
+        "%s %s Avg<br>Velo: %s<br>iVB: %s<br>HB: %s<br>Spin: %s<br>Stuff+: %s",
         mv_avg$PitchType_plot,
         mv_avg$HandGroup,
         ifelse(is.finite(mv_avg$Velo), sprintf("%.1f", mv_avg$Velo), "—"),
         ifelse(is.finite(mv_avg$IVB),  sprintf("%.1f", mv_avg$IVB),  "—"),
         ifelse(is.finite(mv_avg$HB),   sprintf("%.1f", mv_avg$HB),   "—"),
         ifelse(is.finite(mv_avg$Spin), sprintf("%.0f", mv_avg$Spin), "—"),
-        ifelse(is.finite(mv_avg$xRV),  sprintf("%.1f", mv_avg$xRV),  "—"),
         ifelse(is.finite(mv_avg$Stuff),sprintf("%.1f", mv_avg$Stuff),"—")
       )
     } else {
       sprintf(
-        "%s Avg<br>Velo: %s<br>iVB: %s<br>HB: %s<br>Spin: %s<br>xRV+: %s<br>Stuff+: %s",
+        "%s Avg<br>Velo: %s<br>iVB: %s<br>HB: %s<br>Spin: %s<br>Stuff+: %s",
         mv_avg$PitchType_plot,
         ifelse(is.finite(mv_avg$Velo), sprintf("%.1f", mv_avg$Velo), "—"),
         ifelse(is.finite(mv_avg$IVB),  sprintf("%.1f", mv_avg$IVB),  "—"),
         ifelse(is.finite(mv_avg$HB),   sprintf("%.1f", mv_avg$HB),   "—"),
         ifelse(is.finite(mv_avg$Spin), sprintf("%.0f", mv_avg$Spin), "—"),
-        ifelse(is.finite(mv_avg$xRV),  sprintf("%.1f", mv_avg$xRV),  "—"),
         ifelse(is.finite(mv_avg$Stuff),sprintf("%.1f", mv_avg$Stuff),"—")
       )
     }
@@ -9379,7 +9479,6 @@ server <- function(input, output, session){
         text = ~paste0(
           "HB: ", sprintf("%.1f", HorzBreak),
           "<br>iVB: ", sprintf("%.1f", InducedVertBreak),
-          "<br>xRV+: ", ifelse(is.finite(xrv_plus), sprintf("%.1f", xrv_plus), "NA"),
           "<br>Stuff+: ", ifelse(is.finite(stuff_plus), sprintf("%.1f", stuff_plus), "NA")
         ),
         hovertemplate = "%{text}<extra></extra>",
@@ -9453,10 +9552,10 @@ server <- function(input, output, session){
       plotly::layout(title = list(text = title_text, x = 0.5), showlegend = FALSE, margin = list(t = 30, b = 10, l = 10, r = 10))
   }
 
-  build_xrv_ts_plot <- function(d, params, title_text = "xRV Rolling Average") {
+  build_xrv_ts_plot <- function(d, params, title_text = "Stuff+ Rolling Average") {
     if (is.null(d) || !nrow(d)) return(plotly::plot_ly())
     d <- xrv_prepare_base(d, params)
-    if (!nrow(d) || (all(!is.finite(d$xrv_plus)) && all(!is.finite(d$stuff_plus)))) return(plotly::plot_ly())
+    if (!nrow(d) || all(!is.finite(d$stuff_plus))) return(plotly::plot_ly())
 
     if ("CustomGameID" %in% names(d)) {
       d$GameID <- as.character(d$CustomGameID)
@@ -9472,7 +9571,7 @@ server <- function(input, output, session){
     if (!nrow(game_info)) return(plotly::plot_ly())
     d <- d %>%
       dplyr::left_join(game_info, by = "GameID") %>%
-      dplyr::filter(!is.na(GameIndex), is.finite(xrv_plus) | is.finite(stuff_plus))
+      dplyr::filter(!is.na(GameIndex), is.finite(stuff_plus))
     if (!nrow(d)) return(plotly::plot_ly())
 
     order_col <- if ("row_id" %in% names(d)) {
@@ -9524,38 +9623,14 @@ server <- function(input, output, session){
         dplyr::filter(PitchType == pt) %>%
         dplyr::arrange(GameIndex, pitch_order)
       if (!nrow(df_pt)) next
-      y_raw <- df_pt$xrv_plus
       y_raw_stuff <- df_pt$stuff_plus
-      y_roll <- roll_mean_min(y_raw, XRV_TS_ROLL_WINDOW)
       y_roll_stuff <- roll_mean_min(y_raw_stuff, XRV_TS_ROLL_WINDOW)
-      hover_txt <- paste0(
-        "Game: ", df_pt$GameLabel,
-        "<br>", pt, " xRV+: ", ifelse(is.finite(y_raw), sprintf("%.1f", y_raw), "NA"),
-        "<br>Rolling xRV+: ", ifelse(is.finite(y_roll), sprintf("%.1f", y_roll), "NA"),
-        "<br>", pt, " Stuff+: ", ifelse(is.finite(y_raw_stuff), sprintf("%.1f", y_raw_stuff), "NA"),
-        "<br>Rolling Stuff+: ", ifelse(is.finite(y_roll_stuff), sprintf("%.1f", y_roll_stuff), "NA")
-      )
       col <- pitch_colors[[pt]] %||% "#808080"
-      p <- p %>%
-        add_trace(
-          data = df_pt,
-          x = ~x_index,
-          y = y_roll,
-          type = "scatter", mode = "lines+markers",
-          name = paste0(pt, " xRV+"),
-          line = list(color = col),
-          marker = list(color = col, size = 6, opacity = 0.75),
-          text = hover_txt,
-          hoverinfo = "text"
-        )
-
       if (any(is.finite(y_raw_stuff))) {
         hover_txt_stuff <- paste0(
           "Game: ", df_pt$GameLabel,
           "<br>", pt, " Stuff+: ", ifelse(is.finite(y_raw_stuff), sprintf("%.1f", y_raw_stuff), "NA"),
-          "<br>Rolling Stuff+: ", ifelse(is.finite(y_roll_stuff), sprintf("%.1f", y_roll_stuff), "NA"),
-          "<br>", pt, " xRV+: ", ifelse(is.finite(y_raw), sprintf("%.1f", y_raw), "NA"),
-          "<br>Rolling xRV+: ", ifelse(is.finite(y_roll), sprintf("%.1f", y_roll), "NA")
+          "<br>Rolling Stuff+: ", ifelse(is.finite(y_roll_stuff), sprintf("%.1f", y_roll_stuff), "NA")
         )
         p <- p %>%
           add_trace(
@@ -9564,8 +9639,8 @@ server <- function(input, output, session){
             y = y_roll_stuff,
             type = "scatter", mode = "lines+markers",
             name = paste0(pt, " Stuff+"),
-            line = list(color = col, dash = "dot"),
-            marker = list(color = col, size = 5, opacity = 0.6, symbol = "circle-open"),
+            line = list(color = col),
+            marker = list(color = col, size = 6, opacity = 0.75),
             text = hover_txt_stuff,
             hoverinfo = "text",
             showlegend = TRUE
@@ -9576,7 +9651,7 @@ server <- function(input, output, session){
     p %>% layout(
       title = list(text = title_text, x = 0.5),
       xaxis = list(title = "Game", tickmode = "array", tickvals = game_info$GameIndex, ticktext = game_info$GameLabel),
-      yaxis = list(title = "xRV+", ticksuffix = ""),
+      yaxis = list(title = "Stuff+", ticksuffix = ""),
       legend = list(orientation = "h", x = 0, y = 1.1),
       margin = list(t = 60, r = 20, b = 40, l = 60),
       hovermode = "closest"
@@ -10286,7 +10361,7 @@ server <- function(input, output, session){
   output$xrv_season_ts <- plotly::renderPlotly({
     params <- xrv_scale_params()
     d <- xrv_season_data()
-    build_xrv_ts_plot(d, params, paste0(input$PitcherInput, ": xRV Rolling Average"))
+    build_xrv_ts_plot(d, params, paste0(input$PitcherInput, ": Stuff+ Rolling Average"))
   })
 
   # ---- xRV Game Summary outputs ----
@@ -10322,7 +10397,7 @@ server <- function(input, output, session){
   output$xrv_game_ts <- plotly::renderPlotly({
     params <- xrv_scale_params()
     d <- xrv_game_data()
-    build_xrv_ts_plot(d, params, paste0(input$xrv_game_pitcher, ": xRV Rolling Average"))
+    build_xrv_ts_plot(d, params, paste0(input$xrv_game_pitcher, ": Stuff+ Rolling Average"))
   })
 
   # ---- xRV Staff Leaderboard ----
@@ -10349,20 +10424,18 @@ server <- function(input, output, session){
       dplyr::group_by(Pitcher) %>%
       dplyr::summarise(
         Pitches = dplyr::n(),
-        xRV_avg = mean(xrv_plus, na.rm = TRUE),
         Stuff_avg = mean(stuff_plus, na.rm = TRUE),
         .groups = "drop"
       ) %>%
       dplyr::filter(Pitches >= min_p) %>%
-      dplyr::arrange(dplyr::desc(xRV_avg)) %>%
-      dplyr::rename(`xRV (avg)` = xRV_avg, `Stuff+ (avg)` = Stuff_avg)
+      dplyr::arrange(dplyr::desc(Stuff_avg)) %>%
+      dplyr::rename(`Stuff+ (avg)` = Stuff_avg)
     dt <- DT::datatable(
       out,
       rownames = FALSE,
       options = list(dom = "t", paging = FALSE, ordering = TRUE, scrollX = TRUE, order = list(list(2, "desc"))),
       class = "stripe"
     )
-    dt <- DT::formatRound(dt, "xRV (avg)", 1)
     DT::formatRound(dt, "Stuff+ (avg)", 1)
   })
 
@@ -10379,7 +10452,6 @@ server <- function(input, output, session){
       dplyr::group_by(Pitcher, PitchType) %>%
       dplyr::summarise(
         Pitches = dplyr::n(),
-        xRV_avg = mean(xrv_plus, na.rm = TRUE),
         Stuff_avg = mean(stuff_plus, na.rm = TRUE),
         .groups = "drop"
       ) %>%
@@ -10387,9 +10459,9 @@ server <- function(input, output, session){
       dplyr::mutate(Usage = Pitches / sum(Pitches, na.rm = TRUE)) %>%
       dplyr::ungroup() %>%
       dplyr::filter(Pitches >= min_p) %>%
-      dplyr::arrange(dplyr::desc(xRV_avg)) %>%
-      dplyr::select(Pitcher, PitchType, Pitches, Usage, xRV_avg, Stuff_avg) %>%
-      dplyr::rename(`Usage %` = Usage, `xRV (avg)` = xRV_avg, `Stuff+ (avg)` = Stuff_avg)
+      dplyr::arrange(dplyr::desc(Stuff_avg)) %>%
+      dplyr::select(Pitcher, PitchType, Pitches, Usage, Stuff_avg) %>%
+      dplyr::rename(`Usage %` = Usage, `Stuff+ (avg)` = Stuff_avg)
     dt <- DT::datatable(
       out,
       rownames = FALSE,
@@ -10397,7 +10469,6 @@ server <- function(input, output, session){
       class = "stripe"
     )
     dt <- DT::formatPercentage(dt, "Usage %", 0)
-    dt <- DT::formatRound(dt, "xRV (avg)", 1)
     DT::formatRound(dt, "Stuff+ (avg)", 1)
   })
 
@@ -11305,8 +11376,8 @@ server <- function(input, output, session){
             bad  <- v_pp < lo
           }
           # grid does not accept rgba() strings; use solid hex for PDF
-          fills[good, 2] <- "#F3B9B9"
-          fills[bad,  2] <- "#C7D4EA"
+          fills[good, 2] <- "#D6EBD3"
+          fills[bad,  2] <- "#F3B9B9"
         }
       }
       
@@ -11475,13 +11546,13 @@ server <- function(input, output, session){
     )
   })
   
-  # ---- AAR: game dropdown respects sidebar season selection ----
-  observeEvent(list(input$aar_pitcher, input$season_groups), {
+  # ---- AAR: game dropdown respects the report's season selection ----
+  observeEvent(list(input$aar_pitcher, aar_season_group_values()), {
     req(input$aar_pitcher)
     d <- txst_df %>%
       dplyr::filter(Pitcher == input$aar_pitcher, !(is_bullpen %in% TRUE))
     
-    sg <- input$season_groups %||% character(0)
+    sg <- aar_season_group_values()
     season_col <- if ("SeasonTag" %in% names(d)) "SeasonTag" else if ("SeasonGroup" %in% names(d)) "SeasonGroup" else NULL
     if (!is.null(season_col) && length(sg)) {
       d <- d %>% dplyr::filter(.data[[season_col]] %in% sg)
@@ -14006,23 +14077,15 @@ function(el,x){
     wobacon_obs[is_3b] <- ww$X3B; wobacon_obs[is_hr] <- ww$HR
     wobacon_denom <- as.numeric(is_bip)
     
-    xw_on_contact <- xwoba_from_evla(ev, la)
-    xwoba_pa <- numeric(nrow(pa_last))
-    xwoba_pa[is_bb & !is_ibb] <- ww$BB; xwoba_pa[is_hbp] <- ww$HBP; xwoba_pa[is_bip] <- xw_on_contact[is_bip]
-    evla_ok <- is.finite(ev) & is.finite(la)
-    xwoba_denom <- as.numeric(!(is_ibb) & (!is_bip | evla_ok))
-    
     pa_summ <- tibble::tibble(
       PitchType = pa_last$PitchType,
       woba_num  = woba_obs,     woba_den  = woba_denom,
-      wobacon_num = wobacon_obs, wobacon_den = wobacon_denom,
-      xwoba_num = xwoba_pa,     xwoba_den = xwoba_denom
+      wobacon_num = wobacon_obs, wobacon_den = wobacon_denom
     ) %>%
       dplyr::group_by(PitchType) %>%
       dplyr::summarise(
         wOBA     = if (sum(woba_den, na.rm = TRUE) > 0)    sum(woba_num, na.rm = TRUE)    / sum(woba_den, na.rm = TRUE)    else NA_real_,
         wOBAcon  = if (sum(wobacon_den, na.rm = TRUE) > 0) sum(wobacon_num, na.rm = TRUE) / sum(wobacon_den, na.rm = TRUE) else NA_real_,
-        xwOBA    = if (sum(xwoba_den, na.rm = TRUE) > 0)   sum(xwoba_num, na.rm = TRUE)   / sum(xwoba_den, na.rm = TRUE)   else NA_real_,
         .groups = "drop"
       )
     
@@ -14036,7 +14099,7 @@ function(el,x){
     
     cols_to_color <- intersect(names(tbl_metrics), c(names(D1_PCT_AVG), names(ABS_RULES)))
     percent_cols  <- intersect(names(tbl_metrics), names(D1_PCT_AVG))
-    lower_better  <- intersect(names(tbl_metrics), c("BB%","Barrel%","wOBA","xwOBA","wOBAcon","FIP","SLG","OPS"))
+    lower_better  <- intersect(names(tbl_metrics), c("BB%","Barrel%","wOBA","wOBAcon","FIP","SLG","OPS"))
     
     tbl_metrics_colored <- shade_columns_txst(
       tbl_metrics,
@@ -14122,12 +14185,6 @@ function(el,x){
     wobacon_obs[is_3b] <- ww$X3B; wobacon_obs[is_hr] <- ww$HR
     wobacon_denom <- as.numeric(is_bip)
     
-    xw_on_contact <- xwoba_from_evla(ev, la)
-    xwoba_pa <- numeric(nrow(pa_last))
-    xwoba_pa[is_bb & !is_ibb] <- ww$BB; xwoba_pa[is_hbp] <- ww$HBP; xwoba_pa[is_bip] <- xw_on_contact[is_bip]
-    evla_ok <- is.finite(ev) & is.finite(la)
-    xwoba_denom <- as.numeric(!(is_ibb) & (!is_bip | evla_ok))
-    
     resolve_stat_vec <- function(df, cands, default_vec) {
       col <- cands[cands %in% names(df)][1]
       if (!is.na(col)) {
@@ -14152,14 +14209,12 @@ function(el,x){
     pa_summ <- tibble::tibble(
       PitchType = pa_last$PitchType,
       woba_num  = woba_obs,     woba_den  = woba_denom,
-      wobacon_num = wobacon_obs, wobacon_den = wobacon_denom,
-      xwoba_num = xwoba_pa,     xwoba_den = xwoba_denom
+      wobacon_num = wobacon_obs, wobacon_den = wobacon_denom
     ) %>%
       dplyr::group_by(PitchType) %>%
       dplyr::summarise(
         wOBA     = if (sum(woba_den, na.rm = TRUE) > 0)    sum(woba_num, na.rm = TRUE)    / sum(woba_den, na.rm = TRUE)    else NA_real_,
         wOBAcon  = if (sum(wobacon_den, na.rm = TRUE) > 0) sum(wobacon_num, na.rm = TRUE) / sum(wobacon_den, na.rm = TRUE) else NA_real_,
-        xwOBA    = if (sum(xwoba_den, na.rm = TRUE) > 0)   sum(xwoba_num, na.rm = TRUE)   / sum(xwoba_den, na.rm = TRUE)   else NA_real_,
         .groups = "drop"
       )
 
@@ -14201,11 +14256,11 @@ function(el,x){
     tbl_perf <- base_met %>%
       dplyr::left_join(pa_summ, by = "PitchType") %>%
       dplyr::left_join(prv_tbl, by = "PitchType") %>%
-      dplyr::mutate(across(dplyr::any_of(c("wOBA","xwOBA","wOBAcon")), ~ ifelse(is.na(.x), NA, sprintf("%.3f", .x)))) %>%
+      dplyr::mutate(across(dplyr::any_of(c("wOBA","wOBAcon")), ~ ifelse(is.na(.x), NA, sprintf("%.3f", .x)))) %>%
       dplyr::select(
         PitchType, Total, `Usage%`,
         `Whiff%`, `Chase%`, `IZWhiff%`, `CSW%`,
-        wOBA, xwOBA, wOBAcon,
+        wOBA, wOBAcon,
         TB, BB, K, HR, RBI
       )
 
@@ -14219,12 +14274,12 @@ function(el,x){
       dplyr::select(
         PitchType, Total, `Usage%`, pRV,
         `Whiff%`, `Chase%`, `IZWhiff%`, `CSW%`,
-        wOBA, xwOBA, wOBAcon
+        wOBA, wOBAcon
       )
     
     cols_to_color <- intersect(names(tbl_perf), c(names(D1_PCT_AVG), names(ABS_RULES)))
     percent_cols  <- intersect(names(tbl_perf), names(D1_PCT_AVG))
-    lower_better  <- intersect(names(tbl_perf), c("BB%","Barrel%","wOBA","xwOBA","wOBAcon","FIP","SLG","OPS"))
+    lower_better  <- intersect(names(tbl_perf), c("BB%","Barrel%","wOBA","wOBAcon","FIP","SLG","OPS"))
     
     tbl_perf_colored <- shade_columns_txst(
       tbl_perf,
@@ -17316,10 +17371,14 @@ function(el,x){
     long <- dplyr::bind_rows(rows)
     validate(need(nrow(long) > 0, "No finite values for selected stats."))
 
-    ref <- dplyr::bind_rows(refs) %>%
-      dplyr::group_by(.data$Chart) %>%
-      dplyr::slice_head(n = 1) %>%
-      dplyr::ungroup()
+    ref <- if (length(refs)) {
+      dplyr::bind_rows(refs) %>%
+        dplyr::group_by(.data$Chart) %>%
+        dplyr::slice_head(n = 1) %>%
+        dplyr::ungroup()
+    } else {
+      tibble::tibble(Chart = character(), LeagueAvg = numeric())
+    }
 
     label_frames <- list()
     if (!is.null(df_all) && nrow(df_all) && all(c("GameIndex", "GameLabel") %in% names(df_all))) {
@@ -17538,6 +17597,49 @@ function(el,x){
 
   team_release_points <- reactive({
     summarize_release_points(team_trends_data())
+  })
+
+  output$team_release_points_plot <- plotly::renderPlotly({
+    pts <- team_release_points()
+    validate(need(!is.null(pts) && nrow(pts) > 0, "No release-point data for this selection."))
+
+    pts <- pts %>%
+      dplyr::mutate(
+        PitcherDisplay = name_display(Pitcher),
+        Class = pitcher_class_2026(Pitcher),
+        Class = factor(Class, levels = c(names(TEAM_CLASS_COLORS), "Unknown"))
+      ) %>%
+      dplyr::filter(is.finite(RelSide), is.finite(RelHeight))
+    validate(need(nrow(pts) > 0, "No finite release-point data for this selection."))
+
+    class_colors <- c(TEAM_CLASS_COLORS, Unknown = "#7A7A7A")
+    plotly::plot_ly(
+      data = pts,
+      x = ~RelSide,
+      y = ~RelHeight,
+      type = "scatter",
+      mode = "markers+text",
+      color = ~Class,
+      colors = unname(class_colors),
+      text = ~PitcherDisplay,
+      textposition = "top center",
+      textfont = list(size = 10, color = "#2A2421"),
+      marker = list(size = 13, opacity = 0.9, line = list(color = "#FFFFFF", width = 1.5)),
+      hovertext = ~paste0(
+        PitcherDisplay,
+        "<br>Class: ", Class,
+        "<br>Release Side: ", sprintf("%.1f ft", RelSide),
+        "<br>Release Height: ", sprintf("%.1f ft", RelHeight)
+      ),
+      hoverinfo = "text"
+    ) %>%
+      plotly::layout(
+        xaxis = list(title = "Release Side (ft)", zeroline = TRUE, zerolinecolor = "#B8B1AA"),
+        yaxis = list(title = "Release Height (ft)"),
+        legend = list(title = list(text = "Class"), orientation = "h", x = 0, y = 1.12),
+        margin = list(t = 72, r = 30, b = 55, l = 65),
+        hovermode = "closest"
+      )
   })
 
   team_release_season_points <- reactive({
@@ -19651,7 +19753,8 @@ function(el,x){
     tab_shaded <- shade_columns_txst(
       tab,
       cols = intersect(shade_cols, names(tab)),
-      lower_better = intersect(c("BAA","WHIP","BB/9","H/9","BB%","BB+HBP%","Barrel%","wOBA","wOBAcon","FIP","SLG","OPS"), names(tab))
+      lower_better = intersect(c("BAA","WHIP","BB/9","H/9","BB%","BB+HBP%","Barrel%","wOBA","wOBAcon","FIP","SLG","OPS"), names(tab)),
+      palette = "player"
     )
     
     # Build hidden numeric sort columns to guarantee correct ordering
@@ -19809,7 +19912,8 @@ function(el,x){
     total_row_shaded <- shade_columns_txst(
       total_row,
       cols = intersect(shade_cols, names(total_row)),
-      lower_better = intersect(c("BAA","WHIP","BB/9","H/9","BB%","BB+HBP%","Barrel%","wOBA","wOBAcon","FIP","SLG","OPS"), names(total_row))
+      lower_better = intersect(c("BAA","WHIP","BB/9","H/9","BB%","BB+HBP%","Barrel%","wOBA","wOBAcon","FIP","SLG","OPS"), names(total_row)),
+      palette = "player"
     )
 
     leaderboard_totals_cache(total_row_shaded)

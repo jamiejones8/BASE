@@ -6,18 +6,22 @@ inside an iframe or a second application server.
 
 ## Preserved behavior
 
-All ten top-level Wally workflows remain present in their existing order:
+The BASE Hitting workspace retains nine team-analysis workflows in their
+existing order:
 
 1. Performance;
 2. Lineup Builder;
 3. Damage Heat Map;
 4. Whiff Zones;
 5. Team Report;
-6. Game Reports (AAR);
-7. Leaderboard;
-8. Swing Decisions;
-9. Ball Flight;
-10. Contact Point.
+6. Leaderboard;
+7. Swing Decisions;
+8. Ball Flight;
+9. Contact Point.
+
+Game Reports (AAR) is exposed in the unified Postgame Reports workspace with
+its own hitter, season, and game controls. The standalone HittingApp retains
+the AAR in its original tab.
 
 Nested tabs, filters, calculations, tables, plots, PDF builders, and download
 handlers remain owned by Wally's server. The standalone app still
@@ -67,7 +71,7 @@ server reactives. The temporary prepared-data cache is cleared after startup.
 
 - resolution of the four required HittingApp folder files;
 - duplicate removal across folder files;
-- all ten Wally top-level tabs and the isolated BASE layout;
+- all nine hosted Hitting tabs, the moved AAR UI, and the isolated BASE layout;
 - successful registration of Wally's original server graph; and
 - live Performance and Lineup Builder fixture payloads.
 

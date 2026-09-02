@@ -315,17 +315,20 @@ base_hitting_embedded_head <- function() {
       .base-hitting-workspace .lineup-table select { min-width: 120px; }
       .base-hitting-workspace .lineup-total td { font-weight: 800; }
       .base-hitting-workspace table.dataTable tbody td:has(> .cf-cell) {
-        padding: 0 !important;
+        padding: 2px !important;
+        background: #fff !important;
       }
       .base-hitting-workspace table.dataTable tbody td > .cf-cell {
-        display: flex !important;
+        display: block !important;
         width: 100% !important;
-        min-height: 36px;
-        padding: 8px 10px !important;
+        min-height: 32px;
+        margin: 0 !important;
+        padding: 6px 8px !important;
         box-sizing: border-box !important;
-        align-items: center;
-        justify-content: center;
-        border-radius: 0 !important;
+        border: 2px solid #fff !important;
+        border-radius: 4px !important;
+        background-clip: padding-box !important;
+        text-align: center;
       }
       .base-hitting-workspace .shiny-spinner-output-container,
       .base-hitting-workspace .shiny-html-output,
@@ -416,6 +419,7 @@ base_wally_hitting_environment <- function(team_rows) {
   workspace$BASE_HITTING_DATA <- team_rows
   workspace$BASE_HITTING_TEAM_CODE <- TEAM_CONFIG$data_code
   workspace$BASE_HITTING_EMBEDDED <- TRUE
+  workspace$BASE_HITTING_XWOBA_GRID_PATH <- TEAM_CONFIG$data$xwoba_grid_file
   workspace$BASE_HITTING_TXST_LOGO_PATH <- base_project_path(
     "WallyApps", "HittingApp", "www", "txstlogo.jpeg"
   )
@@ -448,6 +452,7 @@ base_wally_hitting_environment <- function(team_rows) {
     keep.source = FALSE
   )
   if (!inherits(workspace$ui, c("shiny.tag", "shiny.tag.list", "list")) ||
+      !inherits(workspace$base_hitting_postgame_ui, c("shiny.tag", "shiny.tag.list", "list")) ||
       !is.function(workspace$server)) {
     stop("Wally HittingApp did not expose a usable UI and server.")
   }
@@ -488,6 +493,13 @@ base_team_hitting_workspace_server <- function(input, output, session) {
   base_clear_team_hitting_cache()
   output$base_team_hitting_app <- shiny::renderUI({
     tags$div(class = "base-hitting-workspace", workspace$ui)
+  })
+  output$base_postgame_hitting_aar <- shiny::renderUI({
+    tags$div(
+      class = "base-hitting-workspace base-postgame-aar",
+      workspace$head_css,
+      workspace$base_hitting_postgame_ui
+    )
   })
   workspace$server(input, output, session)
   shinyjs::hide("base-hitting-loading")

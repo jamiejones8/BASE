@@ -44,10 +44,9 @@ production image. The large national master is never loaded by DefenseApp.
 
 ## Catching ownership
 
-Interactive catcher game and season analysis lives in Defensive Analytics.
-The existing BASE Catching Report remains unchanged under Postgame Reports as
-one of the three PDF generators. These are two entry points over the canonical
-catching source, not duplicate season datasets.
+Catcher season analysis lives in Defensive Analytics. The single-game Catcher
+Report AAR and its PDF are exposed under Postgame Reports. These are two entry
+points over the canonical catching source, not duplicate season datasets.
 
 ## Navigation, appearance, and loading
 

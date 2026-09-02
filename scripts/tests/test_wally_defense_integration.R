@@ -60,23 +60,63 @@ if (!grepl("base-defense-embedded-layout", html, fixed = TRUE)) {
 }
 expected_tabs <- c(
   "Leaderboard", "Opportunities", "OF OAA", "IF OAA", "OAA",
-  "Catcher Reports", "Catcher Season"
+  "Catcher Season"
 )
 missing_tabs <- expected_tabs[!vapply(expected_tabs, grepl, logical(1), x = html, fixed = TRUE)]
 if (length(missing_tabs)) {
   fail("Embedded Defense UI is missing tabs: ", paste(missing_tabs, collapse = ", "))
+}
+if (grepl("Catcher Reports", html, fixed = TRUE)) {
+  fail("Catcher AAR is still present in the Defense workspace.")
+}
+postgame_html <- paste(as.character(workspace$base_catching_postgame_ui), collapse = "")
+if (!grepl("def_catcher_framing_pdf", postgame_html, fixed = TRUE)) {
+  fail("Catcher AAR was not exposed to the Postgame Reports workspace.")
+}
+if (!length(workspace$base_catching_postgame_choices)) {
+  fail("Moved Catcher AAR rendered without initial catcher choices.")
+}
+first_postgame_catcher <- unname(workspace$base_catching_postgame_choices[[1]])
+if (!grepl(first_postgame_catcher, postgame_html, fixed = TRUE)) {
+  fail("Moved Catcher AAR did not render its catcher choices into the selector.")
+}
+if (!length(workspace$base_catching_postgame_game_choices)) {
+  fail("Moved Catcher AAR rendered without initial game choices.")
 }
 
 summary_rows <- workspace$summarize_defense(workspace$defense_df)
 if (!nrow(summary_rows)) fail("Defense summary returned no fixture rows.")
 catcher_rows <- workspace$prepare_catcher_receiving_rows(workspace$catching_df)
 if (!nrow(catcher_rows)) fail("Catcher receiving preparation returned no fixture rows.")
+report_catcher <- catcher_rows$Catcher[[1]]
+report_game <- catcher_rows$CustomGameID[[1]]
+report_rows <- catcher_rows %>%
+  dplyr::filter(.data$Catcher == report_catcher, .data$CustomGameID == report_game)
+report_path <- tempfile(fileext = ".pdf")
+workspace$write_catcher_receiving_pdf(
+  report_rows,
+  workspace$name_display(report_catcher),
+  report_path
+)
+if (!file.exists(report_path) || file.info(report_path)$size <= 0) {
+  fail("Moved Catcher AAR did not generate a PDF.")
+}
+unlink(report_path)
 
 shiny::testServer(workspace$server, {
   session$setInputs(def_season_groups = "S26")
   session$flushReact()
   if (!nrow(filtered_data())) fail("Defense season filter returned no fixture rows.")
-  if (!length(catchers_all())) fail("Catcher selector returned no fixture choices.")
+  catcher_choices <- catchers_all()
+  if (!length(catcher_choices)) fail("Catcher selector returned no fixture choices.")
+  catcher <- unname(catcher_choices[[1]])
+  session$setInputs(def_AARCatcher = catcher)
+  session$flushReact()
+  catcher_games <- games_for_catcher()
+  if (!nrow(catcher_games)) fail("Moved Catcher AAR returned no game choices.")
+  session$setInputs(def_AARCatchGame = catcher_games$gid[[1]])
+  session$flushReact()
+  if (!nrow(aar_catch_data())) fail("Moved Catcher AAR returned no fixture rows.")
   invisible(output$leaderboard_overall_table)
 })
 

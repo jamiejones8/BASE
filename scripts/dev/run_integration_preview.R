@@ -217,7 +217,7 @@ ui <- navbarPage(
     )
   ),
   tabPanel("Home", value = "tab_home", preview_home),
-  tabPanel("Postgame Reports", value = "tab_postgame_reports", placeholder_workspace("PDF report generators", "Postgame Reports", "The three existing BASE report generators remain together here.")),
+  tabPanel("Postgame Reports", value = "tab_postgame_reports", placeholder_workspace("After action reports", "Postgame Reports", "Hitting, pitching, and catching AARs are grouped here.")),
   tabPanel("Pitching", value = "tab_team_pitching", base_team_pitching_workspace_ui()),
   tabPanel("Hitting", value = "tab_team_hitting", base_team_hitting_workspace_ui()),
   tabPanel("Opponent Scouting", value = "tab_opponent_scouting", base_opponent_scouting_workspace_ui()),

@@ -54,12 +54,17 @@ def main() -> int:
 
     by_id = {item["id"]: item for item in workspaces}
     postgame = by_id["postgame_reports"]
-    expected_postgame_tabs = {"tab_pitcher", "tab_hitter", "tab_catcher"}
-    actual_postgame_tabs = {
-        tool.get("existing_base_tab") for tool in postgame.get("tools", [])
+    expected_postgame_sources = {
+        "pitching_aar": ("team_pitching", "AAR"),
+        "hitting_aar": ("team_hitting", "Game Reports (AAR)"),
+        "catching_aar": ("defense", "Catcher Reports"),
     }
-    if actual_postgame_tabs != expected_postgame_tabs or len(postgame.get("tools", [])) != 3:
-        fail("Postgame Reports must contain only the three existing BASE PDF generators.")
+    actual_postgame_sources = {
+        tool.get("id"): (tool.get("source_workspace"), tool.get("moved_from_tab"))
+        for tool in postgame.get("tools", [])
+    }
+    if actual_postgame_sources != expected_postgame_sources:
+        fail("Postgame Reports must contain the three AARs moved from Hitting, Pitching, and Defense.")
 
     opponent = by_id["opponent_scouting"]
     expected_scouting_tools = {
@@ -89,8 +94,8 @@ def main() -> int:
         fail("HomeBASE requires both national search and Texas State roster-card entry.")
 
     defense = by_id["defense"]
-    if "Interactive catcher" not in defense.get("catching_policy", ""):
-        fail("Interactive catcher statistics must be routed to Defensive Analytics.")
+    if "Season-level catcher" not in defense.get("catching_policy", ""):
+        fail("Season-level catcher statistics must be routed to Defensive Analytics.")
 
     processing = by_id["data_processing"]
     retagger = next(
@@ -152,8 +157,12 @@ def main() -> int:
         fail("The persistent Home control is not implemented in the app shell.")
     if 'base_source("R/integrations/wally_pitching_workspace.R"' not in app_source:
         fail("The Pitching workspace adapter is not sourced by BASE.")
-    if 'input, session, "tab_team_pitching"' not in app_source:
-        fail("The Pitching workspace is not registered for lazy initialization.")
+    if 'input, session, c("tab_team_pitching", "tab_postgame_reports")' not in app_source:
+        fail("The Pitching workspace is not registered for team and postgame lazy initialization.")
+    if 'input, session, c("tab_team_hitting", "tab_postgame_reports")' not in app_source:
+        fail("The Hitting workspace is not registered for team and postgame lazy initialization.")
+    if 'input, session, c("tab_defense_workspace", "tab_postgame_reports")' not in app_source:
+        fail("The Defense workspace is not registered for team and postgame lazy initialization.")
     if 'base_source("R/integrations/wally_scouting_workspace.R"' not in app_source:
         fail("The Scouting workspace adapter is not sourced by BASE.")
     if 'input, session, "tab_opponent_scouting"' not in app_source:
@@ -166,6 +175,14 @@ def main() -> int:
         fail("JUCO Scouting is not registered for lazy initialization.")
     if "base_juco_stats_workspace_ui()" not in app_source:
         fail("JUCO Scouting does not render the integrated JucoStatsApp workspace.")
+    postgame_outputs = {
+        "base_postgame_pitching_aar",
+        "base_postgame_hitting_aar",
+        "base_postgame_catching_aar",
+    }
+    missing_postgame_outputs = [item for item in postgame_outputs if item not in app_source]
+    if missing_postgame_outputs:
+        fail(f"Postgame Reports is missing moved AAR outputs: {missing_postgame_outputs}")
     if '#cpp-page .cpp-retag-card' not in app_source:
         fail("The Data Processing card does not deep-link to the persistent retagger.")
     if "body > nav.navbar { display: none !important; }" not in style_source:
