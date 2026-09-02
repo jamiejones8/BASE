@@ -4813,7 +4813,7 @@ home_tab_ui <- function() {
             home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "06", "homeBASE.jpg"),
             home_quick_link("JUCO Scouting", "Compare junior-college hitters and pitchers", "juco_stats", "07", "jucoscouting.png"),
             home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "08", "dataprocessing.jpg"),
-            home_quick_link("Player Health", "Player availability and health tools", "player_health", "09")
+            home_quick_link("Player Health", "Player availability and health tools", "player_health", "09", "medicine.jpeg")
           )
         ),
         tags$section(
