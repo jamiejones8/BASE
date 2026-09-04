@@ -16,6 +16,86 @@ BASE_WALLY_SCOUTING_REQUIRED_PACKAGES <- c(
 
 .base_wally_scouting_state <- new.env(parent = emptyenv())
 
+base_scouting_season_file <- function() {
+  override <- base_env_path("BASE_SCOUTING_SEASON_FILE", "")
+  if (nzchar(override)) return(override)
+  candidates <- unique(c(
+    TEAM_CONFIG$data$ncaa_d1_master_file,
+    base_default_ncaa_d1_master_file()
+  ))
+  available <- candidates[file.exists(candidates)]
+  if (length(available)) available[[1]] else candidates[[1]]
+}
+
+# Open metadata lazily. Only grouped player menus and filtered player pitches
+# cross into R; the national pitch table is never collected in full.
+base_scouting_season_source <- function(path = base_scouting_season_file()) {
+  dataset <- NULL
+  catalogs <- list()
+  cache <- list()
+  open <- function() {
+    if (!is.null(dataset)) return(dataset)
+    if (!file.exists(path)) {
+      stop("Season file unavailable: ", path,
+           ". Set BASE_SCOUTING_SEASON_FILE to the mounted college Parquet.")
+    }
+    if (!requireNamespace("arrow", quietly = TRUE)) {
+      stop("Reading the college season requires the arrow package.")
+    }
+    candidate <- arrow::open_dataset(path, format = "parquet")
+    required <- c("Batter", "BatterTeam", "Pitcher", "PitcherTeam")
+    missing <- setdiff(required, names(candidate$schema))
+    if (length(missing)) stop("Season file is missing columns: ", paste(missing, collapse = ", "))
+    dataset <<- candidate
+    dataset
+  }
+  columns <- function(role) {
+    if (match.arg(role, c("hitter", "pitcher")) == "hitter") {
+      c("BatterTeam", "Batter")
+    } else {
+      c("PitcherTeam", "Pitcher")
+    }
+  }
+  catalog <- function(role) {
+    cols <- columns(role)
+    if (!is.null(catalogs[[role]])) return(catalogs[[role]])
+    query <- dplyr::select(open(), tidyselect::all_of(cols))
+    query <- dplyr::group_by(query, dplyr::across(tidyselect::all_of(cols)))
+    rows <- dplyr::collect(dplyr::summarise(query, Pitches = dplyr::n(), .groups = "drop"))
+    names(rows)[match(cols, names(rows))] <- c("Team", "Player")
+    rows$Team <- as.character(rows$Team)
+    rows$Player <- as.character(rows$Player)
+    rows <- rows[!is.na(rows$Team) & nzchar(trimws(rows$Team)) &
+                   !is.na(rows$Player) & nzchar(trimws(rows$Player)), , drop = FALSE]
+    rows <- rows[order(rows$Team, rows$Player), , drop = FALSE]
+    catalogs[[role]] <<- rows
+    rows
+  }
+  load_players <- function(role, team, players) {
+    cols <- columns(role)
+    players <- sort(unique(as.character(players)))
+    players <- players[!is.na(players) & nzchar(players)]
+    if (length(team) != 1L || is.na(team) || !nzchar(team) || !length(players)) {
+      return(tibble::tibble())
+    }
+    key <- paste(c(role, team, players), collapse = "\u001f")
+    if (!is.null(cache[[key]])) return(cache[[key]])
+    query <- dplyr::filter(open(), .data[[cols[[1]]]] == team,
+                           .data[[cols[[2]]]] %in% players)
+    rows <- tibble::as_tibble(dplyr::collect(query))
+    rows$.source_file <- rep(basename(path), nrow(rows))
+    # Bound the shared cache by bytes as well as entry count.
+    if (as.numeric(object.size(rows)) <= 64 * 1024^2) {
+      cache[[key]] <<- rows
+      while (length(cache) > 16L || as.numeric(object.size(cache)) > 64 * 1024^2) {
+        cache[[1]] <<- NULL
+      }
+    }
+    rows
+  }
+  list(path = path, catalog = catalog, load_players = load_players)
+}
+
 base_scouting_data_dir <- function() {
   configured <- Sys.getenv("BASE_SCOUTING_DATA_DIR", unset = "")
   if (nzchar(configured)) {
@@ -140,7 +220,10 @@ base_scouting_embedded_head <- function() {
   ")))
 }
 
-base_wally_scouting_environment <- function(data_dir = base_scouting_data_dir()) {
+base_wally_scouting_environment <- function(
+  data_dir = base_scouting_data_dir(),
+  season_source = base_scouting_season_source()
+) {
   if (exists("environment", envir = .base_wally_scouting_state, inherits = FALSE)) {
     return(base::get("environment", envir = .base_wally_scouting_state, inherits = FALSE))
   }
@@ -161,6 +244,7 @@ base_wally_scouting_environment <- function(data_dir = base_scouting_data_dir())
 
   workspace <- new.env(parent = globalenv())
   workspace$BASE_SCOUTING_EMBEDDED <- TRUE
+  workspace$BASE_SCOUTING_SEASON_SOURCE <- season_source
   workspace$BASE_SCOUTING_APP_ROOT <- dirname(BASE_WALLY_SCOUTING_FILE)
   workspace$BASE_SCOUTING_DATA_DIR <- normalizePath(
     data_dir,

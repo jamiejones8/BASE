@@ -4514,7 +4514,7 @@ server <- function(input, output, session) {
         tags$div(
           class = "home-season-line",
           tags$span(class = "home-base-badge", "BASE"),
-          tags$span("Baseball Analytics & Scouting Engine")
+          tags$span("Bobcats Analytics & Scouting Engine")
         ),
         tags$h1(
           tags$span(class = "home-title-school", "Texas State"),

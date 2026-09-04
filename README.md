@@ -35,6 +35,12 @@ player-menu checkboxes map directly to those filenames.
 
 ## 2026 data model
 
+- The visible Opponent Scouting workspace can query the existing mounted
+  `/base-data/College26.parquet` directly. Set `BASE_SCOUTING_SEASON_FILE` to
+  select its season source. It loads compact team/player menus and fetches only
+  selected hitters' or pitchers' pitches for reports, including Matchup Grid.
+  Keep this file mounted while the workspace uses it; no additional season
+  upload or runtime rebuild is needed. Game CSVs remain an alternate source.
 - The selected integration source is WallyApps' complete 2026 Division I
   pitching/hitting Parquet: 2,041,154 season rows across 351 team codes and 212
   fields. It replaces the older `College26.parquet` build input after parity
@@ -51,10 +57,10 @@ player-menu checkboxes map directly to those filenames.
 - If a generated hitter catalog is not present, BASE builds it once from the
   mounted partitions and caches it at `/base-data/app_state/hitter-catalog.rds`.
   This adds hitter search without duplicating the full pitch-level dataset.
-- The large master is a staging/build input, not an app-local dependency. After
+- For the partitioned runtime, the large master is a staging/build input, not an app-local dependency. After
   cutover, production keeps one query-optimized national pitch dataset; the
   source master moves to cold archive instead of remaining as a second mounted
-  copy. Small catalogs and the Texas State startup cache are permitted derived
+  copy, once direct Opponent Scouting reads have also been migrated. Small catalogs and the Texas State startup cache are permitted derived
   artifacts.
 - `data/external/CapeCod26.parquet` is a supplemental source. When a selected college player
   has a name match in the Cape dataset, scouting pages can include those Cape
@@ -103,7 +109,7 @@ home scoreboard, and the primary mark on the analytics hub card.
    `--season 2026` to create the one-copy query-on-demand runtime. Configure
    `BASE_NCAA_D1_MASTER_FILE` for provenance/build tooling and
    `BASE_RUNTIME_ROOT` for application reads. After validated cutover, archive
-   the staged master rather than mounting both large copies. Set
+   the staged master only after Opponent Scouting no longer reads it directly. Set
    `BASE_CAPE_DATA_FILE` for an optional player supplement.
 5. Set `BASE_ROSTER_FILE` and `BASE_SCHEDULE_FILE` for the college roster and
    schedule. Templates are available in `config_examples/`.

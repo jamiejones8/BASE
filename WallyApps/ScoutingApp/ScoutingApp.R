@@ -39,6 +39,7 @@ DATA_DIR <- get0(
   inherits = FALSE,
   ifnotfound = file.path(APP_ROOT, "data")
 )
+SCOUTING_SEASON_SOURCE <- get0("BASE_SCOUTING_SEASON_SOURCE", inherits = FALSE)
 env_path <- file.path(APP_ROOT, ".Renviron")
 if (!SCOUTING_EMBEDDED_MODE &&
     file.exists(env_path)) readRenviron(env_path)
@@ -1579,7 +1580,7 @@ pitcher_bust_source_input_id <- function(pitcher){
 
 pitcher_bust_source_choices <- function(source_files){
   source_files <- unique(stats::na.omit(as.character(source_files)))
-  c("All selected CSVs" = "__ALL__", stats::setNames(source_files, source_file_label(source_files)))
+  c("All selected sources" = "__ALL__", stats::setNames(source_files, source_file_label(source_files)))
 }
 
 selected_pitch_pa_rows <- function(d, group_vars, balls_col, strikes_col, two_k_only = FALSE){
@@ -5012,19 +5013,43 @@ ui <- base_scouting_page(
   scouting_title,
   base_scouting_layout(
   sidebarPanel(width = 3,
+               if (!is.null(SCOUTING_SEASON_SOURCE)) tagList(
+                 radioButtons("scout_data_source", "Scouting data",
+                              choices = c("College season" = "season", "Game CSVs" = "csv"),
+                              selected = "season"),
+                 conditionalPanel(
+                   "input.scout_data_source === 'season'",
+                   uiOutput("scout_season_status"),
+                   selectizeInput("scout_hitter_team", "Hitter team", choices = NULL),
+                   selectizeInput("scout_season_hitters", "Hitters to load", choices = NULL,
+                                  multiple = TRUE, options = list(plugins = list("remove_button"))),
+                   selectizeInput("scout_pitcher_team", "Pitcher team", choices = NULL),
+                   selectizeInput("scout_season_pitchers", "Pitchers to load", choices = NULL,
+                                  multiple = TRUE, options = list(plugins = list("remove_button"))),
+                   helpText("Choose players to load their season pitches. You can choose different teams for a matchup."),
+                   hr()
+                 )
+               ),
                conditionalPanel(
                  "input.main_tab !== 'matchup_grid'",
+                 conditionalPanel(
+                 "input.scout_data_source !== 'season'",
                  tags$h4("Report File"),
                  uiOutput("csv_files_ui"),
-                 hr(),
-                 uiOutput("hitter_order_ui")
+                 hr()),
+                 conditionalPanel(
+                   "input.main_tab !== 'Pitcher Card' && input.main_tab !== 'Stuff Sheet'",
+                   uiOutput("hitter_order_ui")
+                 )
                ),
                conditionalPanel(
                  "input.main_tab === 'matchup_grid'",
+                 conditionalPanel(
+                 "input.scout_data_source !== 'season'",
                  tags$h4("Matchup Files"),
                  fileInput("matchup_pitchers_file", "Pitchers CSV", accept = c(".csv", "text/csv")),
                  fileInput("matchup_hitters_file", "Hitters CSV", accept = c(".csv", "text/csv")),
-                 hr(),
+                 hr()),
                  uiOutput("matchup_pitcher_order_ui"),
                  hr(),
                  uiOutput("matchup_hitter_order_ui")
@@ -5133,6 +5158,68 @@ ui <- base_scouting_page(
 
 # -------------------- Server --------------------
 server <- function(input, output, session){
+
+  season_mode <- reactive({
+    !is.null(SCOUTING_SEASON_SOURCE) &&
+      identical(input$scout_data_source %||% "season", "season")
+  })
+  season_catalogs <- reactive({
+    req(season_mode())
+    tryCatch(
+      withProgress(message = "Loading college player directory", value = 0.5, {
+        list(hitter = SCOUTING_SEASON_SOURCE$catalog("hitter"),
+             pitcher = SCOUTING_SEASON_SOURCE$catalog("pitcher"))
+      }),
+      error = function(e) validate(need(FALSE, conditionMessage(e)))
+    )
+  })
+  output$scout_season_status <- renderUI({
+    catalogs <- season_catalogs()
+    helpText(sprintf("College season ready: %s hitters and %s pitchers.",
+                     format(nrow(catalogs$hitter), big.mark = ","),
+                     format(nrow(catalogs$pitcher), big.mark = ",")))
+  })
+  observeEvent(season_catalogs(), {
+    for (role in c("hitter", "pitcher")) {
+      teams <- sort(unique(season_catalogs()[[role]]$Team))
+      id <- paste0("scout_", role, "_team")
+      selected <- input[[id]]
+      if (is.null(selected) || !selected %in% teams) selected <- ""
+      updateSelectizeInput(session, id, choices = c("Choose a team" = "", teams),
+                           selected = selected, server = TRUE)
+    }
+  })
+  for (role_value in c("hitter", "pitcher")) local({
+    role <- role_value
+    team_id <- paste0("scout_", role, "_team")
+    player_id <- paste0("scout_season_", role, "s")
+    observeEvent(list(input[[team_id]], season_catalogs()), {
+      catalog <- season_catalogs()[[role]]
+      team <- input[[team_id]] %||% ""
+      choices <- catalog$Player[catalog$Team == team]
+      updateSelectizeInput(session, player_id, choices = choices,
+                           selected = intersect(input[[player_id]], choices), server = TRUE)
+    })
+  })
+  season_rows <- function(role) {
+    req(season_mode())
+    team <- input[[paste0("scout_", role, "_team")]] %||% ""
+    players <- input[[paste0("scout_season_", role, "s")]]
+    catalog <- season_catalogs()[[role]]
+    players <- intersect(players, catalog$Player[catalog$Team == team])
+    validate(need(nzchar(team) && length(players) > 0,
+                  paste("Choose a team and", paste0(role, "s"), "in the sidebar.")))
+    rows <- tryCatch(
+      withProgress(message = paste("Loading selected", paste0(role, "s")), value = 0.5, {
+        SCOUTING_SEASON_SOURCE$load_players(role, team, players)
+      }),
+      error = function(e) validate(need(FALSE, conditionMessage(e)))
+    )
+    validate(need(nrow(rows) > 0, "No season pitches found for the selected players."))
+    rows
+  }
+  season_hitter_rows <- reactive(season_rows("hitter"))
+  season_pitcher_rows <- reactive(season_rows("pitcher"))
   
   files_refresh <- reactiveVal(0)
   ftp_log <- reactiveVal("")
@@ -5344,7 +5431,7 @@ server <- function(input, output, session){
   })
   
   std_all <- reactive({
-    d_raw <- df_all()
+    d_raw <- if (season_mode()) season_hitter_rows() else df_all()
     tryCatch(std_cols(d_raw), error = function(e){
       message("[std_cols ERROR] ", conditionMessage(e))
       validate(need(FALSE, paste("Column standardization error:", conditionMessage(e))))
@@ -5352,7 +5439,7 @@ server <- function(input, output, session){
   })
   
   pitcher_std_all <- reactive({
-    d_raw <- df_all()
+    d_raw <- if (season_mode()) season_pitcher_rows() else df_all()
     tryCatch(
       pitcher_env$standardize_tm(d_raw) %>%
         dplyr::filter(!pitcher_env$is_bad_pitch_type(PitchType)),
@@ -5364,6 +5451,7 @@ server <- function(input, output, session){
   })
 
   matchup_pitchers_raw <- reactive({
+    if (season_mode()) return(season_pitcher_rows())
     req(input$matchup_pitchers_file)
     out <- read_csv_files(input$matchup_pitchers_file$datapath)
     validate(need(is.data.frame(out) && nrow(out) > 0, "Pitcher CSV did not load any rows."))
@@ -5371,6 +5459,7 @@ server <- function(input, output, session){
   })
 
   matchup_hitters_raw <- reactive({
+    if (season_mode()) return(season_hitter_rows())
     req(input$matchup_hitters_file)
     out <- read_csv_files(input$matchup_hitters_file$datapath)
     validate(need(is.data.frame(out) && nrow(out) > 0, "Hitter CSV did not load any rows."))
@@ -5403,7 +5492,7 @@ server <- function(input, output, session){
   matchup_pitcher_meta <- reactive({
     req(matchup_pitchers_std())
     d <- matchup_pitchers_std()
-    validate(need(nrow(d) > 0, "No pitcher rows found in the uploaded pitcher CSV."))
+    validate(need(nrow(d) > 0, "No pitcher rows found in the selected data."))
     d %>%
       dplyr::mutate(PA_ID = make_pa_id(d)) %>%
       dplyr::filter(!is.na(PitcherName), nzchar(trimws(PitcherName))) %>%
@@ -5460,7 +5549,7 @@ server <- function(input, output, session){
   output$matchup_pitcher_order_ui <- renderUI({
     req(matchup_pitcher_choices())
     choices <- matchup_pitcher_choices()
-    validate(need(length(choices) > 0, "No pitchers found in the uploaded pitcher CSV."))
+    validate(need(length(choices) > 0, "No pitchers found in the selected data."))
     tagList(
       selectizeInput(
         "matchup_pitcher_order",
@@ -5475,14 +5564,14 @@ server <- function(input, output, session){
           placeholder = "Select up to 15 pitchers"
         )
       ),
-      helpText("The list auto-sorts by PA when the file loads. Drag names to change the column order.")
+      helpText("The list auto-sorts by PA when the data loads. Drag names to change the column order.")
     )
   })
 
   output$matchup_hitter_order_ui <- renderUI({
     req(matchup_hitter_choices())
     choices <- matchup_hitter_choices()
-    validate(need(length(choices) > 0, "No hitters found in the uploaded hitter CSV."))
+    validate(need(length(choices) > 0, "No hitters found in the selected data."))
     tagList(
       selectizeInput(
         "matchup_hitter_order",
@@ -5497,7 +5586,7 @@ server <- function(input, output, session){
           placeholder = "Select up to 15 hitters"
         )
       ),
-      helpText("The list auto-sorts by PA when the file loads. Drag names to change the row order.")
+      helpText("The list auto-sorts by PA when the data loads. Drag names to change the row order.")
     )
   })
 
@@ -5544,7 +5633,7 @@ server <- function(input, output, session){
         "hitter_order",
         "Type a hitter name, select, then drag to order:",
         choices = hitters,
-        selected = character(0),
+        selected = if (season_mode()) hitters else character(0),
         multiple = TRUE,
         options = list(
           plugins = list("drag_drop", "remove_button"),
@@ -5579,6 +5668,13 @@ server <- function(input, output, session){
   }, ignoreInit = TRUE)
   
   output$guard_msg <- renderUI({
+    if (season_mode()) {
+      role <- if (identical(input$main_tab, "Pitcher Card")) "pitchers" else "hitters"
+      if (!length(input[[paste0("scout_season_", role)]])) {
+        return(helpText(paste("Choose a team and", role, "in the sidebar to begin.")))
+      }
+      return(NULL)
+    }
     if (is.null(input$csv_files) || length(input$csv_files) == 0) {
       div(style="margin:8px 0; padding:8px; background:#fff3cd; border:1px solid #ffeeba; border-radius:6px;",
           HTML("<b>Select one or more CSVs</b> from data/ to begin."))
@@ -5586,7 +5682,10 @@ server <- function(input, output, session){
   })
 
   output$matchup_guard_msg <- renderUI({
-    if (is.null(input$matchup_pitchers_file) || is.null(input$matchup_hitters_file)) {
+    if (season_mode() && (!length(input$scout_season_hitters) || !length(input$scout_season_pitchers))) {
+      return(helpText("Choose hitters and pitchers in the sidebar to build the matchup grid."))
+    }
+    if (!season_mode() && (is.null(input$matchup_pitchers_file) || is.null(input$matchup_hitters_file))) {
       return(
         div(
           style = "margin:0 0 10px; padding:8px; background:#fff3cd; border:1px solid #ffeeba; border-radius:6px;",
@@ -5826,13 +5925,13 @@ server <- function(input, output, session){
   output$pitcher_bust_order_ui <- renderUI({
     req(pitcher_bust_meta())
     choices <- pitcher_bust_choices()
-    validate(need(length(choices) > 0, "No pitchers found in the selected CSV file(s)."))
+    validate(need(length(choices) > 0, "No pitchers found in the selected data."))
     tagList(
       selectizeInput(
         "pitcher_bust_order",
         "Pitchers (drag to set order):",
         choices = choices,
-        selected = character(0),
+        selected = if (season_mode()) choices else character(0),
         multiple = TRUE,
         options = list(
           plugins = list("drag_drop", "remove_button"),
@@ -5840,7 +5939,7 @@ server <- function(input, output, session){
           placeholder = "Start typing a pitcher name"
         )
       ),
-      helpText("The bust table starts empty. Add only the pitchers you want, then drag to set the report order.")
+      helpText("Choose pitchers, then drag to set the report order.")
     )
   })
 
@@ -5869,7 +5968,7 @@ server <- function(input, output, session){
     if (!isTRUE(pitcher_bust_source_panel_open())) return(NULL)
     pitchers <- pitcher_bust_order()
     if (!length(pitchers)) {
-      return(helpText("Add pitchers first, then choose All selected CSVs or one file per pitcher."))
+      return(helpText("Add pitchers first, then choose all selected sources or one source per pitcher."))
     }
     meta <- pitcher_bust_source_meta()
     selectors <- lapply(pitchers, function(pitcher) {
@@ -5958,7 +6057,7 @@ server <- function(input, output, session){
 	        ggplot() +
 	          theme_void() +
 	          ggtitle(paste(pitcher_name, "-", throws, "-", spec$split_label[[1]])) +
-	          theme(plot.title = element_text(face = "bold", color = MAROON, hjust = 0.5)) +
+	          theme(plot.title = element_text(face = "bold", color = TXST_MAROON, hjust = 0.5)) +
 	          annotate("text", x = 0.5, y = 0.5, label = paste("No rows for", spec$display_label[[1]]), size = 6)
 	      } else {
 	        pitcher_env$compose_report(d_page, spec$split_label[[1]])
