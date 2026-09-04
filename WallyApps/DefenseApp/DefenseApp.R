@@ -1951,13 +1951,13 @@ catcher_framing_zone_plot <- function(d, title = NULL, show_pitch_numbers = TRUE
   d <- d %>% dplyr::filter(is.finite(.data$plot_x), is.finite(.data$plot_z))
   if (!nrow(d)) return(base)
 
-  out <- base + d +
-    geom_point(aes(x = -plot_x, y = plot_z, fill = PitchType),
+  out <- base +
+    geom_point(data = d, aes(x = -plot_x, y = plot_z, fill = PitchType),
                shape = 21, size = 7.4, colour = "black", stroke = 0.9, alpha = 0.95) +
     scale_fill_manual(values = pitch_colors, breaks = facet_levels, limits = facet_levels, drop = FALSE, name = "Pitch Type")
   if (show_pitch_numbers) {
     out <- out +
-      geom_text(aes(x = -plot_x, y = plot_z, label = PitchNumSub), size = 4.4, fontface = "bold", color = "white")
+      geom_text(data = d, aes(x = -plot_x, y = plot_z, label = PitchNumSub), size = 4.4, fontface = "bold", color = "white")
   }
   out
 }

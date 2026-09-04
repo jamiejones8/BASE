@@ -88,6 +88,40 @@ summary_rows <- workspace$summarize_defense(workspace$defense_df)
 if (!nrow(summary_rows)) fail("Defense summary returned no fixture rows.")
 catcher_rows <- workspace$prepare_catcher_receiving_rows(workspace$catching_df)
 if (!nrow(catcher_rows)) fail("Catcher receiving preparation returned no fixture rows.")
+
+# Check both numbered report charts and unnumbered season charts. Explicit
+# layer data must render on ggplot2 3.x as well as 4.x, without data-frame `+`.
+local({
+  grDevices::pdf(file = NULL)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  framing_rows <- data.frame(
+    plot_x = c(-0.4, 0.6, NA_real_), plot_z = c(2.1, 2.7, 2.3),
+    PitchType = rep(workspace$pitch_levels_all[[1]], 3),
+    PitchNumSub = c(1L, 2L, 3L)
+  )
+  for (numbered in c(TRUE, FALSE)) {
+    plot <- workspace$catcher_framing_zone_plot(framing_rows, show_pitch_numbers = numbered)
+    built <- ggplot2::ggplot_build(plot)
+    points <- built$data[[5]]
+    if (nrow(points) != 2L ||
+        !isTRUE(all.equal(points$x, c(-0.4, 0.6))) ||
+        !isTRUE(all.equal(points$y, c(2.1, 2.7)))) {
+      fail("Catcher framing chart changed pitch locations or retained invalid coordinates.")
+    }
+    if (numbered && !identical(as.integer(built$data[[6]]$label), c(1L, 2L))) {
+      fail("Catcher framing chart lost pitch-number labels.")
+    }
+    if (!numbered && length(built$data) != 5L) fail("Season framing chart retained pitch labels.")
+    invisible(ggplot2::ggplotGrob(plot))
+  }
+  for (empty_rows in list(framing_rows[FALSE, ], framing_rows[3, , drop = FALSE])) {
+    empty_plot <- workspace$catcher_framing_zone_plot(empty_rows)
+    if (length(ggplot2::ggplot_build(empty_plot)$data) != 4L) {
+      fail("Empty catcher framing chart should contain only zone and plate outlines.")
+    }
+  }
+})
+
 report_catcher <- catcher_rows$Catcher[[1]]
 report_game <- catcher_rows$CustomGameID[[1]]
 report_rows <- catcher_rows %>%
