@@ -44,6 +44,12 @@ shiny::testServer(workspace$server, {
   pitcher_rows <- pitcher_std_all()
   if (!nrow(hitter_rows)) fail("Hitter scouting standardization returned no fixture rows.")
   if (!nrow(pitcher_rows)) fail("Pitcher scouting standardization returned no fixture rows.")
+  expected_splits <- c("Total", "v LHP", "v RHP")
+  if (!identical(workspace$row1_table_numeric(hitter_rows)$Split, expected_splits) ||
+      !identical(workspace$fps_metrics_by_hand(hitter_rows)$Split, expected_splits) ||
+      !identical(workspace$fps_metrics_by_hand(hitter_rows[0, ])$Split, expected_splits)) {
+    fail("Scouting handedness tables are not Total, left, right.")
+  }
 })
 
 cat(

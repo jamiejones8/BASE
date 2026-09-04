@@ -85,9 +85,9 @@ speed optimization by itself.
 
 `scripts/tests/test_lazy_workspace.R` covers once-only initialization, retry
 after failure, late output/observer registration, LRU reads, recency updates,
-eviction, and clearing. The existing BASE configuration, source contract,
-leaderboards integration, retag tests, workspace/feature contracts, and all
-three Wally golden suites remain green.
+eviction, and clearing. The BASE configuration, source contract, retag tests,
+workspace/feature contracts, service tests, startup smoke test, and all Wally
+integration suites are available through `scripts/checks/run_all.R`.
 
 The local system R does not contain Arrow, so a full BASE runtime timing was not
 available in this environment. Deployment-grade before/after measurements must

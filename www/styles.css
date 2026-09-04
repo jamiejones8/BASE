@@ -633,25 +633,12 @@ table tbody td[style*="background-color"] {
 .base-home-hero {
   position: relative;
   overflow: hidden;
-  border-bottom: 1px solid rgba(172,145,85,0.32);
+  border-bottom: 1px solid rgba(215,189,138,0.25);
   background:
-    radial-gradient(circle at 18% 0, rgba(215,189,138,0.14), transparent 23rem),
-    linear-gradient(118deg, var(--base-maroon-deep), var(--base-maroon) 66%, #64272a);
+    radial-gradient(ellipse at 15% 0%, rgba(215,189,138,0.055), transparent 65%),
+    linear-gradient(110deg, #370e10, #501214);
   color: #fff;
-  box-shadow: 0 16px 40px rgba(49,10,12,0.16);
-}
-
-.base-home-hero::after {
-  position: absolute;
-  right: -92px;
-  bottom: -175px;
-  width: 430px;
-  height: 430px;
-  border: 1px solid rgba(215,189,138,0.12);
-  border-radius: 50%;
-  box-shadow: 0 0 0 42px rgba(215,189,138,0.035), 0 0 0 86px rgba(215,189,138,0.025);
-  content: "";
-  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(49,10,12,0.08);
 }
 
 .base-home-hero-inner {
@@ -659,15 +646,16 @@ table tbody td[style*="background-color"] {
   z-index: 1;
   display: grid;
   width: min(100%, var(--base-content-width));
-  min-height: 330px;
+  min-height: 350px;
   margin: 0 auto;
-  padding: 76px clamp(22px, 4vw, 62px) 44px;
+  padding: 70px clamp(22px, 4vw, 62px) 40px;
   grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr);
-  gap: clamp(34px, 6vw, 92px);
+  gap: clamp(30px, 4vw, 64px);
   align-items: center;
 }
 
-.home-team-identity { display: flex; max-width: 700px; align-items: center; gap: 26px; }
+.home-team-identity { display: flex; max-width: 700px; align-items: center; gap: 28px; }
+.home-team-wordmark { min-width: 0; }
 .home-team-marks {
   display: flex;
   flex: 0 0 auto;
@@ -676,34 +664,53 @@ table tbody td[style*="background-color"] {
   gap: 16px;
 }
 .home-team-logo {
-  width: 96px;
-  height: 96px;
-  flex: 0 0 96px;
+  width: 76px;
+  height: 92px;
+  flex: 0 0 76px;
   object-fit: contain;
-  filter: drop-shadow(0 14px 22px rgba(0,0,0,0.24));
+  filter: brightness(1.2);
 }
 .home-team-logo-divider {
   width: 1px;
-  height: 78px;
+  height: 62px;
   flex: 0 0 1px;
-  background: rgba(255,255,255,0.26);
+  background: rgba(255,255,255,0.18);
 }
 .home-season-line {
-  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
   color: var(--base-gold-bright);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.6;
   text-transform: uppercase;
+}
+.home-season-line > span:last-child { max-width: 205px; }
+.home-base-badge {
+  padding-right: 10px;
+  border-right: 1px solid rgba(215,189,138,0.3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
 }
 .home-team-identity h1 {
   margin: 0;
   color: #fff;
-  font-family: var(--base-font-display);
-  font-size: clamp(36px, 3.2vw, 54px);
+  font-family: var(--base-font-body);
+  font-size: clamp(34px, 3.3vw, 48px);
   font-weight: 600;
-  letter-spacing: 0.025em;
-  line-height: 1.05;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+}
+.home-title-school { display: block; }
+.home-title-sport {
+  display: block;
+  margin-top: 2px;
+  color: rgba(255,255,255,0.8);
+  font-weight: 400;
 }
 .home-team-identity p { max-width: 560px; margin: 14px 0 0; color: rgba(255,255,255,0.70); font-size: 16px; }
 
@@ -711,10 +718,9 @@ table tbody td[style*="background-color"] {
   min-height: 242px;
   padding: 24px 26px;
   border: 1px solid rgba(255,255,255,0.14);
-  border-radius: var(--base-radius-lg);
-  background: rgba(255,255,255,0.075);
-  box-shadow: 0 20px 44px rgba(20,0,1,0.18);
-  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  box-shadow: none;
 }
 .home-next-game-card.is-empty {
   display: grid;
@@ -1123,18 +1129,16 @@ table tbody td[style*="background-color"] {
   display: none !important;
 }
 
-/* Keep primary pages direct: titles only, without decorative or explanatory
-   subheadings. Functional section labels, controls, and table titles remain. */
+/* Keep primary pages direct; retain the home page's BASE brand subheader. */
 .base-workspace-heading p,
 .base-workspace-description,
-.home-season-line,
 .home-team-identity p,
 .dap-hero p {
   display: none !important;
 }
 
 #base-scoreboard {
-  box-shadow: inset 0 -1px rgba(255,255,255,0.08), 0 12px 34px rgba(49,10,12,0.15);
+  box-shadow: 0 8px 24px rgba(49,10,12,0.08);
 }
 
 #base-scoreboard .base-scoreboard-identity {
@@ -1175,10 +1179,11 @@ table tbody td[style*="background-color"] {
   .app-card { min-height: 0; }
   .card-img { height: 180px; }
   .base-home-hero-inner { min-height: 0; padding: 78px 18px 34px; }
-  .home-team-identity { align-items: flex-start; gap: 16px; }
+  .home-team-identity { flex-direction: column; align-items: flex-start; gap: 22px; }
   .home-team-marks { gap: 10px; }
   .home-team-logo { width: 64px; height: 64px; flex-basis: 64px; }
   .home-team-logo-divider { height: 52px; }
+  .home-season-line { margin-bottom: 14px; }
   .home-team-identity h1 { font-size: 34px; }
   .home-team-identity p { font-size: 14px; }
   .home-next-game-card { padding: 20px; }

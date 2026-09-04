@@ -5,6 +5,7 @@
 scripts/__pycache__/
 **/__pycache__/
 app_state/
+leaderboards/cache/*.rds
 data/D1 Defense File.parquet
 .runtime-build-output-defense/
 .baseline-runtime/

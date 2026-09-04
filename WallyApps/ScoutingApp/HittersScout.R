@@ -607,7 +607,7 @@ fps_metrics_by_hand <- function(d){
   fp <- first_pitch_rows(d)
   if (!nrow(fp)) {
     mk <- function(lbl) tibble::tibble(Split = lbl, `FPS%` = NA_real_, `FPS% HD` = NA_real_, `FPS% OS` = NA_real_)
-    return(dplyr::bind_rows(mk("v LHP"), mk("v RHP"), mk("Total")))
+    return(dplyr::bind_rows(mk("Total"), mk("v LHP"), mk("v RHP")))
   }
   calc_row <- function(sub, lbl){
     # Denominators follow your spec:
@@ -622,9 +622,9 @@ fps_metrics_by_hand <- function(d){
   vL <- fp %>% dplyr::filter(hand == "LHP")
   vR <- fp %>% dplyr::filter(hand == "RHP")
   dplyr::bind_rows(
+    calc_row(fp, "Total"),
     calc_row(vL, "v LHP"),
-    calc_row(vR, "v RHP"),
-    calc_row(fp, "Total")
+    calc_row(vR, "v RHP")
   )
 }
 
@@ -758,9 +758,9 @@ row1_table_numeric <- function(d){
   is_R <- !is.na(d$PitcherHand) & d$PitcherHand == "RHP"
   
   core <- dplyr::bind_rows(
+    make_stat_row(d,                        "Total"),
     make_stat_row(d[is_L, , drop = FALSE], "v LHP"),
-    make_stat_row(d[is_R, , drop = FALSE], "v RHP"),
-    make_stat_row(d,                        "Total")
+    make_stat_row(d[is_R, , drop = FALSE], "v RHP")
   )
   
   core %>%
@@ -901,7 +901,7 @@ row1_block <- function(player_name, d){
   num <- row1_table_numeric(d)
   if (is.null(num) || nrow(num) == 0 || ncol(num) == 0) {
     empty <- tibble::tibble(
-      Split = c("v LHP","v RHP","Total"),
+      Split = c("Total","v LHP","v RHP"),
       `K%` = NA_real_, `BB%` = NA_real_, `SLUG` = NA_real_,
       `GB%` = NA_real_, `HH%` = NA_real_,
       `Whiff%` = NA_real_, `Chase%` = NA_real_
@@ -912,7 +912,7 @@ row1_block <- function(player_name, d){
   tg <- tryCatch(
     make_shaded_table_grob(
       disp, num,
-      header_title = "HITTER SPLITS (vLHP / vRHP / TOTAL)",
+      header_title = "HITTER SPLITS (TOTAL / vLHP / vRHP)",
       widen_first = 2.6, other_w = 1.35, padding_pt = 4
     ),
     error = function(e){

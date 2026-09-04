@@ -6258,6 +6258,57 @@ ABS_RULES <- list(
   NA_character_
 }
 
+.d1_pitch_metric_ref_cache <- new.env(parent = emptyenv())
+load_d1_pitch_metric_reference <- function() {
+  cached <- .d1_pitch_metric_ref_cache$value
+  path <- get0(
+    "BASE_PITCHING_PERCENTILE_REFERENCE_PATH",
+    inherits = TRUE,
+    ifnotfound = file.path(app_dir, "data", "d1_pitch_metric_percentile_reference.csv")
+  )
+  mtime <- if (file.exists(path)) file.info(path)$mtime else as.POSIXct(NA)
+  if (is.list(cached) && !is.null(cached$data) && identical(cached$path, path) && identical(cached$mtime, mtime)) {
+    return(cached$data)
+  }
+  if (!file.exists(path)) {
+    out <- tibble::tibble(scope = character(), pitch_type = character(), metric = character(), value = double(), sample_n = integer())
+  } else {
+    out <- suppressMessages(readr::read_csv(path, show_col_types = FALSE)) %>%
+      dplyr::mutate(
+        scope = as.character(scope),
+        pitch_type = as.character(pitch_type),
+        metric = as.character(metric),
+        value = suppressWarnings(as.numeric(value)),
+        sample_n = suppressWarnings(as.integer(sample_n))
+      )
+  }
+  .d1_pitch_metric_ref_cache$value <- list(path = path, mtime = mtime, data = out)
+  out
+}
+
+# The same D1 population used by the percentile cards also colors these cells.
+pitching_cell_percentiles <- function(values, column) {
+  metric <- switch(column,
+    wOBAcon = "performance_wobacon",
+    `2k Zone%` = "performance_2k_zone_pct",
+    `2K Zone%` = "performance_2k_zone_pct",
+    NULL
+  )
+  out <- rep(NA_real_, length(values))
+  if (is.null(metric)) return(out)
+  ref <- load_d1_pitch_metric_reference()
+  pool <- ref$value[ref$scope == "overall" & ref$metric == metric & is.finite(ref$value)]
+  if (!length(pool)) return(out)
+  v <- vapply(values, parse_num, numeric(1))
+  if (column != "wOBAcon") v <- vapply(v, .as_fraction_if_percentish, numeric(1))
+  ok <- is.finite(v)
+  out[ok] <- vapply(v[ok], function(value) {
+    pct <- if (column == "wOBAcon") mean(pool >= value) else mean(pool <= value)
+    pmin(99, pmax(1, round(100 * pct)))
+  }, numeric(1))
+  out
+}
+
 shade_columns_txst <- function(out_df,
                                cols = NULL,
                                cols_to_color = NULL,
@@ -6306,7 +6357,11 @@ shade_columns_txst <- function(out_df,
     
     fills <- rep(NA_character_, length(txt))
     
-    if (is_pct_rule) {
+    cell_percentiles <- pitching_cell_percentiles(txt, nm)
+    if (any(is.finite(cell_percentiles))) {
+      fills <- vapply((cell_percentiles - 50) / 50, .severity_fill,
+                      palette = palette, FUN.VALUE = character(1))
+    } else if (is_pct_rule) {
       if (!is.na(pt_col) && nm %in% c("Whiff%","Chase%")) {
         pitch_vals <- out[[pt_col]]
         avg_vec <- vapply(pitch_vals, d1_pct_avg_for_metric, metric = nm, FUN.VALUE = numeric(1))
@@ -7862,7 +7917,10 @@ server <- function(input, output, session){
     if (!nrow(d)) return(character(0))
     lookup <- d %>%
       dplyr::group_by(CustomGameID_BP) %>%
-      dplyr::summarise(BullpenDate = bullpen_report_date_value(dplyr::cur_data_all()), .groups = "drop") %>%
+      dplyr::summarise(
+        BullpenDate = bullpen_report_date_value(dplyr::pick(dplyr::everything())),
+        .groups = "drop"
+      ) %>%
       dplyr::arrange(dplyr::desc(BullpenDate), CustomGameID_BP)
     lookup$CustomGameID_BP
   })
@@ -9892,7 +9950,7 @@ server <- function(input, output, session){
   season_summary_split_summary <- function(d) {
     p_all <- season_summary_flags(d)
     empty <- tibble::tibble(
-      Split = c("v LHH", "v RHH", "Total"),
+      Split = c("Total", "v LHH", "v RHH"),
       `K%` = NA_real_, `BB%` = NA_real_, `Barrel%` = NA_real_,
       `Strike%` = NA_real_, `Zone%` = NA_real_, `Whiff%` = NA_real_,
       wOBA = NA_real_, `GB%` = NA_real_, `CSW%` = NA_real_
@@ -9921,9 +9979,9 @@ server <- function(input, output, session){
     }
 
     dplyr::bind_rows(
+      split_row(p_all, "Total"),
       split_row(p_all %>% dplyr::filter(.data$BatterSideStd == "L"), "v LHH"),
-      split_row(p_all %>% dplyr::filter(.data$BatterSideStd == "R"), "v RHH"),
-      split_row(p_all, "Total")
+      split_row(p_all %>% dplyr::filter(.data$BatterSideStd == "R"), "v RHH")
     )
   }
 
@@ -13108,33 +13166,6 @@ server <- function(input, output, session){
       dplyr::filter(is.finite(RelSide), is.finite(RelHeight))
   })
 
-  d1_pitch_metric_ref <- reactiveVal(NULL)
-  load_d1_pitch_metric_ref <- function() {
-    cached <- d1_pitch_metric_ref()
-    path <- get0(
-      "BASE_PITCHING_PERCENTILE_REFERENCE_PATH",
-      inherits = TRUE,
-      ifnotfound = file.path(app_dir, "data", "d1_pitch_metric_percentile_reference.csv")
-    )
-    mtime <- if (file.exists(path)) file.info(path)$mtime else as.POSIXct(NA)
-    if (is.list(cached) && !is.null(cached$data) && identical(cached$mtime, mtime)) {
-      return(cached$data)
-    }
-    if (!file.exists(path)) {
-      out <- tibble::tibble(scope = character(), pitch_type = character(), metric = character(), value = double(), sample_n = integer())
-    } else {
-      out <- suppressMessages(readr::read_csv(path, show_col_types = FALSE)) %>%
-        dplyr::mutate(
-          scope = as.character(scope),
-          pitch_type = as.character(pitch_type),
-          metric = as.character(metric),
-          value = suppressWarnings(as.numeric(value)),
-          sample_n = suppressWarnings(as.integer(sample_n))
-        )
-    }
-    d1_pitch_metric_ref(list(mtime = mtime, data = out))
-    out
-  }
 
   pitch_metric_pitch_type <- function(x) {
     raw <- trimws(as.character(x %||% ""))
@@ -13172,7 +13203,7 @@ server <- function(input, output, session){
   }
 
   pitch_metric_percentile <- function(value, metric, pitch_type = "", lower_better = FALSE) {
-    ref <- load_d1_pitch_metric_ref()
+    ref <- load_d1_pitch_metric_reference()
     if (!is.finite(value) || is.null(ref) || !nrow(ref)) return(NA_real_)
     pool <- ref %>%
       dplyr::filter(.data$metric == .env$metric, is.finite(.data$value))
@@ -14311,7 +14342,7 @@ function(el,x){
       lower_better  = lower_better,
       percent_cols  = percent_cols
     )
-    out_df <- force_midpoint_shading(out_df, raw_df, cols = c("wOBA","wOBAcon","SLG","OPS"))
+    out_df <- force_midpoint_shading(out_df, raw_df, cols = c("wOBA","SLG","OPS"))
     DT::datatable(
       out_df,
       rownames = FALSE,
@@ -15462,8 +15493,8 @@ function(el,x){
     p_total <- p; p_total$grp <- "Total"
     tab_total <- build_self_staff_block(p_total)
     
-    out <- dplyr::bind_rows(tab_lr, tab_total) %>%
-      dplyr::mutate(Split = factor(Split, levels = c("vLHH","vRHH","Total"))) %>%
+    out <- dplyr::bind_rows(tab_total, tab_lr) %>%
+      dplyr::mutate(Split = factor(Split, levels = c("Total","vLHH","vRHH"))) %>%
       dplyr::arrange(Split)
     
     as.data.frame(out)
@@ -18767,7 +18798,7 @@ function(el,x){
       }
       
       total_row <- make_total_hand(p, p_flags)
-      out_df <- dplyr::bind_rows(tab, total_row)
+      out_df <- dplyr::bind_rows(total_row, tab)
       
     } else {
       # Pitch-type table (per-pitch metrics + PA metrics grouped by terminal pitch type)

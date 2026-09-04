@@ -61,6 +61,11 @@ base_source <- function(relative_path, local = FALSE, chdir = FALSE) {
   source(base_project_path(relative_path), local = local, chdir = chdir)
 }
 
+base_env <- function(name, default = "") {
+  value <- Sys.getenv(name, unset = "")
+  if (nzchar(trimws(value))) trimws(value) else default
+}
+
 base_env_path <- function(name, default = "") {
   value <- base_env(name, default)
   if (!nzchar(value) || grepl("^(https?:)?//|^data:", value) || startsWith(value, "/")) {
@@ -87,11 +92,6 @@ base_load_env_file <- function(path = base_project_path(".env")) {
 }
 
 base_load_env_file()
-
-base_env <- function(name, default = "") {
-  value <- Sys.getenv(name, unset = "")
-  if (nzchar(trimws(value))) trimws(value) else default
-}
 
 base_env_int <- function(name, default = NA_integer_) {
   value <- suppressWarnings(as.integer(base_env(name, "")))
@@ -165,6 +165,13 @@ base_asset_url <- function(path) {
   sub("^www[/\\\\]", "", path)
 }
 
+# A changed stylesheet gets a new URL on app startup, including in RStudio's
+# Viewer, so local and deployed clients cannot reuse an older cached design.
+base_stylesheet_url <- function(prefix = "") {
+  version <- unname(tools::md5sum(base_www_path("styles.css")))
+  paste0(prefix, "styles.css?v=", version)
+}
+
 base_asset_file <- function(path) {
   if (is.null(path) || is.na(path) || !nzchar(path) ||
       grepl("^(https?:)?//|^data:", path)) return(NA_character_)
@@ -191,7 +198,7 @@ TEAM_CONFIG <- list(
   stats_api_enabled = base_env_bool("BASE_STATS_API_ENABLED", FALSE),
   league_id = base_env_int("BASE_LEAGUE_ID", NA_integer_),
   sport_id = base_env_int("BASE_SPORT_ID", NA_integer_),
-  league_name = base_env("BASE_LEAGUE_NAME", "Pac-12 Conference"),
+  league_name = base_env("BASE_LEAGUE_NAME", "Sun Belt Conference"),
   season = base_env_int("BASE_SEASON", 2026L),
   season_label = base_env(
     "BASE_SEASON_LABEL",
@@ -319,15 +326,6 @@ TEAM_CONFIG <- list(
         "pitch-retags.sqlite"
       )
     ),
-    hf_repo_id = base_env("BASE_DATA_REPO_ID", ""),
-    hf_repo_path = base_env("BASE_DATA_REPO_PATH", base_env("BASE_SEASON_DATA_FILE", "College26.parquet")),
-    swing_model_repo = base_env("BASE_SWING_MODEL_REPO", ""),
-    college_file = base_env("BASE_COLLEGE_DATA_FILE", base_default_season_file()),
-    college_repo_id = base_env(
-      "BASE_COLLEGE_DATA_REPO_ID",
-      base_env("BASE_DATA_REPO_ID", "")
-    ),
-    college_repo_path = base_env("BASE_COLLEGE_DATA_REPO_PATH", base_env("BASE_COLLEGE_DATA_FILE", "College26.parquet")),
     cape_file = base_file_override_or_fallback(
       "BASE_CAPE_DATA_FILE",
       "/base-data/CapeCod26.parquet",

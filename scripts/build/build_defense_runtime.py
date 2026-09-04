@@ -17,7 +17,6 @@ from pathlib import Path
 import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
-from huggingface_hub import HfFileSystem
 
 
 COLLEGE_COLUMNS = [
@@ -40,14 +39,12 @@ def sql_path(path: Path) -> str:
     return str(path.resolve()).replace("\\", "/").replace("'", "''")
 
 
-def materialize_college_projection(source: str, destination: Path) -> None:
+def materialize_college_projection(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         destination.unlink()
 
-    fs = HfFileSystem() if source.startswith("hf://") else None
-    handle = fs.open(source, "rb") if fs else source
-    parquet = pq.ParquetFile(handle)
+    parquet = pq.ParquetFile(source)
     available = set(parquet.schema_arrow.names)
     columns = [column for column in COLLEGE_COLUMNS if column in available]
     missing = sorted(set(("PitchUID", "GameUID", "PitchNo", "Date")).difference(columns))
@@ -70,8 +67,6 @@ def materialize_college_projection(source: str, destination: Path) -> None:
     finally:
         if writer is not None:
             writer.close()
-        if fs and hasattr(handle, "close"):
-            handle.close()
 
 
 def build_runtime(
@@ -323,7 +318,7 @@ def build_runtime(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--defense-source", required=True)
-    parser.add_argument("--college-source", required=True)
+    parser.add_argument("--college-source", required=True, type=Path)
     parser.add_argument("--output", required=True)
     parser.add_argument("--work-dir", required=True)
     parser.add_argument("--buckets", type=int, default=64)

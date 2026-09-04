@@ -139,19 +139,25 @@ def main() -> int:
         fail(f"Unified shell is missing workspace routes: {missing_tabs}")
 
     card_targets = [
-        '"postgame_reports", "01"',
-        '"team_pitching", "02"',
-        '"team_hitting", "03"',
-        '"opponent_scouting", "04"',
-        '"defense_workspace", "05"',
-        '"homebase", "06"',
-        '"juco_stats", "07"',
-        '"data_processing", "08"',
-        '"player_health", "09"',
+        '"postgame_reports", "postgamereports.jpg"',
+        '"team_pitching", "pitching.jpg"',
+        '"team_hitting", "hitting-card.jpg"',
+        '"opponent_scouting", "opponentscouting-card.jpg"',
+        '"defense_workspace", "defenseiveanalytics.webp"',
+        '"homebase", "homeBASE.jpg"',
+        '"juco_stats", "jucoscouting.png"',
+        '"data_processing", "dataprocessing.jpg"',
     ]
     card_positions = [app_source.find(target) for target in card_targets]
     if any(position < 0 for position in card_positions) or card_positions != sorted(card_positions):
         fail("Home cards are missing or differ from the approved eight-workspace order.")
+    planned_health_card = (
+        '"player_health", "medicine.jpg"'
+    )
+    if planned_health_card not in app_source:
+        fail("The planned Player Health card is missing from Home.")
+    if re.search(r"^\s*player_health\s*=", app_source, re.MULTILINE):
+        fail("Player Health must remain a disabled planned card until its workspace is implemented.")
 
     if 'id = "base-shell-home"' not in app_source:
         fail("The persistent Home control is not implemented in the app shell.")

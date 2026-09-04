@@ -1,13 +1,3 @@
----
-title: Texas State BASE
-emoji: ⚾
-colorFrom: red
-colorTo: yellow
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # Texas State BASE
 
 **BASE — Baseball Analytics & Scouting Engine** is a configurable college-
@@ -53,7 +43,7 @@ player-menu checkboxes map directly to those filenames.
 - The private data bucket contains a generated `derived2026/` runtime layer:
   compact player catalogs, 64 stable pitcher hash partitions, and a
   small Texas State subset. The bucket is mounted read-only, so the app
-  does not download data at startup or depend on another Space or Dataset.
+  reads its runtime data directly without downloading it at startup.
 - Startup loads only the Texas State subset for team reports. All-college
   scouting menus use compact catalogs. Pitcher Scouting reads one hash
   partition; Hitter Scouting uses a bucket index to scan only partitions in
@@ -72,7 +62,7 @@ player-menu checkboxes map directly to those filenames.
 - Pitch-type corrections from Pitcher Scouting are stored separately in
   `/base-data/app_state/pitch-retags.sqlite`, keyed by data source and
   `PitchUID`. The override layer is applied when a player loads, so corrections
-  survive Space restarts without modifying either source Parquet file. Hitter
+  survive application restarts without modifying either source Parquet file. Hitter
   Scouting reads the same override layer so pitch classifications stay aligned.
 - `config/texas_state_roster_2027.csv` drives the home roster using the Texas
   State 2026 fall roster for the upcoming 2027 season.
@@ -83,14 +73,15 @@ player-menu checkboxes map directly to those filenames.
 ## Repository layout
 
 - `R/` holds the main application source, split by config, data helpers,
-  modules, pages, reports, and integrations.
+  modules, pages, reports, services, and integrations.
 - `models/` stores local model artifacts used by scouting and report features.
 - `data/reference/` stores reference tables used directly by the app.
 - `data/external/` stores optional supplemental datasets such as Cape Cod data.
 - `data/local/` stores local exploratory datasets and scratch exports.
 - `scripts/build/`, `scripts/checks/`, and `scripts/tests/` separate runtime
   builders, validations, and focused tests.
-- `leaderboards/` remains a self-contained embedded Shiny app.
+- `leaderboards/` retains the legacy calculation reference used by metric
+  parity documentation; it is no longer loaded by the runtime app.
 
 More detailed folder conventions are documented in
 [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md).
@@ -104,10 +95,10 @@ home scoreboard, and the primary mark on the analytics hub card.
 1. Copy `.env.example` to `.env` for local use, or define the same variables in
    the deployment environment.
 2. Set the team identity, `BASE_TEAM_DATA_CODE`, and
-   `BASE_TEAM_DATA_PATTERN`. The code is used by leaderboards; the pattern is
-   used to recognize the team in `PitcherTeam` and `BatterTeam` columns.
-3. Put team logos and card images in `www/`. The embedded leaderboards can
-   resolve its configured logo directly from that shared folder.
+   `BASE_TEAM_DATA_PATTERN`. The code identifies the team in runtime datasets;
+   the pattern recognizes aliases in `PitcherTeam` and `BatterTeam` columns.
+3. Put team logos and card images in `www/` so the unified shell and reports
+   can serve them from one location.
 4. Stage the full master, then run `scripts/build/build_runtime_dataset.py` with
    `--season 2026` to create the one-copy query-on-demand runtime. Configure
    `BASE_NCAA_D1_MASTER_FILE` for provenance/build tooling and
@@ -164,9 +155,7 @@ missing optional metrics, but selectors require `PitcherTeam`, `BatterTeam`,
 ## Run and verify
 
 ```powershell
-Rscript check_team_config.R
-Rscript leaderboards/scripts/precompute_leaderboards_cache.R
-Rscript check_leaderboards_integration.R
+Rscript scripts/checks/run_all.R
 R -e "shiny::runApp(host='0.0.0.0', port=7860)"
 ```
 

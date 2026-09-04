@@ -51,6 +51,19 @@ if (!any(prepared$PitchUID == "fixture-unique-hitting-supplement", na.rm = TRUE)
 
 workspace <- base_wally_hitting_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Hitting server is unavailable.")
+# Exercise the embedded path from outside both the repo and standalone app.
+grid <- readRDS(TEAM_CONFIG$data$xwoba_grid_file)
+lookup_from_other_directory <- function() {
+  previous <- setwd(tempdir())
+  on.exit(setwd(previous))
+  workspace$hitting_xwoba_lookup(c(100, NA, 200), c(20, 20, 20))
+}
+expected_contact <- grid$grid[findInterval(100, grid$ev_edges), findInterval(20, grid$la_edges)]
+actual_contact <- lookup_from_other_directory()
+if (!is.finite(expected_contact) ||
+    !isTRUE(all.equal(actual_contact, c(expected_contact, NA_real_, NA_real_)))) {
+  fail("Embedded hitting xwOBA lookup did not resolve the real configured model.")
+}
 if (!grepl("rgba\\(227,52,52", workspace$stat_severity_fill(1))) {
   fail("Coach-facing Hitting shading is not red for favorable values.")
 }
@@ -59,6 +72,25 @@ if (!grepl("rgba\\(46,125,50", workspace$player_severity_fill(1))) {
 }
 if (!grepl("^#[0-9A-Fa-f]{6}$", workspace$d1_shade_fill(.40, .30))) {
   fail("Hitting AAR shading is not using PDF-safe hexadecimal colors.")
+}
+# One standard deviation above/below the supplied means is approximately
+# the 84th/16th percentile; the mean is neutral at the 50th percentile.
+shade_values <- tibble::tibble(
+  `Swing%` = c(.4866, .3566, NA_real_, .4216),
+  MaxEV = c(111.90, 100.66, NA_real_, 106.28)
+)
+shaded <- workspace$apply_hitting_percentile_shading(shade_values, shade_values)
+for (column in names(shade_values)) {
+  if (!grepl("rgba(227,52,52", shaded[[column]][1], fixed = TRUE) ||
+      !grepl("rgba(93,126,188", shaded[[column]][2], fixed = TRUE) ||
+      !is.na(shaded[[column]][3]) ||
+      grepl("background-color", shaded[[column]][4], fixed = TRUE)) {
+    fail("Hitting percentile cells do not shade high, low, and missing values correctly: ", column)
+  }
+  if (!all(mapply(function(cell, percentile) grepl(percentile, cell, fixed = TRUE),
+                  shaded[[column]][c(1, 2, 4)], c("84 percentile", "16 percentile", "50 percentile")))) {
+    fail("Hitting percentiles do not use the supplied mean and standard deviation: ", column)
+  }
 }
 
 html <- paste(as.character(workspace$ui), collapse = "")
@@ -109,6 +141,26 @@ shiny::testServer(workspace$server, {
   filtered <- dat_filt()
   if (!nrow(filtered)) fail("Hitting Performance filter returned no fixture rows.")
   perf_summary <- workspace$summarize_overall(filtered)
+  if (!is.finite(perf_summary$xwOBAcon)) {
+    fail("Fixture contact is still missing expected wOBA after loading the model.")
+  }
+  # Contact alone defines xwOBAcon; BB/HBP/K contribute only to full xwOBA.
+  contact_cases <- filtered[rep(1, 6), , drop = FALSE]
+  contact_cases$PA_ID <- paste0("contact-case-", seq_len(6))
+  contact_cases$pitch_call <- contact_cases$PitchCall <- c("InPlay", "InPlay", "BallCalled", "HitByPitch", "StrikeSwinging", "BallCalled")
+  contact_cases$play_result <- contact_cases$PlayResult <- c("Single", "Out", "Walk", "Undefined", "Strikeout", "IntentionalWalk")
+  contact_cases$KorBB <- c("", "", "BB", "Undefined", "K", "IBB")
+  contact_cases$ev <- 100
+  contact_cases$la <- 20
+  contact_cases$xwOBA <- NA_real_
+  contact_summary <- workspace$summarize_overall(contact_cases)
+  if (!isTRUE(all.equal(contact_summary$xwOBAcon, expected_contact)) ||
+      !isTRUE(all.equal(contact_summary$xwOBA, (2 * expected_contact + .69 + .72) / 5))) {
+    fail("Expected-contact and expected-PA wOBA calculations have incorrect denominators.")
+  }
+  if (!isTRUE(all.equal(contact_summary$wOBA, (.88 + .69 + .72) / 5))) {
+    fail("PitchCall-only hit-by-pitches are not included in actual wOBA.")
+  }
   required_perf_metrics <- c(
     "xwOBA", "xwOBAcon", "Swing%", "IZ-Swing%", "MaxEV", "90th EV",
     "10-35*%", "GB%", "LD%", "FB%", "PU%", "Foul Ball%"

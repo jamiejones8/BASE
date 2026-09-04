@@ -101,11 +101,20 @@ team_identity <- tags$div(
   class = "home-team-identity",
   tags$div(
     class = "home-team-marks",
+    if (nzchar(base_conference_logo_url())) tagList(
+      tags$img(src = preview_asset(base_conference_logo_url()), alt = "Conference logo", class = "home-team-logo"),
+      tags$span(class = "home-team-logo-divider", `aria-hidden` = "true")
+    ),
     tags$img(src = preview_asset(base_supercat_logo_url()), alt = paste(TEAM_CONFIG$full_name, "logo"), class = "home-team-logo")
   ),
   tags$div(
-    tags$div(class = "home-season-line", "Bobcats Analytics & Scouting Engine"),
-    tags$h1("Texas State Baseball"),
+    class = "home-team-wordmark",
+    tags$div(class = "home-season-line",
+      tags$span(class = "home-base-badge", "BASE"),
+      tags$span("Baseball Analytics & Scouting Engine")
+    ),
+    tags$h1(tags$span(class = "home-title-school", "Texas State"), " ",
+            tags$span(class = "home-title-sport", "Baseball")),
     tags$p("NCAA Division I analytics, scouting, and team intelligence in one workspace.")
   )
 )
@@ -207,7 +216,7 @@ ui <- navbarPage(
       tags$meta(name = "viewport", content = "width=device-width, initial-scale=1"),
       tags$link(rel = "icon", href = preview_asset(base_supercat_logo_url())),
       tags$link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"),
-      tags$link(rel = "stylesheet", type = "text/css", href = "preview-assets/styles.css?v=19"),
+      tags$link(rel = "stylesheet", type = "text/css", href = base_stylesheet_url("preview-assets/")),
       tags$style(HTML(base_brand_css(include_leaderboards = FALSE)))
     ),
     tags$button(

@@ -63,11 +63,13 @@ hitting_xwoba_grid <- function() {
   if (exists(key, envir = .hitting_xwoba_cache, inherits = FALSE)) {
     return(get(key, envir = .hitting_xwoba_cache, inherits = FALSE))
   }
-  configured <- get0("BASE_HITTING_XWOBA_GRID_PATH", inherits = FALSE, ifnotfound = "")
+  configured <- get0("BASE_HITTING_XWOBA_GRID_PATH",
+                     envir = environment(hitting_xwoba_grid), inherits = FALSE, ifnotfound = "")
   env_path <- Sys.getenv("BASE_XWGRID_FILE", unset = "")
   candidates <- unique(c(
     configured,
     env_path,
+    file.path("models", "shared", "xwoba_grid.rds"),
     file.path("..", "..", "models", "shared", "xwoba_grid.rds")
   ))
   candidates <- candidates[nzchar(candidates) & file.exists(candidates)]
@@ -1107,11 +1109,16 @@ leader_date_max <- if (length(leader_date_vec)) max(leader_date_vec) else NULL
 }
 
 # --- parse PA outcome for wOBA (PA-level) ---
-.pa_event <- function(pr, kb){
+.pa_event <- function(pr, kb, pc = NULL){
   prl <- tolower(trimws(nz_chr(pr)))
   kbl <- tolower(trimws(nz_chr(kb)))
   
-  is_hbp <- grepl("hbp|hit by pitch", kbl) | grepl("hit by pitch|\\bhbp\\b", prl)
+  is_hbp <- grepl("hbp|hit\\s*by\\s*pitch", kbl) | grepl("hit\\s*by\\s*pitch|\\bhbp\\b", prl)
+  # TrackMan commonly stores HBP only in PitchCall, with both result fields
+  # left as Undefined. Count those PAs in actual and expected wOBA alike.
+  if (!is.null(pc)) {
+    is_hbp <- is_hbp | grepl("hit\\s*by\\s*pitch|\\bhbp\\b", tolower(nz_chr(pc)))
+  }
   is_ibb <- grepl("\\bibb\\b|intentional", kbl) | grepl("intentional|\\bibb\\b", prl)
   is_bb  <- (!is_ibb) & (grepl("^bb$|walk", kbl) | grepl("\\bwalk\\b", prl))
   is_k   <- grepl("^k$|\\bso\\b|strikeout", kbl) | grepl("strikeout|\\bso\\b|\\bk\\b", prl)
@@ -1240,7 +1247,7 @@ summarize_overall <- function(d){
     if ("PitchCall" %in% names(pa_last))  as.character(pa_last$PitchCall)  else NA_character_
   )
   
-  ev_type <- .pa_event(pr_last, kb_last)
+  ev_type <- .pa_event(pr_last, kb_last, pc_last)
   w       <- .woba_weight(ev_type)
   
   ibb_n <- sum(ev_type == "IBB", na.rm = TRUE)
@@ -1358,7 +1365,7 @@ summarize_overall <- function(d){
       if ("PitchCall" %in% names(pa_last_sub))  as.character(pa_last_sub$PitchCall)  else NA_character_
     )
     
-    ev_sub <- .pa_event(pr_last_sub, kb_last_sub)
+    ev_sub <- .pa_event(pr_last_sub, kb_last_sub, pc_last_sub)
     tb <- sum(ev_sub == "1B", na.rm = TRUE) +
       2 * sum(ev_sub == "2B", na.rm = TRUE) +
       3 * sum(ev_sub == "3B", na.rm = TRUE) +
@@ -3592,6 +3599,39 @@ severity_rgba_fill <- function(score, palette = c("coach", "player")) {
 stat_severity_fill <- function(score) severity_rgba_fill(score, "coach")
 player_severity_fill <- function(score) severity_rgba_fill(score, "player")
 
+# Supplied reference averages and standard deviations. Swing rates are stored
+# as fractions, so a 6.50 percentage-point standard deviation is 0.0650.
+HITTING_PERCENTILE_REFERENCE <- list(
+  `Swing%` = c(mean = 0.4216, sd = 0.0650),
+  MaxEV = c(mean = 106.28, sd = 5.62)
+)
+
+apply_hitting_percentile_shading <- function(tbl_num, tbl_fmt, palette = "coach",
+                                            reference = HITTING_PERCENTILE_REFERENCE) {
+  out <- tbl_fmt
+  for (nm in intersect(c("Swing%", "MaxEV"), intersect(names(tbl_num), names(out)))) {
+    distribution <- reference[[nm]]
+    values <- tbl_num[[nm]]
+    out[[nm]] <- vapply(seq_along(values), function(i) {
+      value <- values[i]
+      if (!is.finite(value)) return(as.character(out[[nm]][i]))
+      # Estimate percentiles from a normal distribution around the reference.
+      pct <- 100 * stats::pnorm(value, mean = distribution[["mean"]], sd = distribution[["sd"]])
+      bg <- severity_rgba_fill((pct - 50) / 50, palette)
+      cell <- shade_cell(as.character(out[[nm]][i]), bg)
+      attributes <- sprintf("title='Normal estimate: %.0f percentile' data-order='%s'", pct, value)
+      # Keep .cf-cell directly inside the table cell so the shared full-cell
+      # padding, sizing, and border-radius styles apply to these columns too.
+      if (nzchar(bg)) {
+        sub("<span ", paste0("<span ", attributes, " "), cell, fixed = TRUE)
+      } else {
+        sprintf("<span %s>%s</span>", attributes, cell)
+      }
+    }, character(1))
+  }
+  out
+}
+
 apply_d1_shading <- function(tbl_num, tbl_fmt, palette = c("coach", "player")){
   palette <- match.arg(palette)
   fill_fun <- if (identical(palette, "player")) player_severity_fill else stat_severity_fill
@@ -3658,7 +3698,7 @@ apply_d1_shading <- function(tbl_num, tbl_fmt, palette = c("coach", "player")){
     out[["90th EV"]] <- mapply(shade_cell, out[["90th EV"]], bg, USE.NAMES = FALSE)
   }
   
-  out
+  apply_hitting_percentile_shading(tbl_num, out, palette)
 }
 
 build_swing_decisions_tbl <- function(d){
@@ -6655,9 +6695,9 @@ server <- function(input, output, session){
       is_R <- !is.na(d$PitcherHand) & d$PitcherHand == "RHP"
       
       tbl_num <- dplyr::bind_rows(
+        make_row(d, "Totals"),
         make_row(d[is_L, , drop=FALSE], "v LHP"),
-        make_row(d[is_R, , drop=FALSE], "v RHP"),
-        make_row(d, "Totals")
+        make_row(d[is_R, , drop=FALSE], "v RHP")
       )
       
       tbl_fmt <- tbl_num %>% format_perf_table()
@@ -6758,7 +6798,7 @@ server <- function(input, output, session){
     validate(need(nrow(ts_wide) > 0, "No date-level rolling stats available."))
     
     long <- ts_wide %>%
-      dplyr::select(.data$DateIndex, .data$DateLabel, dplyr::all_of(stats_sel)) %>%
+      dplyr::select("DateIndex", "DateLabel", dplyr::all_of(stats_sel)) %>%
       tidyr::pivot_longer(cols = dplyr::all_of(stats_sel), names_to = "Metric", values_to = "Value") %>%
       dplyr::filter(is.finite(.data$Value))
     

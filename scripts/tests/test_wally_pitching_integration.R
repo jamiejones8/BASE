@@ -98,11 +98,38 @@ shiny::testServer(workspace$server, {
     Bullpens = FALSE,
     GameInput = games,
     BatterHand = c("L", "R"),
+    perf_split = "hand",
     pitch_aar_season_groups = "S26",
     aar_pitcher = pitcher,
     aar_game = games[[1]]
   )
   session$flushReact()
+  perf <- performance_table_data()
+  perf_raw <- attr(perf, "raw_df")
+  if (!identical(as.character(perf_raw$Batter), c("TOTAL", "vLHH", "vRHH"))) {
+    fail("Pitching handedness Performance table is not Total, left, right.")
+  }
+  splits <- season_summary_split_summary(dataFilter())
+  if (!identical(splits$Split, c("Total", "v LHH", "v RHH"))) {
+    fail("Season Summary handedness table is not Total, left, right.")
+  }
+  staff <- build_self_staff_table(dataFilter())
+  if (!identical(as.character(staff$Split), c("Total", "vLHH", "vRHH"))) {
+    fail("Staff handedness table is not Total, left, right.")
+  }
+  for (column in c("wOBAcon", "2k Zone%", "2K Zone%")) {
+    values <- if (column == "wOBAcon") c("0.000", "2.000", "NA") else c("100%", "0%", "NA")
+    pct <- workspace$pitching_cell_percentiles(values, column)
+    if (!identical(unname(pct), c(99, 1, NA_real_))) fail("Incorrect D1 percentile direction for ", column)
+    cells <- data.frame(values, check.names = FALSE)
+    names(cells) <- column
+    shaded <- workspace$shade_columns_txst(cells, cols = column)[[column]]
+    if (!grepl("rgba(227,52,52", shaded[1], fixed = TRUE) ||
+        !grepl("rgba(93,126,188", shaded[2], fixed = TRUE) ||
+        grepl("background-color", shaded[3], fixed = TRUE)) {
+      fail("Pitching percentile cells do not shade favorable, unfavorable, and missing values correctly.")
+    }
+  }
   decay <- pitch_decay_base()
   if (!is.list(decay) || !all(c("pitches", "pa_last") %in% names(decay))) {
     fail("Pitch Decay did not return its preserved Wally payload.")

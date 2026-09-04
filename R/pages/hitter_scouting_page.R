@@ -209,8 +209,8 @@ hsp_split_row <- function(d, label) {
 hsp_hand_split_table <- function(d) {
   bind_rows(
     hsp_split_row(d, "All Pitchers"),
-    hsp_split_row(d %>% filter(PThrows == "R"), "vs RHP"),
-    hsp_split_row(d %>% filter(PThrows == "L"), "vs LHP")
+    hsp_split_row(d %>% filter(PThrows == "L"), "vs LHP"),
+    hsp_split_row(d %>% filter(PThrows == "R"), "vs RHP")
   )
 }
 

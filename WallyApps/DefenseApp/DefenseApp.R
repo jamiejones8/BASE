@@ -1482,7 +1482,7 @@ opportunity_spray_plot <- function(d, pos = NULL, title = "Opportunities") {
         data = anchor,
         aes(x = plot_x, y = plot_y, label = pos),
         inherit.aes = FALSE,
-        fill = "#501214", color = "#B4975A", label.size = 0,
+        fill = "#501214", color = "#B4975A", linewidth = 0,
         fontface = "bold", size = 4.4
       )
   }
@@ -1727,7 +1727,7 @@ if_ground_oaa_plot <- function(d, title = "IF Ground Ball OAA") {
     geom_segment(aes(x = 0, y = 0, xend = radius * sin((45) * pi / 180), yend = radius * cos((45) * pi / 180)), color = "#501214", linewidth = 0.5, linetype = "dashed") +
     geom_point(data = point_d, aes(x = range_x, y = range_y, color = point_result, shape = point_result), size = 2.6, alpha = 0.82) +
     geom_point(aes(x = 0, y = 0), size = 4, color = "#501214") +
-    geom_label(data = label_df, aes(x = x, y = y, label = label), fontface = "bold", color = "#501214", fill = "white", label.size = 0, size = 3.7, lineheight = 0.95) +
+    geom_label(data = label_df, aes(x = x, y = y, label = label), fontface = "bold", color = "#501214", fill = "white", linewidth = 0, size = 3.7, lineheight = 0.95) +
     annotate("text", x = 0, y = radius * 0.88, label = "IN", fontface = "bold", color = "#501214") +
     scale_fill_gradient2(low = "#501214", mid = "#F7F3EA", high = "#0B7A3B", midpoint = 0, limits = c(-max_abs_oaa, max_abs_oaa), name = "OAA") +
     scale_color_manual(values = c("Made" = "#0B7A3B", "Missed" = "#B00020", "Error" = "black"), name = NULL, drop = FALSE) +
@@ -1814,7 +1814,7 @@ range_360_plot <- function(d, title = "360 Degree Range") {
     geom_segment(aes(x = 0, y = 0, xend = radius * sin((210) * pi / 180), yend = radius * cos((210) * pi / 180)), color = "#501214", linewidth = 0.5, linetype = "dashed") +
     geom_point(data = point_d, aes(x = range_x, y = range_y, color = point_result, shape = point_result), size = 2.6, alpha = 0.82) +
     geom_point(aes(x = 0, y = 0), size = 4, color = "#501214") +
-    geom_label(data = label_df, aes(x = x, y = y, label = label), fontface = "bold", color = "#501214", fill = "white", label.size = 0, size = 3.7, lineheight = 0.95) +
+    geom_label(data = label_df, aes(x = x, y = y, label = label), fontface = "bold", color = "#501214", fill = "white", linewidth = 0, size = 3.7, lineheight = 0.95) +
     annotate("text", x = 0, y = radius * 0.88, label = "IN", fontface = "bold", color = "#501214") +
     annotate("text", x = 0, y = -radius * 0.88, label = "BACK", fontface = "bold", color = "#501214") +
     scale_fill_gradient2(low = "#501214", mid = "#F7F3EA", high = "#0B7A3B", midpoint = 0, limits = oaa_limits, name = "OAA") +
@@ -1951,7 +1951,7 @@ catcher_framing_zone_plot <- function(d, title = NULL, show_pitch_numbers = TRUE
   d <- d %>% dplyr::filter(is.finite(.data$plot_x), is.finite(.data$plot_z))
   if (!nrow(d)) return(base)
 
-  out <- base %+% d +
+  out <- base + d +
     geom_point(aes(x = -plot_x, y = plot_z, fill = PitchType),
                shape = 21, size = 7.4, colour = "black", stroke = 0.9, alpha = 0.95) +
     scale_fill_manual(values = pitch_colors, breaks = facet_levels, limits = facet_levels, drop = FALSE, name = "Pitch Type")

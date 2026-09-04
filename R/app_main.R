@@ -27,14 +27,12 @@ library(workflows)
 library(parsnip)
 library(recipes)
 library(tune)
-library(xgboost)
 library(base64enc)
 library(ggridges)
 library(arrow)
 library(shinyBS)
 library(shinyjs)
 library(DT)
-library(glue)
 library(stringr)
 library(tibble)
 library(reactable)
@@ -68,325 +66,11 @@ first    <- dplyr::first
 last     <- dplyr::last
 
 base_source("R/modules/scout_app.R", local = FALSE)
-base_source("R/integrations/leaderboards_embed.R", local = FALSE)
 base_source("R/pages/cape_pitcher_page.R", local = FALSE)
 base_source("R/pages/hitter_scouting_page.R", local = FALSE)
 base_source("R/pages/defense_page.R", local = FALSE)
 base_source("R/reports/Pitcher_Card.R", local = FALSE)
-# ══════════════════════════════════════════════════════════════════════════════
-# HF HUB WRITE-BACK HELPER — now points at a Dataset repo, not the Space repo
-# Dataset repos don't trigger Space rebuilds on commit, so ineligible list
-# changes no longer restart the app.
-# ══════════════════════════════════════════════════════════════════════════════
-
-HF_DATA_REPO_ID   <- TEAM_CONFIG$data$hf_repo_id
-HF_DATA_REPO_TYPE <- "dataset"
-SEASON_DATA_FILE      <- TEAM_CONFIG$data$season_file
-SEASON_DATA_REPO_ID   <- base_env("BASE_SEASON_DATA_REPO_ID",
-                                  HF_DATA_REPO_ID)
-SEASON_DATA_REPO_PATH <- base_env("BASE_SEASON_DATA_REPO_PATH",
-                                  TEAM_CONFIG$data$hf_repo_path)
-
-push_file_to_hf <- function(local_path, repo_path,
-                            commit_message = paste("Update", repo_path),
-                            repo_id = HF_DATA_REPO_ID) {
-
-  if (!nzchar(repo_id)) {
-    message("HF dataset repository is not configured — skipping push for ", repo_path)
-    return(invisible(FALSE))
-  }
-
-  token <- Sys.getenv("write_token")
-  if (!nzchar(token)) {
-    message("HF write token not found — skipping push for ", repo_path)
-    return(invisible(FALSE))
-  }
-
-  if (!file.exists(local_path)) {
-    message("Local file not found, cannot push: ", local_path)
-    return(invisible(FALSE))
-  }
-
-  file_content <- readBin(local_path, "raw", file.info(local_path)$size)
-  encoded      <- base64enc::base64encode(file_content)
-
-  url <- glue::glue(
-    "https://huggingface.co/api/datasets/{repo_id}/commit/main"
-  )
-
-  body <- list(
-    summary = commit_message,
-    files = list(
-      list(
-        path     = repo_path,
-        content  = encoded,
-        encoding = "base64"
-      )
-    )
-  )
-
-  resp <- httr::POST(
-    url,
-    httr::add_headers(
-      Authorization  = paste("Bearer", token),
-      `Content-Type` = "application/json"
-    ),
-    body   = jsonlite::toJSON(body, auto_unbox = TRUE),
-    encode = "raw"
-  )
-
-  if (httr::status_code(resp) >= 200 && httr::status_code(resp) < 300) {
-    message("Pushed to HF dataset: ", repo_path)
-    return(invisible(TRUE))
-  } else {
-    message("HF push failed (", httr::status_code(resp), "): ",
-            httr::content(resp, as = "text", encoding = "UTF-8"))
-    return(invisible(FALSE))
-  }
-}
-
-pull_file_from_hf <- function(repo_path, local_path, repo_id = HF_DATA_REPO_ID) {
-  if (!nzchar(repo_id)) {
-    message("HF dataset repository is not configured — using local ", local_path)
-    return(invisible(FALSE))
-  }
-  token_candidates <- c(
-    Sys.getenv("BASE_DATA_TOKEN", unset = ""),
-    Sys.getenv("HF_TOKEN", unset = "")
-  )
-  token_candidates <- token_candidates[nzchar(token_candidates)]
-  token <- if (length(token_candidates)) token_candidates[[1]] else ""
-  message(
-    "HF read credential for ", repo_id, ": ",
-    if (nzchar(token)) "present" else "missing"
-  )
-  url <- glue::glue(
-    "https://huggingface.co/datasets/{repo_id}/resolve/main/{repo_path}"
-  )
-  tmp_path <- tempfile(tmpdir = dirname(local_path),
-                       pattern = "hf_pull_",
-                       fileext = paste0(".", tools::file_ext(local_path)))
-  download_timeout <- base_env_int("BASE_DATA_DOWNLOAD_TIMEOUT", 900L)
-
-  resp <- tryCatch({
-    if (nzchar(token)) {
-      httr::GET(
-        url,
-        httr::add_headers(Authorization = paste("Bearer", token)),
-        httr::write_disk(tmp_path, overwrite = TRUE),
-        httr::timeout(download_timeout)
-      )
-    } else {
-      httr::GET(
-        url,
-        httr::write_disk(tmp_path, overwrite = TRUE),
-        httr::timeout(download_timeout)
-      )
-    }
-  }, error = function(e) NULL)
-
-  if (is.null(resp) || httr::http_error(resp)) {
-    if (file.exists(tmp_path)) unlink(tmp_path)
-    status <- if (is.null(resp)) "request error" else httr::status_code(resp)
-    message(
-      "HF pull failed for ", repo_path, " (status: ", status,
-      ") — using local fallback if present."
-    )
-    return(invisible(FALSE))
-  }
-
-  ok <- file.rename(tmp_path, local_path)
-  if (!ok) {
-    ok <- file.copy(tmp_path, local_path, overwrite = TRUE)
-    unlink(tmp_path)
-  }
-  if (!ok) {
-    message("HF pull succeeded but could not update local file for ", repo_path)
-    return(invisible(FALSE))
-  }
-
-  message("Pulled from HF dataset: ", repo_path)
-  return(invisible(TRUE))
-}
-
-pull_season_data_from_hf <- function() {
-  pull_file_from_hf(SEASON_DATA_REPO_PATH, SEASON_DATA_FILE, repo_id = SEASON_DATA_REPO_ID)
-}
-
-push_season_data_to_hf <- function(local_path = SEASON_DATA_FILE,
-                                   commit_message = paste("Update", SEASON_DATA_REPO_PATH)) {
-  push_file_to_hf(local_path, SEASON_DATA_REPO_PATH,
-                  commit_message = commit_message,
-                  repo_id = SEASON_DATA_REPO_ID)
-}
-
-
-parse_base_schedule_times <- function(schedule) {
-  if ("DateTime" %in% names(schedule)) {
-    raw_times <- trimws(as.character(schedule$DateTime))
-  } else if ("Date" %in% names(schedule)) {
-    game_clock <- if ("Time" %in% names(schedule)) {
-      trimws(as.character(schedule$Time))
-    } else {
-      rep("12:00 PM", nrow(schedule))
-    }
-    raw_times <- paste(trimws(as.character(schedule$Date)), game_clock)
-  } else {
-    return(as.POSIXct(character(), tz = TEAM_CONFIG$schedule_timezone))
-  }
-
-  parsed <- suppressWarnings(lubridate::parse_date_time(
-    raw_times,
-    orders = c(
-      "ymd HMS", "ymd HM", "ymd IMS p", "ymd IM p",
-      "mdy HMS", "mdy HM", "mdy IMS p", "mdy IM p", "mdy",
-      "Ymd HMS", "Ymd HM"
-    ),
-    tz = TEAM_CONFIG$schedule_timezone,
-    quiet = TRUE
-  ))
-  as.POSIXct(parsed, tz = TEAM_CONFIG$schedule_timezone)
-}
-
-read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file) {
-  if (!nzchar(path) || !file.exists(path)) return(NULL)
-
-  schedule <- tryCatch(
-    readr::read_csv(path, show_col_types = FALSE),
-    error = function(e) NULL
-  )
-  has_datetime <- "DateTime" %in% names(schedule) || "Date" %in% names(schedule)
-  if (is.null(schedule) || !has_datetime || !"Opponent" %in% names(schedule)) {
-    message("BASE_SCHEDULE_FILE must contain Opponent plus DateTime or Date/Time columns")
-    return(NULL)
-  }
-
-  game_times <- parse_base_schedule_times(schedule)
-  active_rows <- rep(TRUE, nrow(schedule))
-  if ("Status" %in% names(schedule)) {
-    active_rows <- !tolower(trimws(as.character(schedule$Status))) %in%
-      c("cancelled", "canceled", "final", "completed", "postponed")
-  }
-  upcoming <- which(active_rows & !is.na(game_times) & game_times >= Sys.time())
-  if (!length(upcoming)) return(NULL)
-  i <- upcoming[which.min(game_times[upcoming])]
-  value_or <- function(column, default) {
-    if (!column %in% names(schedule) || is.na(schedule[[column]][i]) ||
-        !nzchar(trimws(as.character(schedule[[column]][i])))) default else schedule[[column]][i]
-  }
-  bool_or <- function(column, default = TRUE) {
-    value <- tolower(trimws(as.character(value_or(column, default))))
-    if (value %in% c("true", "t", "1", "yes", "home", "h")) TRUE
-    else if (value %in% c("false", "f", "0", "no", "away", "a")) FALSE
-    else default
-  }
-  game_time <- game_times[i]
-
-  list(
-    opponent = as.character(schedule$Opponent[i]),
-    venue = as.character(value_or("Venue", "Venue TBD")),
-    is_home = bool_or("IsHome", TRUE),
-    datetime = game_time,
-    time_str = format(game_time, "%A, %B %d · %I:%M %p"),
-    ms = as.numeric(game_time) * 1000,
-    wins = as.integer(value_or("TeamWins", 0L)),
-    losses = as.integer(value_or("TeamLosses", 0L)),
-    opp_wins = as.integer(value_or("OppWins", 0L)),
-    opp_losses = as.integer(value_or("OppLosses", 0L)),
-    opp_abbr = as.character(value_or("OppAbbr", "OPP"))
-  )
-}
-
-fetch_next_team_game <- function() {
-  configured_game <- read_next_game_from_schedule()
-  if (!is.null(configured_game)) return(configured_game)
-  if (!isTRUE(TEAM_CONFIG$stats_api_enabled) || is.na(TEAM_CONFIG$mlb_team_id)) return(NULL)
-
-  resp <- tryCatch(
-    httr::GET(paste0(
-      "https://statsapi.mlb.com/api/v1/schedule",
-      "?sportId=", TEAM_CONFIG$sport_id,
-      "&leagueId=", TEAM_CONFIG$league_id,
-      "&teamId=", TEAM_CONFIG$mlb_team_id,
-      "&startDate=", format(Sys.Date(), "%Y-%m-%d"),
-      "&endDate=",   format(Sys.Date() + 30, "%Y-%m-%d"),
-      "&hydrate=team,venue"
-    ), httr::timeout(10)),
-    error = function(e) NULL
-  )
-  if (is.null(resp) || httr::http_error(resp)) return(NULL)
-
-  sched <- jsonlite::fromJSON(httr::content(resp, "text", encoding = "UTF-8"),
-                               simplifyVector = FALSE)
-  if (length(sched$dates) == 0) return(NULL)
-
-  for (d in sched$dates) {
-    g <- d$games[[1]]
-    if (g$status$abstractGameState %in% c("Preview", "Live")) {
-      is_home <- g$teams$home$team$id == TEAM_CONFIG$mlb_team_id
-
-      opponent <- if (is_home) g$teams$away$team$name else g$teams$home$team$name
-
-      # Venue: always the home team's venue
-      venue <- g$venue$name
-
-      # Record: configured team's side
-      team_side <- if (is_home) g$teams$home else g$teams$away
-      wins   <- team_side$leagueRecord$wins
-      losses <- team_side$leagueRecord$losses
-
-      # Opponent record
-      opp_side <- if (is_home) g$teams$away else g$teams$home
-      opp_wins   <- opp_side$leagueRecord$wins
-      opp_losses <- opp_side$leagueRecord$losses
-
-      game_dt_utc <- as.POSIXct(g$gameDate, format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
-      game_dt_est <- lubridate::with_tz(game_dt_utc, "America/New_York")
-
-      
-      teams_resp <- tryCatch(
-        httr::GET(paste0("https://statsapi.mlb.com/api/v1/teams?leagueId=",
-                         TEAM_CONFIG$league_id), httr::timeout(10)),
-        error = function(e) NULL
-      )
-      opp_abbr <- if (!is.null(teams_resp) && !httr::http_error(teams_resp)) {
-        td  <- jsonlite::fromJSON(httr::content(teams_resp, "text", encoding="UTF-8"), simplifyVector=TRUE)$teams
-        row <- td[td$name == opponent, ]
-        if (nrow(row) > 0) row$abbreviation[1] else "OPP"
-      } else "OPP"
-
-      return(list(
-        opponent   = opponent,
-        venue      = venue,
-        is_home    = is_home,
-        datetime   = game_dt_est,
-        time_str   = format(game_dt_est, "%A, %B %d · %I:%M %p"),
-        ms         = as.numeric(game_dt_utc) * 1000,
-        wins       = wins,
-        losses     = losses,
-        opp_wins   = opp_wins,
-        opp_losses = opp_losses,
-        opp_abbr   = opp_abbr
-      ))
-    }
-  }
-  return(NULL)
-}
-
-message("Fetching next game for ", TEAM_CONFIG$full_name, "...")
-next_game <- tryCatch(fetch_next_team_game(), error = function(e) NULL)
-
-NEXT_GAME_OPPONENT <- next_game$opponent   %||% "TBD"
-NEXT_GAME_TIME_STR <- next_game$time_str   %||% "TBD"
-NEXT_GAME_LOCATION <- next_game$venue      %||% "TBD"
-NEXT_GAME_DT       <- next_game$datetime   %||% (Sys.time() + 86400)
-NEXT_GAME_IS_HOME  <- next_game$is_home    %||% TRUE
-TEAM_WINS          <- next_game$wins       %||% 0L
-TEAM_LOSSES        <- next_game$losses     %||% 0L
-OPP_WINS           <- next_game$opp_wins   %||% 0L
-OPP_LOSSES         <- next_game$opp_losses %||% 0L
-TEAM_STREAK        <- "--"
-next_game_ms <- function() as.numeric(NEXT_GAME_DT) * 1000                      
+base_source("R/services/schedule.R", local = FALSE)
 # Postgame Pitcher Reports -> BrewSummaryCard card engine + tab (replaces the
 # old generate_pitcher_pdf flow). Requires the configured model, reference,
 # and silhouette assets from TEAM_CONFIG$data.
@@ -404,11 +88,10 @@ library(gridExtra)
 library(png)
 library(lightgbm)
 library(readr)
-library(sysfonts)
 
-options(shiny.maxRequestSize = 10000000 * 1024^2)
-pdf(file = NULL)
-Sys.setenv(TZ='EST')
+options(
+  shiny.maxRequestSize = base_env_int("BASE_MAX_UPLOAD_MB", 100L) * 1024^2
+)
 
 delayedAssign(
   "model",
@@ -931,17 +614,26 @@ read_input_file <- function(datapath, original_name) {
 # observeEvent(input$update1).
 # ============================================================================
 
-have_showtext <- requireNamespace("showtext", quietly = TRUE) &&
+have_showtext <- base_env_bool("BASE_DOWNLOAD_REPORT_FONTS", FALSE) &&
+                 requireNamespace("showtext", quietly = TRUE) &&
                  requireNamespace("sysfonts", quietly = TRUE)
-#font_sans <- "sans"
-#font_mono <- "sans"
+font_sans <- "sans"
+font_mono <- "mono"
 if (have_showtext) {
-  sysfonts::font_add_google("Arimo",         "arimo")
-  sysfonts::font_add_google("Courier Prime", "cprime")
-  showtext::showtext_auto()
-  showtext::showtext_opts(dpi = 96)
-  font_sans <- "arimo"
-  font_mono <- "cprime"
+  report_fonts_loaded <- tryCatch({
+    sysfonts::font_add_google("Arimo", "arimo")
+    sysfonts::font_add_google("Courier Prime", "cprime")
+    TRUE
+  }, error = function(e) {
+    message("Optional report fonts unavailable; using system fonts: ", conditionMessage(e))
+    FALSE
+  })
+  if (report_fonts_loaded) {
+    showtext::showtext_auto()
+    showtext::showtext_opts(dpi = 96)
+    font_sans <- "arimo"
+    font_mono <- "cprime"
+  }
 }
 
 # C
@@ -3369,20 +3061,7 @@ delayedAssign(
 # ==========================================
 # HITTER DATA SOURCE + REPORT HELPERS (from basetest.R)
 # ==========================================
-download_from_hf_dataset <- function(repo_id, filename, token) {
-  if (!nzchar(repo_id)) stop("HF dataset repository is not configured")
-  url  <- paste0("https://huggingface.co/datasets/", repo_id, "/resolve/main/", filename)
-  tmp  <- tempfile(fileext = paste0(".", tools::file_ext(filename)))
-  auth <- if (nzchar(token)) {
-    httr::add_headers(Authorization = paste("Bearer", token))
-  } else {
-    httr::add_headers()
-  }
-  resp <- httr::GET(url, auth, httr::write_disk(tmp, overwrite = TRUE),
-                    httr::timeout(120))
-  if (httr::http_error(resp)) stop("Failed to download ", filename, ": ", httr::status_code(resp))
-  tmp
-}
+SEASON_DATA_FILE <- TEAM_CONFIG$data$season_file
 
 read_data_file <- function(path) {
   ext <- tolower(tools::file_ext(path))
@@ -3445,11 +3124,6 @@ read_season_runtime_data <- function(path) {
 }
 
 message("Loading master game data...")
-# The BASE deployment reads its mounted bucket path directly. A configured
-# remote repository remains an optional fallback for other deployments only.
-if (!file.exists(SEASON_DATA_FILE)) {
-  invisible(pull_season_data_from_hf())
-}
 
 season_data <- tryCatch({
   df <- read_season_runtime_data(SEASON_DATA_FILE)
@@ -3482,14 +3156,9 @@ master_last_updated <- if (!is.null(season_data)) format(Sys.time(), "%b %d, %Y 
 message("Season data rows: ", if (!is.null(season_data)) nrow(season_data) else 0)
 
 # ----------------------------------------------------------------------------
-# The full College26 master stays in private Space storage for future features.
 # Current all-college scouting loads one selected pitcher from hash-partitioned
 # runtime data, while season_data contains only the configured team's rows.
 # ----------------------------------------------------------------------------
-COLLEGE26_FILE      <- TEAM_CONFIG$data$college_file
-COLLEGE26_REPO_ID   <- base_env("COLLEGE26_REPO_ID", TEAM_CONFIG$data$college_repo_id)
-COLLEGE26_REPO_PATH <- base_env("COLLEGE26_REPO_PATH", TEAM_CONFIG$data$college_repo_path)
-
 college26_data <- NULL
 
 # CapeCod26 remains a separate supplemental source. It is joined only after a
@@ -3840,89 +3509,6 @@ build_split_color_matrix_hitter <- function(df, bench_map, lower_is_better = c()
   color_matrix
 }
 
-# ==========================================
-# SWING DECISION MODELS
-# ==========================================
-message("HITTER_TOKEN present: ", nchar(Sys.getenv("HITTER_TOKEN")) > 0)
-sd_models <- tryCatch({
-  token <- Sys.getenv("HITTER_TOKEN")
-  repo  <- TEAM_CONFIG$data$swing_model_repo
-  if (!nzchar(repo)) stop("BASE_SWING_MODEL_REPO is not configured")
-  message("Downloading swing decision models...")
-  list(
-    model_take  = xgb.load(download_from_hf_dataset(repo, "HitterXRV_Take.ubj",  token)),
-    model_swing = xgb.load(download_from_hf_dataset(repo, "HitterXRV_Swing.ubj", token)),
-    encodings   = readRDS(download_from_hf_dataset(repo,  "encodings.rds",        token))
-  )
-}, error = function(e) { message("Swing decision models not loaded: ", e$message); NULL })
-message("sd_models loaded: ", !is.null(sd_models))
-
-sd_features <- c("PlateLocHeight","PlateLocSide","count_state_enc","pitch_type_enc")
-
-recode_pitch_type_model <- function(x) {
-  case_when(
-    x %in% c("Fastball","Four-Seam","FourSeamFastBall","FourSeamFastball") ~ "FF",
-    x %in% c("Sinker","TwoSeamFastBall","TwoSeamFastball")                 ~ "SI",
-    x == "Cutter"                     ~ "FC",
-    x %in% c("Curveball","CurveBall") ~ "CU",
-    x == "Slider"                     ~ "SL",
-    x == "Sweeper"                    ~ "SW",
-    x %in% c("ChangeUp","Changeup")   ~ "CH",
-    x == "Splitter"                   ~ "FS",
-    TRUE ~ "Other"
-  )
-}
-
-score_pitches_xrv <- function(df, models = sd_models) {
-  if (is.null(models)) return(df %>% mutate(xRV_swing=NA_real_, xRV_take=NA_real_, xRV_diff=NA_real_))
-  enc <- models$encodings
-  scored <- df %>%
-    mutate(
-      PlateLocHeight = suppressWarnings(as.numeric(PlateLocHeight)),
-      PlateLocSide   = suppressWarnings(as.numeric(PlateLocSide)),
-      Balls = as.integer(Balls), Strikes = as.integer(Strikes),
-      count_state = paste0(Balls, "-", Strikes),
-      count_state = ifelse(!count_state %in% c("0-0","0-1","0-2","1-0","1-1","1-2",
-                                               "2-0","2-1","2-2","3-0","3-1","3-2"), NA, count_state),
-      pitch_type_model = recode_pitch_type_model(TaggedPitchType),
-      count_state_enc  = match(count_state, enc$count_state),
-      pitch_type_enc   = match(pitch_type_model, enc$pitch_type)
-    )
-  valid <- !is.na(scored$PlateLocHeight) & !is.na(scored$PlateLocSide) &
-           !is.na(scored$count_state_enc) & !is.na(scored$pitch_type_enc) &
-           scored$pitch_type_model != "Other"
-  scored$xRV_swing <- NA_real_; scored$xRV_take <- NA_real_
-  if (any(valid)) {
-    feature_frame <- scored[valid, sd_features, drop = FALSE] %>%
-      mutate(across(everything(), ~ suppressWarnings(as.numeric(.x))))
-    feature_matrix <- data.matrix(feature_frame)
-    keep <- stats::complete.cases(feature_matrix)
-
-    if (any(keep)) {
-      dmat <- xgb.DMatrix(feature_matrix[keep, , drop = FALSE])
-      scored_rows <- which(valid)[keep]
-      scored$xRV_swing[scored_rows] <- predict(models$model_swing, dmat)
-      scored$xRV_take[scored_rows]  <- predict(models$model_take,  dmat)
-    }
-  }
-  scored %>% mutate(xRV_diff = xRV_swing - xRV_take) %>%
-    select(-pitch_type_model, -count_state_enc, -pitch_type_enc)
-}
-
-summarise_xrv_swdec <- function(scored_df) {
-  scored_df %>% filter(!is.na(xRV_diff)) %>%
-    mutate(ModelShouldSwing = xRV_diff > 0,
-           DidSwing = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip","InPlay"),
-           GoodxDec = (ModelShouldSwing & DidSwing) | (!ModelShouldSwing & !DidSwing)) %>%
-    summarise(Total=n(), GoodDec=sum(GoodxDec,na.rm=TRUE),
-              SwingPitches=sum(ModelShouldSwing,na.rm=TRUE),
-              ActualSwings=sum(DidSwing,na.rm=TRUE), .groups="drop") %>%
-    mutate(`xSwDec%`    = paste0(round(GoodDec      / pmax(Total,1)*100, 1), "%"),
-           `Mdl Swing%` = paste0(round(SwingPitches / pmax(Total,1)*100, 1), "%"),
-           `Act Swing%` = paste0(round(ActualSwings / pmax(Total,1)*100, 1), "%")) %>%
-    select(`xSwDec%`, `Mdl Swing%`, `Act Swing%`)
-}
-
 make_swdec_plot <- function(df, plot_title) {
   dec_colors <- c("Good Swing"="#00840D","Good Take"="#5BBF6A","Bad Swing"="#E1463E","Bad Take"="#F4A49E")
   dec_shapes <- c("Good Swing"=17,"Good Take"=21,"Bad Swing"=25,"Bad Take"=21)
@@ -3967,8 +3553,7 @@ make_swdec_heatmap <- function(df, plot_title) {
 # ==========================================
 # HITTER PDF
 # ==========================================
-generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_file,
-                                active_models = sd_models) {
+generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_file) {
   hitter_name <- format_name(selected_hitter)
 
   coerce_numerics <- function(df) {
@@ -3998,12 +3583,10 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 
   # No coerce_numerics() needed here anymore — game_data/season_data already coerced above
   game_hitter   <- game_data   %>% filter(Batter == selected_hitter) %>%
-                   dedup() %>%
-                   score_pitches_xrv(models = active_models)
+                   dedup()
 
   season_hitter <- season_data %>% filter(Batter == selected_hitter) %>%
-                   dedup() %>%
-                   score_pitches_xrv(models = active_models)
+                   dedup()
 
   logo_grob <- tryCatch({
     logo_file <- base_team_logo_file()
@@ -4074,21 +3657,6 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
     select(`Pitch Type`=PitchTypeGroup, SwDec, `SwDec%`)
 
   game_swdec_plot <- make_swdec_plot(swing_decisions, "Game Swing Decisions by Location")
-
-  game_xrv_overall <- if (!is.null(active_models) && any(!is.na(game_hitter$xRV_diff)))
-    summarise_xrv_swdec(game_hitter) %>% mutate(` `="Overall") %>% select(` `, everything()) else NULL
-
-  game_xrv_by_pitch <- if (!is.null(active_models) && any(!is.na(game_hitter$xRV_diff))) {
-    game_hitter %>%
-      mutate(PitchTypeGroup=case_when(
-        TaggedPitchType %in% c("FourSeamFastBall","Fastball","Four-Seam","Sinker","TwoSeamFastBall","Cutter") ~ "Fastball",
-        TaggedPitchType %in% c("Changeup","Splitter","ChangeUp")                                             ~ "Offspeed",
-        TaggedPitchType %in% c("Curveball","Slider","Sweeper","Slurve")                                      ~ "Breaking Ball",
-        TRUE ~ NA_character_)) %>%
-      filter(!is.na(PitchTypeGroup)) %>%
-      group_by(`Pitch Type`=PitchTypeGroup) %>%
-      group_modify(~summarise_xrv_swdec(.x)) %>% ungroup()
-  } else NULL
 
   stats_by_pitch <- game_hitter %>%
     mutate(
@@ -4224,9 +3792,6 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 
   season_swdec_plot <- make_swdec_heatmap(season_swing_decisions, "Season Swing Decisions by Location")
 
-  season_xrv_overall <- if (!is.null(active_models) && any(!is.na(season_hitter$xRV_diff)))
-    summarise_xrv_swdec(season_hitter) %>% mutate(` `="Overall") %>% select(` `, everything()) else NULL
-
   make_split_stats_hitter <- function(data, hand) {
     data %>%
       filter(Batter==selected_hitter, PitcherThrows==hand) %>%
@@ -4338,9 +3903,6 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
                     y_top=0.260, x_center=0.34, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
     draw_grid_table(swdec_by_pitch, title="By Pitch",
                     y_top=0.180, x_center=0.34, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
-    if (!is.null(active_models) && !is.null(game_xrv_overall))
-      draw_grid_table(game_xrv_overall, title="xRV",
-                      y_top=0.075, x_center=0.34, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
     grid.text("Season", x=0.75, y=0.290, gp=gpar(fontface="bold", cex=0.75, col=TEAM_CONFIG$colors$primary))
     pushViewport(viewport(x=0.62, y=0.312, width=0.22, height=0.250, just=c("center","top")))
     print(season_swdec_plot + theme(plot.title=element_blank(),plot.subtitle=element_blank()),
@@ -4350,9 +3912,6 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
                     title_cex=0.82, alt_row_bg="grey80")
     draw_grid_table(season_swdec_by_pitch, title="By Pitch",
                     y_top=0.180, x_center=0.84, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
-    if (!is.null(active_models) && !is.null(season_xrv_overall))
-      draw_grid_table(season_xrv_overall, title="xRV",
-                      y_top=0.075, x_center=0.84, row_h=0.016, table_width=0.20, cell_cex=0.60, title_cex=0.82)
     page_footer_hitter()
 
     # PAGE 2 — SEASON
@@ -4406,7 +3965,6 @@ BASE_NAV_TABS <- c(
   pitcher            = "tab_pitcher",
   pitcher_player     = "tab_pitcher_player",
   pitcher_mock       = "tab_pcard_mock",
-  team_analytics_app = "tab_leaderboards",
   season_pitcher     = "tab_season_pitcher",
   base_media         = "tab_homebase"
 )
@@ -4417,87 +3975,6 @@ base_nav_click_js <- function(target) {
   sprintf(
     "var navLink=document.querySelector(\".navbar-nav a[data-value='%s']\");if(navLink){navLink.click();}",
     tab_value
-  )
-}
-
-apps <- list(
-  list(id = "catcher",          title = "Catcher Reports",          page = "catcher",        status = "live"),
-  list(id = "hitter",           title = "Postgame Hitter Reports",  page = "hitter",         status = "live"),
-  list(id = "hitter_scouting",  title = "Hitter Scouting",         page = "hitter_scouting", status = "live", image_src = "hitter_scouting.png"),
-  list(id = "pitcher",          title = "Postgame Pitcher Reports", page = "pitcher",        status = "live"),
-  list(id = "pitcher_player",   title = "Pitcher Scouting", page = "pitcher_player", status = "live", image_src = "pitcher_scouting.png"),
-  list(id = "defense",          title = "Defensive Analytics", page = "defense", status = "live", image_src = "TXST_Primary.jpg"),
-  team_analytics_hub_card(),
-  list(id = "umpire",           title = "Umpire Reports",           page = NULL,             status = "live")
-)
-
-make_card <- function(app) {
-  is_coming_soon <- app$status == "coming_soon"
-  card_class  <- paste("app-card", if (is_coming_soon) "coming-soon" else "")
-  badge_class <- paste("status-badge", if (is_coming_soon) "coming-soon" else "live")
-  badge_label <- if (is_coming_soon) "Coming Soon" else "Live"
-  card_image  <- if (!is.null(app$image_src)) app$image_src else paste0(app$id, ".png")
-
-  if (!is.null(app$page) && app$status == "live") {
-    onclick_js <- base_nav_click_js(app$page)
-    tags$div(
-      onclick = onclick_js,
-      class   = card_class,
-      style   = "cursor: pointer;",
-      tags$img(src = card_image, class = "card-img"),
-      tags$div(
-        class = "card-body",
-        tags$div(class = "card-title", app$title),
-        tags$div(
-          class = "card-footer",
-          tags$span(class = badge_class, badge_label),
-          tags$span(class = "card-arrow", ">")
-        )
-      )
-    )
-  } else {
-    tags$a(
-      href   = if (!is.null(app$url)) app$url else "#",
-      target = "_blank",
-      class  = card_class,
-      tags$img(src = card_image, class = "card-img"),
-      tags$div(
-        class = "card-body",
-        tags$div(class = "card-title", app$title),
-        tags$div(
-          class = "card-footer",
-          tags$span(class = badge_class, badge_label),
-          tags$span(class = "card-arrow", ">")
-        )
-      )
-    )
-  }
-}
-
-hub_ui <- function() {
-  tagList(
-    tags$div(
-      class = "hub-main base-page base-hub-page",
-      tags$div(class = "section-label", "Applications"),
-      tags$div(class = "app-grid", lapply(apps, make_card)),
-      tags$div(class = "section-label", style = "margin-top: 40px;",
-               TEAM_CONFIG$roster_label),
-      tags$div(
-        class = "standings-wrapper",
-        tags$div(class = "standings-division-label", "Catchers"),
-        tableOutput("roster_catchers"),
-        tags$div(class = "standings-division-label", "Infielders"),
-        tableOutput("roster_infielders"),
-        tags$div(class = "standings-division-label", "Outfielders"),
-        tableOutput("roster_outfielders"),
-        tags$div(class = "standings-division-label", "Pitchers"),
-        tableOutput("roster_pitchers")
-      )
-    ),
-    tags$div(
-      class = "hub-footer",
-      base_brand_footer()
-    )
   )
 }
 
@@ -4579,55 +4056,6 @@ hitter_ui <- function() {
   )
 }
 
-# Old PDF-based pitcher_ui() is retained but no longer routed to; the pitcher
-# page now renders pitcher_card_ui() (BrewSummaryCard). Kept for reference.
-pitcher_ui <- function() {
-  tagList(
-    tags$div(
-      class = "hub-main",
-      tags$h2("Pitcher Report Generator",
-              style = "font-family: var(--font-head); color: var(--navy); margin-bottom: 24px;"),
-      tags$div(
-        style = "display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 32px;",
-        tags$div(
-          tags$h4("Game CSV", style = "color: var(--navy); margin-bottom: 12px;"),
-          fileInput("pitcher_game_csv", "Upload Game CSV:", accept = ".csv",
-                    buttonLabel = "Browse", placeholder = "No file selected"),
-          selectInput("pitcher_select", "Select Pitcher:", choices = NULL),
-          tags$h4("Manual Overrides", style = "color: var(--navy); margin-top: 16px; margin-bottom: 8px;"),
-          tags$p("Leave blank to use Trackman values.",
-                 style = "font-size: 0.82rem; color: var(--text-muted); margin-bottom: 10px;"),
-          tags$div(
-            style = "display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;",
-            numericInput("manual_pitches", "Pitches", value = NA, min = 0),
-            numericInput("manual_ks",      "K's",     value = NA, min = 0),
-            numericInput("manual_bbs",     "BB's",    value = NA, min = 0)
-          ),
-          tags$div(
-            style = "display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;",
-            numericInput("manual_hits", "Hits", value = NA, min = 0),
-            numericInput("manual_runs", "ER",   value = NA, min = 0)
-          )
-        ),
-        tags$div(
-          tags$h4("Season CSVs", style = "color: var(--navy); margin-bottom: 12px;"),
-          fileInput("pitcher_season_csvs", "Upload Season CSVs:", accept = ".csv", multiple = TRUE,
-                    buttonLabel = "Browse", placeholder = "No files selected")
-        )
-      ),
-      actionButton("generate_pitcher", "Generate Report",
-                   class = "btn btn-primary", style = "width: 200px;"),
-      br(), br(),
-      uiOutput("pitcher_status"),
-      br(),
-      uiOutput("pitcher_download_ui")
-    ),
-    tags$div(class = "hub-footer",
-             base_brand_footer())
-  )
-}
-
-# Resolve an opponent logo from www/<ABBR>.png, then the NCAA team metadata.
 opponent_logo <- function(abbr) {
   direct <- paste0(toupper(as.character(abbr)), ".png")
   if (file.exists(file.path("www", direct))) return(direct)
@@ -4638,7 +4066,7 @@ opponent_logo <- function(abbr) {
   base_team_logo_url()
 }
 
-home_quick_link <- function(label, description, target, number, image = NULL) {
+home_quick_link <- function(label, description, target, image = NULL) {
   has_image <- !is.null(image) && nzchar(image)
   enabled <- !is.null(target) && target %in% names(BASE_NAV_TABS)
   tags$button(
@@ -4780,8 +4208,6 @@ home_tab_ui <- function() {
         text-transform: uppercase; color: var(--base-muted); margin-bottom: 16px;
       }
       .tab-content > .tab-pane { padding: 0; }
-      .tab-pane[data-value='tab_leaderboards'] .navbar { display: none !important; }
-      .tab-pane[data-value='tab_leaderboards'] .navbar-default { display: none !important; }
       .navbar-nav > li > a[data-value='tab_pcard_mock'] { display: none !important; }
     "))),
     tags$div(
@@ -4805,15 +4231,15 @@ home_tab_ui <- function() {
           ),
           tags$div(
             class = "home-quick-grid",
-            home_quick_link("Postgame Reports", "Pitching, hitting, and catching PDFs", "postgame_reports", "01", "postgamereports.jpg"),
-            home_quick_link("Pitching", "Staff performance, bullpens, trends, and reports", "team_pitching", "02", "pitching.jpg"),
-            home_quick_link("Hitting", "Lineups, team trends, and hitter development", "team_hitting", "03", "hitting-card.jpg"),
-            home_quick_link("Opponent Scouting", "Scout NCAA pitchers and hitters", "opponent_scouting", "04", "opponentscouting-card.jpg"),
-            home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "05", "defenseiveanalytics.webp"),
-            home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "06", "homeBASE.jpg"),
-            home_quick_link("JUCO Scouting", "Compare junior-college hitters and pitchers", "juco_stats", "07", "jucoscouting.png"),
-            home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "08", "dataprocessing.jpg"),
-            home_quick_link("Player Health", "Player availability and health tools", "player_health", "09", "medicine.jpg")
+            home_quick_link("Postgame Reports", "Pitching, hitting, and catching PDFs", "postgame_reports", "postgamereports.jpg"),
+            home_quick_link("Pitching", "Staff performance, bullpens, trends, and reports", "team_pitching", "pitching.jpg"),
+            home_quick_link("Hitting", "Lineups, team trends, and hitter development", "team_hitting", "hitting-card.jpg"),
+            home_quick_link("Opponent Scouting", "Scout NCAA pitchers and hitters", "opponent_scouting", "opponentscouting-card.jpg"),
+            home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "defenseiveanalytics.webp"),
+            home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "homeBASE.jpg"),
+            home_quick_link("JUCO Scouting", "Compare junior-college hitters and pitchers", "juco_stats", "jucoscouting.png"),
+            home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "dataprocessing.jpg"),
+            home_quick_link("Player Health", "Player availability and health tools", "player_health", "medicine.jpg")
           )
         ),
         tags$section(
@@ -4874,7 +4300,7 @@ ui <- navbarPage(
       tags$link(rel = "icon", href = base_supercat_logo_url()),
       tags$link(rel = "stylesheet",
         href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"),
-      tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=27"),
+      tags$link(rel = "stylesheet", type = "text/css", href = base_stylesheet_url()),
       tags$style(HTML(base_brand_css(include_leaderboards = FALSE))),
       tags$style(HTML("
         #base-splash {
@@ -4976,7 +4402,6 @@ ui <- navbarPage(
   tabPanel("Pitcher Scouting", value = "tab_pitcher_player", cape_pitcher_player_page_ui()),
   tabPanel("Hitter Scouting",  value = "tab_hitter_scouting", hitter_scouting_page_ui()),
   tabPanel("Defensive Analytics", value = "tab_defense", defense_page_ui()),
-  tabPanel("Leaderboards",     value = "tab_leaderboards",   team_analytics_embedded_ui()),
   tabPanel("Umpire Reports",   value = "tab_umpire",
     tags$div(class = "hub-main base-page base-placeholder-page",
       tags$div(class = "base-placeholder-panel",
@@ -4995,11 +4420,6 @@ server <- function(input, output, session) {
     target <- unname(BASE_NAV_TABS[input$nav_to])
     if (length(target) && !is.na(target)) updateNavbarPage(session, "base_nav", selected = target)
   })
-  base_lazy_workspace_server(
-    input, session, "tab_leaderboards",
-    initialize = function() team_analytics_env$server(input, output, session),
-    id = "leaderboards"
-  )
   base_lazy_workspace_server(
     input, session, c("tab_team_pitching", "tab_postgame_reports"),
     initialize = function() base_team_pitching_workspace_server(
@@ -5067,17 +4487,22 @@ server <- function(input, output, session) {
   # Scoreboard hero
   output$scoreboard_hero <- renderUI({
     ng <- next_game_reactive()
+    conference_logo <- base_conference_logo_url()
 
     team_identity <- tags$div(
       class = "home-team-identity",
       tags$div(
         class = "home-team-marks",
-        tags$img(
-          src = base_conference_logo_url(),
-          alt = TEAM_CONFIG$league_name,
-          class = "home-team-logo"
-        ),
-        tags$span(class = "home-team-logo-divider", `aria-hidden` = "true"),
+        if (nzchar(conference_logo)) {
+          tagList(
+            tags$img(
+              src = conference_logo,
+              alt = if (identical(conference_logo, "pac12logo.webp")) "Pac-12" else TEAM_CONFIG$league_name,
+              class = "home-team-logo"
+            ),
+            tags$span(class = "home-team-logo-divider", `aria-hidden` = "true")
+          )
+        },
         tags$img(
           src = base_supercat_logo_url(),
           alt = paste(TEAM_CONFIG$full_name, "logo"),
@@ -5085,11 +4510,17 @@ server <- function(input, output, session) {
         )
       ),
       tags$div(
+        class = "home-team-wordmark",
         tags$div(
           class = "home-season-line",
-          "Bobcats Analytics & Scouting Engine"
+          tags$span(class = "home-base-badge", "BASE"),
+          tags$span("Baseball Analytics & Scouting Engine")
         ),
-        tags$h1("Texas State Baseball"),
+        tags$h1(
+          tags$span(class = "home-title-school", "Texas State"),
+          " ",
+          tags$span(class = "home-title-sport", "Baseball")
+        ),
         tags$p(
           paste(
             TEAM_CONFIG$competition_level,
@@ -5545,8 +4976,7 @@ server <- function(input, output, session) {
         game_data       = game_data,
         season_data     = season_data,
         selected_hitter = input$selected_hitter,
-        output_file     = tmp_pdf,
-        active_models   = sd_models
+        output_file     = tmp_pdf
       )
       hitter_pdf_path(tmp_pdf)
       output$hitter_status <- renderUI({ div(style = "color:orange;font-weight:bold;", "Rendering pages...") })
@@ -5600,8 +5030,7 @@ server <- function(input, output, session) {
             game_data       = game_all,
             season_data     = season_all,
             selected_hitter = h,
-            output_file     = fn,
-            active_models   = sd_models
+            output_file     = fn
           )
           TRUE
         }, error = function(e) { message("skip hitter ", h, ": ", e$message); FALSE })
