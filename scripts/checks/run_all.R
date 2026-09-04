@@ -1,8 +1,13 @@
 #!/usr/bin/env Rscript
 
 # One-command repository verification used locally and during image builds.
+check_args <- commandArgs(trailingOnly = TRUE)
+if (length(setdiff(check_args, "--build"))) {
+  stop("Usage: run_all.R [--build]", call. = FALSE)
+}
 checks <- list(
-  c("Rscript", "scripts/checks/check_team_config.R"),
+  c("Rscript", "scripts/checks/check_team_config.R", check_args),
+  c("python3", "scripts/tests/test_deployment_checks.py"),
   c("Rscript", "scripts/checks/check_data_source_contract.R"),
   c("python3", "scripts/checks/check_app_workspaces.py"),
   c("python3", "scripts/checks/check_wally_feature_register.py"),

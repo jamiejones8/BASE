@@ -27,6 +27,9 @@ on.exit(setwd(old_wd), add = TRUE)
 source(file.path(project_root, "team_config.R"), local = FALSE)
 
 fail <- function(...) stop(..., call. = FALSE)
+check_args <- commandArgs(trailingOnly = TRUE)
+if (length(setdiff(check_args, "--build"))) fail("Usage: check_team_config.R [--build]")
+build_check <- "--build" %in% check_args
 required_text <- c("city", "name", "full_name", "organization",
                    "abbreviation", "data_code", "data_pattern",
                    "league_name", "season_label", "roster_label")
@@ -76,18 +79,32 @@ validate_csv(
   "Player heights"
 )
 
-model_fields <- c(
+runtime_model_fields <- c(
   "brewstuff_model_file",
   "scout_models_file",
   "pitcher_stuff_model_file",
-  "pitcher_location_model_file",
+  "pitcher_location_model_file"
+)
+model_fields <- c(
+  runtime_model_fields,
   "pitcher_league_stats_file",
   "pitcher_location_league_stats_file",
   "xwoba_grid_file"
 )
 missing_models <- model_fields[!file.exists(unlist(TEAM_CONFIG$data[model_fields]))]
+if (build_check) {
+  deferred_models <- intersect(missing_models, runtime_model_fields)
+  if (length(deferred_models)) {
+    cat("Model presence checks deferred until container startup:",
+        paste(deferred_models, collapse = ", "), "\n")
+  }
+  missing_models <- setdiff(missing_models, runtime_model_fields)
+}
 if (length(missing_models)) {
-  fail("Configured model file(s) not found: ", paste(missing_models, collapse = ", "))
+  details <- vapply(missing_models, function(field) {
+    paste0(field, " = ", TEAM_CONFIG$data[[field]])
+  }, character(1))
+  fail("Configured model file(s) not found: ", paste(details, collapse = ", "))
 }
 pointer_models <- model_fields[vapply(
   TEAM_CONFIG$data[model_fields],
@@ -118,7 +135,7 @@ if (length(missing_assets)) {
   warning("Configured asset(s) not found: ", paste(missing_assets, collapse = ", "))
 }
 
-cat("BASE team configuration is valid.\n")
+cat(if (build_check) "BASE build configuration is valid.\n" else "BASE team configuration is valid.\n")
 cat("Team:", TEAM_CONFIG$full_name, "\n")
 cat("Season:", TEAM_CONFIG$season_label, "\n")
 cat("Season data:", TEAM_CONFIG$data$season_file, "\n")

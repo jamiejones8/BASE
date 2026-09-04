@@ -4,5 +4,5 @@ COPY . .
 RUN install2.r --error \
     shinyWidgets shinycssloaders cowplot ggplotify ggpubr ggtext hms jpeg lubridate ragg readxl
 RUN Rscript -e "files <- list.files('.', pattern='[.]R$', recursive=TRUE); invisible(lapply(files, parse))"
-RUN Rscript scripts/checks/run_all.R
-CMD ["sh", "-c", "exec R --quiet -e \"shiny::runApp(host='0.0.0.0', port=as.integer(Sys.getenv('PORT', '7860')))\""]
+RUN Rscript scripts/checks/run_all.R --build
+CMD ["sh", "start-railway.sh"]

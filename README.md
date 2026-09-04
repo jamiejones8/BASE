@@ -168,3 +168,27 @@ dependency stack again. GitHub Actions republishes it only when
 `Dockerfile.dependencies` or its publishing workflow changes. When dependency
 requirements change, update `Dockerfile.dependencies`, bump its image version,
 publish it, and pin the resulting digest in `Dockerfile` before deployment.
+
+The Docker build runs `Rscript scripts/checks/run_all.R --build`. This retains
+the syntax, configuration, fixture, integration, and startup checks, but defers
+presence checks for the four excluded production models until container startup.
+The bundled xwOBA grid and league references are still required during the build;
+unresolved Git LFS model pointers fail validation in both modes.
+
+The image starts through `sh start-railway.sh`, which validates the full team
+configuration before starting Shiny. Leave Railway's custom Start Command blank
+to use the image default, or set it to `sh start-railway.sh`. Do not put the model
+validation in a pre-deploy command, where runtime volumes are also unavailable.
+Provide these actual model files on the runtime mount (or configure their
+corresponding `BASE_*_MODEL_FILE` / `BASE_SCOUT_MODELS_FILE` overrides):
+
+- `/base-data/models/brewstuff.model`
+- `/base-data/models/pitch_models.rds`
+- `/base-data/models/Stuff+2.rds`
+- `/base-data/models/location_plus_model.rds`
+
+If an override is explicitly set for a bundled reference or xwOBA grid, that
+override file must also exist at runtime. `.env.example` documents paths; it
+does not upload files or automatically configure Railway variables. The default
+`Rscript scripts/checks/run_all.R` remains strict for local verification. These
+checks do not certify national dataset coverage or runtime storage permissions.
