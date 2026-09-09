@@ -14,7 +14,9 @@ if (!inherits(app, "shiny.appobj")) {
 # percentile. The original CAPS BrewStuff path resolves the same tracked sample
 # to roughly 109 Stuff+ / 81st percentile.
 alec_rows <- homebase_load_history_rows("pitcher", "Alec Beversdorf", refresh = TRUE)
-if (nrow(alec_rows)) {
+brewstuff_path <- TEAM_CONFIG$data$brewstuff_model_file
+brewstuff_available <- file.exists(brewstuff_path) && !base_is_lfs_pointer(brewstuff_path)
+if (nrow(alec_rows) && brewstuff_available) {
   alec_scored <- homebase_score_pitcher_rows(alec_rows)
   alec_metrics <- homebase_pitcher_metrics(alec_scored)
   alec_percentiles <- homebase_percentile_rows(alec_scored, "pitcher")
@@ -25,4 +27,7 @@ if (nrow(alec_rows)) {
   }
 }
 
-cat("BASE startup and HomeBASE Stuff+ integrity smoke tests passed.\n")
+if (!brewstuff_available) {
+  cat("HomeBASE Stuff+ regression deferred until the runtime model is mounted.\n")
+}
+cat("BASE startup smoke test passed.\n")
