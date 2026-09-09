@@ -45,6 +45,7 @@ base_source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 base_source("R/integrations/wally_hitting_workspace.R", local = FALSE)
 base_source("R/integrations/wally_scouting_workspace.R", local = FALSE)
 base_source("R/integrations/wally_juco_stats_workspace.R", local = FALSE)
+base_source("R/pages/homebase_page.R", local = FALSE)
 base_source("R/data/defense_data_access.R", local = FALSE)
 base_source("R/integrations/wally_defense_workspace.R", local = FALSE)
 base_source("R/data/defense_attribution.R", local = FALSE)
@@ -664,7 +665,7 @@ ncaa_colors <- tryCatch(
 
 team_palette <- function(team_abbr) {
   fallback_label <- if (length(team_abbr) && !is.na(team_abbr) &&
-                        base_team_matches(team_abbr)) TEAM_CONFIG$full_name else team_abbr
+                        base_team_matches(team_abbr)) TEAM_CONFIG$full_name else base_team_display_name(team_abbr)
   fallback <- list(primary = TEAM_CONFIG$colors$primary,
                    secondary = TEAM_CONFIG$colors$accent,
                    label = fallback_label, logo_url = NA_character_)
@@ -678,7 +679,7 @@ team_palette <- function(team_abbr) {
   if (nrow(row) == 0) return(fallback)
   list(primary   = row$`Primary Color`[1],
        secondary = row$`Secondary Color`[1],
-       label     = row$Team[1],
+       label     = base_team_display_name(team_abbr),
        logo_url  = row$NCAA_img[1])
 }
 
@@ -1525,8 +1526,13 @@ draw_card_to_png <- function(page, file,
                              width = 1200, height = 1200, units = "px",
                              res = 96, dpi = 96) {
   if (requireNamespace("showtext", quietly = TRUE)) showtext::showtext_opts(dpi = dpi)
-  grDevices::png(file, width = width, height = height, units = units,
-                 res = res, bg = tok$bg_page, type = "cairo")
+  if (requireNamespace("ragg", quietly = TRUE)) {
+    ragg::agg_png(file, width = width, height = height, units = units,
+                  res = res, background = tok$bg_page)
+  } else {
+    grDevices::png(file, width = width, height = height, units = units,
+                   res = res, bg = tok$bg_page)
+  }
   if (requireNamespace("showtext", quietly = TRUE)) showtext::showtext_begin()
   on.exit({
     if (requireNamespace("showtext", quietly = TRUE)) showtext::showtext_end()
@@ -1542,8 +1548,8 @@ draw_cards_to_pdf <- function(pages, file, width = 12.5, height = 12.5, dpi = 30
   pages <- Filter(Negate(is.null), pages)
   if (length(pages) == 0) return(invisible(file))
   if (requireNamespace("showtext", quietly = TRUE)) showtext::showtext_opts(dpi = dpi)
-  grDevices::cairo_pdf(file, width = width, height = height,
-                       onefile = TRUE, bg = tok$bg_page)
+  grDevices::pdf(file, width = width, height = height,
+                 onefile = TRUE, bg = tok$bg_page, useDingbats = FALSE)
   if (requireNamespace("showtext", quietly = TRUE)) showtext::showtext_begin()
   on.exit({
     if (requireNamespace("showtext", quietly = TRUE)) showtext::showtext_end()
@@ -2646,7 +2652,7 @@ apply_pitch_source <- function(df, src) {
 # `date` may be one or several dates (the most recent is used).
 # Map team code(s) -> full NcaaColors team name (falls back to the raw code).
 team_display_name <- function(abbr) {
-  vapply(as.character(abbr), function(t) team_palette(t)$label, character(1))
+  base_team_display_name(abbr)
 }
 
 base_data_notice <- function(message = NULL) {
@@ -4392,7 +4398,7 @@ ui <- navbarPage(
   tabPanel("Hitting",          value = "tab_team_hitting",   base_team_hitting_workspace_ui()),
   tabPanel("Opponent Scouting", value = "tab_opponent_scouting", opponent_scouting_workspace_ui()),
   tabPanel("Defense Workspace", value = "tab_defense_workspace", base_team_defense_workspace_ui()),
-  tabPanel("HomeBASE",         value = "tab_homebase",       base_media_ui()),
+  tabPanel("HomeBASE",         value = "tab_homebase",       homebase_page_ui()),
   tabPanel("JUCO Scouting",    value = "tab_juco_stats",     base_juco_stats_workspace_ui()),
   tabPanel("Data Processing",  value = "tab_data_processing", data_processing_workspace_ui()),
   tabPanel("Pitcher Reports",  value = "tab_pitcher",        pitcher_card_ui()),
@@ -4658,18 +4664,15 @@ server <- function(input, output, session) {
   }
 
   make_player_card <- function(name, pos, number, bats, throws, group, visible) {
-    click_js <- if (group == "Pitchers") {
-      sprintf(
-        "Shiny.setInputValue('roster_pitcher_click', %s, {priority:'event'});",
-        jsonlite::toJSON(name, auto_unbox = TRUE)
-      )
-    } else NULL
+    click_js <- sprintf(
+      "Shiny.setInputValue('roster_player_click', %s, {priority:'event'});",
+      jsonlite::toJSON(name, auto_unbox = TRUE)
+    )
 
     tags$div(
       class        = "player-card",
       `data-group` = group,
-      style        = paste0(if (!visible) "display:none;" else "",
-                            if (!is.null(click_js)) "cursor:pointer;" else ""),
+      style        = paste0(if (!visible) "display:none;" else "", "cursor:pointer;"),
       onclick      = click_js,
       tags$div(class = "p-init", make_roster_badge(number)),
       tags$div(
@@ -4707,9 +4710,9 @@ server <- function(input, output, session) {
   homebase_requested <- reactiveVal(NULL)
   pcard_selected <- reactiveVal(NULL)
 
-  observeEvent(input$roster_pitcher_click, {
-    req(input$roster_pitcher_click)
-    homebase_requested(input$roster_pitcher_click)
+  observeEvent(input$roster_player_click, {
+    req(input$roster_player_click)
+    homebase_requested(input$roster_player_click)
     updateNavbarPage(session, "base_nav", selected = "tab_homebase")
   }, ignoreInit = TRUE)
 
@@ -5102,7 +5105,7 @@ server <- function(input, output, session) {
 
   base_lazy_workspace_server(
     input, session, "tab_homebase",
-    initialize = function() base_media_server(
+    initialize = function() homebase_page_server(
       input,
       output,
       session,

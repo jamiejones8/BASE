@@ -367,6 +367,7 @@ TEAM_CONFIG <- list(
       base_model_path("shared", "xwoba_grid.rds")
     ),
     ncaa_colors_file = base_env_path("BASE_NCAA_COLORS_FILE", base_reference_path("NcaaColors.csv")),
+    team_names_file = base_env_path("BASE_TEAM_NAMES_FILE", base_project_path("config", "trackman_team_names.txt")),
     percentile_table_file = base_env_path("BASE_PERCENTILE_TABLE_FILE", base_reference_path("percentile_table.csv")),
     left_batter_image_file = base_env_path("BASE_LEFT_BATTER_IMAGE_FILE", base_www_path("reference", "left_batter.png")),
     right_batter_image_file = base_env_path("BASE_RIGHT_BATTER_IMAGE_FILE", base_www_path("reference", "right_batter.png")),
@@ -380,6 +381,47 @@ base_team_matches <- function(x) {
   x <- as.character(x)
   pattern <- TEAM_CONFIG$data_pattern
   !is.na(x) & nzchar(pattern) & grepl(pattern, x, ignore.case = TRUE, perl = TRUE)
+}
+
+base_team_name_table <- local({
+  cached <- NULL
+  cached_path <- NULL
+  function(refresh = FALSE) {
+    configured_path <- if (!is.null(TEAM_CONFIG$data)) TEAM_CONFIG$data$team_names_file else NULL
+    path <- if (!is.null(configured_path) && length(configured_path) && nzchar(configured_path[[1]])) {
+      configured_path[[1]]
+    } else {
+      base_project_path("config", "trackman_team_names.txt")
+    }
+    if (!isTRUE(refresh) && !is.null(cached) && identical(path, cached_path)) return(cached)
+    rows <- tryCatch(
+      utils::read.delim(
+        path, header = TRUE, sep = "\t", quote = "", comment.char = "#",
+        colClasses = "character", check.names = FALSE, stringsAsFactors = FALSE
+      ),
+      error = function(e) data.frame(trackman_team_id = character(), team_name = character())
+    )
+    if (!all(c("trackman_team_id", "team_name") %in% names(rows))) {
+      rows <- data.frame(trackman_team_id = character(), team_name = character())
+    }
+    rows <- rows[!is.na(rows$trackman_team_id) & nzchar(rows$trackman_team_id) &
+                   !is.na(rows$team_name) & nzchar(rows$team_name), , drop = FALSE]
+    cached <<- rows
+    cached_path <<- path
+    rows
+  }
+})
+
+base_team_display_name <- function(team_code) {
+  codes <- as.character(team_code)
+  rows <- base_team_name_table()
+  lookup <- stats::setNames(rows$team_name, rows$trackman_team_id)
+  result <- unname(lookup[codes])
+  own_team <- base_team_matches(codes)
+  result[own_team] <- TEAM_CONFIG$full_name
+  missing <- is.na(result) | !nzchar(result)
+  result[missing] <- codes[missing]
+  result
 }
 
 base_team_default <- function(values) {

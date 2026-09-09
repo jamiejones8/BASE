@@ -79,6 +79,25 @@ validate_csv(
   "Player heights"
 )
 
+if (!file.exists(TEAM_CONFIG$data$team_names_file)) {
+  fail("TrackMan team-name file was not found: ", TEAM_CONFIG$data$team_names_file)
+}
+team_names <- base_team_name_table(refresh = TRUE)
+if (!nrow(team_names) || !identical(base_team_display_name("BAY_BEA"), "Baylor Bears")) {
+  fail("TrackMan team-name lookup did not resolve BAY_BEA to Baylor Bears")
+}
+ncaa_team_ids <- utils::read.csv(
+  TEAM_CONFIG$data$ncaa_colors_file, nrows = -1L, check.names = FALSE,
+  colClasses = "character"
+)$team_abbr
+missing_team_names <- setdiff(
+  unique(ncaa_team_ids[!is.na(ncaa_team_ids) & nzchar(ncaa_team_ids)]),
+  team_names$trackman_team_id
+)
+if (length(missing_team_names)) {
+  fail("TrackMan team-name lookup is missing: ", paste(missing_team_names, collapse = ", "))
+}
+
 runtime_model_fields <- c(
   "brewstuff_model_file",
   "scout_models_file",

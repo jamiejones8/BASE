@@ -71,14 +71,7 @@ cape_pitcher_pal_for <- function(types, palette = cape_pitcher_pitch_pal, defaul
 }
 
 cape_pitcher_team_name <- function(team_code) {
-  code_chr <- as.character(team_code)
-  out <- rep(NA_character_, length(code_chr))
-  out[base_team_matches(code_chr)] <- TEAM_CONFIG$full_name
-  if (exists("team_display_name", mode = "function", inherits = TRUE)) {
-    unresolved <- is.na(out)
-    out[unresolved] <- team_display_name(code_chr[unresolved])
-  }
-  ifelse(is.na(out), code_chr, out)
+  base_team_display_name(team_code)
 }
 
 cape_pitcher_safe_num <- function(x) {

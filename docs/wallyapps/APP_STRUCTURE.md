@@ -110,9 +110,21 @@ ID, the fallback key is normalized name plus team plus role. Same-name players
 must never be silently merged. If one stable ID appears as both pitcher and
 hitter, HomeBASE may present both role panels within one profile.
 
-The first HomeBASE implementation covers navigation, search, identity, and
-selected-player context. The exact profile statistics and visuals will be
-designed later without blocking the application-shell migration.
+HomeBASE opens on the configured Texas State roster and keeps national search
+as a secondary college-player search mode. A selected player receives role-aware
+season metrics, a five-game performance history, D1 stat percentiles,
+and on-demand previews and PDF exports from the Wally hitter card and the CAPS
+pitcher report in `R/reports/Pitcher_Card.R`. Percentile rows use statistical
+metric names and values rather than generated player-type descriptions.
+Two-way players keep both roles in one profile. Returning
+players resolve against the bundled 2026 team season files. College-player
+search exclusively uses the same mounted 2026 national Parquet source as the
+scouting workspace. Environment-configurable history paths provide the handoff
+point for the incoming season feed.
+
+TrackMan team identifiers remain the internal filter keys. User-facing team
+labels resolve through `config/trackman_team_names.txt`, including full program
+and nickname names such as `BAY_BEA` to `Baylor Bears`.
 
 ## Data Processing
 

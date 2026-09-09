@@ -1,0 +1,322 @@
+# Canonical display names for TrackMan team identifiers.
+# Keep trackman_team_id unchanged in data; use team_name anywhere the code is shown to a user.
+trackman_team_id	team_name
+ABI_WIL	Abilene Christian Wildcats
+AIR_FOR	Air Force Falcons
+AKR_ZIP	Akron Zips
+ALA_ANM	Alabama A&M Bulldogs
+ALA_CRI	Alabama Crimson Tide
+ALA_HOR	Alabama State Hornets
+ALA_LIO	North Alabama Lions
+ALB_GRE	Albany Great Danes
+ALC_BRA	Alcorn State Braves
+APP_MOU	Appalachian State Mountaineers
+ARI_SUN	Arizona State Sun Devils
+ARI_WIL	Arizona Wildcats
+ARK_LIO	Arkansas-Pine Bluff Golden Lions
+ARK_RAZ	Arkansas Razorbacks
+ARL_MAV	UT Arlington Mavericks
+ARM_BLA	Army Black Knights
+ASU_RED	Arkansas State Red Wolves
+AUB_TIG	Auburn Tigers
+AUS_GOV	Austin Peay Governors
+BAL_CAR	Ball State Cardinals
+BAY_BEA	Baylor Bears
+BEL_BRU	Belmont Bruins
+BEL_KNI	Bellarmine Knights
+BET_WIL	Bethune-Cookman Wildcats
+BGS_FAL	Bowling Green Falcons
+BIN_BEA	Binghamton Bearcats
+BOC_EAG	Boston College Eagles
+BOU_BRA	Bourne Braves
+BRA_BRA	Bradley Braves
+BRE_WHI	Brewster Whitecaps
+BRO_BEA	Brown Bears
+BRY_BUL	Bryant Bulldogs
+BUC_BIS	Bucknell Bison
+BUT_BUL	Butler Bulldogs
+BYU_COU	BYU Cougars
+CAL_AGO	UC Davis Aggies
+CAL_ANT	UC Irvine Anteaters
+CAL_BEA	California Golden Bears
+CAL_FUL	Cal State Fullerton Titans
+CAL_HIG	UC Riverside Highlanders
+CAL_LAN	California Baptist Lancers
+CAL_MAT	Cal State Northridge Matadors
+CAL_MUS	Cal Poly Mustangs
+CAM_CAM	Campbell Fighting Camels
+CAN_GRI	Canisius Golden Griffins
+CCU_BLD	Central Connecticut Blue Devils
+CEN_BEA	Central Arkansas Bears
+CEN_MIC	Central Michigan Chippewas
+CHA_ANG	Chatham Anglers
+CHA_BUC	Charleston Southern Buccaneers
+CHA_FOR	Charlotte 49ers
+CIN_BEA	Cincinnati Bearcats
+CIT_BUL	The Citadel Bulldogs
+CLE_TIG	Clemson Tigers
+COA_CHA	Coastal Carolina Chanticleers
+COL_CHA	College of Charleston Cougars
+COL_LION	Columbia Lions
+COP_STA	Coppin State Eagles
+COR_BRE	Cornell Big Red
+COT_KET	Cotuit Kettleers
+CRE_BLU	Creighton Bluejays
+CSD_TRI	UC San Diego Tritons
+CSU_BAK	CSU Bakersfield Roadrunners
+DAL_PAT	Dallas Baptist Patriots
+DAR_GRE	Dartmouth Big Green
+DAV_WIL	Davidson Wildcats
+DAY_FLY	Dayton Flyers
+DEL_BLU	Delaware Blue Hens
+DEL_HOR	Delaware State Hornets
+DIX_STE	Utah Tech Trailblazers
+DUK_BLU	Duke Blue Devils
+ECU_PIR	East Carolina Pirates
+EIU_PAN	Eastern Illinois Panthers
+EKU_COL	Eastern Kentucky Colonels
+ELO_PHO	Elon Phoenix
+EMU_EAG	Eastern Michigan Eagles
+ETS_BUC	East Tennessee State Buccaneers
+EVA_ACE	Evansville Purple Aces
+FAI_STA	Fairfield Stags
+FAL_COM	Falmouth Commodores
+FAU_OWL	Florida Atlantic Owls
+FDU_KNI	Fairleigh Dickinson Knights
+FGCU	Florida Gulf Coast Eagles
+FLA_GAT	Florida Gators
+FLO_PAN	FIU Panthers
+FLO_RAT	Florida A&M Rattlers
+FLO_SEM	Florida State Seminoles
+FOR_RAM	Fordham Rams
+FRE_BUL	Fresno State Bulldogs
+GAR_RUN	Gardner-Webb Runnin' Bulldogs
+GEO_BUL	Georgia Bulldogs
+GEO_COL	George Washington Colonials
+GEO_EAG	Georgia Southern Eagles
+GEO_HOY	Georgetown Hoyas
+GEO_PAN	Georgia State Panthers
+GEO_PAT	George Mason Patriots
+GIT_YEL	Georgia Tech Yellow Jackets
+GON_BUL	Gonzaga Bulldogs
+GRA_CAN	Grand Canyon Antelopes
+GRA_TIG	Grambling State Tigers
+HAR_CRI	Harvard Crimson
+HAR_MAR	Harwich Mariners
+HAW_WAR	Hawaii Rainbow Warriors
+HBU_HUS	Houston Christian Huskies
+HIG_PAN	High Point Panthers
+HOF_PRI	Hofstra Pride
+HOL_CRU	Holy Cross Crusaders
+HOU_COU	Houston Cougars
+HYA_HAR	Hyannis Harbor Hawks
+ILL_ILL	Illinois Fighting Illini
+ILL_RED	Illinois State Redbirds
+IND_SYC	Indiana State Sycamores
+ION_GAE	Iona Gaels
+IOW_HAW	Iowa Hawkeyes
+IU	Indiana Hoosiers
+IWC	Incarnate Word Cardinals
+JAC_GAM	Jacksonville State Gamecocks
+JAC_TIG	Jackson State Tigers
+JMU_DUK	James Madison Dukes
+JUD	Jacksonville Dolphins
+KAN_JAY	Kansas Jayhawks
+KAN_WIL	Kansas State Wildcats
+KEN_OWL	Kennesaw State Owls
+KEN_WIL	Kentucky Wildcats
+KS_GF	Kent State Golden Flashes
+LAF_LEP	Lafayette Leopards
+LAM_CAR	Lamar Cardinals
+LEH_MOU	Lehigh Mountain Hawks
+LIB_FLA	Liberty Flames
+LIN_UNI	Lindenwood Lions
+LIP_BIS	Lipscomb Bisons
+LIT_TRO	Little Rock Trojans
+LON_DIR	Long Beach State Beach
+LON_ISL22	LIU Sharks
+LON_LAN	Longwood Lancers
+LOU_BUL	Louisiana Tech Bulldogs
+LOU_CAJ	Louisiana Ragin' Cajuns
+LOU_CAR	Louisville Cardinals
+LOY_LIO	Loyola Marymount Lions
+LSU_TIG	LSU Tigers
+MAI_BLA	Maine Black Bears
+MAN_JAS	Manhattan Jaspers
+MAN_UNI	Manchester University Spartans
+MAR_HAW	Maryland Eastern Shore Hawks
+MAR_RED	Marist Red Foxes
+MAR_TER	Maryland Terrapins
+MAR_THU	Marshall Thundering Herd
+MCN_COW	McNeese State Cowboys
+MEM_TIG	Memphis Tigers
+MER_BEA	Mercer Bears
+MER_COL1	Merrimack Warriors
+MER_UNI	Mercyhurst Lakers
+MEX_LOB	New Mexico Lobos
+MIA_HUR	Miami Hurricanes
+MIA_RED	Miami RedHawks
+MIC_SPA	Michigan State Spartans
+MIC_WOL	Michigan Wolverines
+MIN_GOL	Minnesota Golden Gophers
+MIS_BEA	Missouri State Bears
+MIS_DEL	Mississippi Valley State Delta Devils
+MIZ_TIG	Missouri Tigers
+MON_HAW	Monmouth Hawks
+MOR_EAG	Morehead State Eagles
+MOY_MOY	Le Moyne Dolphins
+MSM_MTN	Mount St. Mary's Mountaineers
+MSU_BDG	Mississippi State Bulldogs
+MTSU_BLU	Middle Tennessee Blue Raiders
+MUR_RAC	Murray State Racers
+NAV_MID	Navy Midshipmen
+NCA_BUL	UNC Asheville Bulldogs
+NCB	Northern Colorado Bears
+NEB	Nebraska Cornhuskers
+NEV_WOL	Nevada Wolf Pack
+NEW_PRI	New Orleans Privateers
+NIA_EAG	Niagara Purple Eagles
+NIC_COL	Nicholls Colonels
+NIU_HUS	Northern Illinois Huskies
+NJI_HIG	NJIT Highlanders
+NMS_AGG	New Mexico State Aggies
+NOF_OSP	North Florida Ospreys
+NOK_NOR	Northern Kentucky Norse
+NOR_AGG	North Carolina A&T Aggies
+NOR_BIS	North Dakota State Bison
+NOR_CAT	Northwestern Wildcats
+NOR_DEM	Northwestern State Demons
+NOR_HUS	Northeastern Huskies
+NOR_SPA	Norfolk State Spartans
+NOR_TAR	North Carolina Tar Heels
+NOR_WOL	NC State Wolfpack
+NOT_IRI	Notre Dame Fighting Irish
+OAK_GOL	Oakland Golden Grizzlies
+OHI_BOB	Ohio Bobcats
+OKL_COW	Oklahoma State Cowboys
+OKL_SOO	Oklahoma Sooners
+OLD_MON	Old Dominion Monarchs
+OLE_REB	Ole Miss Rebels
+ORA_GOL	Oral Roberts Golden Eagles
+ORE_BEA	Oregon State Beavers
+ORE_DUC	Oregon Ducks
+ORL_FIR	Orleans Firebirds
+OSU_BUC	Ohio State Buckeyes
+PAC_TIG	Pacific Tigers
+PEN_NIT	Penn State Nittany Lions
+PEN_QUA	Penn Quakers
+PEP_WAV	Pepperdine Waves
+PIT_PAN	Pittsburgh Panthers
+POR_PIL	Portland Pilots
+PRA_PAN	Prairie View A&M Panthers
+PRE_BLH	Presbyterian Blue Hose
+PRI_TIG	Princeton Tigers
+PUR_BOI	Purdue Boilermakers
+PUR_FOR	Purdue Fort Wayne Mastodons
+QUI_BOB	Quinnipiac Bobcats
+QUN_RYL	Queens Royals
+RAD_HIG	Radford Highlanders
+RHO_RAM	Rhode Island Rams
+RIC_OWL	Rice Owls
+RIC_SPI	Richmond Spiders
+RID_BRO	Rider Broncs
+RUT_SCA	Rutgers Scarlet Knights
+SAC_HOR	Sacramento State Hornets
+SAC_PIO	Sacred Heart Pioneers
+SAL_JAG	South Alabama Jaguars
+SAM_BEA	Sam Houston State Bearkats
+SAM_BUL	Samford Bulldogs
+SAN_AZT	San Diego State Aztecs
+SAN_BRO	Santa Clara Broncos
+SAN_DON	San Francisco Dons
+SAN_GAU	UC Santa Barbara Gauchos
+SAN_SPA	San Jose State Spartans
+SAN_TOR	San Diego Toreros
+SBU_SEA	Stony Brook Seawolves
+SEA_RED	Seattle Redhawks
+SET_PIR	Seton Hall Pirates
+SIE_SAI	Siena Saints
+SIU_SAL	Southern Illinois Salukis
+SLU_BILL	St. Louis Billikens
+SOU_COU	SIU Edwardsville Cougars
+SOU_GAM	South Carolina Gamecocks
+SOU_GOL	Southern Miss Golden Eagles
+SOU_IND16	Southern Indiana Screaming Eagles
+SOU_JAC	South Dakota State Jackrabbits
+SOU_JAG	Southern Jaguars
+SOU_LIO	Southeastern Louisiana Lions
+SOU_RED	Southeast Missouri State Redhawks
+SOU_TRO	USC Trojans
+SPU_PEA	Saint Peter's Peacocks
+STA_CAR	Stanford Cardinal
+STB_BON	St. Bonaventure Bonnies
+STE_HAT	Stetson Hatters
+STE_LUM	Stephen F. Austin Lumberjacks
+STJ_HAW	St. Joseph's Hawks
+STJ_RED	St. John's Red Storm
+STM_GAE	Saint Mary's Gaels
+STO_COL	Stonehill Skyhawks
+TAR_TEX	Tarleton State Texans
+TCU_HFG	TCU Horned Frogs
+TEN_TEC	Tennessee Tech Golden Eagles
+TEN_VOL	Tennessee Volunteers
+TeamX	TrackMan placeholder team
+TEX_AGG	Texas A&M Aggies
+TEX_BOB	Texas State Bobcats
+TEX_ISL	Texas A&M-Corpus Christi Islanders
+TEX_LON	Texas Longhorns
+TEX_RAI	Texas Tech Red Raiders
+TEX_TIG	Texas Southern Tigers
+THO_M	St. Thomas Tommies
+TOL_ROC	Toledo Rockets
+TOW_TIG	Towson Tigers
+TRO_TRJ	Troy Trojans
+TUL_GRE	Tulane Green Wave
+UAB_BLA	UAB Blazers
+UCF_KNI	Central Florida Knights
+UCLA	UCLA Bruins
+UCO_HUS	UConn Huskies
+UIC_FLA	UIC Flames
+ULM_WAR	Louisiana-Monroe Warhawks
+UMA_AMH	UMass Minutemen
+UMASS_RIV	UMass Lowell River Hawks
+UMBC_RET	UMBC Retrievers
+UNC_SEA	UNC Wilmington Seahawks
+UNC_SPA	UNC Greensboro Spartans
+UNI_WES	West Georgia Wolves
+UNL_REB	UNLV Rebels
+UNO_MAV	Omaha Mavericks
+USC_UPS	USC Upstate Spartans
+USF_BUL	South Florida Bulls
+UTA_UTE	Utah Utes
+UTA_WOL	Utah Valley Wolverines
+UTM_SKY	UT Martin Skyhawks
+UTR_VAQ	Texas-Rio Grande Valley Vaqueros
+UTS_ROA	UTSA Roadrunners
+UWM_PAN	Milwaukee Panthers
+VAL_CRU	Valparaiso Crusaders
+VAN_COM	Vanderbilt Commodores
+VCU_RAM	Virginia Commonwealth Rams
+VIL_WIL	Villanova Wildcats
+VIR_CAV	Virginia Cavaliers
+VIR_MIL	VMI Keydets
+VIR_TEC	Virginia Tech Hokies
+WAG_SEA	Wagner Seahawks
+WAK_DEA	Wake Forest Demon Deacons
+WAR_GAT	Wareham Gatemen
+WAS_COU	Washington State Cougars
+WAS_HUS	Washington Huskies
+WCC	Western Carolina Catamounts
+WES_HIL	Western Kentucky Hilltoppers
+WES_MOU	West Virginia Mountaineers
+WIC_SHO	Wichita State Shockers
+WIN_EAG	Winthrop Eagles
+WIU_LEA	Western Illinois Leathernecks
+WM_TRI	William & Mary Tribe
+WMI_BRO	Western Michigan Broncos
+WOF_TER	Wofford Terriers
+WRI_RAI	Wright State Raiders
+XAV_MUS	Xavier Musketeers
+YAL_BUL	Yale Bulldogs
+YAR_RED	Yarmouth-Dennis Red Sox
+YSU_PEN	Youngstown State Penguins
