@@ -515,12 +515,12 @@ percentile_bucket <- function(pct) {
 
 percentile_style <- function(pct) {
   if (!is.finite(pct) || (pct >= 40 && pct < 60)) return(list(fill = NA_character_, text = "#1a1a1a"))
-  if (pct >= 90) return(list(fill = "#006400", text = "#FFFFFF"))
-  if (pct >= 75) return(list(fill = "#008000", text = "#FFFFFF"))
-  if (pct >= 60) return(list(fill = "#A1D99B", text = "#1a1a1a"))
-  if (pct >= 25) return(list(fill = "#FF9999", text = "#1a1a1a"))
-  if (pct >= 10) return(list(fill = "#FF0000", text = "#FFFFFF"))
-  list(fill = "#8B0000", text = "#FFFFFF")
+  if (pct >= 90) return(list(fill = "#1F5B42", text = "#FFFFFF"))
+  if (pct >= 75) return(list(fill = "#34795A", text = "#FFFFFF"))
+  if (pct >= 60) return(list(fill = "#D9EADF", text = "#183A2B"))
+  if (pct >= 25) return(list(fill = "#F4D6D2", text = "#652427"))
+  if (pct >= 10) return(list(fill = "#C75A52", text = "#FFFFFF"))
+  list(fill = "#8E2E32", text = "#FFFFFF")
 }
 
 format_metric_value <- function(value, kind = "num1") {
@@ -943,31 +943,73 @@ filter_controls <- function(prefix, include_position = FALSE) {
     )
   }
   div(
-    class = if (include_position) "filter-row" else "filter-row pitching",
-    checkbox_panel(paste0(prefix, "_class"), "Class", class_choices),
-    checkbox_panel(paste0(prefix, "_throws"), "Throwing Hand", throwing_choices),
-    checkbox_panel(paste0(prefix, "_bats"), "Batting Hand", batting_choices),
-    if (include_position) {
-      checkbox_panel(
-        paste0(prefix, "_position"),
-        "Position",
-        position_choices
-      )
-    }
+    class = "juco-filter-card",
+    div(
+      class = "juco-filter-heading",
+      div(
+        span(class = "juco-kicker", "PLAYER FILTERS"),
+        h3("Narrow the scouting pool")
+      ),
+      span(class = "juco-filter-hint", "Selections update the board instantly")
+    ),
+    div(
+      class = if (include_position) "filter-row" else "filter-row pitching",
+      checkbox_panel(paste0(prefix, "_class"), "Class", class_choices),
+      checkbox_panel(paste0(prefix, "_throws"), "Throwing Hand", throwing_choices),
+      checkbox_panel(paste0(prefix, "_bats"), "Batting Hand", batting_choices),
+      if (include_position) {
+        checkbox_panel(
+          paste0(prefix, "_position"),
+          "Position",
+          position_choices
+        )
+      }
+    )
   )
 }
 
 common_hitting <- "G, AB, AVG, K%, BB%, OBP, SLG, OPS, 2B, 3B, HR, RBI"
 common_pitching <- "APP, IP, K/9, BB/9, H/9, WHIP, ERA, HR"
 
+stat_guide <- function(role, stats) {
+  stat_names <- trimws(strsplit(stats, ",", fixed = TRUE)[[1]])
+  div(
+    class = "common-strip",
+    div(
+      class = "juco-guide-copy",
+      span(class = "juco-kicker", "EVALUATION SET"),
+      strong(paste(role, "board"))
+    ),
+    div(
+      class = "juco-stat-pills",
+      lapply(stat_names, function(stat) span(class = "juco-stat-pill", stat))
+    )
+  )
+}
+
+leaderboard_panel <- function(title, role, output_id) {
+  div(
+    class = "juco-leaderboard-card",
+    div(
+      class = "juco-table-heading",
+      div(
+        span(class = "juco-kicker", "NATIONAL JUCO BOARD"),
+        h2(title),
+        p("Search, sort, and use the column controls to build a target list.")
+      ),
+      span(class = "juco-role-badge", role)
+    ),
+    div(class = "dt-wrap", DTOutput(output_id))
+  )
+}
+
 juco_hitting_panel <- nav_panel(
     "Hitting",
     div(
       class = "juco-shell",
-      div(class = "common-strip", tags$strong("Hitting Stats: "), common_hitting),
+      stat_guide("Hitting", common_hitting),
       filter_controls("hit", include_position = TRUE),
-      div(class = "table-title", "Hitting Leaderboard"),
-      div(class = "dt-wrap", DTOutput("hitting_table"))
+      leaderboard_panel("Hitting leaderboard", "HIT", "hitting_table")
     )
   )
 
@@ -975,10 +1017,9 @@ juco_pitching_panel <- nav_panel(
     "Pitching",
     div(
       class = "juco-shell",
-      div(class = "common-strip", tags$strong("Pitching Stats: "), common_pitching),
+      stat_guide("Pitching", common_pitching),
       filter_controls("pit", include_position = FALSE),
-      div(class = "table-title", "Pitching Leaderboard"),
-      div(class = "dt-wrap", DTOutput("pitching_table"))
+      leaderboard_panel("Pitching leaderboard", "PITCH", "pitching_table")
     )
   )
 
