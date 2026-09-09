@@ -515,12 +515,12 @@ percentile_bucket <- function(pct) {
 
 percentile_style <- function(pct) {
   if (!is.finite(pct) || (pct >= 40 && pct < 60)) return(list(fill = NA_character_, text = "#1a1a1a"))
-  if (pct >= 90) return(list(fill = "#1F5B42", text = "#FFFFFF"))
-  if (pct >= 75) return(list(fill = "#34795A", text = "#FFFFFF"))
-  if (pct >= 60) return(list(fill = "#D9EADF", text = "#183A2B"))
-  if (pct >= 25) return(list(fill = "#F4D6D2", text = "#652427"))
-  if (pct >= 10) return(list(fill = "#C75A52", text = "#FFFFFF"))
-  list(fill = "#8E2E32", text = "#FFFFFF")
+  if (pct >= 90) return(list(fill = "#D9252E", text = "#FFFFFF"))
+  if (pct >= 75) return(list(fill = "#DC735F", text = "#FFFFFF"))
+  if (pct >= 60) return(list(fill = "#D39383", text = "#4B171B"))
+  if (pct >= 25) return(list(fill = "#AAC6CB", text = "#243B45"))
+  if (pct >= 10) return(list(fill = "#8CAAD2", text = "#173052"))
+  list(fill = "#5D7EBC", text = "#FFFFFF")
 }
 
 format_metric_value <- function(value, kind = "num1") {
