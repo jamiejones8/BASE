@@ -3962,6 +3962,12 @@ clamp_grob_height <- function(g, max_in){
 
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
+hitting_team_display_text <- function(x) {
+  if (exists("base_replace_team_codes", mode = "function", inherits = TRUE)) {
+    return(get("base_replace_team_codes", mode = "function", inherits = TRUE)(x))
+  }
+  as.character(x)
+}
 
 # safer alpha helper for PDF fills (tableGrob won't understand "rgba(...)")
 alpha_hex <- function(hex, a = 0.12) grDevices::adjustcolor(hex, alpha.f = a)
@@ -6342,6 +6348,7 @@ server <- function(input, output, session){
       else if (toupper(team) == toupper(away)) paste("at", home)
       else paste(away, "at", home)
     } else ""
+    opponent <- hitting_team_display_text(opponent)
 
     asset_prefix <- get0("BASE_HITTING_ASSET_PREFIX", inherits = TRUE, ifnotfound = "static")
     div(
@@ -7189,7 +7196,7 @@ server <- function(input, output, session){
       }
       
       date_str <- if (!is.na(gdate)) format(parse_date_any(gdate), "%B %d, %Y") else ""
-      opp_str  <- get_opponent(d)
+      opp_str  <- hitting_team_display_text(get_opponent(d))
       hdr_line <- paste(c(player_name, date_str, opp_str)[nzchar(c(player_name, date_str, opp_str))], collapse = "  •  ")
       
       hdr_bg  <- grid::rectGrob(gp = grid::gpar(fill = "#501214", col = NA))

@@ -245,6 +245,12 @@ options(plotly.jsonifyNamedVectors = FALSE)
 options(warn = 1)
 
 `%||%` <- function(a, b) if (!is.null(a)) a else b
+pitching_team_display_text <- function(x) {
+  if (exists("base_replace_team_codes", mode = "function", inherits = TRUE)) {
+    return(get("base_replace_team_codes", mode = "function", inherits = TRUE)(x))
+  }
+  as.character(x)
+}
 # ---- Safe divide (define once, early) ----
 if (!exists("sdiv", inherits = FALSE)) {
   sdiv <- function(num, den) {
@@ -4180,7 +4186,7 @@ render_AAR_pdf <- function(game_p, season_p, pitcher_name, game_date, opponent, 
   
   game_lab <- date_str
   if (!is.null(opponent) && nzchar(opponent)) {
-    game_lab <- paste(date_str, opponent, sep = sep)
+    game_lab <- paste(date_str, pitching_team_display_text(opponent), sep = sep)
   }
   
   final <- compose_AAR_plot(
@@ -8170,7 +8176,7 @@ server <- function(input, output, session){
     
     # Only auto-fill if the box is currently empty
     if (!nzchar(input$aar_opp) && nzchar(guess))
-      updateTextInput(session, "aar_opp", value = guess)
+      updateTextInput(session, "aar_opp", value = pitching_team_display_text(guess))
   }, ignoreInit = TRUE)
   std_aar_cols <- function(d){
     if (!nrow(d)) return(d)
@@ -8562,7 +8568,7 @@ server <- function(input, output, session){
     slope <- movement_line_slope(hand, gp)
     deg <- if (is.finite(slope)) atan(-slope) * 180 / pi else NA_real_
     date_str <- if (!is.na(gdate)) format(gdate, "%B %d, %Y") else as.character(game_id)
-    game_label <- if (nzchar(opponent)) paste(date_str, "-", opponent) else date_str
+    game_label <- if (nzchar(opponent)) paste(date_str, "-", pitching_team_display_text(opponent)) else date_str
 
     list(gp = gp, sp = sp, gdate = gdate, game_label = game_label, deg = deg, season_label = label)
   }

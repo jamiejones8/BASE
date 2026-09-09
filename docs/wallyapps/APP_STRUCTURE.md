@@ -118,9 +118,11 @@ pitcher report in `R/reports/Pitcher_Card.R`. Percentile rows use statistical
 metric names and values rather than generated player-type descriptions.
 Two-way players keep both roles in one profile. Returning
 players resolve against the bundled 2026 team season files. College-player
-search exclusively uses the same mounted 2026 national Parquet source as the
-scouting workspace. Environment-configurable history paths provide the handoff
-point for the incoming season feed.
+search uses the compact hitter/pitcher catalogs and partitioned player rows
+generated from the mounted 2026 national source. This preserves the complete
+search pool without rescanning the master Parquet in the live app.
+Environment-configurable history paths provide the handoff point for the
+incoming season feed.
 
 TrackMan team identifiers remain the internal filter keys. User-facing team
 labels resolve through `config/trackman_team_names.txt`, including full program

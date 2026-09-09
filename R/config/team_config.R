@@ -415,13 +415,82 @@ base_team_name_table <- local({
 base_team_display_name <- function(team_code) {
   codes <- as.character(team_code)
   rows <- base_team_name_table()
-  lookup <- stats::setNames(rows$team_name, rows$trackman_team_id)
-  result <- unname(lookup[codes])
+  lookup <- stats::setNames(rows$team_name, toupper(trimws(rows$trackman_team_id)))
+  normalized <- toupper(trimws(codes))
+  result <- unname(lookup[normalized])
+  missing <- is.na(result) | !nzchar(result)
+  if (any(missing)) {
+    # TrackMan occasionally appends a numeric duplicate marker to a team ID.
+    base_codes <- sub("[0-9]+$", "", normalized[missing])
+    result[missing] <- unname(lookup[base_codes])
+  }
   own_team <- base_team_matches(codes)
   result[own_team] <- TEAM_CONFIG$full_name
   missing <- is.na(result) | !nzchar(result)
   result[missing] <- codes[missing]
   result
+}
+
+base_team_display_choices <- function(team_codes) {
+  values <- sort(unique(as.character(team_codes)))
+  values <- values[!is.na(values) & nzchar(trimws(values))]
+  stats::setNames(values, base_team_display_name(values))
+}
+
+base_replace_team_codes <- function(text) {
+  output <- as.character(text)
+  rows <- base_team_name_table()
+  if (!length(output) || !nrow(rows)) return(output)
+  order <- order(nchar(rows$trackman_team_id), decreasing = TRUE)
+  for (i in order) {
+    output <- gsub(
+      rows$trackman_team_id[[i]], rows$team_name[[i]],
+      output, fixed = TRUE, useBytes = TRUE
+    )
+  }
+  output
+}
+
+# Older embedded workspaces still render a few team-code text nodes directly.
+# This presentation layer changes labels only; input values and data keys stay
+# as the original TrackMan identifiers.
+base_team_name_client_script <- function() {
+  rows <- base_team_name_table()
+  mapping <- stats::setNames(as.character(rows$team_name), toupper(trimws(rows$trackman_team_id)))
+  mapping <- mapping[!duplicated(names(mapping))]
+  payload <- jsonlite::toJSON(as.list(mapping), auto_unbox = TRUE, null = "null")
+  htmltools::tags$script(htmltools::HTML(sprintf("(function(){
+    const teamNames=%s;
+    const keys=Object.keys(teamNames).sort((a,b)=>b.length-a.length);
+    if(!keys.length)return;
+    const escaped=keys.map(k=>k.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&'));
+    const pattern=new RegExp('(^|[^A-Za-z0-9_])('+escaped.join('|')+')(?:[0-9]+)?(?=$|[^A-Za-z0-9_])','gi');
+    const skip=new Set(['SCRIPT','STYLE','TEXTAREA','CODE','PRE']);
+    function replaceText(node){
+      if(!node||node.nodeType!==3||!node.nodeValue)return;
+      if(node.parentElement&&skip.has(node.parentElement.tagName))return;
+      const next=node.nodeValue.replace(pattern,(match,prefix,code)=>{
+        const key=code.toUpperCase();
+        return prefix+(teamNames[key]||teamNames[key.replace(/[0-9]+$/,'')]||code);
+      });
+      if(next!==node.nodeValue)node.nodeValue=next;
+    }
+    function scan(root){
+      if(!root)return;
+      if(root.nodeType===3){replaceText(root);return;}
+      if(root.nodeType!==1&&root.nodeType!==9&&root.nodeType!==11)return;
+      const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+      let node;while((node=walker.nextNode()))replaceText(node);
+    }
+    function start(){
+      scan(document.body);
+      new MutationObserver(records=>records.forEach(record=>{
+        if(record.type==='characterData')replaceText(record.target);
+        record.addedNodes.forEach(scan);
+      })).observe(document.body,{subtree:true,childList:true,characterData:true});
+    }
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+  })();", payload)))
 }
 
 base_team_default <- function(values) {

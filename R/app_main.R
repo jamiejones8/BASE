@@ -2199,7 +2199,9 @@ base_media_server <- function(input, output, session, requested_player = NULL) {
       filter(!is.na(Pitcher), !is.na(PitcherTeam)) %>%
       distinct(Pitcher, PitcherTeam) %>%
       mutate(
-        display = paste0(pcard_format_pitcher_name(Pitcher), " — ", PitcherTeam),
+        display = paste0(
+          pcard_format_pitcher_name(Pitcher), " — ", base_team_display_name(PitcherTeam)
+        ),
         value   = paste(Pitcher, PitcherTeam, sep = "||")
       ) %>%
       arrange(display)
@@ -2380,7 +2382,7 @@ base_media_server <- function(input, output, session, requested_player = NULL) {
         vs_team = wrap(tags$b("vs. Team"),
           if ("BatterTeam" %in% names(d))
             selectizeInput("cm_filter_vs_team", NULL,
-                           choices = sort(unique(na.omit(d$BatterTeam))), multiple = TRUE,
+                           choices = base_team_display_choices(d$BatterTeam), multiple = TRUE,
                            options = list(plugins = list("remove_button"), placeholder = "Type a team name"),
                            width = "100%")
           else tags$p("Not available in this data.", style = "font-size:12px; color:#8B8B96;")),
@@ -4308,6 +4310,7 @@ ui <- navbarPage(
         href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"),
       tags$link(rel = "stylesheet", type = "text/css", href = base_stylesheet_url()),
       tags$style(HTML(base_brand_css(include_leaderboards = FALSE))),
+      base_team_name_client_script(),
       tags$style(HTML("
         #base-splash {
           position: fixed; inset: 0; z-index: 9999;

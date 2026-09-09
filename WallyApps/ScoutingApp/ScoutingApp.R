@@ -62,6 +62,12 @@ RV_PER_PITCH_SCALE <- 100
 preview_dpi <- 130
 px_from_in <- function(x) as.integer(x * preview_dpi)
 `%||%` <- function(x,y) if (!is.null(x)) x else y
+scouting_team_display_name <- function(x) {
+  if (exists("base_team_display_name", mode = "function", inherits = TRUE)) {
+    return(get("base_team_display_name", mode = "function", inherits = TRUE)(x))
+  }
+  as.character(x)
+}
 
 pdf_inner_fraction <- function(page_size_in, margin_in = PDF_PAGE_MARGIN_IN){
   if (!is.finite(page_size_in) || page_size_in <= 0) return(1)
@@ -5185,7 +5191,8 @@ server <- function(input, output, session){
       id <- paste0("scout_", role, "_team")
       selected <- input[[id]]
       if (is.null(selected) || !selected %in% teams) selected <- ""
-      updateSelectizeInput(session, id, choices = c("Choose a team" = "", teams),
+      team_choices <- stats::setNames(teams, scouting_team_display_name(teams))
+      updateSelectizeInput(session, id, choices = c("Choose a team" = "", team_choices),
                            selected = selected, server = TRUE)
     }
   })

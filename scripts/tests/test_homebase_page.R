@@ -48,38 +48,38 @@ if (!nrow(returning_pitcher) || !all(returning_pitcher$PitcherTeam == "TEX_BOB")
   fail("HomeBASE did not load Jesus Tovar from the 2026 pitching baseline.")
 }
 
-# The college-player directory must use the same lazy season source as scouting,
-# and must not be limited to teams found in Texas State's local game history.
-base_scouting_season_source <- function() {
-  list(
-    catalog = function(role) {
-      if (identical(role, "hitter")) {
-        tibble::tibble(Team = "ANY_CLG", Player = "National, Hitter", Pitches = 25L)
-      } else {
-        tibble::tibble(Team = "OTHER_U", Player = "National, Pitcher", Pitches = 30L)
-      }
-    },
-    load_players = function(role, team, players) {
-      if (identical(role, "hitter")) {
-        tibble::tibble(BatterTeam = team, Batter = players, PitchCall = "InPlay")
-      } else {
-        tibble::tibble(PitcherTeam = team, Pitcher = players, PitchCall = "StrikeCalled")
-      }
-    }
-  )
+# The college-player directory must use the compact mounted catalogs and
+# partitioned row loaders rather than rescanning the full national Parquet.
+base_pitcher_catalog <- tibble::tibble(
+  PitcherTeam = "OTHER_U", Pitcher = "National, Pitcher",
+  Bucket = 1L, PitchCount = 30
+)
+base_get_hitter_catalog <- function(refresh = FALSE) tibble::tibble(
+  BatterTeam = "ANY_CLG", Batter = "National, Hitter", BatterSide = "Right",
+  Buckets = "2", PitchCount = 25
+)
+base_load_hitter_rows <- function(team, hitter) {
+  tibble::tibble(BatterTeam = team, Batter = hitter, PitchCall = "InPlay")
 }
-invisible(homebase_national_source(refresh = TRUE))
+base_load_pitcher_rows <- function(team, pitcher) {
+  tibble::tibble(PitcherTeam = team, Pitcher = pitcher, PitchCall = "StrikeCalled")
+}
 national_catalog <- homebase_catalog()
 if (!any(national_catalog$Name == "Hitter National" & national_catalog$Team == "ANY_CLG") ||
     !identical(attr(national_catalog, "homebase_scope"), "national")) {
-  fail("HomeBASE did not build its college-player directory from the shared scouting season source.")
+  fail("HomeBASE did not build its college-player directory from the mounted compact catalogs.")
 }
 national_match <- homebase_find_catalog_player("Hitter National", "ANY_CLG")$hitter
 national_rows <- homebase_load_national_rows(
   "hitter", national_match$BatterTeam[[1]], national_match$Batter[[1]]
 )
 if (!nrow(national_rows) || national_rows$BatterTeam[[1]] != "ANY_CLG") {
-  fail("HomeBASE did not load a player outside the local opponent history from the shared national Parquet source.")
+  fail("HomeBASE did not load a player outside the local opponent history from the partitioned national dataset.")
+}
+homebase_source <- paste(readLines("R/pages/homebase_page.R", warn = FALSE), collapse = "\n")
+if (grepl("base_scouting_season_source", homebase_source, fixed = TRUE) ||
+    grepl("$load_players", homebase_source, fixed = TRUE)) {
+  fail("HomeBASE still scans the full scouting Parquet instead of using compact runtime catalogs.")
 }
 
 synthetic <- tibble::tibble(
@@ -159,7 +159,6 @@ if (!all(required_pitcher_metrics %in% names(pitcher_metrics))) {
 TEAM_CONFIG$full_name <- "Texas State Bobcats"
 TEAM_CONFIG$colors <- list(primary = "#501214", secondary = "#AC9155")
 TEAM_CONFIG$data <- list(ncaa_colors_file = base_project_path("data", "reference", "NcaaColors.csv"))
-homebase_source <- paste(readLines("R/pages/homebase_page.R", warn = FALSE), collapse = "\n")
 if (grepl('selectInput\\(\\s*"hb_pitcher_card_page"', homebase_source, perl = TRUE)) {
   fail("HomeBASE still exposes the split CAPS pitcher-card page selector.")
 }

@@ -83,8 +83,11 @@ if (!file.exists(TEAM_CONFIG$data$team_names_file)) {
   fail("TrackMan team-name file was not found: ", TEAM_CONFIG$data$team_names_file)
 }
 team_names <- base_team_name_table(refresh = TRUE)
-if (!nrow(team_names) || !identical(base_team_display_name("BAY_BEA"), "Baylor Bears")) {
-  fail("TrackMan team-name lookup did not resolve BAY_BEA to Baylor Bears")
+if (!nrow(team_names) ||
+    !identical(base_team_display_name("BAY_BEA"), "Baylor Bears") ||
+    !identical(base_team_display_name("bay_bea1"), "Baylor Bears") ||
+    !identical(base_replace_team_codes("May 12 vs BAY_BEA"), "May 12 vs Baylor Bears")) {
+  fail("TrackMan team-name presentation did not resolve Baylor aliases and visible text")
 }
 ncaa_team_ids <- utils::read.csv(
   TEAM_CONFIG$data$ncaa_colors_file, nrows = -1L, check.names = FALSE,

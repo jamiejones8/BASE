@@ -686,42 +686,34 @@ homebase_roster_data <- function() {
     dplyr::arrange(suppressWarnings(as.numeric(Number)), Name)
 }
 
-.homebase_national_state <- new.env(parent = emptyenv())
-
-homebase_national_source <- function(refresh = FALSE) {
-  if (isTRUE(refresh) && exists("source", envir = .homebase_national_state, inherits = FALSE)) {
-    rm("source", envir = .homebase_national_state)
-  }
-  if (exists("source", envir = .homebase_national_state, inherits = FALSE)) {
-    return(get("source", envir = .homebase_national_state, inherits = FALSE))
-  }
-  if (!exists("base_scouting_season_source", mode = "function", inherits = TRUE)) {
-    stop("The shared scouting season source is not available.")
-  }
-  source <- base_scouting_season_source()
-  assign("source", source, envir = .homebase_national_state)
-  source
-}
-
 homebase_national_catalog <- function(refresh = FALSE) {
-  source <- homebase_national_source(refresh = refresh)
-  hitters <- source$catalog("hitter") %>%
+  if (!exists("base_get_hitter_catalog", mode = "function", inherits = TRUE) ||
+      !exists("base_pitcher_catalog", inherits = TRUE)) {
+    stop("The mounted national player catalogs are unavailable.")
+  }
+  hitters <- base_get_hitter_catalog(refresh = refresh) %>%
     dplyr::transmute(
-      Team = as.character(Team), RawName = as.character(Player),
-      Name = vapply(Player, homebase_display_name, character(1)), Role = "Hitter"
+      Team = as.character(BatterTeam), RawName = as.character(Batter),
+      Name = vapply(Batter, homebase_display_name, character(1)), Role = "Hitter"
     )
-  pitchers <- source$catalog("pitcher") %>%
+  pitchers <- base_pitcher_catalog %>%
     dplyr::transmute(
-      Team = as.character(Team), RawName = as.character(Player),
-      Name = vapply(Player, homebase_display_name, character(1)), Role = "Pitcher"
+      Team = as.character(PitcherTeam), RawName = as.character(Pitcher),
+      Name = vapply(Pitcher, homebase_display_name, character(1)), Role = "Pitcher"
     )
-  dplyr::bind_rows(hitters, pitchers) %>%
+  result <- dplyr::bind_rows(hitters, pitchers) %>%
     dplyr::filter(!is.na(Team), nzchar(Team), !is.na(RawName), nzchar(RawName))
+  if (!nrow(result)) stop("The mounted national player catalogs are empty.")
+  result
 }
 
 homebase_load_national_rows <- function(role, team, player) {
   role <- match.arg(role, c("hitter", "pitcher"))
-  homebase_national_source()$load_players(role, team, player)
+  if (role == "hitter") {
+    base_load_hitter_rows(team, player)
+  } else {
+    base_load_pitcher_rows(team, player)
+  }
 }
 
 homebase_catalog <- function() {
