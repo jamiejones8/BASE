@@ -22,8 +22,12 @@ season_path <- tempfile(fileext = ".parquet")
 arrow::write_parquet(season_fixture, season_path)
 season_source <- base_scouting_season_source(season_path)
 for (role in c("hitter", "pitcher")) {
-  catalog <- season_source$catalog(role)
-  if (!nrow(catalog) || !"OTHER_TEAM" %in% catalog$Team) fail("National player directory is incomplete.")
+  teams <- season_source$teams(role)
+  catalog <- season_source$catalog(role, "OTHER_TEAM")
+  if (!"OTHER_TEAM" %in% teams || !nrow(catalog) ||
+      !all(catalog$Team == "OTHER_TEAM")) {
+    fail("Team-first national player directory is incomplete.")
+  }
 }
 loads <- list()
 original_load <- season_source$load_players
@@ -33,6 +37,9 @@ season_source$load_players <- function(role, team, players) {
 }
 workspace <- base_wally_scouting_environment(fixture_dir, season_source)
 if (!is.function(workspace$server)) fail("Embedded Scouting server is unavailable.")
+if ("package:MASS" %in% search()) {
+  fail("ScoutingApp attached MASS and can mask dplyr functions in other BASE workspaces.")
+}
 
 html <- paste(as.character(workspace$ui), collapse = "")
 if (grepl("<body", html, fixed = TRUE)) {
@@ -76,19 +83,20 @@ shiny::testServer(workspace$server, {
 shiny::testServer(workspace$server, {
   session$setInputs(scout_data_source = "season")
   session$flushReact()
-  season_catalogs()
+  season_teams()
   if (length(loads)) fail("Pitch data loaded before any season players were selected.")
-  hitter_team <- season_fixture$BatterTeam[[1]]
-  pitcher_team <- season_fixture$PitcherTeam[[1]]
+  original_team <- season_fixture$BatterTeam[[1]]
+  hitter_team <- "OTHER_TEAM"
   hitter <- season_fixture$Batter[[1]]
   pitcher <- season_fixture$Pitcher[[1]]
-  session$setInputs(scout_hitter_team = hitter_team, scout_pitcher_team = pitcher_team)
+  session$setInputs(scout_team = hitter_team)
+  session$flushReact()
   session$setInputs(scout_season_hitters = hitter, scout_season_pitchers = pitcher)
   session$flushReact()
   hitter_rows <- std_all()
   pitcher_rows <- pitcher_std_all()
   expected_hitter <- season_fixture[season_fixture$BatterTeam == hitter_team & season_fixture$Batter == hitter, ]
-  expected_pitcher <- season_fixture[season_fixture$PitcherTeam == pitcher_team & season_fixture$Pitcher == pitcher, ]
+  expected_pitcher <- season_fixture[season_fixture$PitcherTeam == hitter_team & season_fixture$Pitcher == pitcher, ]
   if (!setequal(hitter_rows$PitchUID, expected_hitter$PitchUID)) fail("Season hitter query is incomplete or includes another player/team.")
   if (!setequal(pitcher_rows$PitchUID, expected_pitcher$PitchUID)) fail("Season pitcher query is incomplete or includes another player/team.")
   if (!identical(matchup_hitters_raw()$PitchUID, season_hitter_rows()$PitchUID) ||
@@ -111,20 +119,22 @@ shiny::testServer(workspace$server, {
   if (!isTRUE(all.equal(workspace$row1_table_numeric(hitter_rows), workspace$row1_table_numeric(expected_std)))) {
     fail("Season routing changed hitter report metrics.")
   }
-  session$setInputs(scout_hitter_team = "OTHER_TEAM", scout_season_hitters = hitter)
+  session$setInputs(scout_team = original_team, scout_season_hitters = hitter)
   session$flushReact()
-  if (!all(std_all()$BatterTeam == "OTHER_TEAM")) fail("Changing teams retained the previous school's player data.")
+  session$setInputs(scout_season_hitters = hitter)
+  session$flushReact()
+  if (!all(std_all()$BatterTeam == original_team)) fail("Changing teams retained the previous school's player data.")
   session$setInputs(scout_season_hitters = character())
   cleared <- tryCatch(std_all(), shiny.silent.error = function(e) NULL)
   if (!is.null(cleared)) fail("Clearing the player selection retained stale season rows.")
 })
 
 missing_source <- base_scouting_season_source(paste0(season_path, "-missing"))
-missing_message <- tryCatch({ missing_source$catalog("hitter"); "" }, error = conditionMessage)
+missing_message <- tryCatch({ missing_source$teams("hitter"); "" }, error = conditionMessage)
 if (!grepl("BASE_SCOUTING_SEASON_FILE", missing_message, fixed = TRUE)) fail("Missing season data has no actionable error.")
 bad_path <- tempfile(fileext = ".parquet")
 arrow::write_parquet(tibble::tibble(Unrelated = 1), bad_path)
-bad_message <- tryCatch({ base_scouting_season_source(bad_path)$catalog("hitter"); "" }, error = conditionMessage)
+bad_message <- tryCatch({ base_scouting_season_source(bad_path)$teams("hitter"); "" }, error = conditionMessage)
 if (!grepl("missing columns", bad_message, fixed = TRUE)) fail("Invalid season schema was accepted.")
 unlink(c(season_path, bad_path))
 

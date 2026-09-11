@@ -488,25 +488,165 @@ base_pitching_embedded_head <- function() {
         font-size: 12px;
         font-weight: 700;
       }
-      .base-pitching-workspace .base-pitching-performance-tables,
-      .base-pitching-workspace .base-pitching-performance-details {
+      .base-pitching-workspace .base-pitching-performance-controls {
+        margin-bottom: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--base-border);
+        border-radius: var(--base-radius);
+        background: var(--base-surface);
+        box-shadow: var(--base-shadow-sm);
+      }
+      .base-pitching-workspace .base-pitching-performance-controls .form-group {
+        margin-bottom: 0;
+      }
+      .base-pitching-workspace .base-pitching-performance-table,
+      .base-pitching-workspace .performance-timeseries-panel {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--base-border);
+        border-radius: var(--base-radius);
+        background: var(--base-surface);
+        box-shadow: var(--base-shadow-sm);
+      }
+      .base-pitching-workspace .base-pitching-performance-heading {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 60px;
+        padding: 11px 14px 10px;
+        border-bottom: 1px solid var(--base-border);
+        background: linear-gradient(120deg, rgba(80,18,20,.055), rgba(255,255,255,.94));
+      }
+      .base-pitching-workspace .base-pitching-performance-heading > div {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 18px;
+        gap: 1px;
+      }
+      .base-pitching-workspace .base-pitching-performance-heading span {
+        color: var(--base-maroon);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .09em;
+        text-transform: uppercase;
+      }
+      .base-pitching-workspace .base-pitching-performance-heading strong {
+        color: var(--base-ink);
+        font-family: var(--base-font-display);
+        font-size: 21px;
+        line-height: 1.1;
+      }
+      .base-pitching-workspace .base-pitching-performance-heading small {
+        max-width: 420px;
+        color: var(--base-muted);
+        font-size: 12px;
+        line-height: 1.3;
+        text-align: right;
+      }
+      .base-pitching-workspace .base-pitching-performance-table .shiny-spinner-output-container,
+      .base-pitching-workspace .base-pitching-performance-table .shiny-html-output {
+        width: 100% !important;
+      }
+      .base-pitching-workspace #performance_table .dataTables_wrapper {
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        background: #fff;
+      }
+      .base-pitching-workspace #performance_table .dataTables_scrollHead,
+      .base-pitching-workspace #performance_table .dataTables_scrollBody {
+        width: 100% !important;
+      }
+      .base-pitching-workspace #performance_table table.dataTable {
+        width: 100% !important;
         margin: 0 !important;
+        border-collapse: separate !important;
+        border-spacing: 0;
       }
-      .base-pitching-workspace .base-pitching-performance-tables::before,
-      .base-pitching-workspace .base-pitching-performance-tables::after,
-      .base-pitching-workspace .base-pitching-performance-details::before,
-      .base-pitching-workspace .base-pitching-performance-details::after {
-        display: none !important;
-        content: none !important;
+      .base-pitching-workspace #performance_table table.dataTable thead tr.group-header th {
+        padding: 7px 10px !important;
+        border: 0 !important;
+        border-right: 1px solid rgba(255,255,255,.12) !important;
+        background: var(--base-maroon-deep) !important;
+        color: var(--base-gold-bright) !important;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-align: center;
       }
-      .base-pitching-workspace .base-pitching-performance-tables > [class*='col-'],
-      .base-pitching-workspace .base-pitching-performance-details > [class*='col-'] {
-        float: none;
-        width: auto;
-        padding: 0;
+      .base-pitching-workspace #performance_table table.dataTable thead tr:last-child th {
+        padding: 8px 10px !important;
+        border-right: 1px solid rgba(255,255,255,.12) !important;
+        background: var(--base-maroon) !important;
+        color: #fff !important;
+        font-size: 12px;
+        font-weight: 750;
+        text-align: center;
+        white-space: nowrap;
+      }
+      .base-pitching-workspace #performance_table table.dataTable tbody td {
+        padding: 8px 9px !important;
+        border-top: 1px solid #eee8e2 !important;
+        border-right: 1px solid #f1ece7 !important;
+        background: #fff;
+        color: var(--base-ink);
+        font-size: 12px;
+        line-height: 1.15;
+        text-align: center;
+        white-space: nowrap;
+      }
+      .base-pitching-workspace #performance_table table.dataTable tbody tr:nth-child(even) td {
+        background: #fbf9f6;
+      }
+      .base-pitching-workspace #performance_table table.dataTable tbody tr:hover td {
+        background: #f5eee7 !important;
+      }
+      .base-pitching-workspace #performance_table table.dataTable thead th:first-child,
+      .base-pitching-workspace #performance_table table.dataTable tbody td:first-child {
+        text-align: left;
+        font-weight: 750;
+      }
+      .base-pitching-workspace #performance_table table.dataTable .grp-start {
+        border-left: 2px solid rgba(80,18,20,.35) !important;
+      }
+      .base-pitching-workspace #performance_table table.dataTable tbody tr.base-total-row td {
+        background: #f2e7da !important;
+        color: var(--base-maroon-deep);
+      }
+      .base-pitching-workspace #performance_table table.dataTable tbody td:has(> .cf-cell) {
+        padding: 2px !important;
+      }
+      .base-pitching-workspace #performance_table table.dataTable tbody td > .cf-cell {
+        min-height: 34px;
+        padding: 8px 7px !important;
+        border-radius: 5px !important;
+      }
+      .base-pitching-workspace .base-pitching-performance-insights {
+        display: grid;
+        grid-template-columns: minmax(360px, .72fr) minmax(0, 1.28fr);
+        gap: 12px;
+        align-items: stretch;
+        margin-top: 12px;
+      }
+      .base-pitching-workspace .base-pitching-performance-insights > div {
+        min-width: 0;
+      }
+      .base-pitching-workspace .base-pitching-performance-insights .cr-percentile-card,
+      .base-pitching-workspace .base-pitching-performance-insights .performance-timeseries-panel {
+        min-height: 0 !important;
+        height: 100%;
+        margin: 0;
+      }
+      .base-pitching-workspace .base-pitching-performance-insights .cr-percentile-card {
+        padding: 14px 16px;
+      }
+      .base-pitching-workspace .base-pitching-timeseries-controls {
+        padding: 12px 14px 4px;
+      }
+      .base-pitching-workspace .base-pitching-timeseries-controls > .mb-2 > strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--base-ink);
+        font-size: 12px;
       }
       .base-pitching-workspace .base-season-summary-page {
         display: grid;
@@ -576,9 +716,8 @@ base_pitching_embedded_head <- function() {
       .base-pitching-workspace .base-team-trends-charts .html-widget {
         width: 100% !important;
       }
-      @media (max-width: 1450px) {
-        .base-pitching-workspace .base-pitching-performance-tables,
-        .base-pitching-workspace .base-pitching-performance-details {
+      @media (max-width: 1280px) {
+        .base-pitching-workspace .base-pitching-performance-insights {
           grid-template-columns: 1fr;
         }
       }
@@ -591,6 +730,14 @@ base_pitching_embedded_head <- function() {
         .base-pitching-workspace .base-season-summary-header {
           align-items: flex-start;
           flex-direction: column;
+        }
+        .base-pitching-workspace .base-pitching-performance-heading {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 5px;
+        }
+        .base-pitching-workspace .base-pitching-performance-heading small {
+          text-align: left;
         }
       }
       @media (max-width: 1180px) {

@@ -100,6 +100,24 @@ if (grepl("<body", html, fixed = TRUE)) {
 if (!grepl("base-hitting-embedded-layout", html, fixed = TRUE)) {
   fail("Embedded Hitting UI is missing its scoped BASE layout wrapper.")
 }
+style_html <- htmltools::renderTags(base_hitting_embedded_head())$head
+for (marker in c(
+  "base-hitting-performance-controls",
+  "base-hitting-performance-table",
+  "base-hitting-performance-heading"
+)) {
+  if (!grepl(marker, html, fixed = TRUE)) {
+    fail("Hitting Performance is missing pitcher-matched table styling: ", marker)
+  }
+}
+for (marker in c(
+  "#perf_tbl table.dataTable thead tr.group-header th",
+  "tbody tr.base-total-row td"
+)) {
+  if (!grepl(marker, style_html, fixed = TRUE)) {
+    fail("Hitting Performance is missing pitcher-matched table styling: ", marker)
+  }
+}
 expected_tabs <- c(
   "Performance", "Lineup Builder", "Damage Heat Map", "Whiff Zones",
   "Team Report", "Leaderboard", "Swing Decisions",

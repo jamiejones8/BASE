@@ -3107,7 +3107,6 @@ local({
     library(grid)
     library(scales)
     library(png)
-    library(MASS)   # ok to keep
     library(cowplot)  # for watermark composition
   })
   
@@ -5026,13 +5025,12 @@ ui <- base_scouting_page(
                  conditionalPanel(
                    "input.scout_data_source === 'season'",
                    uiOutput("scout_season_status"),
-                   selectizeInput("scout_hitter_team", "Hitter team", choices = NULL),
+                   selectizeInput("scout_team", "Opponent team", choices = NULL),
                    selectizeInput("scout_season_hitters", "Hitters to load", choices = NULL,
                                   multiple = TRUE, options = list(plugins = list("remove_button"))),
-                   selectizeInput("scout_pitcher_team", "Pitcher team", choices = NULL),
                    selectizeInput("scout_season_pitchers", "Pitchers to load", choices = NULL,
                                   multiple = TRUE, options = list(plugins = list("remove_button"))),
-                   helpText("Choose players to load their season pitches. You can choose different teams for a matchup."),
+                   helpText("Choose an opponent first. Only that team's player directory and selected players' pitches are loaded."),
                    hr()
                  )
                ),
@@ -5169,50 +5167,48 @@ server <- function(input, output, session){
     !is.null(SCOUTING_SEASON_SOURCE) &&
       identical(input$scout_data_source %||% "season", "season")
   })
-  season_catalogs <- reactive({
+  season_teams <- reactive({
     req(season_mode())
     tryCatch(
-      withProgress(message = "Loading college player directory", value = 0.5, {
-        list(hitter = SCOUTING_SEASON_SOURCE$catalog("hitter"),
-             pitcher = SCOUTING_SEASON_SOURCE$catalog("pitcher"))
+      withProgress(message = "Loading college team directory", value = 0.5, {
+        sort(unique(c(
+          SCOUTING_SEASON_SOURCE$teams("hitter"),
+          SCOUTING_SEASON_SOURCE$teams("pitcher")
+        )))
       }),
       error = function(e) validate(need(FALSE, conditionMessage(e)))
     )
   })
   output$scout_season_status <- renderUI({
-    catalogs <- season_catalogs()
-    helpText(sprintf("College season ready: %s hitters and %s pitchers.",
-                     format(nrow(catalogs$hitter), big.mark = ","),
-                     format(nrow(catalogs$pitcher), big.mark = ",")))
+    teams <- season_teams()
+    helpText(sprintf("College season ready: %s teams. Select one to begin.",
+                     format(length(teams), big.mark = ",")))
   })
-  observeEvent(season_catalogs(), {
-    for (role in c("hitter", "pitcher")) {
-      teams <- sort(unique(season_catalogs()[[role]]$Team))
-      id <- paste0("scout_", role, "_team")
-      selected <- input[[id]]
-      if (is.null(selected) || !selected %in% teams) selected <- ""
-      team_choices <- stats::setNames(teams, scouting_team_display_name(teams))
-      updateSelectizeInput(session, id, choices = c("Choose a team" = "", team_choices),
-                           selected = selected, server = TRUE)
-    }
+  observeEvent(season_teams(), {
+    teams <- season_teams()
+    selected <- input$scout_team %||% ""
+    if (!selected %in% teams) selected <- ""
+    team_choices <- stats::setNames(teams, scouting_team_display_name(teams))
+    updateSelectizeInput(session, "scout_team",
+                         choices = c("Choose a team" = "", team_choices),
+                         selected = selected, server = TRUE)
   })
   for (role_value in c("hitter", "pitcher")) local({
     role <- role_value
-    team_id <- paste0("scout_", role, "_team")
     player_id <- paste0("scout_season_", role, "s")
-    observeEvent(list(input[[team_id]], season_catalogs()), {
-      catalog <- season_catalogs()[[role]]
-      team <- input[[team_id]] %||% ""
+    observeEvent(input$scout_team, {
+      team <- input$scout_team %||% ""
+      catalog <- SCOUTING_SEASON_SOURCE$catalog(role, team)
       choices <- catalog$Player[catalog$Team == team]
       updateSelectizeInput(session, player_id, choices = choices,
                            selected = intersect(input[[player_id]], choices), server = TRUE)
-    })
+    }, ignoreInit = TRUE)
   })
   season_rows <- function(role) {
     req(season_mode())
-    team <- input[[paste0("scout_", role, "_team")]] %||% ""
+    team <- input$scout_team %||% ""
     players <- input[[paste0("scout_season_", role, "s")]]
-    catalog <- season_catalogs()[[role]]
+    catalog <- SCOUTING_SEASON_SOURCE$catalog(role, team)
     players <- intersect(players, catalog$Player[catalog$Team == team])
     validate(need(nzchar(team) && length(players) > 0,
                   paste("Choose a team and", paste0(role, "s"), "in the sidebar.")))

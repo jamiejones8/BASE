@@ -79,6 +79,16 @@ missing_tabs <- expected_tabs[!vapply(expected_tabs, grepl, logical(1), x = html
 if (length(missing_tabs)) {
   fail("Embedded Pitching UI is missing tabs: ", paste(missing_tabs, collapse = ", "))
 }
+if (!grepl("performance_table", html, fixed = TRUE) ||
+    !grepl("base-pitching-performance-insights", html, fixed = TRUE)) {
+  fail("Pitching Performance is missing its unified table and insights layout.")
+}
+if (any(vapply(
+  c("performance_traditional_table", "performance_process_table", "performance_modern_table", "performance_results_table"),
+  grepl, logical(1), x = html, fixed = TRUE
+))) {
+  fail("Pitching Performance still renders the disjointed four-table layout.")
+}
 if (grepl(">AAR<", html, fixed = TRUE)) {
   fail("Pitching AAR is still present in the Pitching workspace.")
 }
@@ -109,6 +119,7 @@ shiny::testServer(workspace$server, {
   if (!identical(as.character(perf_raw$Batter), c("TOTAL", "vLHH", "vRHH"))) {
     fail("Pitching handedness Performance table is not Total, left, right.")
   }
+  invisible(output$performance_table)
   splits <- season_summary_split_summary(dataFilter())
   if (!identical(splits$Split, c("Total", "v LHH", "v RHH"))) {
     fail("Season Summary handedness table is not Total, left, right.")

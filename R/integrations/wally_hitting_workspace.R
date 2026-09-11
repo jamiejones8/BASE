@@ -314,6 +314,129 @@ base_hitting_embedded_head <- function() {
       }
       .base-hitting-workspace .lineup-table select { min-width: 120px; }
       .base-hitting-workspace .lineup-total td { font-weight: 800; }
+      .base-hitting-workspace .base-hitting-performance-controls {
+        margin-bottom: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--base-border);
+        border-radius: var(--base-radius);
+        background: var(--base-surface);
+        box-shadow: var(--base-shadow-sm);
+      }
+      .base-hitting-workspace .base-hitting-performance-controls .form-group {
+        margin-bottom: 0;
+      }
+      .base-hitting-workspace .base-hitting-performance-table {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--base-border);
+        border-radius: var(--base-radius);
+        background: var(--base-surface);
+        box-shadow: var(--base-shadow-sm);
+      }
+      .base-hitting-workspace .base-hitting-performance-heading {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 60px;
+        padding: 11px 14px 10px;
+        border-bottom: 1px solid var(--base-border);
+        background: linear-gradient(120deg, rgba(80,18,20,.055), rgba(255,255,255,.94));
+      }
+      .base-hitting-workspace .base-hitting-performance-heading > div {
+        display: grid;
+        gap: 1px;
+      }
+      .base-hitting-workspace .base-hitting-performance-heading span {
+        color: var(--base-maroon);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .09em;
+        text-transform: uppercase;
+      }
+      .base-hitting-workspace .base-hitting-performance-heading strong {
+        color: var(--base-ink);
+        font-family: var(--base-font-display);
+        font-size: 21px;
+        line-height: 1.1;
+      }
+      .base-hitting-workspace .base-hitting-performance-heading small {
+        max-width: 420px;
+        color: var(--base-muted);
+        font-size: 12px;
+        line-height: 1.3;
+        text-align: right;
+      }
+      .base-hitting-workspace .base-hitting-performance-table .shiny-spinner-output-container,
+      .base-hitting-workspace .base-hitting-performance-table .shiny-html-output {
+        width: 100% !important;
+      }
+      .base-hitting-workspace #perf_tbl .dataTables_wrapper {
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        background: #fff;
+      }
+      .base-hitting-workspace #perf_tbl .dataTables_scrollHead,
+      .base-hitting-workspace #perf_tbl .dataTables_scrollBody {
+        width: 100% !important;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable {
+        width: 100% !important;
+        margin: 0 !important;
+        border-collapse: separate !important;
+        border-spacing: 0;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable thead tr.group-header th {
+        padding: 7px 10px !important;
+        border: 0 !important;
+        border-right: 1px solid rgba(255,255,255,.12) !important;
+        background: var(--base-maroon-deep) !important;
+        color: var(--base-gold-bright) !important;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-align: center;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable thead tr:last-child th {
+        padding: 8px 10px !important;
+        border-right: 1px solid rgba(255,255,255,.12) !important;
+        background: var(--base-maroon) !important;
+        color: #fff !important;
+        font-size: 12px;
+        font-weight: 750;
+        text-align: center;
+        white-space: nowrap;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable tbody td {
+        padding: 8px 9px !important;
+        border-top: 1px solid #eee8e2 !important;
+        border-right: 1px solid #f1ece7 !important;
+        background: #fff;
+        color: var(--base-ink);
+        font-size: 12px;
+        line-height: 1.15;
+        text-align: center;
+        white-space: nowrap;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable tbody tr:nth-child(even) td {
+        background: #fbf9f6;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable tbody tr:hover td {
+        background: #f5eee7 !important;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable thead th:first-child,
+      .base-hitting-workspace #perf_tbl table.dataTable tbody td:first-child {
+        text-align: left;
+        font-weight: 750;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable .grp-start {
+        border-left: 2px solid rgba(80,18,20,.35) !important;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable tbody tr.base-total-row td {
+        background: #f2e7da !important;
+        color: var(--base-maroon-deep);
+      }
       .base-hitting-workspace table.dataTable tbody td:has(> .cf-cell) {
         padding: 2px !important;
         background: #fff !important;
@@ -388,6 +511,14 @@ base_hitting_embedded_head <- function() {
         font-weight: 650;
       }
       .base-hitting-workspace .base-multi-filter .selectize-input { min-height: 38px; }
+      .base-hitting-workspace #perf_tbl table.dataTable tbody td:has(> .cf-cell) {
+        padding: 2px !important;
+      }
+      .base-hitting-workspace #perf_tbl table.dataTable tbody td > .cf-cell {
+        min-height: 34px;
+        padding: 8px 7px !important;
+        border-radius: 5px !important;
+      }
       @media (max-width: 900px) {
         .base-hitting-workspace .base-hitting-embedded-layout {
           display: block !important;
@@ -395,6 +526,16 @@ base_hitting_embedded_head <- function() {
         .base-hitting-workspace .base-hitting-sidebar {
           position: static;
           margin-bottom: 16px;
+        }
+      }
+      @media (max-width: 720px) {
+        .base-hitting-workspace .base-hitting-performance-heading {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 5px;
+        }
+        .base-hitting-workspace .base-hitting-performance-heading small {
+          text-align: left;
         }
       }
     "))

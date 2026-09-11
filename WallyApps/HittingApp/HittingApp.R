@@ -1699,7 +1699,7 @@ ui <- base_hitting_page(
     nav_panel(
       title = "Performance",
       div(
-        class = "mb-2",
+        class = "base-hitting-performance-controls",
         radioGroupButtons(
           inputId  = "hit_perf_split",
           label    = "Split performance by",
@@ -1709,6 +1709,15 @@ ui <- base_hitting_page(
         )
       ),
       div(
+        class = "base-hitting-performance-table",
+        div(
+          class = "base-hitting-performance-heading",
+          div(
+            span("Season snapshot"),
+            strong("Hitter performance")
+          ),
+          tags$small("Results, swing decisions, and batted-ball quality in one view")
+        ),
         withSpinner(DTOutput("perf_tbl"), type = 4, color = "#501214")
       ),
       div(
@@ -6675,7 +6684,8 @@ server <- function(input, output, session){
         table(class = "display",
               thead(
                 tr(class = "group-header",
-                   th(colspan = 13, ""),
+                   th(colspan = 1, class = "group-label", "SPLIT"),
+                   th(colspan = 12, class = "group-label", "RESULTS"),
                    th(colspan = 7, class = "group-label", "SWING"),
                    th(colspan = 10, class = "group-label", "BATTED BALL")
                 ),
@@ -6719,14 +6729,16 @@ server <- function(input, output, session){
         escape    = FALSE,
         selection = "none",
         options   = list(
-          dom='t', paging=FALSE, ordering=FALSE, autoWidth=TRUE,
+          dom='t', paging=FALSE, ordering=FALSE, stripe=TRUE,
+          scrollX=TRUE, autoWidth=TRUE,
           rowCallback = DT::JS(
             "function(row, data) {",
-            "  if (data[0] === 'Totals') { $('td', row).css('font-weight', '800'); }",
+            "  $(row).toggleClass('base-total-row', data[0] === 'Totals');",
             "}"
           ),
-          columnDefs = list(list(className = "grp-start", targets = c(13,20)))
-        )
+          columnDefs = list(list(className = "grp-start", targets = c(0,1,13,20)))
+        ),
+        class = "stripe"
       )
       
     } else {
@@ -6743,14 +6755,16 @@ server <- function(input, output, session){
         escape    = FALSE,
         selection = "none",
         options   = list(
-          dom='t', paging=FALSE, ordering=FALSE, autoWidth=TRUE,
+          dom='t', paging=FALSE, ordering=FALSE, stripe=TRUE,
+          scrollX=TRUE, autoWidth=TRUE,
           rowCallback = DT::JS(
             "function(row, data) {",
-            "  if (data[0] === 'Totals') { $('td', row).css('font-weight', '800'); }",
+            "  $(row).toggleClass('base-total-row', data[0] === 'Totals');",
             "}"
           ),
-          columnDefs = list(list(className = "grp-start", targets = c(13,20)))
-        )
+          columnDefs = list(list(className = "grp-start", targets = c(0,1,13,20)))
+        ),
+        class = "stripe"
       )
     }
   })

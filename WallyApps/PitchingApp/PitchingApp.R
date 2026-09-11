@@ -5880,10 +5880,6 @@ head_css <- htmltools::tags$head(
       width:100%;
       box-sizing:border-box;
     }
-    .base-pitching-performance-tables .table-title.mt-3{
-      margin-top:22px !important;
-    }
-
     .cr-percentile-column{display:flex}
     .cr-percentile-column > .shiny-html-output{display:flex;width:100%}
     .cr-percentile-card{background:rgba(255,255,255,0.94);border:1px solid rgba(0,117,138,.32);border-radius:8px;padding:12px 14px;margin-bottom:12px;min-height:650px;width:100%;display:flex;flex-direction:column}
@@ -6608,7 +6604,7 @@ ui <- base_pitching_page(
       id = "main_tabs",
       title = "Performance",
       div(
-        class = "mb-2",
+        class = "base-pitching-performance-controls",
         shinyWidgets::radioGroupButtons(
           inputId  = "perf_split",
           label    = "Split performance by",
@@ -6619,32 +6615,31 @@ ui <- base_pitching_page(
         )
       ),
       div(
-        class = "base-pitching-performance-tables",
-        column(
-          6,
-          div(class = "table-title mb-1", "Traditional Stats"),
-          withSpinner(DTOutput("performance_traditional_table"), type = 4, color = "#501214"),
-          div(class = "table-title mt-3 mb-1", "Process Stats"),
-          withSpinner(DTOutput("performance_process_table"), type = 4, color = "#501214")
+        class = "base-pitching-performance-table",
+        div(
+          class = "base-pitching-performance-heading",
+          div(
+            span("Season snapshot"),
+            strong("Pitcher performance")
+          ),
+          tags$small("Results, miss quality, contact management, and execution in one view")
         ),
-        column(
-          6,
-          div(class = "table-title mb-1", "Modern Stats"),
-          withSpinner(DTOutput("performance_modern_table"), type = 4, color = "#501214"),
-          div(class = "table-title mt-3 mb-1", "Performance"),
-          withSpinner(DTOutput("performance_results_table"), type = 4, color = "#501214")
-        )
+        withSpinner(DTOutput("performance_table"), type = 4, color = "#501214")
       ),
       div(
-        class = "base-pitching-performance-details",
-        column(
-          6,
-          div(class = "cr-percentile-column mt-3", withSpinner(uiOutput("performance_percentiles"), type = 4, color = "#501214"))
+        class = "base-pitching-performance-insights",
+        div(
+          class = "cr-percentile-column",
+          withSpinner(uiOutput("performance_percentiles"), type = 4, color = "#501214")
         ),
-        column(
-          6,
-          div(class = "performance-timeseries-panel mt-3",
-              div(class = "table-title mb-1", "Time Series"),
+        div(
+          class = "performance-timeseries-panel",
+          div(
+              class = "base-pitching-performance-heading",
+              div(span("Trend view"), strong("Performance over time"))
+          ),
+          div(
+              class = "base-pitching-timeseries-controls",
               div(class = "mb-2",
                   strong("Performance Stats"),
                   selectizeInput(
@@ -6675,7 +6670,7 @@ ui <- base_pitching_page(
                     size      = "sm"
                   )
               ),
-              withSpinner(plotOutput("perf_ts_plot", height = "560px", width = "100%"), type = 4, color = "#501214")
+              withSpinner(plotOutput("perf_ts_plot", height = "520px", width = "100%"), type = 4, color = "#501214")
           )
         )
       )
@@ -19368,46 +19363,74 @@ function(el,x){
     )
   })
 
-  render_performance_slice <- function(metric_cols) {
+  render_performance_overview <- function() {
     out_df <- performance_table_data()
     if (is.null(out_df) || !nrow(out_df)) out_df <- data.frame(Status = "No data")
-    id_cols <- intersect(c("Batter","IP","PA","Pitch type","Pitches (#)"), names(out_df))
-    keep <- unique(c(id_cols, intersect(metric_cols, names(out_df))))
+
+    identity_cols <- intersect(
+      c("Batter", "IP", "PA", "Pitch type", "Pitches (#)"),
+      names(out_df)
+    )
+    display_groups <- list(
+      "Results" = c("BAA", "SLG", "OPS", "WHIP", "wOBA", "wOBAcon", "FIP", "pRV"),
+      "Miss & contact" = c(
+        "K/9", "BB/9", "H/9", "K%", "BB%", "BB+HBP%", "Barrel%", "GB%",
+        "CSW%", "Whiff%", "IZWhiff%", "Chase%"
+      ),
+      "Pitch execution" = c(
+        "FPS%", "1-1 Win%", "E&A%", "Strike%", "Zone%", "Pre2k Zone%",
+        "2k Zone%", "Put Away%", "Shut Down Inning%"
+      )
+    )
+    grouped_cols <- lapply(display_groups, intersect, y = names(out_df))
+    keep <- unique(c(identity_cols, unlist(grouped_cols, use.names = FALSE)))
     if (!length(keep)) keep <- names(out_df)
+
+    group_names <- c(
+      rep("Split", length(identity_cols)),
+      unlist(Map(function(label, cols) rep(label, length(cols)), names(grouped_cols), grouped_cols), use.names = FALSE)
+    )
+    if (length(group_names) != length(keep)) group_names <- rep("Performance", length(keep))
+    runs <- rle(group_names)
+    group_cells <- Map(
+      function(label, count) htmltools::tags$th(
+        colspan = count,
+        class = "group-label",
+        toupper(label)
+      ),
+      runs$values,
+      runs$lengths
+    )
+    container <- htmltools::tags$table(
+      class = "display",
+      htmltools::tags$thead(
+        htmltools::tags$tr(class = "group-header", htmltools::tagList(group_cells)),
+        htmltools::tags$tr(htmltools::tagList(lapply(keep, htmltools::tags$th)))
+      )
+    )
+    group_starts <- cumsum(c(0L, head(runs$lengths, -1L)))
+
     DT::datatable(
       out_df[, keep, drop = FALSE],
-      escape   = FALSE,
+      container = container,
+      escape = FALSE,
       rownames = FALSE,
-      options  = list(
-        dom      = 't',
-        paging   = FALSE,
+      selection = "none",
+      options = list(
+        dom = "t",
+        paging = FALSE,
         ordering = FALSE,
-        stripe   = TRUE,
-        scrollX  = TRUE,
-        autoWidth = TRUE
+        stripe = TRUE,
+        scrollX = TRUE,
+        autoWidth = TRUE,
+        columnDefs = list(list(className = "grp-start", targets = group_starts))
       ),
       class = "stripe"
     )
   }
 
-  output$performance_traditional_table <- DT::renderDT({
-    render_performance_slice(c("BAA","SLG","OPS","WHIP","K/9","BB/9","H/9"))
-  })
-
-  output$performance_modern_table <- DT::renderDT({
-    render_performance_slice(c("FIP","wOBA","wOBAcon","K%","BB%","BB+HBP%","Barrel%","GB%"))
-  })
-
-  output$performance_results_table <- DT::renderDT({
-    render_performance_slice(c("pRV","CSW%","Whiff%","IZWhiff%","Chase%"))
-  })
-
-  output$performance_process_table <- DT::renderDT({
-    render_performance_slice(c("Strike%","Zone%","FPS%","E&A%","Pre2k Zone%","2k Zone%","Put Away%","Shut Down Inning%","1-1 Win%"))
-  })
-
   output$performance_table <- DT::renderDT({
-    render_performance_slice(names(performance_table_data()))
+    render_performance_overview()
   })
 
   leaderboard_totals_cache <- reactiveVal(NULL)

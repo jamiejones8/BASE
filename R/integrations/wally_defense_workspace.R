@@ -84,7 +84,11 @@ base_prepare_wally_catching_rows <- function(startup_rows = NULL) {
 base_prepare_catcher_framing_baseline <- function() {
   configured <- TEAM_CONFIG$data$catcher_framing_reference_file %||% ""
   path <- if (nzchar(configured)) configured else base_defense_dev_file("d1_catcher_framing_metrics.csv")
-  if (!file.exists(path)) return(tibble::tibble())
+  if (!file.exists(path)) return(tibble::tibble(
+    metric_id = character(), metric = character(), Catcher = character(),
+    value = numeric(), chances = integer(), numerator = numeric(),
+    metric_order = integer(), better = character()
+  ))
   readr::read_csv(path, show_col_types = FALSE)
 }
 

@@ -554,31 +554,33 @@ homebase_percentile_color <- function(percentile) {
 
 homebase_percentile_card <- function(rows, title, subtitle, estimated = FALSE) {
   if (!nrow(rows)) return(NULL)
-  bar_rows <- list()
-  previous_group <- NULL
-  for (i in seq_len(nrow(rows))) {
-    group <- if ("Group" %in% names(rows)) as.character(rows$Group[[i]]) else "Statistics"
-    if (!identical(group, previous_group)) {
-      bar_rows <- c(bar_rows, list(tags$div(class = "hb-percentile-group", group)))
-      previous_group <- group
-    }
-    percentile <- rows$Percentile[[i]]
-    position <- if (is.finite(percentile)) pmin(99, pmax(1, percentile)) else 50
-    label <- if (is.finite(percentile)) as.character(as.integer(percentile)) else "—"
-    color <- homebase_percentile_color(percentile)
-    bar_rows <- c(bar_rows, list(tags$div(
-      class = paste0("hb-percentile-row", if (!is.finite(percentile)) " is-empty" else ""),
-      tags$span(class = "hb-percentile-label", rows$Label[[i]]),
+  groups <- if ("Group" %in% names(rows)) unique(as.character(rows$Group)) else "Statistics"
+  bar_groups <- lapply(groups, function(group) {
+    indices <- if ("Group" %in% names(rows)) which(as.character(rows$Group) == group) else seq_len(nrow(rows))
+    bar_rows <- lapply(indices, function(i) {
+      percentile <- rows$Percentile[[i]]
+      position <- if (is.finite(percentile)) pmin(99, pmax(1, percentile)) else 50
+      label <- if (is.finite(percentile)) as.character(as.integer(percentile)) else "—"
+      color <- homebase_percentile_color(percentile)
       tags$div(
-        class = "hb-percentile-track-wrap",
-        tags$div(class = "hb-percentile-track"),
-        tags$div(class = "hb-percentile-fill", style = sprintf("width:%.0f%%; background:%s;", position, color)),
-        tags$div(class = "hb-percentile-average"),
-        tags$span(class = "hb-percentile-badge", style = sprintf("left:%.0f%%; background:%s;", position, color), label)
-      ),
-      tags$span(class = "hb-percentile-value", rows$Display[[i]])
-    )))
-  }
+        class = paste0("hb-percentile-row", if (!is.finite(percentile)) " is-empty" else ""),
+        tags$span(class = "hb-percentile-label", rows$Label[[i]]),
+        tags$div(
+          class = "hb-percentile-track-wrap",
+          tags$div(class = "hb-percentile-track"),
+          tags$div(class = "hb-percentile-fill", style = sprintf("width:%.0f%%; background:%s;", position, color)),
+          tags$div(class = "hb-percentile-average"),
+          tags$span(class = "hb-percentile-badge", style = sprintf("left:%.0f%%; background:%s;", position, color), label)
+        ),
+        tags$span(class = "hb-percentile-value", rows$Display[[i]])
+      )
+    })
+    tags$div(
+      class = "hb-percentile-group-block",
+      tags$div(class = "hb-percentile-group", group),
+      tagList(bar_rows)
+    )
+  })
   tags$section(
     class = "hb-percentile-card",
     tags$div(
@@ -587,7 +589,7 @@ homebase_percentile_card <- function(rows, title, subtitle, estimated = FALSE) {
       if (estimated) tags$small("Estimated from CAPS D1 benchmarks") else tags$small("D1 reference minimums enforced")
     ),
     tags$div(class = "hb-percentile-scale", tags$span("25th"), tags$span("50th"), tags$span("75th")),
-    tags$div(class = "hb-percentile-rows", tagList(bar_rows))
+    tags$div(class = "hb-percentile-rows", tagList(bar_groups))
   )
 }
 
@@ -753,6 +755,19 @@ homebase_find_catalog_player <- function(name, team = NULL) {
   list(hitter = NULL, pitcher = NULL)
 }
 
+homebase_default_roster_player <- function(roster) {
+  if (is.null(roster) || !is.data.frame(roster) || !nrow(roster)) return("")
+  hitter_history <- homebase_history_dataset("hitter")
+  pitcher_history <- homebase_history_dataset("pitcher")
+  tracked_names <- c(
+    if ("Batter" %in% names(hitter_history)) hitter_history$Batter else character(),
+    if ("Pitcher" %in% names(pitcher_history)) pitcher_history$Pitcher else character()
+  )
+  tracked_keys <- unique(homebase_name_key(tracked_names))
+  available <- which(homebase_name_key(roster$Name) %in% tracked_keys)
+  roster$Name[[if (length(available)) available[[1]] else 1L]]
+}
+
 homebase_metric_tile <- function(label, value, detail = NULL, class = NULL) {
   tags$div(
     class = paste("hb-metric", class %||% ""),
@@ -904,6 +919,7 @@ homebase_build_caps_pitcher_card <- function(data, player) {
 
 homebase_page_ui <- function() {
   roster <- homebase_roster_data()
+  initial_player <- homebase_default_roster_player(roster)
   roster_choices <- if (nrow(roster)) {
     stats::setNames(roster$Name, paste0("#", roster$Number, "  ", roster$Name, " · ", roster$Pos))
   } else character()
@@ -911,50 +927,71 @@ homebase_page_ui <- function() {
   tags$div(
     class = "hub-main base-workspace-page homebase-workspace",
     tags$div(
-      class = "base-workspace-heading hb-heading",
+      class = "hb-commandbar",
       tags$div(
-        tags$div(class = "base-eyebrow", "Player intelligence"),
-        tags$h1("HomeBASE"),
-        tags$p(paste0("Current roster and opponent profiles using the ", homebase_history_label(), " baseline."))
-      ),
-      tags$div(class = "base-source-chip", tags$span(class = "home-status-dot"), TEAM_CONFIG$roster_label)
-    ),
-    tags$section(
-      class = "hb-picker",
-      radioButtons(
-        "hb_scope", NULL,
-        choices = c("Our roster" = "roster", "College player search" = "opponent"),
-        selected = "roster", inline = TRUE
-      ),
-      conditionalPanel(
-        "input.hb_scope === 'roster'",
-        selectizeInput(
-          "hb_roster_player", NULL, choices = c("Select a player…" = "", roster_choices), selected = "",
-          options = list(placeholder = "Search the active roster", maxOptions = 50), width = "100%"
-        )
-      ),
-      conditionalPanel(
-        "input.hb_scope === 'opponent'",
+        class = "base-workspace-heading hb-heading",
         tags$div(
-          class = "hb-opponent-picker",
-          selectizeInput(
-            "hb_opponent_player", NULL, choices = NULL,
-            options = list(placeholder = "Search any player in the national season file", maxOptions = 20), width = "100%"
-          ),
-          actionButton("hb_load_opponent", "Open player", class = "btn btn-primary")
+          tags$div(class = "base-eyebrow", "Player intelligence"),
+          tags$h1("HomeBASE")
         ),
-        uiOutput("hb_opponent_source_note")
+        tags$div(class = "base-source-chip", tags$span(class = "home-status-dot"), TEAM_CONFIG$roster_label)
+      ),
+      tags$section(
+        class = "hb-picker",
+        radioButtons(
+          "hb_scope", NULL,
+          choices = c("Our roster" = "roster", "College search" = "opponent"),
+          selected = "roster", inline = TRUE
+        ),
+        conditionalPanel(
+          "input.hb_scope === 'roster'",
+          selectizeInput(
+            "hb_roster_player", NULL, choices = roster_choices, selected = initial_player,
+            options = list(placeholder = "Search the active roster", maxOptions = 50), width = "100%"
+          )
+        ),
+        conditionalPanel(
+          "input.hb_scope === 'opponent'",
+          tags$div(
+            class = "hb-opponent-picker",
+            selectizeInput(
+              "hb_opponent_player", NULL, choices = NULL,
+              options = list(placeholder = "Search the national season file", maxOptions = 20), width = "100%"
+            ),
+            actionButton("hb_load_opponent", "Open", class = "btn btn-primary")
+          ),
+          uiOutput("hb_opponent_source_note")
+        )
       )
     ),
-    uiOutput("hb_empty_state"),
-    uiOutput("hb_profile_header"),
     tags$div(
-      class = "hb-profile-grid",
-      uiOutput("hb_overview"),
-      uiOutput("hb_recent")
+      class = "hb-view-shell",
+      tabsetPanel(
+        id = "hb_view",
+        selected = "overview",
+        tabPanel(
+          "Dashboard", value = "overview",
+          uiOutput("hb_empty_state"),
+          uiOutput("hb_profile_header"),
+          tags$div(
+            class = "hb-dashboard-grid",
+            tags$main(class = "hb-dashboard-main", uiOutput("hb_overview")),
+            tags$aside(
+              class = "hb-dashboard-rail",
+              uiOutput("hb_percentiles"),
+              uiOutput("hb_recent")
+            )
+          )
+        ),
+        tabPanel(
+          "Player reports", value = "reports",
+          tags$div(
+            class = "hb-report-view",
+            uiOutput("hb_card_studio")
+          )
+        )
+      )
     ),
-    uiOutput("hb_percentiles"),
-    uiOutput("hb_card_studio"),
     tags$div(class = "hub-footer", base_brand_footer())
   )
 }
@@ -1014,7 +1051,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
     row <- roster[homebase_name_key(roster$Name) == homebase_name_key(input$hb_roster_player), , drop = FALSE]
     if (!nrow(row)) row <- NULL
     load_profile(input$hb_roster_player, roster_row = row)
-  }, ignoreInit = TRUE)
+  }, ignoreInit = FALSE)
 
   observeEvent(input$hb_scope, {
     if (!identical(input$hb_scope, "opponent") || !is.null(national_catalog())) return()
@@ -1242,7 +1279,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
         if (is.null(pitcher_card_page())) tags$p(class = "hb-card-placeholder", "Generate the original single-page CAPS card from this player's full tracked sample.") else imageOutput("hb_pitcher_card", width = "100%", height = "auto")
       )))
     }
-    tags$section(class = "hb-card-studio", tags$div(class = "hb-studio-heading", tags$span("Card studio"), tags$h2("Scouting cards")), tagList(panes))
+    tags$section(class = "hb-card-studio", tags$div(class = "hb-studio-heading", tags$span("Player reports"), tags$h2("PDF and image generator")), tagList(panes))
   })
 
   observeEvent(input$hb_generate_hitter, {

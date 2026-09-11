@@ -10,7 +10,7 @@ BASE_WALLY_SCOUTING_FILE <- base_project_path(
 
 BASE_WALLY_SCOUTING_REQUIRED_PACKAGES <- c(
   "bslib", "cowplot", "curl", "dplyr", "DT", "ggplot2", "ggplotify",
-  "gridExtra", "gtable", "htmltools", "jpeg", "MASS", "patchwork", "png",
+  "gridExtra", "gtable", "htmltools", "jpeg", "patchwork", "png",
   "purrr", "readr", "scales", "shiny", "stringr", "tibble", "tidyr"
 )
 
@@ -31,8 +31,18 @@ base_scouting_season_file <- function() {
 # cross into R; the national pitch table is never collected in full.
 base_scouting_season_source <- function(path = base_scouting_season_file()) {
   dataset <- NULL
+  team_cache <- list()
   catalogs <- list()
   cache <- list()
+  production_path <- normalizePath(
+    base_scouting_season_file(), winslash = "/", mustWork = FALSE
+  )
+  requested_path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  use_runtime_catalogs <- identical(requested_path, production_path) &&
+    exists("base_pitcher_catalog", inherits = TRUE) &&
+    exists("base_get_hitter_catalog", mode = "function", inherits = TRUE) &&
+    exists("base_load_pitcher_rows", mode = "function", inherits = TRUE) &&
+    exists("base_load_hitter_rows", mode = "function", inherits = TRUE)
   open <- function() {
     if (!is.null(dataset)) return(dataset)
     if (!file.exists(path)) {
@@ -56,10 +66,55 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
       c("PitcherTeam", "Pitcher")
     }
   }
-  catalog <- function(role) {
+  runtime_catalog <- function(role) {
+    role <- match.arg(role, c("hitter", "pitcher"))
+    if (role == "hitter") {
+      base_get_hitter_catalog() %>%
+        dplyr::transmute(
+          Team = as.character(.data$BatterTeam),
+          Player = as.character(.data$Batter),
+          Pitches = suppressWarnings(as.numeric(.data$PitchCount))
+        )
+    } else {
+      base_pitcher_catalog %>%
+        dplyr::transmute(
+          Team = as.character(.data$PitcherTeam),
+          Player = as.character(.data$Pitcher),
+          Pitches = suppressWarnings(as.numeric(.data$PitchCount))
+        )
+    }
+  }
+  teams <- function(role) {
+    role <- match.arg(role, c("hitter", "pitcher"))
+    if (!is.null(team_cache[[role]])) return(team_cache[[role]])
+    if (use_runtime_catalogs) {
+      values <- runtime_catalog(role)$Team
+    } else {
+      team_col <- columns(role)[[1]]
+      query <- dplyr::select(open(), tidyselect::all_of(team_col))
+      values <- dplyr::collect(dplyr::distinct(query))[[team_col]]
+    }
+    values <- sort(unique(as.character(values)))
+    values <- values[!is.na(values) & nzchar(trimws(values))]
+    team_cache[[role]] <<- values
+    values
+  }
+  catalog <- function(role, team) {
+    role <- match.arg(role, c("hitter", "pitcher"))
     cols <- columns(role)
-    if (!is.null(catalogs[[role]])) return(catalogs[[role]])
-    query <- dplyr::select(open(), tidyselect::all_of(cols))
+    team <- as.character(team %||% "")[[1]]
+    if (is.na(team) || !nzchar(trimws(team))) return(tibble::tibble(
+      Team = character(), Player = character(), Pitches = numeric()
+    ))
+    key <- paste(role, team, sep = "\u001f")
+    if (!is.null(catalogs[[key]])) return(catalogs[[key]])
+    if (use_runtime_catalogs) {
+      rows <- runtime_catalog(role) %>% dplyr::filter(.data$Team == team)
+      catalogs[[key]] <<- rows
+      return(rows)
+    }
+    query <- dplyr::filter(open(), .data[[cols[[1]]]] == team)
+    query <- dplyr::select(query, tidyselect::all_of(cols))
     query <- dplyr::group_by(query, dplyr::across(tidyselect::all_of(cols)))
     rows <- dplyr::collect(dplyr::summarise(query, Pitches = dplyr::n(), .groups = "drop"))
     names(rows)[match(cols, names(rows))] <- c("Team", "Player")
@@ -68,7 +123,7 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
     rows <- rows[!is.na(rows$Team) & nzchar(trimws(rows$Team)) &
                    !is.na(rows$Player) & nzchar(trimws(rows$Player)), , drop = FALSE]
     rows <- rows[order(rows$Team, rows$Player), , drop = FALSE]
-    catalogs[[role]] <<- rows
+    catalogs[[key]] <<- rows
     rows
   }
   load_players <- function(role, team, players) {
@@ -80,9 +135,14 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
     }
     key <- paste(c(role, team, players), collapse = "\u001f")
     if (!is.null(cache[[key]])) return(cache[[key]])
-    query <- dplyr::filter(open(), .data[[cols[[1]]]] == team,
-                           .data[[cols[[2]]]] %in% players)
-    rows <- tibble::as_tibble(dplyr::collect(query))
+    if (use_runtime_catalogs) {
+      loader <- if (role == "hitter") base_load_hitter_rows else base_load_pitcher_rows
+      rows <- dplyr::bind_rows(lapply(players, function(player) loader(team, player)))
+    } else {
+      query <- dplyr::filter(open(), .data[[cols[[1]]]] == team,
+                             .data[[cols[[2]]]] %in% players)
+      rows <- tibble::as_tibble(dplyr::collect(query))
+    }
     rows$.source_file <- rep(basename(path), nrow(rows))
     # Bound the shared cache by bytes as well as entry count.
     if (as.numeric(object.size(rows)) <= 64 * 1024^2) {
@@ -93,7 +153,7 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
     }
     rows
   }
-  list(path = path, catalog = catalog, load_players = load_players)
+  list(path = path, teams = teams, catalog = catalog, load_players = load_players)
 }
 
 base_scouting_data_dir <- function() {
