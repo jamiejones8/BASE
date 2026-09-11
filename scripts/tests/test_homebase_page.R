@@ -32,10 +32,20 @@ if (!identical(homebase_format_game_date(as.Date("2026-05-12")), "May 12")) {
 if (!identical(homebase_format_innings(17), "5.2")) {
   fail("HomeBASE innings formatting did not convert outs to baseball notation.")
 }
-team_palette <- function(team_code) list(logo_url = paste0("https://logos.example/", team_code, ".svg"))
+team_palette <- function(team_code) list(
+  primary = "#003087", secondary = "#F2A900",
+  logo_url = paste0("https://logos.example/", team_code, ".svg")
+)
 if (!identical(homebase_team_logo_url("BAY_BEA"), "https://logos.example/BAY_BEA.svg") ||
     !identical(homebase_team_monogram("Baylor Bears"), "BB")) {
   fail("HomeBASE did not resolve an opponent team logo and fallback monogram.")
+}
+team_theme <- homebase_team_theme("BAY_BEA")
+if (!identical(team_theme$primary, "#003087") ||
+    !identical(team_theme$secondary, "#F2A900") ||
+    !identical(team_theme$on_primary, "#FFFFFF") ||
+    !grepl("--hb-team-primary:#003087", homebase_team_theme_css("BAY_BEA"), fixed = TRUE)) {
+  fail("HomeBASE did not build an accessible theme from the selected team's stored colors.")
 }
 rm(team_palette)
 
@@ -77,6 +87,12 @@ if (!nrow(national_rows) || national_rows$BatterTeam[[1]] != "ANY_CLG") {
   fail("HomeBASE did not load a player outside the local opponent history from the partitioned national dataset.")
 }
 homebase_source <- paste(readLines("R/pages/homebase_page.R", warn = FALSE), collapse = "\n")
+homebase_styles <- paste(readLines("www/styles.css", warn = FALSE), collapse = "\n")
+if (!grepl('uiOutput("hb_team_theme")', homebase_source, fixed = TRUE) ||
+    !grepl("var(--hb-team-primary)", homebase_styles, fixed = TRUE) ||
+    !grepl("var(--hb-team-secondary)", homebase_styles, fixed = TRUE)) {
+  fail("HomeBASE is not applying the selected player's team theme to the page.")
+}
 if (grepl("base_scouting_season_source", homebase_source, fixed = TRUE) ||
     grepl("$load_players", homebase_source, fixed = TRUE)) {
   fail("HomeBASE still scans the full scouting Parquet instead of using compact runtime catalogs.")

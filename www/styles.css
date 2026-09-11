@@ -1151,6 +1151,13 @@ table tbody td[style*="background-color"] {
    HomeBASE player overview
    -------------------------------------------------------------------------- */
 .homebase-workspace {
+  --hb-team-primary: var(--base-maroon);
+  --hb-team-primary-deep: #3a0b0e;
+  --hb-team-primary-soft: #f7eeee;
+  --hb-team-secondary: var(--base-gold);
+  --hb-team-secondary-soft: #f7f1e5;
+  --hb-team-on-primary: #fff;
+  --hb-team-on-secondary: #2b2114;
   width: min(100%, 1680px);
   max-width: none;
   padding: 72px clamp(14px, 2vw, 30px) 18px;
@@ -1170,10 +1177,13 @@ table tbody td[style*="background-color"] {
   padding: 7px 12px;
   align-items: center;
   gap: 14px;
-  border: 1px solid var(--base-border);
+  border: 1px solid color-mix(in srgb, var(--hb-team-primary) 18%, var(--base-border));
   border-radius: var(--base-radius);
-  background: linear-gradient(120deg, rgba(80,18,20,.045), rgba(255,255,255,.8));
+  background: linear-gradient(120deg, var(--hb-team-primary-soft), rgba(255,255,255,.84));
 }
+
+.hb-heading .base-eyebrow { color: var(--hb-team-primary); }
+.hb-heading .home-status-dot { background: var(--hb-team-secondary); }
 
 .hb-heading h1 {
   margin: 1px 0 2px;
@@ -1204,14 +1214,14 @@ table tbody td[style*="background-color"] {
 }
 .hb-view-shell > .tabbable > .nav-tabs > li > a:hover,
 .hb-view-shell > .tabbable > .nav-tabs > li > a:focus {
-  border-bottom-color: var(--base-gold);
-  background: rgba(80,18,20,.045);
-  color: var(--base-maroon);
+  border-bottom-color: var(--hb-team-secondary);
+  background: var(--hb-team-primary-soft);
+  color: var(--hb-team-primary);
 }
 .hb-view-shell > .tabbable > .nav-tabs > li.active > a {
-  border-bottom-color: var(--base-maroon);
-  background: rgba(80,18,20,.06);
-  color: var(--base-maroon);
+  border-bottom-color: var(--hb-team-primary);
+  background: var(--hb-team-primary-soft);
+  color: var(--hb-team-primary);
 }
 
 .hb-picker {
@@ -1232,6 +1242,22 @@ table tbody td[style*="background-color"] {
 .hb-picker .radio-inline { margin: 0 12px 0 0; font-size: 13px; font-weight: 700; }
 .hb-picker .selectize-control { margin-bottom: 0; }
 .hb-picker .selectize-input { min-height: 38px; padding-top: 8px; padding-bottom: 8px; }
+.hb-picker .selectize-input.focus,
+.hb-picker .form-control:focus {
+  border-color: var(--hb-team-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hb-team-primary) 14%, transparent);
+}
+.hb-picker input[type="radio"] { accent-color: var(--hb-team-primary); }
+.homebase-workspace .btn-primary {
+  border-color: var(--hb-team-primary) !important;
+  background: var(--hb-team-primary) !important;
+  color: var(--hb-team-on-primary) !important;
+}
+.homebase-workspace .btn-primary:hover,
+.homebase-workspace .btn-primary:focus {
+  border-color: var(--hb-team-primary-deep) !important;
+  background: var(--hb-team-primary-deep) !important;
+}
 .hb-opponent-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }
 .hb-picker-note { margin: 7px 0 0; color: var(--base-muted); font-size: 12px; }
 
@@ -1243,7 +1269,7 @@ table tbody td[style*="background-color"] {
   padding: 28px;
   border: 1px dashed var(--base-border-strong);
   border-radius: var(--base-radius);
-  background: linear-gradient(135deg, rgba(80,18,20,.035), rgba(180,151,90,.07));
+  background: linear-gradient(135deg, var(--hb-team-primary-soft), var(--hb-team-secondary-soft));
 }
 
 .hb-empty-mark {
@@ -1253,8 +1279,8 @@ table tbody td[style*="background-color"] {
   height: 58px;
   place-items: center;
   border-radius: 50%;
-  background: var(--base-maroon);
-  color: #fff;
+  background: var(--hb-team-primary);
+  color: var(--hb-team-on-primary);
   font-family: var(--base-font-display);
   font-size: 27px;
   font-weight: 800;
@@ -1275,10 +1301,10 @@ table tbody td[style*="background-color"] {
   overflow: hidden;
   border-radius: calc(var(--base-radius) + 2px);
   background:
-    radial-gradient(circle at 86% 10%, rgba(215,189,138,.2), transparent 27%),
-    linear-gradient(110deg, #3a0b0e 0%, var(--base-maroon) 56%, #651c20 100%);
-  box-shadow: 0 14px 32px rgba(49,10,12,.16);
-  color: #fff;
+    radial-gradient(circle at 86% 10%, color-mix(in srgb, var(--hb-team-secondary) 34%, transparent), transparent 27%),
+    linear-gradient(110deg, var(--hb-team-primary-deep) 0%, var(--hb-team-primary) 58%, color-mix(in srgb, var(--hb-team-primary) 80%, var(--hb-team-secondary)) 100%);
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--hb-team-primary) 22%, transparent);
+  color: var(--hb-team-on-primary);
 }
 
 .hb-player-band::after {
@@ -1286,7 +1312,7 @@ table tbody td[style*="background-color"] {
   position: absolute;
   right: 156px;
   bottom: -35px;
-  color: rgba(255,255,255,.035);
+  color: color-mix(in srgb, var(--hb-team-on-primary) 5%, transparent);
   font-family: var(--base-font-display);
   font-size: 112px;
   font-weight: 900;
@@ -1319,7 +1345,7 @@ table tbody td[style*="background-color"] {
 .hb-team-monogram {
   position: absolute;
   z-index: 1;
-  color: var(--base-maroon);
+  color: var(--hb-team-primary);
   font-family: var(--base-font-display);
   font-size: 23px;
   font-weight: 900;
@@ -1337,11 +1363,11 @@ table tbody td[style*="background-color"] {
   bottom: -7px;
   min-width: 31px;
   padding: 4px 7px;
-  border: 2px solid #fff;
+  border: 2px solid var(--hb-team-on-primary);
   border-radius: 999px;
-  background: var(--base-gold);
+  background: var(--hb-team-secondary);
   box-shadow: 0 3px 8px rgba(26,0,2,.28);
-  color: var(--base-maroon);
+  color: var(--hb-team-on-secondary);
   font-family: var(--base-font-display);
   font-size: 11px;
   font-weight: 900;
@@ -1351,10 +1377,10 @@ table tbody td[style*="background-color"] {
 }
 
 .hb-player-name { position: relative; z-index: 1; }
-.hb-player-name > span { color: rgba(255,255,255,.68); font-size: 13px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.hb-player-name h2 { margin: 1px 0 5px; color: #fff; font-family: var(--base-font-display); font-size: clamp(25px, 2.6vw, 32px); line-height: 1; }
+.hb-player-name > span { color: color-mix(in srgb, var(--hb-team-on-primary) 70%, transparent); font-size: 13px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.hb-player-name h2 { margin: 1px 0 5px; color: var(--hb-team-on-primary); font-family: var(--base-font-display); font-size: clamp(25px, 2.6vw, 32px); line-height: 1; }
 .hb-player-tags { display: flex; flex-wrap: wrap; gap: 7px; }
-.hb-player-tags span { padding: 3px 8px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; background: rgba(255,255,255,.08); color: #fff; font-size: 12px; font-weight: 700; }
+.hb-player-tags span { padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--hb-team-on-primary) 24%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--hb-team-on-primary) 9%, transparent); color: var(--hb-team-on-primary); font-size: 12px; font-weight: 700; }
 
 .hb-sample {
   position: relative;
@@ -1362,12 +1388,12 @@ table tbody td[style*="background-color"] {
   display: grid;
   min-width: 112px;
   padding-left: 24px;
-  border-left: 1px solid rgba(255,255,255,.2);
+  border-left: 1px solid color-mix(in srgb, var(--hb-team-on-primary) 22%, transparent);
   text-align: right;
 }
 
-.hb-sample span, .hb-sample small { color: rgba(255,255,255,.65); font-size: 12px; }
-.hb-sample strong { margin: 1px 0; color: #fff; font-family: var(--base-font-display); font-size: 24px; line-height: 1; }
+.hb-sample span, .hb-sample small { color: color-mix(in srgb, var(--hb-team-on-primary) 68%, transparent); font-size: 12px; }
+.hb-sample strong { margin: 1px 0; color: var(--hb-team-on-primary); font-family: var(--base-font-display); font-size: 24px; line-height: 1; }
 
 .hb-dashboard-grid {
   display: grid;
@@ -1390,7 +1416,7 @@ table tbody td[style*="background-color"] {
 .hb-overview-card { padding: 10px; }
 .hb-section-head, .hb-percentile-head, .hb-card-toolbar { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .hb-section-head > div > span, .hb-percentile-head > div > span, .hb-card-toolbar > div:first-child > span, .hb-studio-heading > span {
-  color: var(--base-maroon);
+  color: var(--hb-team-primary);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: .09em;
@@ -1399,7 +1425,7 @@ table tbody td[style*="background-color"] {
 
 .hb-section-head h3, .hb-percentile-head h3, .hb-card-toolbar h3, .hb-studio-heading h2 { margin: 3px 0 0; color: var(--base-ink); font-family: var(--base-font-display); }
 .hb-section-head h3, .hb-percentile-head h3, .hb-card-toolbar h3 { font-size: 18px; }
-.hb-role-chip { padding: 5px 8px; border-radius: 5px; background: var(--base-maroon); color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.hb-role-chip { padding: 5px 8px; border-radius: 5px; background: var(--hb-team-primary); color: var(--hb-team-on-primary); font-size: 11px; font-weight: 800; letter-spacing: .08em; }
 
 .hb-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin-top: 6px; overflow: hidden; border: 1px solid var(--base-border); border-radius: 8px; background: var(--base-border); }
 .hb-metric { display: grid; min-height: 52px; align-content: center; padding: 6px 9px; background: #fff; }
@@ -1415,7 +1441,7 @@ table tbody td[style*="background-color"] {
 }
 
 .hb-stat-panel {
-  --panel-accent: var(--base-maroon);
+  --panel-accent: var(--hb-team-primary);
   --panel-soft: #faf5f5;
   position: relative;
   overflow: hidden;
@@ -1488,20 +1514,20 @@ table tbody td[style*="background-color"] {
 
 .hb-stat-panel.is-workload {
   grid-column: 1 / -1;
-  --panel-accent: var(--base-gold);
+  --panel-accent: var(--hb-team-secondary);
   padding: 8px 9px 9px;
-  border-color: #59171b;
-  background: linear-gradient(115deg, #3a0b0e, var(--base-maroon) 62%, #6b2025);
+  border-color: var(--hb-team-primary-deep);
+  background: linear-gradient(115deg, var(--hb-team-primary-deep), var(--hb-team-primary) 62%, color-mix(in srgb, var(--hb-team-primary) 78%, var(--hb-team-secondary)));
 }
 
 .hb-stat-panel.is-workload::before { display: none; }
-.hb-stat-panel.is-workload .hb-stat-panel-head h4 { color: #fff; }
-.hb-stat-panel.is-workload .hb-stat-panel-head span { color: rgba(255,255,255,.66); }
+.hb-stat-panel.is-workload .hb-stat-panel-head h4 { color: var(--hb-team-on-primary); }
+.hb-stat-panel.is-workload .hb-stat-panel-head span { color: color-mix(in srgb, var(--hb-team-on-primary) 68%, transparent); }
 .hb-stat-panel.is-workload .hb-stat-panel-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-.hb-stat-panel.is-workload .hb-metric { border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.09); box-shadow: none; }
+.hb-stat-panel.is-workload .hb-metric { border-color: color-mix(in srgb, var(--hb-team-on-primary) 18%, transparent); background: color-mix(in srgb, var(--hb-team-on-primary) 9%, transparent); box-shadow: none; }
 .hb-stat-panel.is-workload .hb-metric > span,
-.hb-stat-panel.is-workload .hb-metric > small { color: rgba(255,255,255,.68); }
-.hb-stat-panel.is-workload .hb-metric > strong { color: #fff; }
+.hb-stat-panel.is-workload .hb-metric > small { color: color-mix(in srgb, var(--hb-team-on-primary) 70%, transparent); }
+.hb-stat-panel.is-workload .hb-metric > strong { color: var(--hb-team-on-primary); }
 
 .hb-stat-panel.is-results {
   grid-column: span 6;
@@ -1531,13 +1557,13 @@ table tbody td[style*="background-color"] {
 }
 .hb-stat-panel.is-traits .hb-stat-panel-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .hb-stat-panel .hb-metric.is-model {
-  border-color: var(--base-maroon);
-  background: linear-gradient(135deg, #3a0b0e, var(--base-maroon));
-  box-shadow: 0 7px 16px rgba(80,18,20,.18);
+  border-color: var(--hb-team-primary);
+  background: linear-gradient(135deg, var(--hb-team-primary-deep), var(--hb-team-primary));
+  box-shadow: 0 7px 16px color-mix(in srgb, var(--hb-team-primary) 22%, transparent);
 }
 .hb-stat-panel .hb-metric.is-model > span,
-.hb-stat-panel .hb-metric.is-model > small { color: rgba(255,255,255,.7); }
-.hb-stat-panel .hb-metric.is-model > strong { color: #fff; font-size: 27px; }
+.hb-stat-panel .hb-metric.is-model > small { color: color-mix(in srgb, var(--hb-team-on-primary) 72%, transparent); }
+.hb-stat-panel .hb-metric.is-model > strong { color: var(--hb-team-on-primary); font-size: 27px; }
 
 .hb-recent-block { overflow: hidden; }
 .hb-section-title { padding: 9px 11px; border-bottom: 1px solid var(--base-border); color: var(--base-ink); font-family: var(--base-font-display); font-size: 15px; font-weight: 750; }
@@ -1547,7 +1573,7 @@ table tbody td[style*="background-color"] {
 .hb-game-identity strong { color: var(--base-ink); font-size: 13px; }
 .hb-game-identity span { color: var(--base-muted); font-size: 12px; }
 .hb-game-line { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-.hb-game-line span { min-width: 36px; padding: 3px 5px; border-radius: 4px; background: #f2f0ed; color: var(--base-ink); font-size: 12px; font-weight: 750; text-align: center; }
+.hb-game-line span { min-width: 36px; padding: 3px 5px; border-radius: 4px; background: var(--hb-team-primary-soft); color: var(--base-ink); font-size: 12px; font-weight: 750; text-align: center; }
 .hb-muted { margin: 16px; color: var(--base-muted); font-size: 14px; }
 
 .hb-percentile-section, .hb-card-studio { margin-top: 0; }
@@ -1562,7 +1588,7 @@ table tbody td[style*="background-color"] {
 .hb-percentile-scale span:last-child { text-align: right; }
 .hb-percentile-rows { column-count: 2; column-gap: 9px; column-rule: 1px solid var(--base-border); }
 .hb-percentile-group-block { break-inside: avoid; margin-bottom: 4px; }
-.hb-percentile-group { margin-top: 5px; padding: 4px 0 3px 76px; border-bottom: 1px dashed var(--base-border-strong); color: var(--base-maroon); font-size: 10px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+.hb-percentile-group { margin-top: 5px; padding: 4px 0 3px 76px; border-bottom: 1px dashed var(--base-border-strong); color: var(--hb-team-primary); font-size: 10px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
 .hb-percentile-group:first-child { margin-top: 0; }
 .hb-percentile-row { display: grid; grid-template-columns: 76px minmax(68px, 1fr) 38px; gap: 5px; align-items: center; min-height: 27px; border-bottom: 1px dashed #d8dde0; }
 .hb-percentile-row:last-child { border-bottom: 0; }
@@ -1669,7 +1695,7 @@ table tbody td[style*="background-color"] {
   .hb-team-logo { width: 43px; height: 43px; }
   .hb-player-number { right: -5px; bottom: -6px; min-width: 27px; padding: 3px 6px; font-size: 10px; }
   .hb-player-name h2 { font-size: 30px; }
-  .hb-sample { grid-column: 1 / -1; grid-template-columns: auto auto auto; align-items: baseline; gap: 7px; padding: 12px 0 0; border-top: 1px solid rgba(255,255,255,.2); border-left: 0; text-align: left; }
+  .hb-sample { grid-column: 1 / -1; grid-template-columns: auto auto auto; align-items: baseline; gap: 7px; padding: 12px 0 0; border-top: 1px solid color-mix(in srgb, var(--hb-team-on-primary) 22%, transparent); border-left: 0; text-align: left; }
   .hb-sample strong { font-size: 22px; }
   .hb-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hb-pitcher-stat-board { grid-template-columns: 1fr; }

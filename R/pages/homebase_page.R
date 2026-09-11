@@ -53,6 +53,69 @@ homebase_team_logo_url <- function(team_code) {
   NA_character_
 }
 
+homebase_valid_hex <- function(value, fallback) {
+  value <- as.character(value %||% "")
+  value <- value[!is.na(value) & grepl("^#[0-9A-Fa-f]{6}$", value)]
+  toupper(if (length(value)) value[[1]] else fallback)
+}
+
+homebase_mix_hex <- function(color, target = "#000000", weight = 0.2) {
+  weight <- min(1, max(0, suppressWarnings(as.numeric(weight))))
+  source_rgb <- grDevices::col2rgb(color)[, 1]
+  target_rgb <- grDevices::col2rgb(target)[, 1]
+  mixed <- round(source_rgb * (1 - weight) + target_rgb * weight)
+  sprintf("#%02X%02X%02X", mixed[[1]], mixed[[2]], mixed[[3]])
+}
+
+homebase_contrast_color <- function(background) {
+  rgb <- grDevices::col2rgb(background)[, 1] / 255
+  linear <- ifelse(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055)^2.4)
+  luminance <- sum(c(0.2126, 0.7152, 0.0722) * linear)
+  white_contrast <- 1.05 / (luminance + 0.05)
+  black_contrast <- (luminance + 0.05) / 0.05
+  if (white_contrast >= black_contrast) "#FFFFFF" else "#151515"
+}
+
+homebase_team_theme <- function(team_code) {
+  fallback_primary <- homebase_valid_hex(
+    TEAM_CONFIG$colors$primary %||% "#501214", "#501214"
+  )
+  fallback_secondary <- homebase_valid_hex(
+    TEAM_CONFIG$colors$accent %||% TEAM_CONFIG$colors$secondary %||% "#B4975A",
+    "#B4975A"
+  )
+  palette <- if (exists("team_palette", mode = "function", inherits = TRUE)) {
+    tryCatch(team_palette(team_code), error = function(e) list())
+  } else list()
+  primary <- homebase_valid_hex(palette$primary, fallback_primary)
+  secondary <- homebase_valid_hex(palette$secondary, fallback_secondary)
+  list(
+    primary = primary,
+    primary_deep = homebase_mix_hex(primary, "#000000", 0.28),
+    primary_soft = homebase_mix_hex(primary, "#FFFFFF", 0.92),
+    secondary = secondary,
+    secondary_soft = homebase_mix_hex(secondary, "#FFFFFF", 0.86),
+    on_primary = homebase_contrast_color(primary),
+    on_secondary = homebase_contrast_color(secondary)
+  )
+}
+
+homebase_team_theme_css <- function(team_code) {
+  theme <- homebase_team_theme(team_code)
+  sprintf(
+    paste0(
+      ".homebase-workspace{",
+      "--hb-team-primary:%s;--hb-team-primary-deep:%s;--hb-team-primary-soft:%s;",
+      "--hb-team-secondary:%s;--hb-team-secondary-soft:%s;",
+      "--hb-team-on-primary:%s;--hb-team-on-secondary:%s;",
+      "}"
+    ),
+    theme$primary, theme$primary_deep, theme$primary_soft,
+    theme$secondary, theme$secondary_soft,
+    theme$on_primary, theme$on_secondary
+  )
+}
+
 homebase_team_monogram <- function(team_name) {
   words <- unlist(strsplit(gsub("[^A-Za-z0-9 ]", " ", as.character(team_name)), "\\s+"))
   words <- words[nzchar(words)]
@@ -926,6 +989,7 @@ homebase_page_ui <- function() {
 
   tags$div(
     class = "hub-main base-workspace-page homebase-workspace",
+    shiny::uiOutput("hb_team_theme"),
     tags$div(
       class = "hb-commandbar",
       tags$div(
@@ -1004,6 +1068,12 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   pitcher_card_page <- reactiveVal(NULL)
 
   roster <- homebase_roster_data()
+
+  output$hb_team_theme <- renderUI({
+    profile <- selected_profile()
+    team <- if (is.null(profile)) TEAM_CONFIG$abbreviation else profile$team
+    tags$style(htmltools::HTML(homebase_team_theme_css(team)))
+  })
 
   load_profile <- function(name, team = NULL, roster_row = NULL) {
     is_roster_player <- !is.null(roster_row) && nrow(roster_row) > 0
