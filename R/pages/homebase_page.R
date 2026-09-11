@@ -284,6 +284,8 @@ homebase_classify_pa <- function(pa) {
     pa,
     .hb_hit = is_hit,
     .hb_hr = is_hr,
+    .hb_triple = is_triple,
+    .hb_double = is_double,
     .hb_walk = is_walk,
     .hb_hbp = is_hbp,
     .hb_k = is_k,
@@ -298,29 +300,63 @@ homebase_hitter_metrics <- function(data) {
   if (!nrow(pa)) return(NULL)
   ab <- sum(!pa$.hb_walk & !pa$.hb_hbp & !pa$.hb_sac, na.rm = TRUE)
   hits <- sum(pa$.hb_hit, na.rm = TRUE)
+  doubles <- sum(pa$.hb_double, na.rm = TRUE)
+  triples <- sum(pa$.hb_triple, na.rm = TRUE)
+  homers <- sum(pa$.hb_hr, na.rm = TRUE)
   walks <- sum(pa$.hb_walk, na.rm = TRUE)
   hbp <- sum(pa$.hb_hbp, na.rm = TRUE)
   ev <- homebase_number(homebase_first_column(pa, c("ExitSpeed", "ExitVelocity", "ev"), NA))
+  angle <- homebase_number(homebase_first_column(pa, c("Angle", "LaunchAngle", "la"), NA))
   bip_ev <- ev[pa$.hb_bip & is.finite(ev)]
   pitch_call <- tolower(as.character(homebase_first_column(data, c("PitchCall", "pitch_call"), "")))
   swing <- grepl("swing|foul|in.?play", pitch_call)
   whiff <- grepl("swinging|swing.*strike|whiff", pitch_call)
   px <- homebase_number(homebase_first_column(data, c("PlateLocSide", "PlateX", "plate_x"), NA))
   pz <- homebase_number(homebase_first_column(data, c("PlateLocHeight", "PlateZ", "plate_z"), NA))
-  in_zone <- is.finite(px) & is.finite(pz) & abs(px) <= .83 & pz >= 1.5 & pz <= 3.5
-  outside <- is.finite(px) & is.finite(pz) & !in_zone
+  zone_known <- is.finite(px) & is.finite(pz)
+  in_zone <- zone_known & abs(px) <= .83 & pz >= 1.5 & pz <= 3.5
+  outside <- zone_known & !in_zone
+  bip_angle <- pa$.hb_bip & is.finite(angle)
+  barrel_ok <- pa$.hb_bip & is.finite(ev) & is.finite(angle)
+  is_barrel <- barrel_ok & ev >= 95 & angle >= 5 & angle <= 35
+  average <- if (ab > 0) hits / ab else NA_real_
+  on_base <- if ((ab + walks + hbp) > 0) (hits + walks + hbp) / (ab + walks + hbp) else NA_real_
+  slugging <- if (ab > 0) sum(pa$.hb_tb, na.rm = TRUE) / ab else NA_real_
+  games <- length(unique(homebase_game_key(data)))
   list(
+    Games = games,
+    Pitches = nrow(data),
     PA = nrow(pa),
-    AVG = if (ab > 0) hits / ab else NA_real_,
-    OBP = if ((ab + walks + hbp) > 0) (hits + walks + hbp) / (ab + walks + hbp) else NA_real_,
-    SLG = if (ab > 0) sum(pa$.hb_tb, na.rm = TRUE) / ab else NA_real_,
+    AB = ab,
+    H = hits,
+    `2B` = doubles,
+    `3B` = triples,
+    HR = homers,
+    XBH = doubles + triples + homers,
+    AVG = average,
+    OBP = on_base,
+    SLG = slugging,
+    OPS = if (is.finite(on_base) && is.finite(slugging)) on_base + slugging else NA_real_,
+    ISO = if (is.finite(average) && is.finite(slugging)) slugging - average else NA_real_,
     `K%` = mean(pa$.hb_k, na.rm = TRUE),
     `BB%` = mean(pa$.hb_walk, na.rm = TRUE),
+    `Swing%` = if (length(swing)) mean(swing, na.rm = TRUE) else NA_real_,
+    `ZoneSwing%` = if (sum(in_zone, na.rm = TRUE) > 0) sum(swing & in_zone, na.rm = TRUE) / sum(in_zone, na.rm = TRUE) else NA_real_,
     `Contact%` = if (sum(swing, na.rm = TRUE) > 0) 1 - sum(whiff, na.rm = TRUE) / sum(swing, na.rm = TRUE) else NA_real_,
+    `ZoneContact%` = if (sum(swing & in_zone, na.rm = TRUE) > 0) 1 - sum(whiff & in_zone, na.rm = TRUE) / sum(swing & in_zone, na.rm = TRUE) else NA_real_,
+    `Whiff%` = if (sum(swing, na.rm = TRUE) > 0) sum(whiff, na.rm = TRUE) / sum(swing, na.rm = TRUE) else NA_real_,
     `Chase%` = if (sum(outside, na.rm = TRUE) > 0) sum(swing & outside, na.rm = TRUE) / sum(outside, na.rm = TRUE) else NA_real_,
     `HardHit%` = if (length(bip_ev)) mean(bip_ev >= 95) else NA_real_,
+    `Barrel%` = if (sum(barrel_ok, na.rm = TRUE) > 0) sum(is_barrel, na.rm = TRUE) / sum(barrel_ok, na.rm = TRUE) else NA_real_,
     `Avg EV` = if (length(bip_ev)) mean(bip_ev) else NA_real_,
-    `Max EV` = if (length(bip_ev)) max(bip_ev) else NA_real_
+    `90th EV` = if (length(bip_ev)) as.numeric(stats::quantile(bip_ev, .9, na.rm = TRUE, names = FALSE)) else NA_real_,
+    `Max EV` = if (length(bip_ev)) max(bip_ev) else NA_real_,
+    `Avg LA` = if (sum(bip_angle, na.rm = TRUE) > 0) mean(angle[bip_angle], na.rm = TRUE) else NA_real_,
+    `SweetSpot%` = if (sum(bip_angle, na.rm = TRUE) > 0) mean(angle[bip_angle] >= 10 & angle[bip_angle] <= 35) else NA_real_,
+    `GB%` = if (sum(bip_angle, na.rm = TRUE) > 0) mean(angle[bip_angle] < 5) else NA_real_,
+    `LD%` = if (sum(bip_angle, na.rm = TRUE) > 0) mean(angle[bip_angle] >= 5 & angle[bip_angle] < 25) else NA_real_,
+    `FB%` = if (sum(bip_angle, na.rm = TRUE) > 0) mean(angle[bip_angle] >= 25 & angle[bip_angle] <= 50) else NA_real_,
+    `PU%` = if (sum(bip_angle, na.rm = TRUE) > 0) mean(angle[bip_angle] > 50) else NA_real_
   )
 }
 
@@ -851,6 +887,55 @@ homebase_pitcher_stat_panel <- function(class, title, subtitle, ...) {
   )
 }
 
+homebase_hitter_stat_board <- function(metrics) {
+  tags$div(
+    class = "hb-stat-board hb-hitter-stat-board",
+    homebase_pitcher_stat_panel("is-workload", "Workload", "Season volume",
+      homebase_metric_tile("Games", format(metrics$Games, big.mark = ",")),
+      homebase_metric_tile("Plate appearances", format(metrics$PA, big.mark = ",")),
+      homebase_metric_tile("At-bats", format(metrics$AB, big.mark = ",")),
+      homebase_metric_tile("Pitches seen", format(metrics$Pitches, big.mark = ",")),
+      homebase_metric_tile("Hits", format(metrics$H, big.mark = ",")),
+      homebase_metric_tile("Extra-base hits", format(metrics$XBH, big.mark = ","))
+    ),
+    homebase_pitcher_stat_panel("is-production", "Production", "Season outcomes",
+      homebase_metric_tile("AVG", homebase_format_decimal(metrics$AVG)),
+      homebase_metric_tile("OBP", homebase_format_decimal(metrics$OBP), class = "is-key"),
+      homebase_metric_tile("SLG", homebase_format_decimal(metrics$SLG), class = "is-key"),
+      homebase_metric_tile("OPS", homebase_format_decimal(metrics$OPS), class = "is-key"),
+      homebase_metric_tile("ISO", homebase_format_decimal(metrics$ISO)),
+      homebase_metric_tile("Doubles", format(metrics$`2B`, big.mark = ",")),
+      homebase_metric_tile("Triples", format(metrics$`3B`, big.mark = ",")),
+      homebase_metric_tile("Home runs", format(metrics$HR, big.mark = ","))
+    ),
+    homebase_pitcher_stat_panel("is-approach", "Approach & contact", "Swing decisions and bat control",
+      homebase_metric_tile("K%", homebase_format_rate(metrics$`K%`), class = "is-key"),
+      homebase_metric_tile("BB%", homebase_format_rate(metrics$`BB%`), class = "is-key"),
+      homebase_metric_tile("Swing%", homebase_format_rate(metrics$`Swing%`)),
+      homebase_metric_tile("Zone swing%", homebase_format_rate(metrics$`ZoneSwing%`)),
+      homebase_metric_tile("Chase%", homebase_format_rate(metrics$`Chase%`), class = "is-key"),
+      homebase_metric_tile("Whiff%", homebase_format_rate(metrics$`Whiff%`), class = "is-key"),
+      homebase_metric_tile("Contact%", homebase_format_rate(metrics$`Contact%`)),
+      homebase_metric_tile("Zone contact%", homebase_format_rate(metrics$`ZoneContact%`))
+    ),
+    homebase_pitcher_stat_panel("is-impact", "Contact quality", "Exit velocity and damage",
+      homebase_metric_tile("Average EV", homebase_format_number(metrics$`Avg EV`, 1), "mph"),
+      homebase_metric_tile("90th EV", homebase_format_number(metrics$`90th EV`, 1), "mph", class = "is-key"),
+      homebase_metric_tile("Max EV", homebase_format_number(metrics$`Max EV`, 1), "mph", class = "is-key"),
+      homebase_metric_tile("Hard-hit%", homebase_format_rate(metrics$`HardHit%`)),
+      homebase_metric_tile("Barrel%", homebase_format_rate(metrics$`Barrel%`), class = "is-key"),
+      homebase_metric_tile("Sweet-spot%", homebase_format_rate(metrics$`SweetSpot%`))
+    ),
+    homebase_pitcher_stat_panel("is-batted-ball", "Batted-ball shape", "Launch-angle distribution",
+      homebase_metric_tile("Average LA", homebase_format_number(metrics$`Avg LA`, 1), "degrees"),
+      homebase_metric_tile("Ground-ball%", homebase_format_rate(metrics$`GB%`)),
+      homebase_metric_tile("Line-drive%", homebase_format_rate(metrics$`LD%`)),
+      homebase_metric_tile("Fly-ball%", homebase_format_rate(metrics$`FB%`)),
+      homebase_metric_tile("Pop-up%", homebase_format_rate(metrics$`PU%`))
+    )
+  )
+}
+
 homebase_recent_ui <- function(data, role) {
   title <- if (role == "hitter") "Recent games · Hitting" else "Recent games · Pitching"
   if (!nrow(data)) {
@@ -1187,6 +1272,10 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
     pos <- if (!is.null(row) && nrow(row)) row$Pos[[1]] else "Player"
     handedness <- if (!is.null(row) && nrow(row)) paste0("B/T: ", row$Bats[[1]], "/", row$Throws[[1]]) else NULL
     roles <- c(if (nrow(profile$hitter)) "Hitter", if (nrow(profile$pitcher)) "Pitcher")
+    sample_parts <- c(
+      if (nrow(profile$hitter)) paste(format(nrow(profile$hitter), big.mark = ","), "hitting"),
+      if (nrow(profile$pitcher)) paste(format(nrow(profile$pitcher), big.mark = ","), "pitching")
+    )
     team_name <- homebase_team_name(profile$team)
     logo_url <- homebase_team_logo_url(profile$team)
     tags$section(
@@ -1207,10 +1296,10 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
         tags$div(class = "hb-player-tags", lapply(roles, function(role) tags$span(role)), if (!is.null(handedness)) tags$span(handedness))
       ),
       tags$div(
-        class = "hb-sample",
+        class = paste("hb-sample", if (length(roles) > 1L) "is-two-way" else ""),
         tags$span("Tracked sample"),
         tags$strong(format(nrow(profile$hitter) + nrow(profile$pitcher), big.mark = ",")),
-        tags$small(paste(profile$source_label, "pitches"))
+        tags$small(paste0(paste(sample_parts, collapse = " · "), " pitches"))
       )
     )
   })
@@ -1224,17 +1313,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
       sections <- c(sections, list(tags$section(
         class = "hb-overview-card",
         tags$div(class = "hb-section-head", tags$div(tags$span("Hitter profile"), tags$h3("Season hitting")), tags$span(class = "hb-role-chip", "BAT")),
-        tags$div(
-          class = "hb-metric-grid",
-          homebase_metric_tile("PA", format(m$PA, big.mark = ",")),
-          homebase_metric_tile("AVG", homebase_format_decimal(m$AVG)),
-          homebase_metric_tile("OBP", homebase_format_decimal(m$OBP)),
-          homebase_metric_tile("SLG", homebase_format_decimal(m$SLG)),
-          homebase_metric_tile("K%", homebase_format_rate(m$`K%`)),
-          homebase_metric_tile("BB%", homebase_format_rate(m$`BB%`)),
-          homebase_metric_tile("Hard-hit", homebase_format_rate(m$`HardHit%`)),
-          homebase_metric_tile("Avg EV", if (is.finite(m$`Avg EV`)) sprintf("%.1f", m$`Avg EV`) else "—")
-        )
+        homebase_hitter_stat_board(m)
       )))
     }
     if (nrow(profile$pitcher)) {
@@ -1294,7 +1373,8 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
     if (!length(sections)) {
       sections <- list(tags$section(class = "hb-overview-card", tags$h3("Player profile"), tags$p(class = "hb-muted", "Roster identity is available, but no matching season pitch data was found yet.")))
     }
-    tags$div(class = "hb-overview-stack", tagList(sections))
+    two_way <- nrow(profile$hitter) > 0 && nrow(profile$pitcher) > 0
+    tags$div(class = paste("hb-overview-stack", if (two_way) "is-two-way" else ""), tagList(sections))
   })
 
   output$hb_recent <- renderUI({
@@ -1327,7 +1407,13 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
     tags$section(
       class = "hb-percentile-section",
       tags$div(class = "hb-studio-heading", tags$span("At a glance"), tags$h2(paste(homebase_history_label(), "percentile rankings"))),
-      tags$div(class = paste("hb-percentile-grid", if (length(cards) == 1L) "is-single" else ""), tagList(cards))
+      tags$div(
+        class = paste(
+          "hb-percentile-grid",
+          if (length(cards) == 1L) "is-single" else "is-two-way"
+        ),
+        tagList(cards)
+      )
     )
   })
 

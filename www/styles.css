@@ -1394,6 +1394,8 @@ table tbody td[style*="background-color"] {
 
 .hb-sample span, .hb-sample small { color: color-mix(in srgb, var(--hb-team-on-primary) 68%, transparent); font-size: 12px; }
 .hb-sample strong { margin: 1px 0; color: var(--hb-team-on-primary); font-family: var(--base-font-display); font-size: 24px; line-height: 1; }
+.hb-sample.is-two-way { min-width: 188px; }
+.hb-sample.is-two-way small { white-space: nowrap; }
 
 .hb-dashboard-grid {
   display: grid;
@@ -1433,6 +1435,7 @@ table tbody td[style*="background-color"] {
 .hb-metric > strong { margin-top: 2px; color: var(--base-ink); font-family: var(--base-font-display); font-size: 19px; line-height: 1.1; }
 .hb-metric > small { margin-top: 3px; color: var(--base-muted); font-size: 11px; }
 
+.hb-stat-board,
 .hb-pitcher-stat-board {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -1536,6 +1539,13 @@ table tbody td[style*="background-color"] {
 }
 .hb-stat-panel.is-results .hb-stat-panel-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
+.hb-stat-panel.is-production {
+  grid-column: span 6;
+  --panel-accent: #7d2229;
+  --panel-soft: #fbf2f2;
+}
+.hb-stat-panel.is-production .hb-stat-panel-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
 .hb-stat-panel.is-execution {
   grid-column: span 6;
   --panel-accent: #355f7b;
@@ -1543,12 +1553,33 @@ table tbody td[style*="background-color"] {
 }
 .hb-stat-panel.is-execution .hb-stat-panel-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
+.hb-stat-panel.is-approach {
+  grid-column: span 6;
+  --panel-accent: #355f7b;
+  --panel-soft: #f1f7fa;
+}
+.hb-stat-panel.is-approach .hb-stat-panel-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
 .hb-stat-panel.is-contact {
   grid-column: span 5;
   --panel-accent: #9a6a1d;
   --panel-soft: #fbf6ea;
 }
 .hb-stat-panel.is-contact .hb-stat-panel-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.hb-stat-panel.is-impact {
+  grid-column: span 7;
+  --panel-accent: #9a6a1d;
+  --panel-soft: #fbf6ea;
+}
+.hb-stat-panel.is-impact .hb-stat-panel-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.hb-stat-panel.is-batted-ball {
+  grid-column: span 5;
+  --panel-accent: #3d6a5b;
+  --panel-soft: #eff7f4;
+}
+.hb-stat-panel.is-batted-ball .hb-stat-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .hb-stat-panel.is-traits {
   grid-column: span 7;
@@ -1581,6 +1612,7 @@ table tbody td[style*="background-color"] {
 .hb-studio-heading h2 { font-size: 20px; }
 .hb-percentile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .hb-percentile-grid.is-single { grid-template-columns: minmax(0, 1fr); }
+.hb-percentile-grid.is-two-way { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .hb-percentile-card { padding: 10px 11px 11px; }
 .hb-percentile-head > small { max-width: 150px; color: var(--base-muted); font-size: 11px; line-height: 1.3; text-align: right; }
 .hb-percentile-scale { display: grid; grid-template-columns: repeat(3, 1fr); margin: 7px 42px 3px 88px; color: var(--base-muted); font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
@@ -1637,9 +1669,15 @@ table tbody td[style*="background-color"] {
   .hb-stat-panel.is-results,
   .hb-stat-panel.is-execution,
   .hb-stat-panel.is-contact,
-  .hb-stat-panel.is-traits { grid-column: 1 / -1; }
+  .hb-stat-panel.is-traits,
+  .hb-stat-panel.is-production,
+  .hb-stat-panel.is-approach,
+  .hb-stat-panel.is-impact,
+  .hb-stat-panel.is-batted-ball { grid-column: 1 / -1; }
   .hb-stat-panel.is-results .hb-stat-panel-grid,
-  .hb-stat-panel.is-traits .hb-stat-panel-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hb-stat-panel.is-traits .hb-stat-panel-grid,
+  .hb-stat-panel.is-production .hb-stat-panel-grid,
+  .hb-stat-panel.is-impact .hb-stat-panel-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 767px) {
@@ -1698,6 +1736,7 @@ table tbody td[style*="background-color"] {
   .hb-sample { grid-column: 1 / -1; grid-template-columns: auto auto auto; align-items: baseline; gap: 7px; padding: 12px 0 0; border-top: 1px solid color-mix(in srgb, var(--hb-team-on-primary) 22%, transparent); border-left: 0; text-align: left; }
   .hb-sample strong { font-size: 22px; }
   .hb-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hb-stat-board,
   .hb-pitcher-stat-board { grid-template-columns: 1fr; }
   .hb-stat-panel { grid-column: 1 / -1 !important; padding: 12px; }
   .hb-stat-panel-head { align-items: flex-start; flex-direction: column; gap: 2px; }
@@ -1705,7 +1744,11 @@ table tbody td[style*="background-color"] {
   .hb-stat-panel.is-results .hb-stat-panel-grid,
   .hb-stat-panel.is-execution .hb-stat-panel-grid,
   .hb-stat-panel.is-contact .hb-stat-panel-grid,
-  .hb-stat-panel.is-traits .hb-stat-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hb-stat-panel.is-traits .hb-stat-panel-grid,
+  .hb-stat-panel.is-production .hb-stat-panel-grid,
+  .hb-stat-panel.is-approach .hb-stat-panel-grid,
+  .hb-stat-panel.is-impact .hb-stat-panel-grid,
+  .hb-stat-panel.is-batted-ball .hb-stat-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hb-game-row { grid-template-columns: 1fr; }
   .hb-game-line { justify-content: flex-start; }
   .hb-percentile-card { padding: 16px 12px; }

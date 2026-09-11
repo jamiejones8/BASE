@@ -40,6 +40,13 @@ if (!is.function(workspace$server)) fail("Embedded Scouting server is unavailabl
 if ("package:MASS" %in% search()) {
   fail("ScoutingApp attached MASS and can mask dplyr functions in other BASE workspaces.")
 }
+launch_html <- paste(as.character(base_opponent_scouting_workspace_ui()), collapse = "")
+if (!all(vapply(
+  c("base-scouting-launch", "base_scouting_team", "base_scouting_open", "base_scouting_open_csv"),
+  grepl, logical(1), x = launch_html, fixed = TRUE
+))) {
+  fail("Opponent Scouting does not expose the deferred team-first launch screen.")
+}
 
 html <- paste(as.character(workspace$ui), collapse = "")
 if (grepl("<body", html, fixed = TRUE)) {
@@ -89,7 +96,7 @@ shiny::testServer(workspace$server, {
   hitter_team <- "OTHER_TEAM"
   hitter <- season_fixture$Batter[[1]]
   pitcher <- season_fixture$Pitcher[[1]]
-  session$setInputs(scout_team = hitter_team)
+  session$setInputs(base_scouting_team = hitter_team)
   session$flushReact()
   session$setInputs(scout_season_hitters = hitter, scout_season_pitchers = pitcher)
   session$flushReact()
@@ -119,7 +126,7 @@ shiny::testServer(workspace$server, {
   if (!isTRUE(all.equal(workspace$row1_table_numeric(hitter_rows), workspace$row1_table_numeric(expected_std)))) {
     fail("Season routing changed hitter report metrics.")
   }
-  session$setInputs(scout_team = original_team, scout_season_hitters = hitter)
+  session$setInputs(base_scouting_team = original_team, scout_season_hitters = hitter)
   session$flushReact()
   session$setInputs(scout_season_hitters = hitter)
   session$flushReact()
@@ -128,6 +135,41 @@ shiny::testServer(workspace$server, {
   cleared <- tryCatch(std_all(), shiny.silent.error = function(e) NULL)
   if (!is.null(cleared)) fail("Clearing the player selection retained stale season rows.")
 })
+
+# Merely opening the tab must register the lightweight launch screen without
+# sourcing or starting the full scouting application.
+original_environment <- base_wally_scouting_environment
+environment_calls <- 0L
+server_calls <- 0L
+base_wally_scouting_environment <- function(...) {
+  environment_calls <<- environment_calls + 1L
+  list(
+    ui = htmltools::tags$div("Deferred scouting fixture"),
+    server = function(input, output, session) server_calls <<- server_calls + 1L
+  )
+}
+shiny::testServer(
+  function(input, output, session) {
+    base_opponent_scouting_workspace_server(
+      input, output, session,
+      data_dir = fixture_dir,
+      season_source = season_source
+    )
+  },
+  {
+    session$flushReact()
+    if (environment_calls != 0L || server_calls != 0L) {
+      fail("Opponent Scouting initialized its full engine before a launch action.")
+    }
+    session$setInputs(base_scouting_team = "OTHER_TEAM", base_scouting_open = 1)
+    session$flushReact()
+    session$flushReact()
+    if (environment_calls != 1L || server_calls != 1L) {
+      fail("Opponent Scouting did not initialize exactly once after opening a team.")
+    }
+  }
+)
+base_wally_scouting_environment <- original_environment
 
 missing_source <- base_scouting_season_source(paste0(season_path, "-missing"))
 missing_message <- tryCatch({ missing_source$teams("hitter"); "" }, error = conditionMessage)

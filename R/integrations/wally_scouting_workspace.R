@@ -164,6 +164,13 @@ base_scouting_data_dir <- function() {
   base_project_path("WallyApps", "ScoutingApp", "data")
 }
 
+base_scouting_team_display_name <- function(team_codes) {
+  if (exists("base_team_display_name", mode = "function", inherits = TRUE)) {
+    return(base_team_display_name(team_codes))
+  }
+  as.character(team_codes)
+}
+
 base_scouting_embedded_head <- function() {
   htmltools::tags$head(htmltools::tags$style(htmltools::HTML("
     .base-scouting-workspace {
@@ -268,7 +275,66 @@ base_scouting_embedded_head <- function() {
     .base-scouting-workspace .shiny-plot-output {
       max-width: none;
     }
+    .base-scouting-launch {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(360px, .72fr);
+      gap: 18px;
+      align-items: center;
+      min-height: 250px;
+      padding: 28px;
+      border: 1px solid var(--base-border);
+      border-radius: var(--base-radius);
+      background:
+        radial-gradient(circle at 88% 12%, rgba(180,151,90,.16), transparent 30%),
+        linear-gradient(135deg, rgba(80,18,20,.045), rgba(255,255,255,.98));
+      box-shadow: var(--base-shadow-sm);
+    }
+    .base-scouting-launch-copy { max-width: 620px; }
+    .base-scouting-launch-mark {
+      display: grid;
+      width: 54px;
+      height: 54px;
+      margin-bottom: 14px;
+      place-items: center;
+      border-radius: 13px;
+      background: var(--base-maroon);
+      color: var(--base-gold-bright);
+      font-family: var(--base-font-display);
+      font-size: 25px;
+      font-weight: 850;
+    }
+    .base-scouting-launch h2 {
+      margin: 0 0 6px;
+      color: var(--base-ink);
+      font-family: var(--base-font-display);
+      font-size: 28px;
+    }
+    .base-scouting-launch p {
+      margin: 0;
+      color: var(--base-muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .base-scouting-launch-controls {
+      padding: 18px;
+      border: 1px solid var(--base-border);
+      border-radius: var(--base-radius-sm);
+      background: rgba(255,255,255,.94);
+    }
+    .base-scouting-launch-controls .form-group { margin-bottom: 10px; }
+    .base-scouting-launch-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+    .base-scouting-launch-actions .btn { min-height: 38px; }
+    .base-scouting-launch-status {
+      min-height: 18px;
+      margin-top: 9px !important;
+      font-size: 12px !important;
+    }
     @media (max-width: 900px) {
+      .base-scouting-launch { grid-template-columns: 1fr; }
       .base-scouting-workspace .base-scouting-embedded-layout {
         display: block;
       }
@@ -340,6 +406,7 @@ base_wally_scouting_environment <- function(
 base_opponent_scouting_workspace_ui <- function() {
   tags$div(
     class = "base-workspace-page base-scouting-host",
+    base_scouting_embedded_head(),
     tags$div(
       class = "base-workspace-heading",
       tags$div(
@@ -355,12 +422,39 @@ base_opponent_scouting_workspace_ui <- function() {
         "Scouting report workspace"
       )
     ),
+    tags$section(
+      id = "base-scouting-launch",
+      class = "base-scouting-launch",
+      tags$div(
+        class = "base-scouting-launch-copy",
+        tags$div(class = "base-scouting-launch-mark", "B"),
+        tags$h2("Choose an opponent to begin"),
+        tags$p(
+          "Select one team to open its scouting workspace. BASE will load that team's player directory first, then only the players you choose."
+        )
+      ),
+      tags$div(
+        class = "base-scouting-launch-controls",
+        selectizeInput(
+          "base_scouting_team", "Opponent team", choices = NULL,
+          options = list(placeholder = "Search college teams", maxOptions = 100),
+          width = "100%"
+        ),
+        tags$div(
+          class = "base-scouting-launch-actions",
+          actionButton("base_scouting_open", "Open team", class = "btn btn-primary"),
+          actionButton("base_scouting_open_csv", "Use game CSVs", class = "btn btn-outline-secondary")
+        ),
+        shiny::uiOutput("base_scouting_launch_status")
+      )
+    ),
     tags$div(
       id = "base-scouting-loading",
       class = "base-workspace-loading",
+      style = "display:none;",
       tags$div(class = "base-loading-mark", "B"),
       tags$strong("Preparing Opponent Scouting"),
-      tags$span("The workspace loads once, when first opened.")
+      tags$span("Loading the selected workspace. This runs once for the session.")
     ),
     shiny::uiOutput("base_opponent_scouting_app")
   )
@@ -370,13 +464,81 @@ base_opponent_scouting_workspace_server <- function(
   input,
   output,
   session,
-  data_dir = base_scouting_data_dir()
+  data_dir = base_scouting_data_dir(),
+  season_source = base_scouting_season_source()
 ) {
-  workspace <- base_wally_scouting_environment(data_dir)
-  output$base_opponent_scouting_app <- shiny::renderUI({
-    tags$div(class = "base-scouting-workspace", workspace$ui)
+  available_teams <- reactiveVal(NULL)
+  workspace_started <- reactiveVal(FALSE)
+
+  observe({
+    if (!is.null(available_teams())) return()
+    teams <- tryCatch(
+      # The pitcher catalog is already mounted at BASE startup and contains
+      # the complete team directory. Avoid touching the hitter catalog until
+      # a team is explicitly selected because its fallback may need to build.
+      sort(unique(season_source$teams("pitcher"))),
+      error = function(e) structure(character(), error = conditionMessage(e))
+    )
+    available_teams(teams)
+    if (length(teams)) {
+      choices <- stats::setNames(teams, base_scouting_team_display_name(teams))
+      updateSelectizeInput(session, "base_scouting_team", choices = choices, server = TRUE)
+    }
   })
-  workspace$server(input, output, session)
-  shinyjs::hide("base-scouting-loading")
-  invisible(workspace)
+
+  output$base_scouting_launch_status <- renderUI({
+    teams <- available_teams()
+    if (is.null(teams)) return(tags$p(class = "base-scouting-launch-status", "Loading team directory…"))
+    error <- attr(teams, "error") %||% ""
+    if (nzchar(error)) return(tags$p(
+      class = "base-scouting-launch-status text-warning",
+      "College directory unavailable. You can still use game CSVs."
+    ))
+    tags$p(
+      class = "base-scouting-launch-status",
+      paste(format(length(teams), big.mark = ","), "college teams available")
+    )
+  })
+
+  start_workspace <- function(mode = c("season", "csv")) {
+    mode <- match.arg(mode)
+    if (isTRUE(workspace_started())) return(invisible(FALSE))
+    if (identical(mode, "season")) {
+      team <- input$base_scouting_team %||% ""
+      if (!nzchar(team)) {
+        showNotification("Choose an opponent team first.", type = "warning")
+        return(invisible(FALSE))
+      }
+    }
+    workspace_started(TRUE)
+    shinyjs::hide("base-scouting-launch")
+    shinyjs::show("base-scouting-loading")
+
+    session$onFlushed(function() {
+      tryCatch({
+        workspace <- base_wally_scouting_environment(data_dir, season_source)
+        output$base_opponent_scouting_app <- shiny::renderUI({
+          tags$div(class = "base-scouting-workspace", workspace$ui)
+        })
+        workspace$server(input, output, session)
+        session$onFlushed(function() {
+          updateRadioButtons(session, "scout_data_source", selected = mode)
+          shinyjs::hide("base-scouting-loading")
+        }, once = TRUE)
+      }, error = function(e) {
+        workspace_started(FALSE)
+        shinyjs::hide("base-scouting-loading")
+        shinyjs::show("base-scouting-launch")
+        showNotification(
+          paste("Opponent Scouting could not start:", conditionMessage(e)),
+          type = "error"
+        )
+      })
+    }, once = TRUE)
+    invisible(TRUE)
+  }
+
+  observeEvent(input$base_scouting_open, start_workspace("season"), ignoreInit = TRUE)
+  observeEvent(input$base_scouting_open_csv, start_workspace("csv"), ignoreInit = TRUE)
+  invisible(list(started = workspace_started, teams = available_teams))
 }

@@ -14,6 +14,7 @@ TEAM_CONFIG <- list(
 )
 
 suppressPackageStartupMessages({
+  library(shiny)
   library(dplyr)
   library(tibble)
   library(readr)
@@ -118,6 +119,7 @@ synthetic <- tibble::tibble(
   PlateLocSide = c(0, .2, -.3, .1, 1.1, 1.2, -.2, .3),
   PlateLocHeight = c(2.5, 2.7, 2.4, 2.6, 2.2, 2.3, 2.5, 2.8),
   ExitSpeed = c(NA, 96, NA, NA, NA, NA, NA, 104),
+  Angle = c(NA, 18, NA, NA, NA, NA, NA, 28),
   RunsScored = c(0, 0, 0, 0, 0, 0, 0, 1)
 )
 
@@ -127,6 +129,26 @@ if (nrow(pa) != 4L) fail("HomeBASE did not reduce pitch rows to four plate appea
 hitter <- homebase_hitter_metrics(synthetic)
 if (hitter$PA != 4L || abs(hitter$AVG - (2 / 3)) > 1e-9 || abs(hitter$SLG - (5 / 3)) > 1e-9) {
   fail("HomeBASE hitter overview metrics differ from the synthetic outcomes.")
+}
+required_hitter_metrics <- c(
+  "Games", "Pitches", "PA", "AB", "H", "2B", "3B", "HR", "XBH",
+  "AVG", "OBP", "SLG", "OPS", "ISO", "K%", "BB%", "Swing%", "ZoneSwing%",
+  "Contact%", "ZoneContact%", "Whiff%", "Chase%", "HardHit%", "Barrel%",
+  "Avg EV", "90th EV", "Max EV", "Avg LA", "SweetSpot%", "GB%", "LD%", "FB%", "PU%"
+)
+if (!all(required_hitter_metrics %in% names(hitter)) || hitter$HR != 1L || hitter$XBH != 1L) {
+  fail("HomeBASE hitter stat board is missing detailed performance metrics.")
+}
+hitter_board_html <- paste(as.character(homebase_hitter_stat_board(hitter)), collapse = "")
+if (!all(vapply(
+  c("hb-hitter-stat-board", "is-workload", "is-production", "is-approach", "is-impact", "is-batted-ball"),
+  grepl, logical(1), x = hitter_board_html, fixed = TRUE
+))) {
+  fail("HomeBASE hitter statistics are not organized into the detailed visual panels.")
+}
+if (!grepl(".hb-percentile-grid.is-two-way", homebase_styles, fixed = TRUE) ||
+    !grepl('else "is-two-way"', homebase_source, fixed = TRUE)) {
+  fail("HomeBASE does not give two-way percentile cards a clean full-width rail layout.")
 }
 
 hitter_games <- homebase_recent_games(synthetic, "hitter")
