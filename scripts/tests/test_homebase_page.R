@@ -94,6 +94,10 @@ if (!grepl('uiOutput("hb_team_theme")', homebase_source, fixed = TRUE) ||
     !grepl("var(--hb-team-secondary)", homebase_styles, fixed = TRUE)) {
   fail("HomeBASE is not applying the selected player's team theme to the page.")
 }
+if (!grepl(".dataTables_scrollBody > table.dataTable > thead", homebase_styles, fixed = TRUE) ||
+    !grepl("visibility: collapse !important", homebase_styles, fixed = TRUE)) {
+  fail("Scrollable tables do not globally collapse DataTables' duplicate sizing headers.")
+}
 if (grepl("base_scouting_season_source", homebase_source, fixed = TRUE) ||
     grepl("$load_players", homebase_source, fixed = TRUE)) {
   fail("HomeBASE still scans the full scouting Parquet instead of using compact runtime catalogs.")

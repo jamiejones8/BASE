@@ -34,6 +34,12 @@ expected_files <- c(
 if (!identical(basename(base_hitting_supplement_paths()), expected_files)) {
   fail("Hitting workspace does not resolve the four HittingApp folder CSVs.")
 }
+if (!identical(
+  names(base_hitting_supplement_candidates()),
+  c("S25", "F25", "SQ26", "S26", "F26", "S27")
+)) {
+  fail("Hitting workspace is not prepared for optional 2026 Fall and 2027 Season sources.")
+}
 
 # Folder rows still deduplicate repeated pitch IDs across selected season files.
 supplement <- fixture[1:2, , drop = FALSE]
@@ -51,6 +57,9 @@ if (!any(prepared$PitchUID == "fixture-unique-hitting-supplement", na.rm = TRUE)
 
 workspace <- base_wally_hitting_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Hitting server is unavailable.")
+if (!all(c(F26 = "2026 Fall", S27 = "2027 Season") %in% stats::setNames(names(workspace$SEASON_CHOICES), workspace$SEASON_CHOICES))) {
+  fail("Hitting season controls do not expose 2026 Fall and 2027 Season.")
+}
 # Exercise the embedded path from outside both the repo and standalone app.
 grid <- readRDS(TEAM_CONFIG$data$xwoba_grid_file)
 lookup_from_other_directory <- function() {

@@ -51,14 +51,18 @@
           "WallyApps/HittingApp/data/2025 Season -cleaned.csv",
           "WallyApps/HittingApp/data/2025 Fall -cleaned.csv",
           "WallyApps/HittingApp/data/2026 Squads - cleaned.csv",
-          "WallyApps/HittingApp/data/2026 Season - cleaned.csv"
+          "WallyApps/HittingApp/data/2026 Season - cleaned.csv",
+          "BASE_TEAM_SEASON_IMPORT_DIR/2026 Fall - cleaned.csv",
+          "BASE_TEAM_SEASON_IMPORT_DIR/2027 Season - cleaned.csv"
         ],
         "pitching": [
           "WallyApps/PitchingApp/data/2025 Season -cleaned.csv",
           "WallyApps/PitchingApp/data/2025 Fall -cleaned.csv",
           "WallyApps/PitchingApp/data/2026 Squads - cleaned.csv",
           "WallyApps/PitchingApp/data/2026 Season - cleaned.csv",
-          "WallyApps/PitchingApp/data/Bullpens - cleaned.csv"
+          "WallyApps/PitchingApp/data/Bullpens - cleaned.csv",
+          "BASE_TEAM_SEASON_IMPORT_DIR/2026 Fall - cleaned.csv",
+          "BASE_TEAM_SEASON_IMPORT_DIR/2027 Season - cleaned.csv"
         ]
       },
       "scope": [
@@ -66,7 +70,9 @@
         "Texas State 2025 fall",
         "Texas State 2026 squads",
         "Texas State bullpens",
-        "2026 season pitches absent from the national master"
+        "2026 season pitches absent from the national master",
+        "Texas State 2026 fall",
+        "Texas State 2027 season"
       ],
       "identity_precedence": [
         "PitchUID",
@@ -78,6 +84,8 @@
         "Never expose this source as complete NCAA coverage.",
         "Keep internal, scrimmage, and bullpen competition labels distinct.",
         "Use the HittingApp and PitchingApp folder files directly for their integrated BASE workspaces.",
+        "Load optional 2026 Fall and 2027 Season cumulative CSVs when they exist; their absence before first import is valid.",
+        "Append one validated TrackMan game at a time and deduplicate by stable pitch identity before replacing a cumulative season CSV.",
         "Do not blend the Wally workspace payloads with the national master."
       ]
     },

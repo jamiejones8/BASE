@@ -41,6 +41,7 @@ source(file.path(base_bootstrap_root, "team_config.R"), local = FALSE)
 base_source("R/data/source_contract.R", local = FALSE)
 base_source("R/performance/lazy_workspace.R", local = FALSE)
 base_source("R/data/data_access.R", local = FALSE)
+base_source("R/data/team_season_imports.R", local = FALSE)
 base_source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 base_source("R/integrations/wally_hitting_workspace.R", local = FALSE)
 base_source("R/integrations/wally_scouting_workspace.R", local = FALSE)
@@ -50,6 +51,13 @@ base_source("R/data/defense_data_access.R", local = FALSE)
 base_source("R/integrations/wally_defense_workspace.R", local = FALSE)
 base_source("R/data/defense_attribution.R", local = FALSE)
 base_source("R/data/pitch_retags.R", local = FALSE)
+
+options(
+  shiny.maxRequestSize = max(
+    getOption("shiny.maxRequestSize", 5 * 1024^2),
+    base_env_int("BASE_TRACKMAN_UPLOAD_MAX_MB", 100L) * 1024^2
+  )
+)
 
 BASE_RETAG_STORAGE_STATUS <- base_retag_storage_status()
 message(
@@ -4190,21 +4198,189 @@ data_processing_workspace_ui <- function() {
     "if(retag){retag.scrollIntoView({behavior:'smooth',block:'center'});}",
     "},250);"
   )
-  workspace_landing_ui(
-    "Data Processing",
-    "Prepare, validate, and correct",
-    "Operational tools live here so reporting and scouting workspaces remain focused on analysis.",
-    list(
-      workspace_tool_card(
-        "Pitch Retagger", "Persistent pitch-type corrections with source and PitchUID provenance.",
-        "pitcher_player", "Open retagger", onclick = open_retagger
+  import_card <- function(target_id, input_id, output_id) {
+    target <- base_team_season_import_target(target_id)
+    tags$section(
+      class = "base-import-card",
+      tags$div(
+        class = "base-import-card-heading",
+        tags$div(
+          tags$span(class = "base-tool-eyebrow", "Team season source"),
+          tags$h3(target$label)
+        ),
+        tags$span(class = "base-import-year", target$expected_year)
       ),
-      workspace_tool_card(
-        "Source Health", "Coverage, freshness, schema, and runtime-build validation.",
-        status = "Integration queued"
-      )
+      tags$p(
+        "Upload one raw TrackMan game CSV. BASE validates the game and season, removes pitches already stored, and appends only new rows."
+      ),
+      shiny::fileInput(
+        inputId = paste0(input_id, "_file"),
+        label = "TrackMan game CSV",
+        accept = c("text/csv", ".csv"),
+        buttonLabel = "Choose game",
+        placeholder = "No file selected"
+      ),
+      shiny::actionButton(
+        inputId = paste0(input_id, "_append"),
+        label = paste("Validate and append to", target$label),
+        class = "btn-primary base-import-submit"
+      ),
+      shiny::uiOutput(output_id)
     )
+  }
+
+  tagList(
+    tags$head(tags$style(HTML("
+      .base-data-processing-page { padding-bottom:48px; }
+      .base-data-processing-page .base-workspace-tool-grid { margin-bottom:24px; }
+      .base-import-section-heading { margin:26px 0 12px; }
+      .base-import-section-heading h3 { margin:2px 0 5px; font-family:var(--base-font-display);font-size:24px; }
+      .base-import-section-heading p { max-width:820px;margin:0;color:var(--base-muted); }
+      .base-import-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px; }
+      .base-import-card { min-width:0;padding:18px;border:1px solid var(--base-border);border-radius:var(--base-radius);background:var(--base-surface);box-shadow:var(--base-shadow-sm); }
+      .base-import-card-heading { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px; }
+      .base-import-card h3 { margin:1px 0 0;font-family:var(--base-font-display);font-size:22px;color:var(--base-ink); }
+      .base-import-card > p { min-height:42px;color:var(--base-muted);font-size:13px;line-height:1.45; }
+      .base-import-year { padding:5px 8px;border-radius:999px;background:var(--base-gold-soft);color:var(--base-maroon);font-size:11px;font-weight:800; }
+      .base-import-card .form-group { margin:14px 0 10px; }
+      .base-import-submit { width:100%;white-space:normal; }
+      .base-import-status { margin-top:12px;padding:11px 12px;border:1px solid var(--base-border);border-radius:8px;background:var(--base-surface-soft);font-size:12px;line-height:1.45; }
+      .base-import-status strong { display:block;margin-bottom:2px;color:var(--base-ink); }
+      .base-import-status.is-success { border-color:rgba(37,99,69,.24);background:var(--base-success-soft); }
+      .base-import-status.is-error { border-color:rgba(155,44,44,.24);background:var(--base-danger-soft);color:var(--base-danger); }
+      .base-import-path { display:block;overflow-wrap:anywhere;color:var(--base-muted);font-family:var(--base-font-data);font-size:10px; }
+      @media(max-width:800px){.base-import-grid{grid-template-columns:1fr}.base-import-card>p{min-height:0}}
+    "))),
+    tags$div(
+      class = "hub-main base-page base-data-processing-page",
+      tags$div(class = "base-eyebrow", "Prepare, validate, and correct"),
+      tags$h2("Data Processing"),
+      tags$p(
+        class = "base-workspace-description",
+        "Operational tools live here so reporting and scouting workspaces remain focused on analysis."
+      ),
+      tags$div(
+        class = "base-workspace-tool-grid",
+        workspace_tool_card(
+          "Pitch Retagger", "Persistent pitch-type corrections with source and PitchUID provenance.",
+          "pitcher_player", "Open retagger", onclick = open_retagger
+        ),
+        workspace_tool_card(
+          "Source Health", "Coverage, freshness, schema, and runtime-build validation.",
+          status = "Integration queued"
+        )
+      ),
+      tags$div(
+        class = "base-import-section-heading",
+        tags$div(class = "base-eyebrow", "TrackMan ingestion"),
+        tags$h3("Append a completed game"),
+        tags$p(
+          "Choose the correct destination before importing. Files are stored as cumulative season CSVs and loaded by Team Pitching, Team Hitting, Postgame Reports, and HomeBASE."
+        )
+      ),
+      tags$div(
+        class = "base-import-grid",
+        import_card("F26", "dp_f26", "dp_f26_status"),
+        import_card("S27", "dp_s27", "dp_s27_status")
+      )
+    ),
+    tags$div(class = "hub-footer", base_brand_footer())
   )
+}
+
+data_processing_server <- function(input, output, session) {
+  states <- list(F26 = shiny::reactiveVal(NULL), S27 = shiny::reactiveVal(NULL))
+
+  render_status <- function(target_id, state) {
+    status <- base_team_season_source_status(target_id)
+    target <- status$target
+    if (!is.null(state) && identical(state$type, "error")) {
+      return(tags$div(
+        class = "base-import-status is-error",
+        tags$strong("Import not saved"),
+        state$message,
+        tags$span(class = "base-import-path", status$path)
+      ))
+    }
+    if (!is.null(state) && identical(state$type, "success")) {
+      result <- state$result
+      summary <- if (result$inserted_rows > 0L) {
+        paste0(
+          format(result$inserted_rows, big.mark = ","), " new pitches appended; ",
+          format(result$duplicate_rows, big.mark = ","), " duplicates skipped."
+        )
+      } else {
+        paste0("No new pitches were added; all ", result$duplicate_rows, " rows were already stored.")
+      }
+      return(tags$div(
+        class = "base-import-status is-success",
+        tags$strong(paste(target$label, "source updated")),
+        summary,
+        tags$br(),
+        paste0("Source total: ", format(result$total_rows, big.mark = ","), " pitches. Reload BASE if an analysis workspace was already open."),
+        tags$span(class = "base-import-path", result$destination)
+      ))
+    }
+    tags$div(
+      class = "base-import-status",
+      tags$strong(if (status$exists) "Season source ready" else "Waiting for the first game"),
+      if (status$exists) {
+        paste0(
+          "Last saved ", format(status$modified, "%b %d, %Y at %I:%M %p"),
+          " (", format(round(status$size / 1024^2, 1), nsmall = 1), " MB)."
+        )
+      } else {
+        "The cumulative CSV will be created automatically after the first valid import."
+      },
+      tags$span(class = "base-import-path", status$path)
+    )
+  }
+
+  output$dp_f26_status <- shiny::renderUI(render_status("F26", states$F26()))
+  output$dp_s27_status <- shiny::renderUI(render_status("S27", states$S27()))
+
+  register_import <- function(target_id, input_prefix, state) {
+    shiny::observeEvent(input[[paste0(input_prefix, "_append")]], {
+      upload <- input[[paste0(input_prefix, "_file")]]
+      if (is.null(upload) || !nzchar(upload$datapath)) {
+        state(list(type = "error", message = "Choose a TrackMan game CSV before importing."))
+        return()
+      }
+      result <- tryCatch(
+        shiny::withProgress(
+          message = paste("Updating", base_team_season_import_target(target_id)$label),
+          value = 0.35,
+          {
+            imported <- base_import_trackman_game(upload$datapath, target_id)
+            shiny::incProgress(0.65)
+            imported
+          }
+        ),
+        error = function(e) e
+      )
+      if (inherits(result, "error")) {
+        state(list(type = "error", message = conditionMessage(result)))
+        shiny::showNotification(conditionMessage(result), type = "error", duration = 8)
+        return()
+      }
+
+      base_clear_team_pitching_cache()
+      base_clear_team_hitting_cache()
+      base_clear_wally_pitching_state()
+      base_clear_wally_hitting_state()
+      homebase_clear_history_cache()
+      state(list(type = "success", result = result))
+      shiny::showNotification(
+        paste(result$target_label, "saved:", result$inserted_rows, "new pitches"),
+        type = "message",
+        duration = 6
+      )
+    }, ignoreInit = TRUE)
+  }
+
+  register_import("F26", "dp_f26", states$F26)
+  register_import("S27", "dp_s27", states$S27)
+  invisible(states)
 }
 
 home_tab_ui <- function() {
@@ -4429,6 +4605,7 @@ server <- function(input, output, session) {
     target <- unname(BASE_NAV_TABS[input$nav_to])
     if (length(target) && !is.na(target)) updateNavbarPage(session, "base_nav", selected = target)
   })
+  data_processing_server(input, output, session)
   base_lazy_workspace_server(
     input, session, c("tab_team_pitching", "tab_postgame_reports"),
     initialize = function() base_team_pitching_workspace_server(

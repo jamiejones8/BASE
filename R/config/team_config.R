@@ -244,6 +244,13 @@ TEAM_CONFIG <- list(
       "BASE_TEAM_SUPPLEMENT_DATASET_DIR",
       "/base-data/supplements/texas-state-pitches"
     ),
+    team_season_import_dir = base_env_path(
+      "BASE_TEAM_SEASON_IMPORT_DIR",
+      file.path(
+        if (dir.exists("/base-data")) "/base-data/app_state" else base_project_path("app_state"),
+        "team-season-imports"
+      )
+    ),
     season_file = base_env_path("BASE_SEASON_DATA_FILE", base_default_season_file()),
     runtime_root = base_env_path("BASE_RUNTIME_ROOT", "/base-data/derived2026"),
     pitcher_dataset_dir = base_env_path(

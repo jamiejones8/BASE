@@ -170,7 +170,18 @@
           "navigation": "Data Processing deep-links directly to the persistent retag controls without creating a second server or pitch-data copy."
         },
         "Data-source health and coverage",
-        "Future upload, validation, and preparation utilities"
+        {
+          "id": "trackman_2026_fall_import",
+          "title": "2026 Fall TrackMan Import",
+          "storage": "Cumulative 2026 Fall CSV in BASE_TEAM_SEASON_IMPORT_DIR",
+          "behavior": "Validate one game, enforce 2026 dates and Texas State participation, deduplicate stable pitch IDs, then append atomically."
+        },
+        {
+          "id": "trackman_2027_season_import",
+          "title": "2027 Season TrackMan Import",
+          "storage": "Cumulative 2027 Season CSV in BASE_TEAM_SEASON_IMPORT_DIR",
+          "behavior": "Validate one game, enforce 2027 dates and Texas State participation, deduplicate stable pitch IDs, then append atomically."
+        }
       ]
     }
   ]

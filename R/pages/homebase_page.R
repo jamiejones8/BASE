@@ -4,6 +4,10 @@
 # card engine is loaded only when a user asks to generate a hitter or pitcher
 # card, preserving fast HomeBASE startup for the active roster.
 
+if (!exists("base_team_season_import_paths", mode = "function")) {
+  source(base_project_path("R", "data", "team_season_imports.R"), local = FALSE)
+}
+
 homebase_name_key <- function(x) {
   x <- as.character(x)
   comma_name <- grepl(",", x, fixed = TRUE)
@@ -143,40 +147,65 @@ homebase_history_file <- function(role = c("hitter", "pitcher")) {
   )
 }
 
+homebase_history_files <- function(role = c("hitter", "pitcher")) {
+  role <- match.arg(role)
+  unique(c(
+    homebase_history_file(role),
+    unname(base_team_season_import_paths(existing_only = TRUE))
+  ))
+}
+
 homebase_history_label <- function() {
   value <- Sys.getenv("BASE_HOMEBASE_HISTORY_LABEL", unset = "")
   if (nzchar(trimws(value))) trimws(value) else "2026 season"
 }
 
-homebase_history_dataset <- local({
-  cache <- new.env(parent = emptyenv())
-  function(role = c("hitter", "pitcher"), refresh = FALSE) {
-    role <- match.arg(role)
-    path <- homebase_history_file(role)
-    key <- paste(role, normalizePath(path, winslash = "/", mustWork = FALSE), sep = "::")
-    if (!isTRUE(refresh) && exists(key, envir = cache, inherits = FALSE)) {
-      return(get(key, envir = cache, inherits = FALSE))
-    }
-    rows <- if (!file.exists(path)) {
-      tibble::tibble()
-    } else {
-      tryCatch(
-        readr::read_csv(
-          path,
-          col_types = readr::cols(.default = readr::col_character()),
-          progress = FALSE,
-          show_col_types = FALSE
-        ) %>% tibble::as_tibble(),
-        error = function(e) {
-          message("HomeBASE could not read ", basename(path), ": ", conditionMessage(e))
-          tibble::tibble()
-        }
-      )
-    }
-    assign(key, rows, envir = cache)
-    rows
+.homebase_history_cache <- new.env(parent = emptyenv())
+
+homebase_history_dataset <- function(role = c("hitter", "pitcher"), refresh = FALSE) {
+  role <- match.arg(role)
+  paths <- homebase_history_files(role)
+  path_key <- paste(normalizePath(paths, winslash = "/", mustWork = FALSE), collapse = "|")
+  key <- paste(role, path_key, sep = "::")
+  if (!isTRUE(refresh) && exists(key, envir = .homebase_history_cache, inherits = FALSE)) {
+    return(get(key, envir = .homebase_history_cache, inherits = FALSE))
   }
-})
+  paths <- paths[file.exists(paths)]
+  pieces <- lapply(paths, function(path) {
+    tryCatch({
+      rows <- readr::read_csv(
+        path,
+        col_types = readr::cols(.default = readr::col_character()),
+        progress = FALSE,
+        show_col_types = FALSE
+      ) %>% tibble::as_tibble()
+      target <- Filter(
+        function(candidate) identical(candidate$filename, basename(path)),
+        BASE_TEAM_SEASON_IMPORT_TARGETS
+      )
+      rows$.base_homebase_source_label <- if (length(target)) target[[1]]$label else homebase_history_label()
+      rows
+    }, error = function(e) {
+      message("HomeBASE could not read ", basename(path), ": ", conditionMessage(e))
+      tibble::tibble()
+    })
+  })
+  pieces <- pieces[vapply(pieces, nrow, integer(1)) > 0L]
+  rows <- if (length(pieces)) dplyr::bind_rows(pieces) else tibble::tibble()
+  if (nrow(rows)) {
+    keys <- base_trackman_event_key(rows)
+    stable <- !is.na(keys) & nzchar(keys)
+    rows <- rows[!stable | !duplicated(keys), , drop = FALSE]
+  }
+  assign(key, rows, envir = .homebase_history_cache)
+  rows
+}
+
+homebase_clear_history_cache <- function() {
+  keys <- ls(.homebase_history_cache, all.names = TRUE)
+  if (length(keys)) rm(list = keys, envir = .homebase_history_cache)
+  invisible(TRUE)
+}
 
 homebase_load_history_rows <- function(role = c("hitter", "pitcher"), player, refresh = FALSE) {
   role <- match.arg(role)
@@ -188,7 +217,14 @@ homebase_load_history_rows <- function(role = c("hitter", "pitcher"), player, re
   keep <- homebase_name_key(rows[[player_col]]) == homebase_name_key(player) &
     !is.na(rows[[team_col]]) & grepl(TEAM_CONFIG$data_pattern, rows[[team_col]], ignore.case = TRUE, perl = TRUE)
   result <- rows[keep, , drop = FALSE]
-  if (nrow(result)) result$DataSource <- homebase_history_label()
+  if (nrow(result)) {
+    result$DataSource <- if (".base_homebase_source_label" %in% names(result)) {
+      result$.base_homebase_source_label
+    } else {
+      homebase_history_label()
+    }
+    result$.base_homebase_source_label <- NULL
+  }
   result
 }
 

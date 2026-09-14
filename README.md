@@ -31,7 +31,18 @@ and [`docs/wallyapps/SCOUTING_INTEGRATION.md`](docs/wallyapps/SCOUTING_INTEGRATI
 
 The integrated Pitching and Hitting workspaces use the season, squad, and
 bullpen CSV files stored in their respective `WallyApps/*/data` folders. Their
-player-menu checkboxes map directly to those filenames.
+player-menu checkboxes map directly to those filenames. Optional cumulative
+`2026 Fall - cleaned.csv` and `2027 Season - cleaned.csv` sources are loaded
+from `BASE_TEAM_SEASON_IMPORT_DIR` as soon as they exist.
+
+Data Processing contains separate 2026 Fall and 2027 Season TrackMan importers.
+Each accepts one game CSV, verifies its year and Texas State participation,
+deduplicates pitches by stable TrackMan identity, and atomically appends new
+rows to the selected cumulative source. The default deployment directory is
+`/base-data/app_state/team-season-imports`; mount it as persistent writable
+storage. Local development defaults to the ignored `app_state/team-season-imports`
+directory. If Pitching, Hitting, Postgame Reports, or HomeBASE was already open
+during an import, reload BASE to rebuild that workspace from the updated file.
 
 ## 2026 data model
 

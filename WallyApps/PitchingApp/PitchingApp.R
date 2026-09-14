@@ -202,6 +202,12 @@ season_window_info <- function(date_val) {
   if (date_val >= as.Date("2026-02-13") && date_val <= as.Date("2026-06-30")) {
     out$label <- "2026 Season"; out$start <- as.Date("2026-02-13"); out$end <- as.Date("2026-06-30"); return(out)
   }
+  if (date_val >= as.Date("2026-07-01") && date_val <= as.Date("2026-12-31")) {
+    out$label <- "2026 Fall"; out$start <- as.Date("2026-07-01"); out$end <- as.Date("2026-12-31"); return(out)
+  }
+  if (date_val >= as.Date("2027-01-01") && date_val <= as.Date("2027-06-30")) {
+    out$label <- "2027 Season"; out$start <- as.Date("2027-01-01"); out$end <- as.Date("2027-06-30"); return(out)
+  }
   
   # Fallback heuristics if outside fixed windows
   m <- as.integer(format(date_val, "%m"))
@@ -215,7 +221,9 @@ SEASON_CHOICES <- c(
   "2025 Season" = "S25",
   "2025 Fall"   = "F25",
   "2026 Squads" = "SQ26",
-  "2026 Season" = "S26"
+  "2026 Season" = "S26",
+  "2026 Fall"   = "F26",
+  "2027 Season" = "S27"
 )
 
 
@@ -3253,6 +3261,8 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
       tag == "F25"  ~ "2025 Fall",
       tag == "SQ26" ~ "2026 Squads",
       tag == "S26"  ~ "2026 Season",
+      tag == "F26"  ~ "2026 Fall",
+      tag == "S27"  ~ "2027 Season",
       tag == "PORT" ~ "Portal",
       TRUE          ~ as.character(tag %||% "Season")
     )
@@ -4715,6 +4725,8 @@ infer_season_group_from_file <- function(f) {
     grepl("f25|2025[_ -]?fall|fall[_ -]?2025",       f) ~ "F25",
     grepl("sq26|2026[_ -]?squads|squads[_ -]?2026",   f) ~ "SQ26",
     grepl("s26|2026[_ -]?season|season[_ -]?2026",    f) ~ "S26",
+    grepl("f26|2026[_ -]?fall|fall[_ -]?2026",        f) ~ "F26",
+    grepl("s27|2027[_ -]?season|season[_ -]?2027",    f) ~ "S27",
     grepl("portal", f)                                 ~ "PORT",
     TRUE ~ NA_character_
   )
@@ -4742,6 +4754,8 @@ df$SeasonGroup <- dplyr::case_when(
   df$SeasonGroup %in% c("F25","2025 FALL","2025_FALL")     ~ "F25",
   df$SeasonGroup %in% c("SQ26","2026 SQUADS","2026_SQUADS")~ "SQ26",
   df$SeasonGroup %in% c("S26","2026 SEASON","2026_SEASON") ~ "S26",
+  df$SeasonGroup %in% c("F26","2026 FALL","2026_FALL")     ~ "F26",
+  df$SeasonGroup %in% c("S27","2027 SEASON","2027_SEASON") ~ "S27",
   df$SeasonGroup %in% c("PORT","PORTAL","PORTAL SEASON","PORTAL_SEASON") ~ "PORT",
   TRUE ~ df$SeasonGroup
 )
@@ -5145,6 +5159,8 @@ games_2025_season <- games_by_season("S25")
 games_2025_fall   <- games_by_season("F25")
 games_2026_squads <- games_by_season("SQ26")
 games_2026_season <- games_by_season("S26")
+games_2026_fall   <- games_by_season("F26")
+games_2027_season <- games_by_season("S27")
 games_portal      <- games_by_season("PORT")
 
 GAMES_BY_SEASON <- list(
@@ -5152,6 +5168,8 @@ GAMES_BY_SEASON <- list(
   F25  = games_2025_fall,
   SQ26 = games_2026_squads,
   S26  = games_2026_season,
+  F26  = games_2026_fall,
+  S27  = games_2027_season,
   PORT = games_portal
 )
 # ---- Pitcher-aware game ID helper (season + optional bullpens) ----
@@ -7495,6 +7513,8 @@ server <- function(input, output, session){
       tag == "F25"  ~ "2025 Fall",
       tag == "SQ26" ~ "2026 Squads",
       tag == "S26"  ~ "2026 Season",
+      tag == "F26"  ~ "2026 Fall",
+      tag == "S27"  ~ "2027 Season",
       tag == "PORT" ~ "Portal",
       TRUE          ~ as.character(tag %||% "")
     )

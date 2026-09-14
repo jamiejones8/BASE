@@ -4,6 +4,10 @@
 # normalized team-only payload and a scoped visual shell, then evaluates the
 # app in an isolated environment on the first visit to the Pitching workspace.
 
+if (!exists("base_team_season_import_paths", mode = "function")) {
+  base_source("R/data/team_season_imports.R", local = FALSE)
+}
+
 BASE_WALLY_PITCHING_FILE <- base_project_path(
   "WallyApps", "PitchingApp", "PitchingApp.R"
 )
@@ -19,7 +23,7 @@ BASE_WALLY_PITCHING_REQUIRED_PACKAGES <- c(
 .base_team_pitching_cache <- new.env(parent = emptyenv())
 .base_wally_pitching_state <- new.env(parent = emptyenv())
 
-BASE_WALLY_PITCHING_DATA_FILES <- c(
+BASE_WALLY_PITCHING_LEGACY_DATA_FILES <- c(
   S25 = "2025 Season -cleaned.csv",
   F25 = "2025 Fall -cleaned.csv",
   SQ26 = "2026 Squads - cleaned.csv",
@@ -27,18 +31,29 @@ BASE_WALLY_PITCHING_DATA_FILES <- c(
   BP = "Bullpens - cleaned.csv"
 )
 
-base_pitching_dev_supplement_paths <- function() {
+base_pitching_supplement_candidates <- function() {
   root <- base_project_path("WallyApps", "PitchingApp", "data")
-  file.path(root, unname(BASE_WALLY_PITCHING_DATA_FILES))
+  c(
+    stats::setNames(
+      file.path(root, unname(BASE_WALLY_PITCHING_LEGACY_DATA_FILES)),
+      names(BASE_WALLY_PITCHING_LEGACY_DATA_FILES)
+    ),
+    base_team_season_import_paths(existing_only = FALSE)
+  )
+}
+
+base_pitching_dev_supplement_paths <- function() {
+  unname(base_pitching_supplement_candidates())
 }
 
 base_pitching_supplement_paths <- function() {
-  paths <- base_pitching_dev_supplement_paths()
-  missing <- paths[!file.exists(paths)]
+  candidates <- base_pitching_supplement_candidates()
+  required <- candidates[names(BASE_WALLY_PITCHING_LEGACY_DATA_FILES)]
+  missing <- required[!file.exists(required)]
   if (length(missing)) {
     stop("Wally PitchingApp data files are missing: ", paste(basename(missing), collapse = ", "))
   }
-  paths
+  unname(candidates[file.exists(candidates)])
 }
 
 base_read_pitching_source <- function(path) {
@@ -54,10 +69,18 @@ base_read_pitching_source <- function(path) {
   }
   rows$source_file <- basename(path)
   rows$row_in_file <- seq_len(nrow(rows))
-  source_group <- names(BASE_WALLY_PITCHING_DATA_FILES)[
-    match(basename(path), BASE_WALLY_PITCHING_DATA_FILES)
+  source_files <- stats::setNames(
+    basename(base_pitching_supplement_candidates()),
+    names(base_pitching_supplement_candidates())
+  )
+  source_group <- names(source_files)[
+    match(basename(path), source_files)
   ]
   rows$SeasonGroup <- if (identical(source_group, "BP")) NA_character_ else source_group
+  if (!is.na(source_group) && source_group %in% names(BASE_TEAM_SEASON_IMPORT_TARGETS) &&
+      "PitcherTeam" %in% names(rows)) {
+    rows <- rows[base_team_matches(rows$PitcherTeam), , drop = FALSE]
+  }
   rows
 }
 
@@ -190,6 +213,12 @@ base_load_team_pitching_data <- function(source_rows = NULL, refresh = FALSE) {
 base_clear_team_pitching_cache <- function() {
   keys <- ls(.base_team_pitching_cache, all.names = TRUE)
   if (length(keys)) rm(list = keys, envir = .base_team_pitching_cache)
+  invisible(TRUE)
+}
+
+base_clear_wally_pitching_state <- function() {
+  keys <- ls(.base_wally_pitching_state, all.names = TRUE)
+  if (length(keys)) rm(list = keys, envir = .base_wally_pitching_state)
   invisible(TRUE)
 }
 

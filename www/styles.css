@@ -486,6 +486,13 @@ table.dataTable thead th {
   text-transform: uppercase;
 }
 
+/* DataTables keeps a duplicate header inside each horizontal scroll body for
+   column sizing. App-level header styles can otherwise turn that hidden copy
+   into one or more empty colored rows above the data. */
+.dataTables_scrollBody > table.dataTable > thead {
+  visibility: collapse !important;
+}
+
 .table > tbody > tr > td,
 table.dataTable tbody td { border-color: var(--base-border) !important; }
 .table-striped > tbody > tr:nth-of-type(odd), table.dataTable.stripe > tbody > tr.odd { background: var(--base-surface-soft); }

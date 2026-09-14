@@ -4,6 +4,10 @@
 # normalized Texas State payload, evaluates the app in an isolated environment,
 # and supplies a visual wrapper scoped to the Hitting workspace.
 
+if (!exists("base_team_season_import_paths", mode = "function")) {
+  base_source("R/data/team_season_imports.R", local = FALSE)
+}
+
 BASE_WALLY_HITTING_FILE <- base_project_path(
   "WallyApps", "HittingApp", "HittingApp.R"
 )
@@ -18,25 +22,36 @@ BASE_WALLY_HITTING_REQUIRED_PACKAGES <- c(
 .base_team_hitting_cache <- new.env(parent = emptyenv())
 .base_wally_hitting_state <- new.env(parent = emptyenv())
 
-BASE_WALLY_HITTING_DATA_FILES <- c(
+BASE_WALLY_HITTING_LEGACY_DATA_FILES <- c(
   S25 = "2025 Season -cleaned.csv",
   F25 = "2025 Fall -cleaned.csv",
   SQ26 = "2026 Squads - cleaned.csv",
   S26 = "2026 Season - cleaned.csv"
 )
 
-base_hitting_dev_supplement_paths <- function() {
+base_hitting_supplement_candidates <- function() {
   root <- base_project_path("WallyApps", "HittingApp", "data")
-  file.path(root, unname(BASE_WALLY_HITTING_DATA_FILES))
+  c(
+    stats::setNames(
+      file.path(root, unname(BASE_WALLY_HITTING_LEGACY_DATA_FILES)),
+      names(BASE_WALLY_HITTING_LEGACY_DATA_FILES)
+    ),
+    base_team_season_import_paths(existing_only = FALSE)
+  )
+}
+
+base_hitting_dev_supplement_paths <- function() {
+  unname(base_hitting_supplement_candidates())
 }
 
 base_hitting_supplement_paths <- function() {
-  paths <- base_hitting_dev_supplement_paths()
-  missing <- paths[!file.exists(paths)]
+  candidates <- base_hitting_supplement_candidates()
+  required <- candidates[names(BASE_WALLY_HITTING_LEGACY_DATA_FILES)]
+  missing <- required[!file.exists(required)]
   if (length(missing)) {
     stop("Wally HittingApp data files are missing: ", paste(basename(missing), collapse = ", "))
   }
-  paths
+  unname(candidates[file.exists(candidates)])
 }
 
 base_read_hitting_source <- function(path) {
@@ -52,8 +67,12 @@ base_read_hitting_source <- function(path) {
   }
   rows$source_file <- basename(path)
   rows$row_in_file <- seq_len(nrow(rows))
-  season_group <- names(BASE_WALLY_HITTING_DATA_FILES)[
-    match(basename(path), BASE_WALLY_HITTING_DATA_FILES)
+  source_files <- stats::setNames(
+    basename(base_hitting_supplement_candidates()),
+    names(base_hitting_supplement_candidates())
+  )
+  season_group <- names(source_files)[
+    match(basename(path), source_files)
   ]
   rows$SeasonGroup <- season_group
   rows
@@ -191,6 +210,12 @@ base_load_team_hitting_data <- function(source_rows = NULL, refresh = FALSE) {
 base_clear_team_hitting_cache <- function() {
   keys <- ls(.base_team_hitting_cache, all.names = TRUE)
   if (length(keys)) rm(list = keys, envir = .base_team_hitting_cache)
+  invisible(TRUE)
+}
+
+base_clear_wally_hitting_state <- function() {
+  keys <- ls(.base_wally_hitting_state, all.names = TRUE)
+  if (length(keys)) rm(list = keys, envir = .base_wally_hitting_state)
   invisible(TRUE)
 }
 

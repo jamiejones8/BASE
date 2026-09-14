@@ -107,6 +107,11 @@ def main() -> int:
     )
     if not retagger or retagger.get("existing_base_tab") != "tab_pitcher_player":
         fail("Data Processing must route to the persistent pitch retagger.")
+    processing_tool_ids = {
+        tool.get("id") for tool in processing.get("tools", []) if isinstance(tool, dict)
+    }
+    if not {"trackman_2026_fall_import", "trackman_2027_season_import"}.issubset(processing_tool_ids):
+        fail("Data Processing must declare both future TrackMan season importers.")
 
     known_routes = set(sources.get("feature_routes", {}))
     for workspace in workspaces:
@@ -191,6 +196,9 @@ def main() -> int:
         fail(f"Postgame Reports is missing moved AAR outputs: {missing_postgame_outputs}")
     if '#cpp-page .cpp-retag-card' not in app_source:
         fail("The Data Processing card does not deep-link to the persistent retagger.")
+    for input_prefix in ('import_card("F26", "dp_f26"', 'import_card("S27", "dp_s27"'):
+        if input_prefix not in app_source:
+            fail(f"The Data Processing TrackMan importer is missing {input_prefix}.")
     if "body > nav.navbar { display: none !important; }" not in style_source:
         fail("The compatibility navbar is not hidden by the application stylesheet.")
 

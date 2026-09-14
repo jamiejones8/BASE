@@ -587,7 +587,9 @@ SEASON_CHOICES <- c(
   "2025 Season" = "S25",
   "2025 Fall"   = "F25",
   "2026 Squads" = "SQ26",
-  "2026 Season" = "S26"
+  "2026 Season" = "S26",
+  "2026 Fall"   = "F26",
+  "2027 Season" = "S27"
 )
 
 # ---- Season grouping (season CSV format) ----
@@ -599,6 +601,8 @@ infer_season_group_from_file <- function(f) {
     grepl("f25|2025[_ -]?fall|fall[_ -]?2025",       f) ~ "F25",
     grepl("sq26|2026[_ -]?squads|squads[_ -]?2026",   f) ~ "SQ26",
     grepl("s26|2026[_ -]?season|season[_ -]?2026",    f) ~ "S26",
+    grepl("f26|2026[_ -]?fall|fall[_ -]?2026",        f) ~ "F26",
+    grepl("s27|2027[_ -]?season|season[_ -]?2027",    f) ~ "S27",
     grepl("portal", f)                                 ~ "PORT",
     TRUE ~ NA_character_
   )
@@ -626,6 +630,8 @@ df$SeasonGroup <- dplyr::case_when(
   df$SeasonGroup %in% c("F25","2025 FALL","2025_FALL")     ~ "F25",
   df$SeasonGroup %in% c("SQ26","2026 SQUADS","2026_SQUADS")~ "SQ26",
   df$SeasonGroup %in% c("S26","2026 SEASON","2026_SEASON") ~ "S26",
+  df$SeasonGroup %in% c("F26","2026 FALL","2026_FALL")     ~ "F26",
+  df$SeasonGroup %in% c("S27","2027 SEASON","2027_SEASON") ~ "S27",
   df$SeasonGroup %in% c("PORT","PORTAL","PORTAL SEASON","PORTAL_SEASON") ~ "PORT",
   TRUE ~ df$SeasonGroup
 )
@@ -8756,6 +8762,8 @@ server <- function(input, output, session){
       sg %in% c("F25","2025 FALL","2025_FALL")     ~ "2025 Fall",
       sg %in% c("SQ26","2026 SQUADS","2026_SQUADS")~ "2026 Squads",
       sg %in% c("S26","2026 SEASON","2026_SEASON") ~ "2026 Season",
+      sg %in% c("F26","2026 FALL","2026_FALL")     ~ "2026 Fall",
+      sg %in% c("S27","2027 SEASON","2027_SEASON") ~ "2027 Season",
       sg %in% c("PORT","PORTAL","PORTAL SEASON","PORTAL_SEASON") ~ "Portal",
       TRUE ~ sg
     )
@@ -8764,6 +8772,8 @@ server <- function(input, output, session){
       sg %in% c("F25","2025 FALL","2025_FALL")     ~ "F25",
       sg %in% c("SQ26","2026 SQUADS","2026_SQUADS")~ "SQ26",
       sg %in% c("S26","2026 SEASON","2026_SEASON") ~ "S26",
+      sg %in% c("F26","2026 FALL","2026_FALL")     ~ "F26",
+      sg %in% c("S27","2027 SEASON","2027_SEASON") ~ "S27",
       sg %in% c("PORT","PORTAL","PORTAL SEASON","PORTAL_SEASON") ~ "PORT",
       TRUE ~ sg
     ))

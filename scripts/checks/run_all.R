@@ -15,6 +15,7 @@ checks <- list(
   c("Rscript", "scripts/tests/test_lazy_workspace.R"),
   c("Rscript", "scripts/tests/test_homebase_page.R"),
   c("Rscript", "scripts/tests/test_pitch_retags.R"),
+  c("Rscript", "scripts/tests/test_team_season_imports.R"),
   c("Rscript", "scripts/tests/test_wally_pitching_integration.R"),
   c("Rscript", "scripts/tests/test_wally_hitting_integration.R"),
   c("Rscript", "scripts/tests/test_wally_defense_integration.R"),

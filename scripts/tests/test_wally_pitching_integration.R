@@ -35,6 +35,12 @@ expected_files <- c(
 if (!identical(basename(base_pitching_supplement_paths()), expected_files)) {
   fail("Pitching workspace does not resolve the five PitchingApp folder CSVs.")
 }
+if (!identical(
+  names(base_pitching_supplement_candidates()),
+  c("S25", "F25", "SQ26", "S26", "BP", "F26", "S27")
+)) {
+  fail("Pitching workspace is not prepared for optional 2026 Fall and 2027 Season sources.")
+}
 
 # Folder rows still deduplicate repeated pitch IDs while retaining bullpen rows.
 supplement <- fixture[1:2, , drop = FALSE]
@@ -52,6 +58,9 @@ if (!any(prepared$PitchUID == "fixture-unique-bullpen-pitch", na.rm = TRUE)) {
 
 workspace <- base_wally_pitching_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Pitching server is unavailable.")
+if (!all(c(F26 = "2026 Fall", S27 = "2027 Season") %in% stats::setNames(names(workspace$SEASON_CHOICES), workspace$SEASON_CHOICES))) {
+  fail("Pitching season controls do not expose 2026 Fall and 2027 Season.")
+}
 if (!grepl("rgba\\(227,52,52", workspace$.severity_fill(1, "coach"))) {
   fail("Coach-facing Pitching shading is not red for favorable values.")
 }
