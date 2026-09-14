@@ -38,6 +38,7 @@ library(tibble)
 library(reactable)
 
 source(file.path(base_bootstrap_root, "team_config.R"), local = FALSE)
+base_source("R/security/password_gate.R", local = FALSE)
 base_source("R/data/source_contract.R", local = FALSE)
 base_source("R/performance/lazy_workspace.R", local = FALSE)
 base_source("R/data/data_access.R", local = FALSE)
@@ -4462,7 +4463,7 @@ home_tab_ui <- function() {
 # ==========================================
 # UI
 # ==========================================
-ui <- navbarPage(
+base_application_ui <- navbarPage(
   title       = tagList(
     tags$img(
       src = base_supercat_logo_url(),
@@ -4596,10 +4597,35 @@ ui <- navbarPage(
   tabPanel("Pitcher Card (Mock)", value = "tab_pcard_mock", pcard_report_ui())
 )
 
+ui <- bootstrapPage(
+  useShinyjs(),
+  tags$head(
+    tags$meta(name = "robots", content = "noindex, nofollow"),
+    tags$link(rel = "icon", href = base_supercat_logo_url()),
+    tags$link(
+      rel = "stylesheet",
+      href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"
+    ),
+    tags$link(rel = "stylesheet", type = "text/css", href = base_stylesheet_url()),
+    tags$style(HTML(base_brand_css(include_leaderboards = FALSE)))
+  ),
+  uiOutput("base_app_root")
+)
+
 # ==========================================
 # SERVER
 # ==========================================
 server <- function(input, output, session) {
+
+  authenticated <- base_password_gate_server(
+    input,
+    output,
+    session,
+    application_ui = base_application_ui
+  )
+
+  observeEvent(authenticated(), {
+    req(isTRUE(authenticated()))
 
   observeEvent(input$nav_to, {
     target <- unname(BASE_NAV_TABS[input$nav_to])
@@ -5294,6 +5320,7 @@ server <- function(input, output, session) {
     id = "homebase"
   )
 
+  }, ignoreInit = TRUE, once = TRUE)
 }
 
       

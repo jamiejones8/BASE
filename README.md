@@ -125,6 +125,19 @@ home scoreboard, and the primary mark on the analytics hub card.
 5. Set `BASE_ROSTER_FILE` and `BASE_SCHEDULE_FILE` for the college roster and
    schedule. Templates are available in `config_examples/`.
 
+## Password access
+
+BASE opens on a password screen and does not render the application workspaces
+until the browser session is authenticated. Set `BASE_APP_PASSWORD` as a private
+environment variable in Railway or in an ignored local `.env` file. The app
+shows a configuration notice and remains locked when this variable is empty.
+
+Each browser session must authenticate again after it reconnects or refreshes.
+After five unsuccessful attempts, the session is paused for 30 seconds. Those
+defaults can be changed with `BASE_AUTH_MAX_ATTEMPTS` and
+`BASE_AUTH_LOCKOUT_SECONDS`. Production deployments should continue to use
+HTTPS so passwords are encrypted in transit.
+
 ## College roster format
 
 The roster CSV requires these columns:

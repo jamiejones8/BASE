@@ -75,12 +75,179 @@ a { color: var(--base-maroon); }
 a:hover, a:focus { color: var(--base-maroon-deep); }
 
 /* --------------------------------------------------------------------------
+   Password gate
+   -------------------------------------------------------------------------- */
+.base-auth-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  min-height: 100vh;
+  padding: 28px;
+  place-items: center;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(215, 189, 138, 0.19), transparent 24rem),
+    linear-gradient(145deg, var(--base-maroon-deep), var(--base-maroon) 68%, #64272a);
+}
+
+.base-auth-screen::before {
+  position: fixed;
+  inset: 22px;
+  border: 1px solid rgba(215, 189, 138, 0.22);
+  content: "";
+  pointer-events: none;
+}
+
+.base-auth-card {
+  position: relative;
+  width: min(100%, 430px);
+  padding: clamp(30px, 5vw, 48px);
+  border: 1px solid rgba(215, 189, 138, 0.3);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 30px 80px rgba(26, 4, 5, 0.35);
+}
+
+.base-auth-brand {
+  display: flex;
+  margin-bottom: 36px;
+  align-items: center;
+  gap: 13px;
+}
+
+.base-auth-brand img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(49, 10, 12, 0.18));
+}
+
+.base-auth-wordmark { display: flex; flex-direction: column; line-height: 1; }
+.base-auth-product {
+  color: var(--base-maroon);
+  font-family: var(--base-font-display);
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+.base-auth-team {
+  margin-top: 6px;
+  color: var(--base-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.base-auth-eyebrow {
+  margin-bottom: 7px;
+  color: var(--base-gold);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.base-auth-card h1 {
+  margin: 0;
+  color: var(--base-ink);
+  font-family: var(--base-font-display);
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.base-auth-intro {
+  margin: 12px 0 27px;
+  color: var(--base-muted);
+  font-size: 15px;
+}
+
+.base-auth-card .form-group { margin-bottom: 14px; }
+.base-auth-card label {
+  margin-bottom: 8px;
+  color: var(--base-ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.base-auth-card .form-control {
+  height: 48px;
+  border: 1px solid var(--base-border-strong);
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 16px;
+}
+.base-auth-card .form-control:focus {
+  border-color: var(--base-maroon);
+  box-shadow: 0 0 0 3px rgba(80, 18, 20, 0.12);
+}
+
+.base-auth-submit {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 4px;
+  border: 1px solid var(--base-maroon-deep);
+  border-radius: 10px;
+  background: var(--base-maroon);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+.base-auth-submit:hover,
+.base-auth-submit:focus {
+  background: var(--base-maroon-deep);
+  color: #fff;
+  box-shadow: 0 9px 20px rgba(49, 10, 12, 0.2);
+  transform: translateY(-1px);
+}
+
+.base-auth-message {
+  margin: -2px 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.base-auth-message.is-error {
+  border: 1px solid rgba(155, 44, 44, 0.18);
+  background: var(--base-danger-soft);
+  color: var(--base-danger);
+}
+.base-auth-help {
+  margin: 14px 0 0;
+  color: var(--base-subtle);
+  font-size: 12px;
+  text-align: center;
+}
+.base-auth-config-error {
+  display: flex;
+  padding: 13px 14px;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid rgba(155, 44, 44, 0.18);
+  border-radius: 9px;
+  background: var(--base-danger-soft);
+  color: var(--base-danger);
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .base-auth-screen { padding: 16px; }
+  .base-auth-screen::before { inset: 10px; }
+  .base-auth-card { padding: 28px 24px; }
+}
+
+/* --------------------------------------------------------------------------
    Primary application navigation
    -------------------------------------------------------------------------- */
 /* navbarPage remains as the compatibility router, but its global navigation
    is intentionally hidden. Workspaces own their tabs; Home is the only global
    control exposed to users. */
 body > nav.navbar { display: none !important; }
+#base_app_root > nav.navbar,
+#base_app_root > body > nav.navbar { display: none !important; }
 
 #base-shell-home {
   position: fixed;
@@ -236,7 +403,9 @@ body > nav.navbar { display: none !important; }
 /* Shiny's navbarPage wraps every tab in a padded Bootstrap container. Each
    BASE page owns its own internal spacing, so the root wrapper should be
    full-bleed—especially the Home hero. */
-body > .container-fluid {
+body > .container-fluid,
+#base_app_root > .container-fluid,
+#base_app_root > body > .container-fluid {
   width: 100%;
   padding-right: 0;
   padding-left: 0;
