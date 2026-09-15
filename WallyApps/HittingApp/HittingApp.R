@@ -1594,7 +1594,7 @@ if (isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE)))
   base_hitting_page <- page_sidebar
 }
 
-base_hitting_postgame_ui <- tagList(
+base_hitting_aar_builder_ui <- tagList(
   if (isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))) {
     div(
       class = "aar-card",
@@ -1652,6 +1652,16 @@ base_hitting_postgame_ui <- tagList(
       width = 4,
       div(class="aar-card", uiOutput("aar_kpi"))
     )
+  )
+)
+
+base_hitting_postgame_ui <- navset_tab(
+  id = "hit_aar_tabs",
+  nav_panel("AAR Builder", base_hitting_aar_builder_ui),
+  nav_panel(
+    "Recent AARs",
+    div(class = "table-title mb-1", "Most Recent AARs"),
+    uiOutput("hit_aar_recent_list_ui")
   )
 )
 
@@ -3731,11 +3741,11 @@ build_swing_decisions_tbl <- function(d){
   n <- nrow(d)
   if (!n) {
     return(tibble::tibble(
-      `#` = integer(), `PA` = integer(), Pitcher = abbr_name(get_chr("Pitcher")),
+      `#` = integer(), `PA` = integer(), Pitcher = character(),
        Count = character(),
       `Pitch Res` = character(), `AB Res` = character(), `Pitch Type` = character(),
       Velo = character(), EV = character(), LA = character(), Dist = character(),
-      Decision = character(), `Good?` = character()
+      Decision = character(), `Good?` = character(), Ump = character()
     ))
   }
   
@@ -3868,13 +3878,36 @@ build_swing_decisions_tbl <- function(d){
     in_zone %in% FALSE & Decision == "SWING" ~ "NO",
     TRUE                                     ~ ""
   )
+
+  # Replace vendor tokens with language a player or coach would use.
+  pitch_result <- dplyr::case_when(
+    get_chr("pitch_call") %in% c("BallCalled", "Ball", "BallInDirt") ~ "Called Ball",
+    get_chr("pitch_call") == "StrikeCalled" ~ "Called Strike",
+    get_chr("pitch_call") == "StrikeSwinging" ~ "Swing & Miss",
+    get_chr("pitch_call") %in% c("FoulBall", "FoulBallFieldable", "FoulBallNotFieldable") ~ "Foul Ball",
+    get_chr("pitch_call") == "FoulTip" ~ "Foul Tip",
+    get_chr("pitch_call") %in% c("InPlay", "InPlayOut", "InPlayNoOut") ~ "Ball in Play",
+    get_chr("pitch_call") == "HitByPitch" ~ "Hit By Pitch",
+    get_chr("pitch_call") == "AutomaticBall" ~ "Automatic Ball",
+    get_chr("pitch_call") == "AutomaticStrike" ~ "Automatic Strike",
+    get_chr("pitch_call") == "PitchOut" ~ "Pitchout",
+    TRUE ~ gsub("([a-z])([A-Z])", "\\1 \\2", get_chr("pitch_call"))
+  )
+
+  # Only called-pitch misses receive an umpire marker. From the hitter's
+  # perspective, an in-zone ball is fortunate and an out-of-zone strike hurts.
+  ump_marker <- dplyr::case_when(
+    get_chr("pitch_call") == "BallCalled" & in_zone %in% TRUE ~ "🍀",
+    get_chr("pitch_call") == "StrikeCalled" & in_zone %in% FALSE ~ "🤖",
+    TRUE ~ ""
+  )
   
   tbl <- tibble::tibble(
     `#`         = pitchnum,
     `PA`        = pa_seq,
     Pitcher     = abbr_name(get_chr("Pitcher")),
     Count       = Count,
-    `Pitch Res.`= get_chr("pitch_call"),
+    `Pitch Res.`= pitch_result,
     `Res.`      = abres,
     `Type`      = pt_chr,
     Velo        = velo_chr,
@@ -3882,7 +3915,8 @@ build_swing_decisions_tbl <- function(d){
     LA          = la_chr,
     Dist        = dist_chr,
     Decision    = Decision,
-    `Good?`     = good_calc
+    `Good?`     = good_calc,
+    Ump         = ump_marker
     
   )
   
@@ -6150,8 +6184,12 @@ server <- function(input, output, session){
   })
   
   # AAR data for a single selected game
-  aar_game_data_for <- function(sel_game, use_full_game = FALSE){
-    aar_hitter <- aar_hitter_value()
+  aar_game_data_for <- function(sel_game, use_full_game = FALSE, hitter_override = NULL){
+    aar_hitter <- if (!is.null(hitter_override) && nzchar(as.character(hitter_override))) {
+      as.character(hitter_override)
+    } else {
+      aar_hitter_value()
+    }
     req(nzchar(aar_hitter))
     
     # AAR controls are independent from the Hitting workspace sidebar because
@@ -6205,7 +6243,11 @@ server <- function(input, output, session){
     d <- d %>% dplyr::filter(.data$Batter == aar_hitter, !(is_bullpen %in% TRUE))
     
     # Build the hitter's game list (newest → oldest) and pick the current selection
-    gf <- games_for_aar_hitter()
+    gf <- if (!is.null(hitter_override) && nzchar(as.character(hitter_override))) {
+      unique(as.character(d$CustomGameID))
+    } else {
+      games_for_aar_hitter()
+    }
     gids <- gf
     if (is.data.frame(gf)) gids <- gf$gid
     gids <- as.character(gids)
@@ -7111,14 +7153,7 @@ server <- function(input, output, session){
   
 
   # ================== AAR PDF DOWNLOAD ==================
-  output$hit_aar_pdf <- downloadHandler(
-    filename = function() {
-      d <- aar_data()
-      plyr <- if (!is.null(d) && nrow(d) && "Batter" %in% names(d)) gsub("[^A-Za-z0-9]+","_", unique(d$Batter)[1]) else "Player"
-      gdt  <- if (!is.null(d) && nrow(d) && "GameDate" %in% names(d)) as.character(sort(unique(d$GameDate))[1]) else as.character(Sys.Date())
-      sprintf("AAR_%s_%s.pdf", plyr, gdt)
-    },
-    content = function(file){
+  write_hitting_aar_pdf <- function(file, d) {
       
       # ---------- local helpers (self-contained so this block works anywhere) ----------
       nz_chr <- function(x) ifelse(is.na(x), "", as.character(x))
@@ -7169,7 +7204,6 @@ server <- function(input, output, session){
       }
       
       # ---------- get data ----------
-      d <- aar_data()
       validate(need(nrow(d) > 0, "No data for AAR."))
       
       # ---------- PAGE & COLUMN LAYOUT (Legal 14x8.5, 60/40 split) ----------
@@ -7192,6 +7226,7 @@ server <- function(input, output, session){
         }
       }
       open_pdf_device(file, PAGE_W_IN, PAGE_H_IN)
+      on.exit(grDevices::dev.off(), add = TRUE)
       
       
       # ---------- HEADER (Player, date, opponent; logos if available) ----------
@@ -7217,7 +7252,7 @@ server <- function(input, output, session){
       
       date_str <- if (!is.na(gdate)) format(parse_date_any(gdate), "%B %d, %Y") else ""
       opp_str  <- hitting_team_display_text(get_opponent(d))
-      hdr_line <- paste(c(player_name, date_str, opp_str)[nzchar(c(player_name, date_str, opp_str))], collapse = "  •  ")
+      hdr_line <- paste(c(player_name, date_str, opp_str)[nzchar(c(player_name, date_str, opp_str))], collapse = "  |  ")
       
       hdr_bg  <- grid::rectGrob(gp = grid::gpar(fill = "#501214", col = NA))
       hdr_txt <- grid::textGrob(
@@ -7243,12 +7278,20 @@ server <- function(input, output, session){
       
       # Nudge/align logos inside their cells (no vp= on gtable_add_grob)
       if (!inherits(left_logo, "null")) {
-        left_logo <- grid::editGrob(left_logo, x = grid::unit(0, "npc"), y = grid::unit(0.5, "npc"),
-                                    just = c("left", "center"))
+        left_logo <- grid::editGrob(
+          left_logo,
+          x = grid::unit(0.06, "npc"), y = grid::unit(0.5, "npc"),
+          width = grid::unit(0.78, "in"), height = grid::unit(0.55, "in"),
+          just = c("left", "center")
+        )
       }
       if (!inherits(right_logo, "null")) {
-        right_logo <- grid::editGrob(right_logo, x = grid::unit(1, "npc"), y = grid::unit(0.5, "npc"),
-                                     just = c("right", "center"))
+        right_logo <- grid::editGrob(
+          right_logo,
+          x = grid::unit(0.94, "npc"), y = grid::unit(0.5, "npc"),
+          width = grid::unit(0.78, "in"), height = grid::unit(0.55, "in"),
+          just = c("right", "center")
+        )
       }
       
       # Build a 3-column header: [logo] [title] [logo]
@@ -7327,7 +7370,7 @@ server <- function(input, output, session){
       }
       
       # force exact column order
-      want_cols <- c("#","PA","Pitcher","Count","Pitch Res.","Res.","Type","Velo","EV","LA","Dist","Decision","Good?")
+      want_cols <- c("#","PA","Pitcher","Count","Pitch Res.","Res.","Type","Velo","EV","LA","Dist","Decision","Good?","Ump")
       have <- intersect(want_cols, names(tbl_pdf))
       tbl_pdf <- dplyr::select(tbl_pdf, dplyr::all_of(have))
       missing <- setdiff(want_cols, names(tbl_pdf))
@@ -7335,13 +7378,17 @@ server <- function(input, output, session){
         for (nm in missing) tbl_pdf[[nm]] <- ""
         tbl_pdf <- dplyr::select(tbl_pdf, dplyr::all_of(want_cols))
       }
+      # Base PDF fonts do not reliably contain color emoji. Keep the semantic
+      # values in the data, then draw compact vector clover/robot icons below.
+      ump_values_pdf <- as.character(tbl_pdf$Ump)
+      tbl_pdf$Ump <- ""
       
       # theme: maroon header + gold text
       ttheme_tbl <- gridExtra::ttheme_minimal(
         core = list(fg_params = list(cex = 0.90, lineheight = 1.45),
                     padding   = grid::unit(c(3, 4), "pt")),
         colhead = list(
-          fg_params = list(cex = 0.86, fontface = 2, col = "#B4975A", hjust = 0, x = 0.04),
+          fg_params = list(cex = 0.80, fontface = 2, col = "#B4975A", hjust = 0.5, x = 0.5),
           bg_params = list(fill = "#501214", col = NA)
         )
       )
@@ -7364,25 +7411,16 @@ server <- function(input, output, session){
       # Keep a small inside margin so borders never touch the gutter.
       tbl_max_in <- LEFT_W_IN - 0.10   # <-- adjust margin if you want, but keep something >0
       
-      # Weights for the 13 columns (must sum to 1.00)
-      # (#, PA, Pitcher, Count, Pitch Res., Res., Type, Velo, EV, LA, Dist, Decision, Good?)
+      # Weights for the 14 compact columns. Normalize them so future additions
+      # cannot push the table past its panel boundary.
+      # (#, PA, Pitcher, Count, Pitch Res., Res., Type, Velo, EV, LA, Dist, Decision, Good?, Ump)
       w <- c(
-        0.04,  # #
-        0.05,  # PA
-        0.16,  # Pitcher (slightly narrower to free space for Good?)
-        0.07,  # Count
-        0.18,  # Pitch Res.
-        0.06,  # Res.
-        0.08,  # Type
-        0.06,  # Velo
-        0.06,  # EV
-        0.05,  # LA
-        0.05,  # Dist
-        0.08,  # Decision
-        0.06   # Good?
+        0.030, 0.040, 0.110, 0.055, 0.150, 0.050, 0.090,
+        0.055, 0.045, 0.040, 0.045, 0.075, 0.060, 0.055
       )
+      w <- w / sum(w)
       
-      # If for any reason the table doesn't have 13 cols (defensive), fall back evenly
+      # If for any reason the table doesn't have 14 cols (defensive), fall back evenly
       if (length(g_swing_tbl$widths) != length(w)) {
         w <- rep(1/length(g_swing_tbl$widths), length(g_swing_tbl$widths))
       }
@@ -7416,7 +7454,8 @@ server <- function(input, output, session){
             decision <- decision_rows[min(r, length(decision_rows))]
             gp <- g$grobs[[k]]$gp %||% grid::gpar()
             gp$col <- if (decision == "SWING") "#501214" else if (decision == "TAKE") "#FFFFFF" else "#222222"
-            gp$fontface <- if (decision %in% c("SWING", "TAKE")) 2 else 1
+            gp$fontface <- NULL
+            gp$font <- if (decision %in% c("SWING", "TAKE")) 2 else 1
             g$grobs[[k]]$gp <- gp
           }
         }
@@ -7470,17 +7509,47 @@ server <- function(input, output, session){
       col_pres <- intersect(colnames(tbl_pdf), c("Pitch Res.","Pitch Res"))
       if (length(col_pres)) {
         col_pres <- col_pres[1]
-        pres_vals <- tbl_pdf[[col_pres]]
-        pres_bg <- ifelse(pres_vals %in% SWING_LIKE, "#B4975A",
-                          ifelse(pres_vals %in% TAKE_LIKE,  "#501214", ""))
-        pres_fg <- ifelse(pres_vals %in% SWING_LIKE, "#501214",
-                          ifelse(pres_vals %in% TAKE_LIKE,  "#FFFFFF", "black"))
+        decision_vals <- toupper(trimws(nz_chr(tbl_pdf$Decision)))
+        pres_bg <- ifelse(decision_vals == "SWING", "#B4975A",
+                          ifelse(decision_vals == "TAKE", "#501214", ""))
+        pres_fg <- ifelse(decision_vals == "SWING", "#501214",
+                          ifelse(decision_vals == "TAKE", "#FFFFFF", "black"))
         g_swing_tbl <- shade_table_col(
           g_swing_tbl,
           which(colnames(tbl_pdf) == col_pres),
           fills = pres_bg,
           text_col = pres_fg
         )
+      }
+
+      # Draw PDF-safe vector equivalents of the requested emoji markers.
+      ump_col <- which(colnames(tbl_pdf) == "Ump")
+      if (length(ump_col) == 1L) {
+        core_fg <- which(g_swing_tbl$layout$name == "core-fg" & g_swing_tbl$layout$l == ump_col)
+        core_fg <- core_fg[order(g_swing_tbl$layout$t[core_fg])]
+        clover_icon <- function() grid::grobTree(
+          grid::segmentsGrob(x0 = .50, y0 = .18, x1 = .54, y1 = .42,
+                             gp = grid::gpar(col = "#1B5E20", lwd = 1.4)),
+          grid::circleGrob(x = c(.43, .57, .43, .57), y = c(.48, .48, .62, .62), r = .10,
+                           gp = grid::gpar(fill = "#2E7D32", col = "#1B5E20", lwd = .6))
+        )
+        robot_icon <- function() grid::grobTree(
+          grid::segmentsGrob(x0 = .50, y0 = .70, x1 = .56, y1 = .82,
+                             gp = grid::gpar(col = "#455A64", lwd = 1.1)),
+          grid::circleGrob(x = .57, y = .84, r = .025,
+                           gp = grid::gpar(fill = "#90A4AE", col = "#455A64", lwd = .5)),
+          grid::roundrectGrob(x = .50, y = .51, width = .52, height = .38, r = grid::unit(.06, "npc"),
+                              gp = grid::gpar(fill = "#B0BEC5", col = "#455A64", lwd = .8)),
+          grid::circleGrob(x = c(.42, .58), y = .55, r = .035,
+                           gp = grid::gpar(fill = "#263238", col = NA)),
+          grid::segmentsGrob(x0 = .40, y0 = .43, x1 = .60, y1 = .43,
+                             gp = grid::gpar(col = "#455A64", lwd = .8))
+        )
+        for (j in seq_along(core_fg)) {
+          marker <- ump_values_pdf[min(j, length(ump_values_pdf))]
+          if (identical(marker, "🍀")) g_swing_tbl$grobs[[core_fg[j]]] <- clover_icon()
+          if (identical(marker, "🤖")) g_swing_tbl$grobs[[core_fg[j]]] <- robot_icon()
+        }
       }
       
       # ---------- STRIKE ZONE PLOT (bigger marks ~ +40%) ----------
@@ -7545,10 +7614,11 @@ server <- function(input, output, session){
               axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks = element_blank())
       
       g_strike <- ggplotGrob(p_strike)
-      # Nudge strike zone up ~10% within its cell
+      # Keep the plot inside its cell so its white panel cannot cover the
+      # report header when rendered by different PDF devices.
       g_strike <- grid::grobTree(
         g_strike,
-        vp = grid::viewport(y = grid::unit(0.6, "npc"), height = grid::unit(1, "npc"))
+        vp = grid::viewport(y = grid::unit(0.5, "npc"), height = grid::unit(0.96, "npc"))
       )
       # ---- Spray grob for PDF (NO grid.newpage side-effects) ----
       spray_grob_pdf <- function(df_game){
@@ -7872,8 +7942,8 @@ server <- function(input, output, session){
           `D1 Avg` = c(d1[["whiff"]], d1[["chase"]], d1[["barrel"]])
         )
         
-        fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100*x), "—")
-        fmt_cnt <- function(x) ifelse(is.finite(x), as.character(as.integer(round(x))), "—")
+        fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100*x), "-")
+        fmt_cnt <- function(x) ifelse(is.finite(x), as.character(as.integer(round(x))), "-")
         t0$`This Game` <- fmt_cnt(t0$`This Game`)
         t0$Season <- fmt_pct(t0$Season)
         t0$`D1 Avg` <- fmt_pct(t0$`D1 Avg`)
@@ -7994,9 +8064,116 @@ server <- function(input, output, session){
         
         grid::grid.draw(gt)
       }
-      grDevices::dev.off()
-    }
+  }
+
+  output$hit_aar_pdf <- downloadHandler(
+    filename = function() {
+      d <- aar_data()
+      plyr <- if (!is.null(d) && nrow(d) && "Batter" %in% names(d)) gsub("[^A-Za-z0-9]+","_", unique(d$Batter)[1]) else "Player"
+      gdt  <- if (!is.null(d) && nrow(d) && "GameDate" %in% names(d)) as.character(sort(unique(d$GameDate))[1]) else as.character(Sys.Date())
+      sprintf("AAR_%s_%s.pdf", plyr, gdt)
+    },
+    content = function(file) write_hitting_aar_pdf(file, aar_data())
   )
+
+  hit_aar_recent_reports <- reactive({
+    d <- df
+    if (is.null(d) || !nrow(d)) return(tibble::tibble())
+    d <- d %>% dplyr::filter(!(is_bullpen %in% TRUE))
+    season_groups <- aar_season_group_values()
+    season_col <- if ("SeasonGroup" %in% names(d)) "SeasonGroup" else if ("SeasonTag" %in% names(d)) "SeasonTag" else NULL
+    if (!is.null(season_col) && length(season_groups)) {
+      d <- d %>% dplyr::filter(.data[[season_col]] %in% season_groups)
+    }
+    d$.aar_date <- dplyr::coalesce(
+      parse_date_any(d$GameDate),
+      parse_date_any(d$Date),
+      extract_date_from_filename(d$source_file)
+    )
+    d %>%
+      dplyr::filter(!is.na(Batter), nzchar(as.character(Batter)),
+                    !is.na(CustomGameID), nzchar(as.character(CustomGameID))) %>%
+      dplyr::group_by(Batter, CustomGameID) %>%
+      dplyr::summarise(
+        GameDate = {
+          values <- .aar_date[!is.na(.aar_date)]
+          if (length(values)) min(values) else as.Date(NA)
+        },
+        Pitches = dplyr::n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::arrange(dplyr::desc(GameDate), Batter) %>%
+      dplyr::slice_head(n = 25) %>%
+      dplyr::mutate(row_id = dplyr::row_number())
+  })
+
+  output$hit_aar_recent_list_ui <- renderUI({
+    rows <- hit_aar_recent_reports()
+    if (!nrow(rows)) return(div("No hitting AARs available for the selected season filters."))
+    tagList(lapply(seq_len(nrow(rows)), function(i) {
+      row <- rows[i, ]
+      div(
+        style = "display:grid; grid-template-columns:1.5fr .8fr .5fr .75fr .75fr; gap:10px; align-items:center; padding:8px 10px; border-bottom:1px solid #e5e5e5;",
+        div(style = "font-weight:700;", name_display(row$Batter)),
+        div(ifelse(is.na(row$GameDate), "Unknown date", format(row$GameDate, "%B %d, %Y"))),
+        div(paste(row$Pitches, "pitches")),
+        actionButton(paste0("hit_aar_recent_preview_", i), "Preview AAR", class = "btn-sm"),
+        downloadButton(paste0("hit_aar_recent_download_", i), "Download AAR", class = "btn-sm")
+      )
+    }))
+  })
+
+  hit_aar_recent_preview <- reactiveVal(NULL)
+  for (i in seq_len(25)) {
+    local({
+      idx <- i
+      observeEvent(input[[paste0("hit_aar_recent_preview_", idx)]], {
+        rows <- hit_aar_recent_reports()
+        req(nrow(rows) >= idx)
+        hit_aar_recent_preview(rows[idx, ])
+        showModal(modalDialog(
+          title = paste("AAR Preview:", name_display(rows$Batter[idx])),
+          div(class = "base-report-preview", imageOutput("hit_aar_recent_preview_image", height = "900px")),
+          easyClose = TRUE, size = "l", footer = modalButton("Close")
+        ))
+      }, ignoreInit = TRUE)
+
+      output[[paste0("hit_aar_recent_download_", idx)]] <- downloadHandler(
+        filename = function() {
+          rows <- hit_aar_recent_reports()
+          if (nrow(rows) < idx) return("Hitting_AAR.pdf")
+          paste0("AAR_", gsub("[^A-Za-z0-9]+", "_", rows$Batter[idx]), "_",
+                 ifelse(is.na(rows$GameDate[idx]), "undated", format(rows$GameDate[idx], "%Y%m%d")), ".pdf")
+        },
+        content = function(file) {
+          rows <- hit_aar_recent_reports()
+          req(nrow(rows) >= idx)
+          report_data <- aar_game_data_for(
+            rows$CustomGameID[idx],
+            hitter_override = rows$Batter[idx]
+          )
+          write_hitting_aar_pdf(file, report_data)
+        }
+      )
+    })
+  }
+
+  output$hit_aar_recent_preview_image <- renderImage({
+    selected <- hit_aar_recent_preview()
+    req(!is.null(selected), nrow(selected) == 1)
+    report_data <- aar_game_data_for(
+      selected$CustomGameID[[1]],
+      hitter_override = selected$Batter[[1]]
+    )
+    tmp_pdf <- tempfile(fileext = ".pdf")
+    on.exit(unlink(tmp_pdf), add = TRUE)
+    write_hitting_aar_pdf(tmp_pdf, report_data)
+    if (!requireNamespace("pdftools", quietly = TRUE)) stop("The pdftools package is required for AAR previews.")
+    bitmap <- pdftools::pdf_render_page(tmp_pdf, page = 1L, dpi = 130)
+    tmp_png <- tempfile(fileext = ".png")
+    png::writePNG(bitmap, tmp_png)
+    list(src = tmp_png, contentType = "image/png", width = "100%")
+  }, deleteFile = TRUE)
   
   # -------------------- Damage Heat Map --------------------
   plot_damage_heat <- function(d){
@@ -8960,6 +9137,9 @@ server <- function(input, output, session){
   })
   
   output$hit_team_report_preview <- renderImage({
+    # An unset selector during lazy workspace startup is normal, not a preview
+    # failure. Keep it outside tryCatch so Shiny suspends quietly.
+    req(input$team_report_game)
     make_error_png <- function(msg) {
       tmp <- tempfile(fileext = ".png")
       png(tmp, width = 2200, height = 1700, res = 200)

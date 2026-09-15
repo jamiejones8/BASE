@@ -73,6 +73,10 @@ postgame_html <- paste(as.character(workspace$base_catching_postgame_ui), collap
 if (!grepl("def_catcher_framing_pdf", postgame_html, fixed = TRUE)) {
   fail("Catcher AAR was not exposed to the Postgame Reports workspace.")
 }
+if (!grepl("Recent AARs", postgame_html, fixed = TRUE) ||
+    !grepl("catch_aar_recent_list_ui", postgame_html, fixed = TRUE)) {
+  fail("Catcher AAR is missing its Recent AARs tab.")
+}
 if (!length(workspace$base_catching_postgame_choices)) {
   fail("Moved Catcher AAR rendered without initial catcher choices.")
 }
@@ -151,6 +155,7 @@ shiny::testServer(workspace$server, {
   session$setInputs(def_AARCatchGame = catcher_games$gid[[1]])
   session$flushReact()
   if (!nrow(aar_catch_data())) fail("Moved Catcher AAR returned no fixture rows.")
+  if (!nrow(catch_aar_recent_reports())) fail("Catcher Recent AARs returned no fixture rows.")
   invisible(output$leaderboard_overall_table)
 })
 

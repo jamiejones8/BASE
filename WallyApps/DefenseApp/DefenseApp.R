@@ -2442,7 +2442,7 @@ if (length(base_catching_postgame_choices)) {
   base_catching_postgame_game_choices <- catcher_game_choices(default_games)
 }
 
-base_catching_postgame_ui <- tagList(
+base_catching_aar_builder_ui <- tagList(
   div(
     class = "mb-2 d-flex align-items-center justify-content-between",
     div(
@@ -2476,6 +2476,16 @@ base_catching_postgame_ui <- tagList(
   fluidRow(
     column(width = 6, div(class = "defense-panel", style = "width:100%; overflow-x:auto;", DTOutput("def_catcher_ball_to_strike_tbl"))),
     column(width = 6, div(class = "defense-panel", style = "width:100%; overflow-x:auto;", DTOutput("def_catcher_strike_to_ball_tbl")))
+  )
+)
+
+base_catching_postgame_ui <- navset_tab(
+  id = "catch_aar_tabs",
+  nav_panel("AAR Builder", base_catching_aar_builder_ui),
+  nav_panel(
+    "Recent AARs",
+    div(class = "table-title mb-1", "Most Recent AARs"),
+    uiOutput("catch_aar_recent_list_ui")
   )
 )
 
@@ -2947,6 +2957,99 @@ server <- function(input, output, session) {
       write_catcher_receiving_pdf(d, name_display(input$def_AARCatcher %||% "Catcher"), file)
     }
   )
+
+  catch_aar_recent_reports <- reactive({
+    d <- catcher_receiving_pool()
+    if (!nrow(d)) return(tibble::tibble())
+    season_groups <- input$def_season_groups %||% character(0)
+    if (length(season_groups) && "SeasonGroup" %in% names(d)) {
+      d <- d %>% dplyr::filter(.data$SeasonGroup %in% season_groups)
+    }
+    d %>%
+      dplyr::filter(!is.na(Catcher), nzchar(as.character(Catcher)),
+                    !is.na(CustomGameID), nzchar(as.character(CustomGameID))) %>%
+      dplyr::group_by(Catcher, CustomGameID) %>%
+      dplyr::summarise(
+        GameDate = {
+          values <- GameDate[!is.na(GameDate)]
+          if (length(values)) min(values) else as.Date(NA)
+        },
+        Pitches = dplyr::n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::arrange(dplyr::desc(GameDate), Catcher) %>%
+      dplyr::slice_head(n = 25) %>%
+      dplyr::mutate(row_id = dplyr::row_number())
+  })
+
+  catcher_aar_data_for <- function(catcher, game_id) {
+    d <- catcher_receiving_pool() %>%
+      dplyr::filter(.data$Catcher == catcher, .data$CustomGameID == game_id)
+    validate(need(nrow(d) > 0, "No rows in selected game for this catcher."))
+    prepare_catcher_receiving_rows(d)
+  }
+
+  output$catch_aar_recent_list_ui <- renderUI({
+    rows <- catch_aar_recent_reports()
+    if (!nrow(rows)) return(div("No catching AARs available for the selected season filters."))
+    tagList(lapply(seq_len(nrow(rows)), function(i) {
+      row <- rows[i, ]
+      div(
+        style = "display:grid; grid-template-columns:1.5fr .8fr .5fr .75fr .75fr; gap:10px; align-items:center; padding:8px 10px; border-bottom:1px solid #e5e5e5;",
+        div(style = "font-weight:700;", name_display(row$Catcher)),
+        div(ifelse(is.na(row$GameDate), "Unknown date", format(row$GameDate, "%B %d, %Y"))),
+        div(paste(row$Pitches, "pitches")),
+        actionButton(paste0("catch_aar_recent_preview_", i), "Preview AAR", class = "btn-sm"),
+        downloadButton(paste0("catch_aar_recent_download_", i), "Download AAR", class = "btn-sm")
+      )
+    }))
+  })
+
+  catch_aar_recent_preview <- reactiveVal(NULL)
+  for (i in seq_len(25)) {
+    local({
+      idx <- i
+      observeEvent(input[[paste0("catch_aar_recent_preview_", idx)]], {
+        rows <- catch_aar_recent_reports()
+        req(nrow(rows) >= idx)
+        catch_aar_recent_preview(rows[idx, ])
+        showModal(modalDialog(
+          title = paste("AAR Preview:", name_display(rows$Catcher[idx])),
+          div(class = "base-report-preview", imageOutput("catch_aar_recent_preview_image", height = "1100px")),
+          easyClose = TRUE, size = "l", footer = modalButton("Close")
+        ))
+      }, ignoreInit = TRUE)
+
+      output[[paste0("catch_aar_recent_download_", idx)]] <- downloadHandler(
+        filename = function() {
+          rows <- catch_aar_recent_reports()
+          if (nrow(rows) < idx) return("Catching_AAR.pdf")
+          paste0("AAR_", gsub("[^A-Za-z0-9]+", "_", rows$Catcher[idx]), "_",
+                 ifelse(is.na(rows$GameDate[idx]), "undated", format(rows$GameDate[idx], "%Y%m%d")), ".pdf")
+        },
+        content = function(file) {
+          rows <- catch_aar_recent_reports()
+          req(nrow(rows) >= idx)
+          report_data <- catcher_aar_data_for(rows$Catcher[idx], rows$CustomGameID[idx])
+          write_catcher_receiving_pdf(report_data, name_display(rows$Catcher[idx]), file)
+        }
+      )
+    })
+  }
+
+  output$catch_aar_recent_preview_image <- renderImage({
+    selected <- catch_aar_recent_preview()
+    req(!is.null(selected), nrow(selected) == 1)
+    report_data <- catcher_aar_data_for(selected$Catcher[[1]], selected$CustomGameID[[1]])
+    tmp_pdf <- tempfile(fileext = ".pdf")
+    on.exit(unlink(tmp_pdf), add = TRUE)
+    write_catcher_receiving_pdf(report_data, name_display(selected$Catcher[[1]]), tmp_pdf)
+    if (!requireNamespace("pdftools", quietly = TRUE)) stop("The pdftools package is required for AAR previews.")
+    bitmap <- pdftools::pdf_render_page(tmp_pdf, page = 1L, dpi = 140)
+    tmp_png <- tempfile(fileext = ".png")
+    png::writePNG(bitmap, tmp_png)
+    list(src = tmp_png, contentType = "image/png", width = "100%")
+  }, deleteFile = TRUE)
 
   output$stats_kpis <- renderUI({
     d <- filtered_data()

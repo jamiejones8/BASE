@@ -71,6 +71,9 @@ aar_fill <- workspace$aar_severity_fill(.40, .30)
 if (!grepl("^#[0-9A-Fa-f]{6}$", aar_fill) || grepl("rgba", aar_fill, fixed = TRUE)) {
   fail("Pitching AAR shading is not using PDF-safe hexadecimal colors.")
 }
+if (is.null(workspace$.get_batter_silhouette_grob("R"))) {
+  fail("Embedded pitching AAR cannot resolve the batter silhouette asset.")
+}
 
 html <- paste(as.character(workspace$ui), collapse = "")
 if (grepl("<body", html, fixed = TRUE)) {
@@ -165,8 +168,11 @@ shiny::testServer(workspace$server, {
   invisible(output$pitch_decay_velocity)
 })
 
-aar_pdf <- tempfile(fileext = ".pdf")
-on.exit(unlink(aar_pdf), add = TRUE)
+aar_pdf <- Sys.getenv("BASE_PITCHING_AAR_QA", unset = "")
+if (!nzchar(aar_pdf)) {
+  aar_pdf <- tempfile(fileext = ".pdf")
+  on.exit(unlink(aar_pdf), add = TRUE)
+}
 workspace$render_AAR_pdf(
   game_p = aar_render_payload$game,
   season_p = aar_render_payload$season,
@@ -177,6 +183,16 @@ workspace$render_AAR_pdf(
   arm_angle_deg = NULL,
   season_col_label = "Season"
 )
+pitch_type_table <- workspace$build_pitchtype_perf_table(
+  aar_render_payload$game,
+  aar_render_payload$season
+)
+if (!identical(
+  names(pitch_type_table)[1:6],
+  c("PitchType", "Whiff%", "Chase%", "GB%", "BAA", "Avg EV")
+)) {
+  fail("Pitching AAR pitch-type performance table does not match the final reference format.")
+}
 if (!file.exists(aar_pdf) || file.info(aar_pdf)$size <= 0) {
   fail("Pitching AAR PDF did not render successfully.")
 }

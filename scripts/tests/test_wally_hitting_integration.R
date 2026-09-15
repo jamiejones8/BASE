@@ -144,11 +144,20 @@ if (!grepl("hit_aar_pdf", postgame_html, fixed = TRUE) ||
     !grepl("aar_hitter", postgame_html, fixed = TRUE)) {
   fail("Hitting AAR was not exposed to the Postgame Reports workspace.")
 }
+if (!grepl("Recent AARs", postgame_html, fixed = TRUE) ||
+    !grepl("hit_aar_recent_list_ui", postgame_html, fixed = TRUE)) {
+  fail("Hitting AAR is missing its Recent AARs tab.")
+}
 
 hitter <- as.character(workspace$hitters_txst[[1]])
 games <- unique(as.character(workspace$txst_df$CustomGameID))
 games <- games[!is.na(games) & nzchar(games)]
 if (!length(games)) fail("Hitting fixture exposed no selectable games.")
+downloaded_aar <- Sys.getenv("BASE_HITTING_AAR_QA", unset = "")
+if (!nzchar(downloaded_aar)) {
+  downloaded_aar <- tempfile(fileext = ".pdf")
+  on.exit(unlink(downloaded_aar), add = TRUE)
+}
 
 shiny::testServer(workspace$server, {
   # The embedded server starts before its dynamically inserted UI has sent any
@@ -268,6 +277,30 @@ shiny::testServer(workspace$server, {
   session$setInputs(AARGame = aar_games[[1]])
   session$flushReact()
   if (!nrow(aar_data())) fail("Moved Hitting AAR returned no fixture rows.")
+  ump_cases <- aar_data()[rep(1, 4), , drop = FALSE]
+  ump_cases$PitchNum <- seq_len(4)
+  ump_cases$PA_ID <- paste0("ump-case-", seq_len(4))
+  ump_cases$row_in_file <- seq_len(4)
+  ump_cases$pitch_call <- ump_cases$PitchCall <- c(
+    "FoulBallNotFieldable", "BallCalled", "StrikeCalled", "StrikeSwinging"
+  )
+  ump_cases$in_zone <- c(FALSE, TRUE, FALSE, FALSE)
+  ump_table <- workspace$build_swing_decisions_tbl(ump_cases)
+  if (!identical(
+    ump_table$`Pitch Res.`,
+    c("Foul Ball", "Called Ball", "Called Strike", "Swing & Miss")
+  )) fail("Hitting AAR still exposes raw TrackMan result tokens.")
+  if (!identical(ump_table$Ump, c("", "🍀", "🤖", ""))) {
+    fail("Hitting AAR umpire markers are incorrect or include a swing result.")
+  }
+  recent_aars <- hit_aar_recent_reports()
+  if (!nrow(recent_aars)) fail("Hitting Recent AARs returned no fixture rows.")
+  generator <- session$.__enclos_env__$private$file_generators$get(session$ns("hit_aar_pdf"))
+  if (is.null(generator) || !is.function(generator$content)) fail("Hitting AAR download handler was not registered.")
+  generator$content(downloaded_aar)
+  if (!file.exists(downloaded_aar) || file.info(downloaded_aar)$size <= 0) {
+    fail("Hitting AAR download did not produce a PDF.")
+  }
   invisible(output$aar_kpi)
   invisible(output$aar_swing_tbl)
   invisible(output$perf_tbl)

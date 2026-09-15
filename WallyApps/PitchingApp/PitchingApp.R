@@ -1320,51 +1320,87 @@ build_process_table <- function(game_p, season_p, season_header = "Season") {
 
 # Pitch Type Performance (Game + Season) — returns a plain data.frame with hidden numeric columns
 build_pitchtype_perf_table <- function(game_p, season_p = NULL) {
-  g <- prepare_aar_flags(game_p)
-  if (!nrow(g)) {
-    return(as.data.frame(tibble::tibble(`Status` = "No data")))
-  }
-  s <- if (!is.null(season_p) && nrow(season_p)) prepare_aar_flags(season_p) else g[0, , drop = FALSE]
-  
-  summarize_pt <- function(d) {
-    d %>%
-      dplyr::group_by(PitchType) %>%
-      dplyr::summarise(
-        Strike  = sdiv(sum(IsStrike, na.rm = TRUE), dplyr::n()),
-        Pre2K   = { den <- sum(!TwoStrike & !is.na(InZone), na.rm = TRUE); sdiv(sum(InZone & !TwoStrike, na.rm = TRUE), den) },
-        Whiff   = { sw  <- sum(IsSwing,          na.rm = TRUE); sdiv(sum(PitchCall == "StrikeSwinging", na.rm = TRUE), sw) },
-        IZWhiff = { swi <- sum(IsSwing & InZone, na.rm = TRUE); sdiv(sum(PitchCall == "StrikeSwinging" & InZone, na.rm = TRUE), swi) },
-        .groups = "drop"
-      )
-  }
-  
-  g_sum <- summarize_pt(g)
-  s_sum <- summarize_pt(s)
-  
-  out <- g_sum %>%
-    dplyr::left_join(s_sum, by = "PitchType", suffix = c("_g", "_s")) %>%
-    dplyr::arrange(dplyr::desc(.data$Strike_g))
-  
+  g <- prepare_aar_flags(tibble::as_tibble(game_p))
+  if (!nrow(g)) return(as.data.frame(tibble::tibble(Status = "No data")))
+
+  if (!"PitchType" %in% names(g)) g$PitchType <- "Undefined"
+  g$PitchType <- as.character(g$PitchType)
+  g$PitchType[is.na(g$PitchType) | !nzchar(g$PitchType)] <- "Undefined"
+  g$.aar_row <- seq_len(nrow(g))
+
+  pc <- tolower(trimws(as.character(g$PitchCall %||% "")))
+  pr <- tolower(trimws(as.character(g$PlayResult %||% "")))
+  bb <- if ("BBType" %in% names(g)) tolower(trimws(as.character(g$BBType))) else rep("", nrow(g))
+  tagged_hit <- if ("TaggedHitType" %in% names(g)) tolower(trimws(as.character(g$TaggedHitType))) else rep("", nrow(g))
+  evla <- resolve_ev_la_strict(g)
+
+  g$.aar_whiff <- pc == "strikeswinging"
+  g$.aar_chase_opp <- !is.na(g$InZone) & !g$InZone
+  g$.aar_chase <- g$.aar_chase_opp & g$IsSwing
+  g$.aar_bip <- safe_is_bip(g$PitchCall, g$PlayResult)
+  g$.aar_ground <- g$.aar_bip & (
+    grepl("ground", bb) | grepl("ground", tagged_hit) | grepl("ground", pr)
+  )
+  g$.aar_ev <- suppressWarnings(as.numeric(evla$ev))
+
+  pitch_summary <- g %>%
+    dplyr::group_by(PitchType) %>%
+    dplyr::summarise(
+      Pitches = dplyr::n(),
+      Whiff = sdiv(sum(.aar_whiff, na.rm = TRUE), sum(IsSwing, na.rm = TRUE)),
+      Chase = sdiv(sum(.aar_chase, na.rm = TRUE), sum(.aar_chase_opp, na.rm = TRUE)),
+      GB = sdiv(sum(.aar_ground, na.rm = TRUE), sum(.aar_bip, na.rm = TRUE)),
+      AvgEV = if (any(.aar_bip & is.finite(.aar_ev))) mean(.aar_ev[.aar_bip & is.finite(.aar_ev)], na.rm = TRUE) else NA_real_,
+      .groups = "drop"
+    )
+
+  # Batting average belongs to the pitch that ended the plate appearance.
+  # Walks, HBP, and sacrifices are excluded from at-bats.
+  g_pa <- ensure_pa(g) %>%
+    dplyr::group_by(PA_ID) %>%
+    dplyr::arrange(.aar_row, .by_group = TRUE) %>%
+    dplyr::slice_tail(n = 1) %>%
+    dplyr::ungroup()
+  pa_pr <- tolower(trimws(as.character(g_pa$PlayResult %||% "")))
+  pa_kb <- tolower(trimws(as.character(g_pa$KorBB %||% "")))
+  pa_pc <- tolower(trimws(as.character(g_pa$PitchCall %||% "")))
+  is_hit <- grepl("home ?run|\\bhr\\b|\\btriple\\b|\\b3b\\b|\\bdouble\\b|\\b2b\\b|\\bsingle\\b|\\b1b\\b", pa_pr) &
+    !grepl("double\\s*play", pa_pr)
+  non_ab <- grepl("walk|\\bbb\\b|\\bibb\\b|intent", pa_kb) |
+    grepl("walk|intent|sac", pa_pr) |
+    pa_pc == "hitbypitch"
+  g_pa$.aar_hit <- is_hit
+  g_pa$.aar_ab <- !non_ab
+
+  baa_summary <- g_pa %>%
+    dplyr::group_by(PitchType) %>%
+    dplyr::summarise(
+      BAA = sdiv(sum(.aar_hit & .aar_ab, na.rm = TRUE), sum(.aar_ab, na.rm = TRUE)),
+      .groups = "drop"
+    )
+
+  out <- pitch_summary %>%
+    dplyr::left_join(baa_summary, by = "PitchType") %>%
+    dplyr::arrange(dplyr::desc(Pitches), PitchType)
+
   fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "NA")
-  fmt_dual <- function(gv, sv) paste0(fmt_pct(gv), " | ", fmt_pct(sv))
-  
+  fmt_rate <- function(x) ifelse(is.finite(x), sub("^0", "", sprintf("%.3f", x)), "NA")
+  fmt_ev <- function(x) ifelse(is.finite(x), sprintf("%.1f", x), "NA")
+
   out_disp <- out %>%
     dplyr::transmute(
       PitchType,
-      `Strike%`       = fmt_dual(Strike_g,  Strike_s),
-      `Pre2K\nZone%`  = fmt_dual(Pre2K_g,   Pre2K_s),
-      `Whiff%`        = fmt_dual(Whiff_g,   Whiff_s),
-      `IZ\nWhiff%`    = fmt_dual(IZWhiff_g, IZWhiff_s),
-      .g_Strike   = Strike_g,
-      .s_Strike   = Strike_s,
-      .g_Pre2K    = Pre2K_g,
-      .s_Pre2K    = Pre2K_s,
-      .g_Whiff    = Whiff_g,
-      .s_Whiff    = Whiff_s,
-      .g_IZWhiff  = IZWhiff_g,
-      .s_IZWhiff  = IZWhiff_s
+      `Whiff%` = fmt_pct(Whiff),
+      `Chase%` = fmt_pct(Chase),
+      `GB%` = fmt_pct(GB),
+      BAA = fmt_rate(BAA),
+      `Avg EV` = fmt_ev(AvgEV),
+      .v_Whiff = Whiff,
+      .v_Chase = Chase,
+      .v_GB = GB,
+      .v_BAA = BAA,
+      .v_AvgEV = AvgEV
     )
-  
   as.data.frame(out_disp)
 }
 
@@ -2093,7 +2129,7 @@ compute_2k_block <- function(d, grp) {
   }
   
   find_shape <- function() {
-    roots <- c("www", "")
+    roots <- unique(c("www", "", file.path(app_dir, "www")))
     bases <- c("Battershape","battershape","BatterShape","batter_shape","Batter_Shape")
     exts  <- c("png","jpg","jpeg")
     for (r in roots) {
@@ -2755,7 +2791,41 @@ txst_ptperf_table <- function(df) {
   if (!("PitchType" %in% names(df))) {
     return(as_txst_table(df))
   }
+
+  # Game-only presentation used by the final pitching AAR reference.
+  game_metric_cols <- c("Whiff%", "Chase%", "GB%", "BAA", "Avg EV")
+  if (all(game_metric_cols %in% names(df))) {
+    display_df <- df[, c("PitchType", game_metric_cols), drop = FALSE]
+    names(display_df)[names(display_df) == "PitchType"] <- "Pitch Type"
+    tbl <- ggpubr::ggtexttable(display_df, rows = NULL, theme = ggpubr::ttheme("blank"))
+    tbl <- txst_table_header_style(tbl, ncol(display_df))
+    tbl <- txst_table_polish(tbl, display_df)
+
+    value_cols <- list(
+      `Whiff%` = list(raw = ".v_Whiff", ref = function(pt) d1_pct_avg_for_metric("Whiff%", pt), lower = FALSE),
+      `Chase%` = list(raw = ".v_Chase", ref = function(pt) d1_pct_avg_for_metric("Chase%", pt), lower = FALSE),
+      `GB%` = list(raw = ".v_GB", ref = function(pt) D1_PCT_AVG$`GB%`, lower = FALSE),
+      BAA = list(raw = ".v_BAA", ref = function(pt) 0.260, lower = TRUE),
+      `Avg EV` = list(raw = ".v_AvgEV", ref = function(pt) 84.0, lower = TRUE)
+    )
+    for (metric in names(value_cols)) {
+      spec <- value_cols[[metric]]
+      col_idx <- which(names(display_df) == metric)
+      if (!length(col_idx) || !(spec$raw %in% names(df))) next
+      for (i in seq_len(nrow(df))) {
+        value <- suppressWarnings(as.numeric(df[[spec$raw]][i]))
+        ref <- spec$ref(as.character(df$PitchType[i]))
+        fill <- aar_severity_fill(value, ref, lower_better = spec$lower)
+        if (!is.na(fill)) {
+          tbl <- .tbl_bg(tbl, row = i + 1, column = col_idx, fill = fill,
+                         color = "#BEBEBE", linewidth = 0.6)
+        }
+      }
+    }
+    return(tbl)
+  }
   
+  # Backward-compatible renderer for older paired game/season tables.
   # normalize header names (allow both stacked and single-line versions)
   if ("Pre2K\nZone%" %in% names(df)) names(df)[names(df) == "Pre2K\nZone%"] <- "Pre2k Zone%"
   if ("IZ\nWhiff%"   %in% names(df)) names(df)[names(df) == "IZ\nWhiff%"]   <- "IZ Whiff%"
@@ -8332,8 +8402,31 @@ server <- function(input, output, session){
     list(date = dt, away = away, home = home, opp_guess = opp)
   })
   
-  # Inline preview (renders PDF, rasterizes page 1 if 'pdftools' is available)
+  # One cached PDF backs both preview images. The reactive is invalidated only
+  # when its report inputs change, avoiding duplicate report builds.
+  aar_preview_pdf_path <- reactiveVal(NULL)
+  session$onSessionEnded(function() {
+    old_path <- isolate(aar_preview_pdf_path())
+    if (is.character(old_path) && length(old_path) == 1L && file.exists(old_path)) unlink(old_path)
+  })
+  aar_preview_pdf <- reactive({
+    req(input$aar_pitcher, input$aar_game)
+    old_path <- isolate(aar_preview_pdf_path())
+    if (is.character(old_path) && length(old_path) == 1L && file.exists(old_path)) unlink(old_path)
+    tmp_pdf <- tempfile(fileext = ".pdf")
+    render_aar_pdf_for(
+      tmp_pdf,
+      as.character(input$aar_pitcher),
+      as.character(input$aar_game),
+      as.character(input$aar_opp %||% "")
+    )
+    isolate(aar_preview_pdf_path(tmp_pdf))
+    tmp_pdf
+  })
+
+  # Inline preview (renders the cached PDF, then rasterizes page 1)
   output$aar_preview <- renderImage({
+    req(input$aar_pitcher, input$aar_game)
     # Always return a PNG even if something errors
     make_error_png <- function(msg) {
       tmp <- tempfile(fileext = ".png")
@@ -8346,57 +8439,7 @@ server <- function(input, output, session){
     }
     
     tryCatch({
-      gp <- aar_game_data()
-      sp <- aar_season_data()
-      
-      hand  <- guess_throw_hand(input$aar_pitcher, gp)
-      slope <- movement_line_slope(hand, gp)
-      deg   <- if (is.finite(slope)) atan(-slope) * 180 / pi else NA_real_
-      
-      meta  <- aar_selected_game_meta()
-      gdate <- meta$date
-      
-      # fallback only if game_id date parse fails (use MIN date in gp, never "last game")
-      if (is.na(gdate)) {
-        gd_vec <- parse_date_any(unique(gp$GameDate))
-        gdate  <- suppressWarnings(min(gd_vec, na.rm = TRUE))
-        if (!is.finite(gdate)) gdate <- as.Date(NA)
-      }
-      
-      # ---- FORCE the selected game date into the game dataset (prevents "last game" bleed) ----
-      for (nm in intersect(c("GameDate","Date","PitchDate","Game_Date","UTCDate","LocalDate"), names(gp))) {
-        gp[[nm]] <- as.Date(gdate)
-      }
-      
-      # Filter season rows by the SAME SeasonTag as the selected game (only if available)
-      # Filter season rows by the SAME SeasonTag as the selected game (only if available)
-      info <- aar_season_info()
-      
-      # robustly locate season column (SeasonTag/SeasonGroup/etc.)
-      season_col <- {
-        nms <- names(sp)
-        cands <- c("SeasonTag","SeasonGroup","Season_Group","Season","Season_Code","SeasonCode")
-        idx <- which(tolower(nms) %in% tolower(cands))
-        if (length(idx)) nms[idx[1]] else NULL
-      }
-      
-      if (!is.na(info$tag) && nzchar(info$tag) && !is.null(season_col)) {
-        sp <- sp %>% dplyr::filter(.data[[season_col]] == info$tag)
-      }
-      
-      
-      tmp_pdf <- tempfile(fileext = ".pdf")
-      on.exit(unlink(tmp_pdf), add = TRUE)
-      render_AAR_pdf(
-        game_p           = gp,
-        season_p         = sp,
-        pitcher_name     = input$aar_pitcher,
-        game_date        = gdate,
-        opponent         = input$aar_opp %||% "",
-        outfile          = tmp_pdf,
-        arm_angle_deg    = if (is.finite(deg)) deg else NULL,
-        season_col_label = info$label
-      )
+      tmp_pdf <- aar_preview_pdf()
       tmp_png <- render_pdf_page_png(tmp_pdf, page = 1L, dpi = 160)
       
       list(src = tmp_png, contentType = "image/png", width = "100%")
@@ -8407,6 +8450,7 @@ server <- function(input, output, session){
   }, deleteFile = TRUE)
 
   output$aar_preview_page2 <- renderImage({
+    req(input$aar_pitcher, input$aar_game)
     make_error_png <- function(msg) {
       tmp <- tempfile(fileext = ".png")
       png(tmp, width = 1700, height = 2800, res = 200)
@@ -8418,22 +8462,8 @@ server <- function(input, output, session){
     }
     
     tryCatch({
-      gp <- aar_game_data()
-      
-      meta  <- aar_selected_game_meta()
-      gdate <- meta$date
-      
-      if (is.na(gdate)) {
-        gd_vec <- parse_date_any(unique(gp$GameDate))
-        gdate  <- suppressWarnings(min(gd_vec, na.rm = TRUE))
-        if (!is.finite(gdate)) gdate <- as.Date(NA)
-      }
-      for (nm in intersect(c("GameDate","Date","PitchDate","Game_Date","UTCDate","LocalDate"), names(gp))) {
-        gp[[nm]] <- as.Date(gdate)
-      }
-      
-      p <- compose_AAR_pa_grid_plot(game_p = gp)
-      tmp_png <- render_plot_pdf_preview(p, width = 8.5, height = 14, dpi = 160)
+      tmp_pdf <- aar_preview_pdf()
+      tmp_png <- render_pdf_page_png(tmp_pdf, page = 2L, dpi = 160)
       
       list(src = tmp_png, contentType = "image/png", width = "100%")
     }, error = function(e) {
@@ -8741,6 +8771,7 @@ server <- function(input, output, session){
   })
   
   output$team_report_preview <- renderImage({
+    req(input$team_game)
     make_error_png <- function(msg) {
       tmp <- tempfile(fileext = ".png")
       png(tmp, width = 2200, height = 1700, res = 200)
@@ -9355,7 +9386,7 @@ server <- function(input, output, session){
       dplyr::summarise(
         Pitches = dplyr::n(),
         VeloAvg = mean(RelSpeed, na.rm = TRUE),
-        VeloMax = max(RelSpeed, na.rm = TRUE),
+        VeloMax = if (any(is.finite(RelSpeed))) max(RelSpeed, na.rm = TRUE) else NA_real_,
         iVB = mean(InducedVertBreak, na.rm = TRUE),
         HB  = mean(HorzBreak, na.rm = TRUE),
         Spin = mean(SpinRate, na.rm = TRUE),
@@ -9391,7 +9422,7 @@ server <- function(input, output, session){
         PitchType = "Total",
         Pitches = dplyr::n(),
         VeloAvg = mean(RelSpeed, na.rm = TRUE),
-        VeloMax = max(RelSpeed, na.rm = TRUE),
+        VeloMax = if (any(is.finite(RelSpeed))) max(RelSpeed, na.rm = TRUE) else NA_real_,
         iVB = mean(InducedVertBreak, na.rm = TRUE),
         HB  = mean(HorzBreak, na.rm = TRUE),
         Spin = mean(SpinRate, na.rm = TRUE),
