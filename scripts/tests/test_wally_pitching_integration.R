@@ -193,6 +193,17 @@ if (!identical(
 )) {
   fail("Pitching AAR pitch-type performance table does not match the final reference format.")
 }
+angle_segments <- workspace$arm_angle_segments(aar_render_payload$game)
+if (nrow(angle_segments) < 2L || anyDuplicated(angle_segments$PitchType)) {
+  fail("Pitching AAR does not draw a separate arm-angle ray for each pitch type.")
+}
+if (any(angle_segments$y != 0) || any(!is.finite(angle_segments$yend)) || any(angle_segments$yend <= 0)) {
+  fail("Pitching AAR arm-angle rays extend outside the positive y axis.")
+}
+movement_layers <- workspace$movement_plot(aar_render_payload$game)$layers
+if (any(vapply(movement_layers, function(layer) inherits(layer$geom, "GeomAbline"), logical(1)))) {
+  fail("Pitching AAR still contains the old full-width arm-angle line.")
+}
 if (!file.exists(aar_pdf) || file.info(aar_pdf)$size <= 0) {
   fail("Pitching AAR PDF did not render successfully.")
 }

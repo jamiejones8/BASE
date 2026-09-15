@@ -2405,7 +2405,51 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
   g
 }
 
-# ---------- MOVEMENT PLOT (25 x 25 window, dashed arm-angle line) ----------
+# Build one arm-angle ray per pitch type from that pitch's average release
+# position. Rays stop at the plot boundary and never extend below y = 0.
+arm_angle_segments <- function(p, limit = 25, default_height_ft = 6 + 2/12) {
+  d <- tibble::as_tibble(p)
+  required <- c("PitchType", "RelHeight", "RelSide")
+  if (!all(required %in% names(d)) || !nrow(d)) return(tibble::tibble())
+
+  safe_mean <- function(x) {
+    x <- suppressWarnings(as.numeric(x))
+    if (any(is.finite(x))) mean(x[is.finite(x)]) else NA_real_
+  }
+  pitcher_height <- NA_real_
+  if ("PitcherHeight" %in% names(d)) pitcher_height <- safe_mean(d$PitcherHeight)
+  if (is.finite(pitcher_height) && pitcher_height > 8) pitcher_height <- pitcher_height / 12
+  if (!is.finite(pitcher_height) && exists("height_lookup", inherits = TRUE) && "Pitcher" %in% names(d)) {
+    pitcher <- as.character(dplyr::first(d$Pitcher[!is.na(d$Pitcher) & nzchar(as.character(d$Pitcher))]))
+    looked_up <- if (length(pitcher) && nzchar(pitcher)) height_lookup[[pitcher]] else NULL
+    looked_up <- suppressWarnings(as.numeric(looked_up))
+    if (length(looked_up) && is.finite(looked_up[[1]])) pitcher_height <- looked_up[[1]]
+  }
+  if (!is.finite(pitcher_height)) pitcher_height <- default_height_ft
+
+  d %>%
+    dplyr::mutate(PitchType = as.character(PitchType)) %>%
+    dplyr::filter(!is.na(PitchType), nzchar(PitchType)) %>%
+    dplyr::group_by(PitchType) %>%
+    dplyr::summarise(
+      RelHeight = safe_mean(RelHeight),
+      RelSide = safe_mean(RelSide),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(
+      adj = RelHeight - 0.7 * pitcher_height,
+      slope = adj / abs(RelSide),
+      x_abs = dplyr::if_else(slope >= 1, limit / slope, limit),
+      x = 0,
+      y = 0,
+      xend = sign(RelSide) * x_abs,
+      yend = slope * x_abs
+    ) %>%
+    dplyr::filter(is.finite(slope), slope > 0, is.finite(xend), is.finite(yend), yend > 0) %>%
+    dplyr::select(PitchType, x, y, xend, yend)
+}
+
+# ---------- MOVEMENT PLOT (25 x 25 window, per-pitch arm-angle rays) ----------
 movement_plot <- function(p, arm_angle_deg = NULL) {
   d <- tibble::as_tibble(p) %>%
     mutate(
@@ -2440,30 +2484,7 @@ movement_plot <- function(p, arm_angle_deg = NULL) {
   )
   present <- intersect(names(pitch_colors), unique(d$PitchType))
   pal <- pitch_colors[present]
-  
-  # slope magnitude from the passed angle (same as before)
-  s_mag <- if (!is.null(arm_angle_deg) && is.finite(arm_angle_deg)) {
-    -tan(pi * arm_angle_deg / 180)   # returns the positive "s" we used elsewhere
-  } else {
-    1
-  }
-  
-  # infer hand sign: LHP -> -1, RHP -> +1
-  hand_sign <- {
-    relx <- suppressWarnings(as.numeric(p$RelSide))
-    if (any(is.finite(relx))) {
-      if (mean(relx, na.rm = TRUE) < 0) -1 else 1
-    } else {
-      # fallback: use fastball HB (LHP tends to have negative HB on four-seam)
-      pt  <- tolower(as.character(p$PitchType))
-      hb  <- suppressWarnings(as.numeric(p$HorzBreak))
-      fs  <- is.finite(hb) & pt %in% c("fastball","four-seam")
-      hb_mean <- if (any(fs)) mean(hb[fs], na.rm = TRUE) else NA_real_
-      if (is.finite(hb_mean) && hb_mean < 0) -1 else 1
-    }
-  }
-  
-  slope <- s_mag * hand_sign
+  angle_lines <- arm_angle_segments(p, limit = 25)
   
   ggplot(
     d,
@@ -2487,6 +2508,13 @@ movement_plot <- function(p, arm_angle_deg = NULL) {
     
     geom_hline(yintercept = 0, linewidth = 1, color = "black") +
     geom_vline(xintercept = 0, linewidth = 1, color = "black") +
+    geom_segment(
+      data = angle_lines,
+      aes(x = x, y = y, xend = xend, yend = yend, color = PitchType),
+      inherit.aes = FALSE,
+      linetype = "dashed",
+      linewidth = 1
+    ) +
     geom_point(
       alpha = 0.9,
       size = 2.2,
@@ -2540,8 +2568,7 @@ movement_plot <- function(p, arm_angle_deg = NULL) {
       legend.box.just = "top",
       legend.title = element_text(face = "bold"),
       legend.spacing.y = unit(4, "pt")
-    ) +
-    geom_abline(intercept = 0, slope = slope, linetype = "dashed", linewidth = 1)
+    )
 }
 
 library(cowplot)
