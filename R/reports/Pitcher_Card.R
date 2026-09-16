@@ -143,7 +143,7 @@ pcard_pitch_metrics_table <- function(pitcher_data) {
     summarise(
       `#`        = n(),
       Velo       = pcard_format_num(mean(RelSpeed, na.rm = TRUE), 1),
-      `Max Velo` = pcard_format_num(suppressWarnings(max(RelSpeed, na.rm = TRUE)), 1),
+      `Max Velo` = pcard_format_num(if (any(is.finite(RelSpeed))) max(RelSpeed[is.finite(RelSpeed)]) else NA_real_, 1),
       Spin       = pcard_format_num(mean(SpinRate, na.rm = TRUE), 0),
       iVB        = pcard_format_num(mean(InducedVertBreak, na.rm = TRUE), 1),
       HB         = pcard_format_num(mean(HorzBreak, na.rm = TRUE), 1),

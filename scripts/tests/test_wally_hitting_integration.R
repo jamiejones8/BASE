@@ -110,6 +110,10 @@ if (!grepl("base-hitting-embedded-layout", html, fixed = TRUE)) {
   fail("Embedded Hitting UI is missing its scoped BASE layout wrapper.")
 }
 style_html <- htmltools::renderTags(base_hitting_embedded_head())$head
+if (!grepl("grid-template-columns: repeat(2, minmax(0, 1fr))", style_html, fixed = TRUE) ||
+    !grepl("shiny-input-checkboxgroup[id$='season_groups']", style_html, fixed = TRUE)) {
+  fail("Hitting sidebar season controls are missing the aligned checkbox grid.")
+}
 for (marker in c(
   "base-hitting-performance-controls",
   "base-hitting-performance-table",
@@ -298,7 +302,8 @@ shiny::testServer(workspace$server, {
   generator <- session$.__enclos_env__$private$file_generators$get(session$ns("hit_aar_pdf"))
   if (is.null(generator) || !is.function(generator$content)) fail("Hitting AAR download handler was not registered.")
   generator$content(downloaded_aar)
-  if (!file.exists(downloaded_aar) || file.info(downloaded_aar)$size <= 0) {
+  if (!file.exists(downloaded_aar) || file.info(downloaded_aar)$size <= 4 ||
+      !identical(readBin(downloaded_aar, what = "raw", n = 4L), charToRaw("%PDF"))) {
     fail("Hitting AAR download did not produce a PDF.")
   }
   invisible(output$aar_kpi)

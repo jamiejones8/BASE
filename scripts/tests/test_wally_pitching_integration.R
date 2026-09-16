@@ -12,6 +12,16 @@ source("team_config.R", local = FALSE)
 BASE_NCAA_D1_SOURCE_LABEL <- "2026 NCAA Division I"
 source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 
+# The integration fixture verifies that the Wally Stuff+ path delegates to the
+# app's one BrewStuff scorer without requiring the production LightGBM asset.
+model <- structure(list(name = "brewstuff-test-model"), class = "brewstuff_test_model")
+getBrewStuff <- function(game, final_model, bullpen = FALSE, ...) {
+  stopifnot(inherits(final_model, "brewstuff_test_model"), identical(bullpen, FALSE))
+  game$rv <- -0.01
+  game$Stuff <- 123
+  game
+}
+
 fail <- function(...) stop(paste0(...), call. = FALSE)
 
 fixture_path <- file.path(
@@ -58,6 +68,13 @@ if (!any(prepared$PitchUID == "fixture-unique-bullpen-pitch", na.rm = TRUE)) {
 
 workspace <- base_wally_pitching_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Pitching server is unavailable.")
+brew_scored <- workspace$compute_brew_stuff(prepared[1:3, , drop = FALSE])
+if (!identical(as.numeric(brew_scored$stuff_plus), rep(123, 3))) {
+  fail("Pitching Stuff+ does not delegate to BrewStuff.")
+}
+if (exists("compute_called_stuff", envir = workspace, inherits = FALSE)) {
+  fail("Legacy called-stuff scoring remains active in the Pitching workspace.")
+}
 if (!all(c(F26 = "2026 Fall", S27 = "2027 Season") %in% stats::setNames(names(workspace$SEASON_CHOICES), workspace$SEASON_CHOICES))) {
   fail("Pitching season controls do not expose 2026 Fall and 2027 Season.")
 }
@@ -81,6 +98,11 @@ if (grepl("<body", html, fixed = TRUE)) {
 }
 if (!grepl("base-pitching-embedded-layout", html, fixed = TRUE)) {
   fail("Embedded Pitching UI is missing its scoped BASE layout wrapper.")
+}
+style_html <- htmltools::renderTags(base_pitching_embedded_head())$head
+if (!grepl("grid-template-columns: repeat(2, minmax(0, 1fr))", style_html, fixed = TRUE) ||
+    !grepl("shiny-input-checkboxgroup[id$='season_groups']", style_html, fixed = TRUE)) {
+  fail("Pitching sidebar season controls are missing the aligned checkbox grid.")
 }
 expected_tabs <- c(
   "Performance", "Pitch Metrics", "Season Summary", "Pitch Decay",
@@ -193,6 +215,20 @@ if (!identical(
 )) {
   fail("Pitching AAR pitch-type performance table does not match the final reference format.")
 }
+season_perf_fixture <- aar_render_payload$game
+game_perf_fixture <- season_perf_fixture
+season_perf_fixture$PitchCall <- "StrikeSwinging"
+game_perf_fixture$PitchCall <- "BallCalled"
+season_perf_table <- workspace$build_pitchtype_perf_table(game_perf_fixture, season_perf_fixture)
+if (!any(season_perf_table[["Whiff%"]] == "100%", na.rm = TRUE)) {
+  fail("Pitching AAR pitch-type performance does not use season averages.")
+}
+missing_call_fixture <- aar_render_payload$game
+missing_call_fixture$PitchCall[[1]] <- NA_character_
+if (inherits(try(workspace$build_process_table(missing_call_fixture, missing_call_fixture), silent = TRUE), "try-error") ||
+    inherits(try(workspace$build_pitchtype_perf_table(missing_call_fixture, missing_call_fixture), silent = TRUE), "try-error")) {
+  fail("Pitching AAR tables fail when TrackMan PitchCall values are missing.")
+}
 angle_segments <- workspace$arm_angle_segments(aar_render_payload$game)
 if (nrow(angle_segments) < 2L || anyDuplicated(angle_segments$PitchType)) {
   fail("Pitching AAR does not draw a separate arm-angle ray for each pitch type.")
@@ -203,6 +239,13 @@ if (any(angle_segments$y != 0) || any(!is.finite(angle_segments$yend)) || any(an
 movement_layers <- workspace$movement_plot(aar_render_payload$game)$layers
 if (any(vapply(movement_layers, function(layer) inherits(layer$geom, "GeomAbline"), logical(1)))) {
   fail("Pitching AAR still contains the old full-width arm-angle line.")
+}
+missing_release_segments <- workspace$arm_angle_segments(
+  dplyr::select(aar_render_payload$game, -dplyr::any_of(c("RelHeight", "RelSide")))
+)
+if (!identical(names(missing_release_segments), c("PitchType", "x", "y", "xend", "yend")) ||
+    nrow(missing_release_segments) != 0L) {
+  fail("Missing release data does not produce a safe empty arm-angle layer.")
 }
 if (!file.exists(aar_pdf) || file.info(aar_pdf)$size <= 0) {
   fail("Pitching AAR PDF did not render successfully.")

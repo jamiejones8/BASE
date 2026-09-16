@@ -118,11 +118,30 @@ score_pitches <- function(df) {
     mutate(velo_dif = release_speed - fb_velo, ivb_dif = fb_ivb - pfx_z,
            break_dif = (fb_xmax*.5 + fb_xmin*.5) - pfx_x, spin_dif = spin_axis - fb_axis)
   for (lv in PTL) g[[paste0("pt_", lv)]] <- as.integer(g$pt == lv)
-  allf <- unique(c(models$stuff$feats, models$loc$feats, models$pitch$feats))
+  allf <- unique(c(models$loc$feats, models$pitch$feats))
   for (f in allf) if (!f %in% names(g)) g[[f]] <- NA_real_
   s1 <- function(m) { mdl <- xgboost::xgb.load.raw(m$model_raw)
     round(100 - 10 * ((predict(mdl, as.matrix(g[, m$feats])) - m$mean) / m$sd)) }
-  df$StuffPlus    <- s1(models$stuff)
+  df$.brew_row_id <- seq_len(nrow(df))
+  brew_fn <- get0("getBrewStuff", mode = "function", inherits = TRUE)
+  brew_model <- get0("model", inherits = TRUE)
+  brew_scored <- if (!is.null(brew_fn) && !is.null(brew_model)) {
+    tryCatch(
+      brew_fn(df, brew_model, bullpen = FALSE),
+      error = function(e) {
+        message(">>> BREWSTUFF SCORING ERROR: ", conditionMessage(e))
+        NULL
+      }
+    )
+  } else NULL
+  if (!is.null(brew_scored) && all(c(".brew_row_id", "Stuff") %in% names(brew_scored))) {
+    df$StuffPlus <- suppressWarnings(as.numeric(
+      brew_scored$Stuff[match(df$.brew_row_id, brew_scored$.brew_row_id)]
+    ))
+  } else {
+    df$StuffPlus <- NA_real_
+  }
+  df$.brew_row_id <- NULL
   df$LocationPlus <- s1(models$loc)
   df$PitchingPlus <- s1(models$pitch)
   prp <- predict(xgboost::xgb.load.raw(models$pitch$model_raw), as.matrix(g[, models$pitch$feats]))
@@ -137,61 +156,26 @@ score_pitches <- function(df) {
   df
 }
 
-# Debug: show exactly what the Stuff+ model ingests per pitch + its raw output.
+# Debug: summarize the BrewStuff output by pitch type.
 debug_inputs <- function(d) {
-  models <- scout_models()
-  if (is.null(models)) return(data.frame(Note = "pitch_models.rds not loaded — no debug."))
-  numv <- function(x) suppressWarnings(as.numeric(x)); HSIGN <- -1; PTL <- models$pt_levels
-  for (cc in c("TaggedPitchType","AutoPitchType","PitcherThrows","RelSpeed","SpinRate",
-               "Extension","RelSide","RelHeight","HorzBreak","InducedVertBreak","SpinAxis",
-               "PlateLocSide","PlateLocHeight","Balls","Strikes","BatterSide","Pitcher"))
-    if (!cc %in% names(d)) d[[cc]] <- NA
-  g <- d %>% mutate(
-    PT_raw = dplyr::coalesce(as.character(TaggedPitchType), as.character(AutoPitchType)),
-    pt = dplyr::case_when(
-      PT_raw %in% c("Fastball","FourSeamFastBall","Four-Seam","FF") ~ "FF",
-      PT_raw %in% c("Sinker","TwoSeamFastBall","Two-Seam","SI","FT") ~ "SI",
-      PT_raw %in% c("Cutter","FC") ~ "FC",
-      PT_raw %in% c("Slider","Sweeper","Slurve","SL","ST") ~ "SL",
-      PT_raw %in% c("Curveball","Knuckle Curve","KnuckleCurve","CU","KC") ~ "CU",
-      PT_raw %in% c("ChangeUp","Changeup","CH") ~ "CH",
-      PT_raw %in% c("Splitter","FS") ~ "FS", TRUE ~ NA_character_),
-    arm = ifelse(PitcherThrows %in% c("Left","L"), -1, 1),
-    release_speed = numv(RelSpeed), release_spin_rate = numv(SpinRate),
-    release_extension = numv(Extension),
-    release_pos_x = numv(RelSide) * arm * HSIGN, release_pos_z = numv(RelHeight),
-    pfx_x = (numv(HorzBreak) / 12) * arm * HSIGN, pfx_z = numv(InducedVertBreak) / 12,
-    spin_axis = ifelse(arm == 1, numv(SpinAxis), (360 - numv(SpinAxis)) %% 360),
-    plate_x = numv(PlateLocSide) * arm * HSIGN, plate_z = numv(PlateLocHeight),
-    balls = numv(Balls), strikes = numv(Strikes),
-    out_of_zone = ifelse(!(abs(numv(PlateLocSide)) <= 0.83 &
-                           dplyr::between(numv(PlateLocHeight), 1.5, 3.5)), 1L, 0L),
-    stand_same = ifelse((arm == 1 & BatterSide %in% c("Right","R")) |
-                        (arm == -1 & BatterSide %in% c("Left","L")), 1L, 0L))
-  fb <- g %>% filter(pt %in% c("FF","FC","SI")) %>% group_by(Pitcher) %>%
-    summarise(fb_velo = mean(release_speed, na.rm = TRUE), fb_ivb = quantile(pfx_z, .8, na.rm = TRUE),
-              fb_xmax = quantile(pfx_x, .8, na.rm = TRUE), fb_xmin = quantile(pfx_x, .2, na.rm = TRUE),
-              fb_axis = mean(spin_axis, na.rm = TRUE), .groups = "drop")
-  g <- g %>% left_join(fb, by = "Pitcher") %>%
-    mutate(velo_dif = release_speed - fb_velo, ivb_dif = fb_ivb - pfx_z,
-           break_dif = (fb_xmax*.5 + fb_xmin*.5) - pfx_x, spin_dif = spin_axis - fb_axis)
-  for (lv in PTL) g[[paste0("pt_", lv)]] <- as.integer(g$pt == lv)
-  for (f in models$stuff$feats) if (!f %in% names(g)) g[[f]] <- NA_real_
-  mdl <- xgboost::xgb.load.raw(models$stuff$model_raw)
-  g$rawRV <- predict(mdl, as.matrix(g[, models$stuff$feats]))
-  g$St <- round(100 - 10 * ((g$rawRV - models$stuff$mean) / models$stuff$sd))
-  g %>% filter(!is.na(PitchType)) %>% group_by(Pitch = PitchType) %>%
-    summarise(N = dplyr::n(), Velo = round(mean(release_speed, na.rm = TRUE), 1),
-      `pfx_z ft` = round(mean(pfx_z, na.rm = TRUE), 2),
-      `pfx_x ft` = round(mean(pfx_x, na.rm = TRUE), 2),
-      Spin = round(mean(release_spin_rate, na.rm = TRUE)),
-      Ext = round(mean(release_extension, na.rm = TRUE), 1),
-      relZ = round(mean(release_pos_z, na.rm = TRUE), 2),
-      veloDif = round(mean(velo_dif, na.rm = TRUE), 1),
-      ivbDif = round(mean(ivb_dif, na.rm = TRUE), 2),
-      RawRV = round(mean(rawRV, na.rm = TRUE), 4),
-      `Stuff+` = round(mean(St, na.rm = TRUE)), .groups = "drop") %>%
-    arrange(desc(N))
+  scored <- tryCatch(score_pitches(d), error = function(e) NULL)
+  if (is.null(scored) || !"StuffPlus" %in% names(scored)) {
+    return(data.frame(Note = "BrewStuff scoring unavailable."))
+  }
+  if (!"PitchType" %in% names(scored)) {
+    scored$PitchType <- dplyr::coalesce(
+      as.character(scored$TaggedPitchType), as.character(scored$AutoPitchType)
+    )
+  }
+  scored %>%
+    dplyr::filter(!is.na(PitchType)) %>%
+    dplyr::group_by(Pitch = PitchType) %>%
+    dplyr::summarise(
+      N = dplyr::n(),
+      `Stuff+` = round(mnn(StuffPlus)),
+      .groups = "drop"
+    ) %>%
+    dplyr::arrange(dplyr::desc(N))
 }
 
 # ============================================================================

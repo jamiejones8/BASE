@@ -104,7 +104,6 @@ if (length(missing_team_names)) {
 runtime_model_fields <- c(
   "brewstuff_model_file",
   "scout_models_file",
-  "pitcher_stuff_model_file",
   "pitcher_location_model_file"
 )
 model_fields <- c(

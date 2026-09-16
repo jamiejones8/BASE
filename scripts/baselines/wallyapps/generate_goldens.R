@@ -95,16 +95,16 @@ if (identical(app_name, "HittingApp")) {
   statline <- env$count_statline(pitches)
   process <- env$build_process_table(pitches, pitches, "Fixture Season")
   pitch_performance <- env$build_pitchtype_perf_table(pitches, pitches)
-  stuff_rows <- env$compute_called_stuff(pitches)
+  stuff_rows <- env$compute_brew_stuff(pitches)
   stuff_summary <- stuff_rows |>
     dplyr::filter(is.finite(.data$stuff_plus)) |>
-    dplyr::group_by(.data$Pitcher, .data$PitchType_stuff) |>
+    dplyr::group_by(.data$Pitcher, .data$PitchType) |>
     dplyr::summarise(
       pitches = dplyr::n(),
       mean_stuff_plus = mean(.data$stuff_plus),
       .groups = "drop"
     ) |>
-    dplyr::arrange(.data$Pitcher, .data$PitchType_stuff)
+    dplyr::arrange(.data$Pitcher, .data$PitchType)
 
   write_table(
     data.frame(
@@ -117,7 +117,7 @@ if (identical(app_name, "HittingApp")) {
   )
   write_table(process, "process-metrics.csv")
   write_table(pitch_performance, "pitch-type-performance.csv")
-  write_table(stuff_summary, "called-stuff.csv")
+  write_table(stuff_summary, "brewstuff.csv")
   save_plot_pair(env$strike_zone_plot(pitches, title = "Fixture Pitch Locations"), "strike-zone", width = 7, height = 7)
   save_plot_pair(env$movement_plot(pitches), "pitch-movement", width = 7.5, height = 6.5)
 
@@ -129,7 +129,7 @@ if (identical(app_name, "HittingApp")) {
     observed_walk_count = statline$bb_n,
     expected_fixture_korbb_walk_rows = sum(trimws(as.character(pitches$KorBB)) == "Walk", na.rm = TRUE),
     observed_walk_encoding_mismatch = statline$bb_n == 0 && any(trimws(as.character(pitches$KorBB)) == "Walk", na.rm = TRUE),
-    golden_tables = c("statline.csv", "process-metrics.csv", "pitch-type-performance.csv", "called-stuff.csv"),
+    golden_tables = c("statline.csv", "process-metrics.csv", "pitch-type-performance.csv", "brewstuff.csv"),
     golden_visuals = c("strike-zone.png", "strike-zone.pdf", "pitch-movement.png", "pitch-movement.pdf")
   ))
 } else if (identical(app_name, "DefenseApp")) {

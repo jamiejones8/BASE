@@ -348,11 +348,6 @@ TEAM_CONFIG <- list(
       "/base-data/models/pitch_models.rds",
       base_model_path("shared", "pitch_models.rds")
     ),
-    pitcher_stuff_model_file = base_file_override_or_fallback(
-      "BASE_PITCHER_STUFF_MODEL_FILE",
-      "/base-data/models/Stuff+2.rds",
-      base_model_path("pitcher", "Stuff+2.rds")
-    ),
     pitcher_location_model_file = base_file_override_or_fallback(
       "BASE_PITCHER_LOCATION_MODEL_FILE",
       "/base-data/models/location_plus_model.rds",

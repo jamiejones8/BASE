@@ -132,11 +132,14 @@ until the browser session is authenticated. Set `BASE_APP_PASSWORD` as a private
 environment variable in Railway or in an ignored local `.env` file. The app
 shows a configuration notice and remains locked when this variable is empty.
 
-Each browser session must authenticate again after it reconnects or refreshes.
-After five unsuccessful attempts, the session is paused for 30 seconds. Those
-defaults can be changed with `BASE_AUTH_MAX_ATTEMPTS` and
-`BASE_AUTH_LOCKOUT_SECONDS`. Production deployments should continue to use
-HTTPS so passwords are encrypted in transit.
+Successful authentication is remembered on the same device for 48 hours with a
+signed cookie. Set `BASE_AUTH_REMEMBER_HOURS=0` to keep access session-only, or
+choose up to 168 hours. `BASE_AUTH_COOKIE_SECRET` can provide a separate token
+signing secret; changing either it or `BASE_APP_PASSWORD` invalidates existing
+remember-device tokens. After five unsuccessful attempts, the session is paused
+for 30 seconds. Those defaults can be changed with `BASE_AUTH_MAX_ATTEMPTS` and
+`BASE_AUTH_LOCKOUT_SECONDS`. Production deployments should continue to use HTTPS
+so passwords and the Secure remember-device cookie are encrypted in transit.
 
 ## College roster format
 
@@ -201,7 +204,7 @@ publish it, and pin the resulting digest in `Dockerfile` before deployment.
 
 The Docker build runs `Rscript scripts/checks/run_all.R --build`. This retains
 the syntax, configuration, fixture, integration, and startup checks, but defers
-presence checks for the four excluded production models until container startup.
+presence checks for the three excluded production models until container startup.
 The bundled xwOBA grid and league references are still required during the build;
 unresolved Git LFS model pointers fail validation in both modes.
 
@@ -214,7 +217,6 @@ corresponding `BASE_*_MODEL_FILE` / `BASE_SCOUT_MODELS_FILE` overrides):
 
 - `/base-data/models/brewstuff.model`
 - `/base-data/models/pitch_models.rds`
-- `/base-data/models/Stuff+2.rds`
 - `/base-data/models/location_plus_model.rds`
 
 If an override is explicitly set for a bundled reference or xwOBA grid, that

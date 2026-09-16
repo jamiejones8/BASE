@@ -58,6 +58,11 @@ if (grepl("<body", html, fixed = TRUE)) {
 if (!grepl("base-defense-embedded-layout", html, fixed = TRUE)) {
   fail("Embedded Defense UI is missing its scoped BASE layout wrapper.")
 }
+style_html <- htmltools::renderTags(base_defense_embedded_head())$head
+if (!grepl("grid-template-columns:repeat(2,minmax(0,1fr))", style_html, fixed = TRUE) ||
+    !grepl("shiny-input-checkboxgroup[id$='season_groups']", style_html, fixed = TRUE)) {
+  fail("Defense sidebar season controls are missing the aligned checkbox grid.")
+}
 expected_tabs <- c(
   "Leaderboard", "Opportunities", "OF OAA", "IF OAA", "OAA",
   "Catcher Season"

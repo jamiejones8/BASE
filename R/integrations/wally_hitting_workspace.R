@@ -257,6 +257,65 @@ base_hitting_embedded_head <- function() {
         font-size: 20px;
         font-weight: 600;
       }
+      .base-hitting-workspace .base-hitting-sidebar .form-group,
+      .base-hitting-workspace .base-hitting-sidebar .shiny-input-container {
+        width: 100% !important;
+        margin-bottom: 18px;
+      }
+      .base-hitting-workspace .base-hitting-sidebar label.control-label {
+        margin-bottom: 7px;
+        color: var(--base-ink);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .base-hitting-workspace .base-hitting-sidebar .form-control,
+      .base-hitting-workspace .base-hitting-sidebar .selectize-input,
+      .base-hitting-workspace .base-hitting-sidebar .bootstrap-select > .dropdown-toggle {
+        min-height: 42px;
+        border-color: #dccbca !important;
+        border-radius: 9px !important;
+        background: #fff !important;
+        box-shadow: none !important;
+      }
+      .base-hitting-workspace .base-hitting-sidebar .form-control:focus,
+      .base-hitting-workspace .base-hitting-sidebar .selectize-input.focus,
+      .base-hitting-workspace .base-hitting-sidebar .bootstrap-select > .dropdown-toggle:focus {
+        border-color: var(--base-maroon) !important;
+        box-shadow: 0 0 0 3px rgba(80,18,20,.10) !important;
+      }
+      .base-hitting-workspace .base-hitting-sidebar .shiny-input-checkboxgroup[id$='season_groups'] {
+        padding: 12px;
+        border: 1px solid var(--base-border);
+        border-radius: 10px;
+        background: #faf8f5;
+      }
+      .base-hitting-workspace .base-hitting-sidebar .shiny-input-checkboxgroup[id$='season_groups'] .shiny-options-group {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 10px;
+      }
+      .base-hitting-workspace .base-hitting-sidebar .shiny-input-checkboxgroup[id$='season_groups'] label.checkbox-inline,
+      .base-hitting-workspace .base-hitting-sidebar .shiny-input-checkboxgroup[id$='season_groups'] label.checkbox,
+      .base-hitting-workspace .base-hitting-sidebar .shiny-input-checkboxgroup[id$='season_groups'] .form-check {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 6px;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: var(--base-ink);
+        font-size: 11px;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+      .base-hitting-workspace .base-hitting-sidebar .shiny-input-checkboxgroup[id$='season_groups'] input[type='checkbox'],
+      .base-hitting-workspace .base-hitting-sidebar .shiny-input-checkboxgroup[id$='season_groups'] .form-check-input {
+        position: static !important;
+        flex: 0 0 auto;
+        width: 14px;
+        height: 14px;
+        margin: 0 !important;
+      }
       .base-hitting-workspace .base-hitting-main,
       .base-hitting-workspace .base-hitting-main > .tabbable,
       .base-hitting-workspace .base-hitting-main .tab-content,

@@ -3537,7 +3537,7 @@ local({
       dplyr::group_by(PitchType) %>%
       dplyr::summarise(
         `Avg Velo` = mean(RelSpeed, na.rm = TRUE),
-        `Max Velo` = suppressWarnings(max(RelSpeed, na.rm = TRUE)),
+        `Max Velo` = if (any(is.finite(RelSpeed))) max(RelSpeed[is.finite(RelSpeed)]) else NA_real_,
         `Spin`     = mean(SpinRate, na.rm = TRUE),
         `IVB`      = mean(IVB, na.rm = TRUE),
         `HB`       = mean(HB, na.rm = TRUE),

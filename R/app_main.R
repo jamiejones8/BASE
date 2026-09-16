@@ -124,24 +124,48 @@ delayedAssign(
 )
 delayedAssign(
   "percentiledata",
-  read_csv(TEAM_CONFIG$data$percentile_table_file),
+  read_csv(TEAM_CONFIG$data$percentile_table_file, show_col_types = FALSE),
   assign.env = environment()
 )
 
+base_finite_max <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  x <- x[is.finite(x)]
+  if (length(x)) max(x) else NA_real_
+}
+
+base_can_density_2d <- function(data, x_col, y_col, min_rows = 4L) {
+  if (is.null(data) || !all(c(x_col, y_col) %in% names(data))) return(FALSE)
+  x <- suppressWarnings(as.numeric(data[[x_col]]))
+  y <- suppressWarnings(as.numeric(data[[y_col]]))
+  keep <- is.finite(x) & is.finite(y)
+  sum(keep) >= min_rows && length(unique(x[keep])) >= 2L && length(unique(y[keep])) >= 2L &&
+    is.finite(stats::sd(x[keep])) && stats::sd(x[keep]) > 0 &&
+    is.finite(stats::sd(y[keep])) && stats::sd(y[keep]) > 0
+}
+
 get_percentile <- function(value, stat, pitch_type, percentiledata) {
-  if (is.na(value)) return(NA_real_)
+  if (length(value) != 1L || !is.finite(suppressWarnings(as.numeric(value)))) return(NA_real_)
   
   df <- percentiledata %>%
     dplyr::filter(
       Stat == stat,
       TaggedPitchType == pitch_type
     ) %>%
+    dplyr::transmute(
+      Value = suppressWarnings(as.numeric(Value)),
+      Percentile = suppressWarnings(as.numeric(Percentile))
+    ) %>%
+    dplyr::filter(is.finite(Value), is.finite(Percentile)) %>%
+    dplyr::group_by(Value) %>%
+    dplyr::summarise(Percentile = mean(Percentile), .groups = "drop") %>%
     dplyr::arrange(Value)
   
   if (nrow(df) == 0) return(NA_real_)
   
   # Interpolate percentile
-  p <- approx(
+  if (nrow(df) == 1L) return(df$Percentile[[1]])
+  p <- stats::approx(
     x = df$Value,
     y = df$Percentile,
     xout = value,
@@ -1314,7 +1338,7 @@ arsenal_summary <- function(game, height_override = NULL, set_override = NULL) {
       Usage    = sprintf("%.1f%%(%d)", N / nrow(game) * 100, N),
       FPS      = sprintf("%.1f%%", mean(Strike[PitchofPA == 1], na.rm = TRUE) * 100),
       Velo     = sprintf("%.1f", round(mean(RelSpeed, na.rm = TRUE), 1)),
-      Top      = sprintf("%.1f", round(max(RelSpeed, na.rm = TRUE), 1)),
+      Top      = ifelse(is.finite(base_finite_max(RelSpeed)), sprintf("%.1f", round(base_finite_max(RelSpeed), 1)), "-"),
       Spin     = format(round(mean(SpinRate, na.rm = TRUE)), big.mark = ","),
       IVB      = sprintf("%.1f", round(mean(InducedVertBreak, na.rm = TRUE), 1)),
       HB       = sprintf("%.1f", round(mean(HorzBreak, na.rm = TRUE), 1)),
@@ -1343,7 +1367,7 @@ arsenal_summary <- function(game, height_override = NULL, set_override = NULL) {
       Usage    = sprintf("100.0%%(%d)", n()),
       FPS      = sprintf("%.1f%%", mean(Strike[PitchofPA == 1], na.rm = TRUE) * 100),
       Velo     = "—",
-      Top      = sprintf("%.1f", round(max(RelSpeed, na.rm = TRUE), 1)),
+      Top      = ifelse(is.finite(base_finite_max(RelSpeed)), sprintf("%.1f", round(base_finite_max(RelSpeed), 1)), "-"),
       Spin     = "—",
       IVB      = "—",
       HB       = "—",
@@ -3052,13 +3076,8 @@ generate_catcher_pdf <- function(game_framing, game_throwing, season_framing, se
 }
 
 # ==========================================
-# PITCHER - MODELS (retained for compatibility; card tab no longer uses them)
+# PITCHER - LOCATION MODELS
 # ==========================================
-delayedAssign(
-  "pitcher_model",
-  readRDS(TEAM_CONFIG$data$pitcher_stuff_model_file),
-  assign.env = environment()
-)
 delayedAssign(
   "league_stats",
   readRDS(TEAM_CONFIG$data$pitcher_league_stats_file),
@@ -3867,9 +3886,15 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       hh_data    <- grp_data  %>% filter(PitchCall=="InPlay",!is.na(ExitSpeed),ExitSpeed>=95)
       if (nrow(grp_data)<1)
         return(ggplot()+theme_void()+labs(title=grp)+theme(plot.title=element_text(hjust=0.5,size=13,face="bold")))
-      p <- ggplot(grp_data, aes(x=PlateLocSide,y=PlateLocHeight)) +
-        stat_density_2d(aes(fill=after_stat(density)),geom="raster",contour=FALSE,interpolate=TRUE) +
-        scale_fill_gradient(low="lightblue",high="red") +
+      p <- ggplot(grp_data, aes(x=PlateLocSide,y=PlateLocHeight))
+      if (base_can_density_2d(grp_data, "PlateLocSide", "PlateLocHeight")) {
+        p <- p +
+          stat_density_2d(aes(fill=after_stat(density)),geom="raster",contour=FALSE,interpolate=TRUE) +
+          scale_fill_gradient(low="lightblue",high="red")
+      } else {
+        p <- p + geom_point(color = "#501214", alpha = 0.45, size = 1.8)
+      }
+      p <- p +
         geom_path(data=hitter_strike_zone,aes(x=PlateLocSide,y=PlateLocHeight),color="black",linewidth=1,inherit.aes=FALSE) +
         geom_polygon(data=hitter_home_plate,aes(x=x,y=y),fill="white",color="black",linewidth=0.8,inherit.aes=FALSE)
       if (nrow(whiff_data)>0)

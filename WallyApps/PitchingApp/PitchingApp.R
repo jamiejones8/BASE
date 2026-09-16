@@ -280,246 +280,42 @@ xrv_plus_from <- function(x, mu, sd) {
   100 + (mu - x) / sd * 10
 }
 
-# ---- Stuff+ helpers (movement-only, unsupervised) ----
-called_stuff_baseline_path <- "data/called_stuff_baseline.csv"
-find_app_file <- function(rel_path, start = getwd(), max_up = 5) {
-  cur <- normalizePath(start, winslash = "/", mustWork = FALSE)
-  for (i in 0:max_up) {
-    cand <- file.path(cur, rel_path)
-    if (file.exists(cand)) return(cand)
-    up <- dirname(cur)
-    if (identical(up, cur)) break
-    cur <- up
-  }
-  NA_character_
-}
-
-normalize_pitch_type_for_stuff <- function(pt) {
-  raw <- tolower(trimws(as.character(pt %||% "")))
-  if (!nzchar(raw)) return("Undefined")
-  pc <- gsub("[^a-z0-9]", "", raw)
-
-  if (pc %in% c("fourseamfastball","4seamfastball","fourseam","4seam","ff")) return("Four-Seam")
-  if (pc %in% c("twoseamfastball","2seamfastball","twoseam","2seam","ft")) return("Two-Seam")
-  if (pc %in% c("oneseamfastball","1seamfastball","oneseam","1seam")) return("Fastball")
-  if (pc %in% c("fastball","fb","fa")) return("Fastball")
-  if (pc %in% c("sinker","si","snk")) return("Sinker")
-  if (pc %in% c("cutter","cut","fc")) return("Cutter")
-  if (pc %in% c("slider","sl")) return("Slider")
-  if (pc %in% c("sweeper","sweep","st","sw")) return("Sweeper")
-  if (pc %in% c("curveball","curve","cb","cu","kc")) return("Curveball")
-  if (pc %in% c("changeup","change","ch","chg")) return("Changeup")
-  if (pc %in% c("splitter","split","splitfinger","fs","fo")) return("Splitter")
-  if (pc %in% c("knuckleball","knuckle")) return("Undefined")
-  if (pc %in% c("other","undefined","unknown","untagged")) return("Undefined")
-
-  # fallback to existing helper (keeps canonical labels) if available
-  if (exists("self_scout_pitch_type", mode = "function")) {
-    ct <- self_scout_pitch_type(raw)
-    if (!is.na(ct) && nzchar(ct)) return(ct)
-  }
-  "Undefined"
-}
-
-collapse_stuff_baseline <- function(df) {
-  if (is.null(df) || !nrow(df)) return(df)
-  if (!"PitchType_stuff" %in% names(df)) return(df)
-  if (!"comp_n" %in% names(df)) df$comp_n <- 1
-
-  metric_pairs <- list(
-    RelSpeed = c("RelSpeed_mean", "RelSpeed_sd"),
-    SpinRate = c("SpinRate_mean", "SpinRate_sd"),
-    InducedVertBreak = c("InducedVertBreak_mean", "InducedVertBreak_sd"),
-    HorzBreak = c("HorzBreak_mean", "HorzBreak_sd"),
-    VertApprAngle = c("VertApprAngle_mean", "VertApprAngle_sd"),
-    HorzApprAngle = c("HorzApprAngle_mean", "HorzApprAngle_sd"),
-    RelHeight = c("RelHeight_mean", "RelHeight_sd"),
-    RelSide = c("RelSide_mean", "RelSide_sd"),
-    Extension = c("Extension_mean", "Extension_sd"),
-    comp = c("comp_mean", "comp_sd")
-  )
-
-  pooled_stats <- function(mu, sd, n) {
-    mu <- suppressWarnings(as.numeric(mu))
-    sd <- suppressWarnings(as.numeric(sd))
-    n  <- suppressWarnings(as.numeric(n))
-    ok <- is.finite(mu) & is.finite(sd) & is.finite(n) & n > 0
-    if (!any(ok)) return(c(mu = NA_real_, sd = NA_real_))
-    mu <- mu[ok]; sd <- sd[ok]; n <- n[ok]
-    w_mu <- sum(n * mu) / sum(n)
-    if (length(n) <= 1 || sum(n) <= 1) {
-      return(c(mu = w_mu, sd = sd[1]))
-    }
-    ss_within <- sum((n - 1) * (sd ^ 2))
-    ss_between <- sum(n * (mu - w_mu) ^ 2)
-    denom <- sum(n) - 1
-    w_sd <- if (denom > 0) sqrt((ss_within + ss_between) / denom) else NA_real_
-    c(mu = w_mu, sd = w_sd)
-  }
-
-  out <- df %>%
-    dplyr::group_by(PitchType_stuff) %>%
-    dplyr::summarise(
-      comp_n = sum(comp_n, na.rm = TRUE),
-      .groups = "drop"
-    )
-
-  for (nm in names(metric_pairs)) {
-    mu_col <- metric_pairs[[nm]][1]
-    sd_col <- metric_pairs[[nm]][2]
-    if (!all(c(mu_col, sd_col) %in% names(df))) {
-      out[[mu_col]] <- NA_real_
-      out[[sd_col]] <- NA_real_
-      next
-    }
-    tmp <- df %>%
-      dplyr::group_by(PitchType_stuff) %>%
-      dplyr::summarise(
-        .mu = pooled_stats(.data[[mu_col]], .data[[sd_col]], comp_n)[["mu"]],
-        .sd = pooled_stats(.data[[mu_col]], .data[[sd_col]], comp_n)[["sd"]],
-        .groups = "drop"
-      )
-    out <- out %>%
-      dplyr::left_join(tmp, by = "PitchType_stuff") %>%
-      dplyr::rename(!!mu_col := .mu, !!sd_col := .sd)
-  }
-
-  out
-}
-
-called_stuff_baseline <- tryCatch(
-  {
-    baseline_path <- find_app_file(file.path("data", "called_stuff_baseline.csv"))
-    if (!is.na(baseline_path)) {
-      called_stuff_baseline_path <<- baseline_path
-      readr::read_csv(baseline_path, show_col_types = FALSE)
-    } else {
-      called_stuff_baseline_path <<- "data/called_stuff_baseline.csv"
-      readr::read_csv("data/called_stuff_baseline.csv", show_col_types = FALSE)
-    }
-  } %>%
-    dplyr::mutate(
-      PitchType_stuff = vapply(pitch_type, normalize_pitch_type_for_stuff, character(1)),
-      comp_n = suppressWarnings(as.numeric(comp_n))
-    ) %>%
-    dplyr::filter(!is.na(PitchType_stuff), nzchar(PitchType_stuff)) %>%
-    dplyr::arrange(dplyr::desc(comp_n)) %>%
-    dplyr::distinct(PitchType_stuff, .keep_all = TRUE),
-  error = function(e) NULL
-)
-
-compute_called_stuff <- function(d) {
+# ---- Stuff+ helpers (BrewStuff is the single scoring model) ----
+compute_brew_stuff <- function(d) {
   if (is.null(d) || !nrow(d)) return(d)
   d <- tibble::as_tibble(d)
-  if (is.null(called_stuff_baseline) || !nrow(called_stuff_baseline)) {
-    if (!isTRUE(getOption("stuff_baseline_missing"))) {
-      message("Stuff+ baseline not loaded; Stuff+ will be NA. Check data/called_stuff_baseline.csv path.")
-      options(stuff_baseline_missing = TRUE)
+  d$stuff_raw <- NA_real_
+  d$stuff_plus <- NA_real_
+
+  brew_fn <- get0("getBrewStuff", mode = "function", inherits = TRUE)
+  brew_model <- get0("model", inherits = TRUE)
+  if (is.null(brew_fn) || is.null(brew_model)) {
+    if (!isTRUE(getOption("brewstuff_unavailable"))) {
+      message("BrewStuff is unavailable; Stuff+ will be NA.")
+      options(brewstuff_unavailable = TRUE)
     }
-    d$stuff_raw <- NA_real_
-    d$stuff_plus <- NA_real_
-    return(d)
-  }
-  if (!"PitchType" %in% names(d) && "TaggedPitchType" %in% names(d)) d$PitchType <- d$TaggedPitchType
-  d$PitchType <- trimws(as.character(d$PitchType))
-  if ("TaggedPitchType" %in% names(d)) {
-    tagged <- trimws(as.character(d$TaggedPitchType))
-    blank <- is.na(d$PitchType) | !nzchar(d$PitchType)
-    d$PitchType[blank] <- tagged[blank]
-  }
-
-  d$PitchType_stuff <- vapply(d$PitchType, normalize_pitch_type_for_stuff, character(1))
-  base <- called_stuff_baseline
-  if (!"PitchType_stuff" %in% names(base)) {
-    base <- base %>%
-      dplyr::mutate(PitchType_stuff = vapply(pitch_type, normalize_pitch_type_for_stuff, character(1)))
-  }
-  base <- base %>%
-    dplyr::filter(!is.na(PitchType_stuff), nzchar(PitchType_stuff))
-  if (!"comp_n" %in% names(base)) base$comp_n <- 1
-  base$comp_n <- suppressWarnings(as.numeric(base$comp_n))
-  base <- base %>%
-    dplyr::arrange(dplyr::desc(comp_n)) %>%
-    dplyr::distinct(PitchType_stuff, .keep_all = TRUE)
-  d <- d %>% dplyr::left_join(base, by = "PitchType_stuff", relationship = "many-to-one", suffix = c("", "_base"))
-
-  # If any baseline columns collided with existing columns, prefer the baseline values.
-  req_cols <- c(
-    "RelSpeed_mean","RelSpeed_sd","SpinRate_mean","SpinRate_sd","Extension_mean","Extension_sd",
-    "InducedVertBreak_mean","InducedVertBreak_sd","HorzBreak_mean","HorzBreak_sd",
-    "VertApprAngle_mean","VertApprAngle_sd","HorzApprAngle_mean","HorzApprAngle_sd",
-    "RelHeight_mean","RelHeight_sd","RelSide_mean","RelSide_sd","comp_mean","comp_sd"
-  )
-  for (nm in req_cols) {
-    base_nm <- paste0(nm, "_base")
-    if (base_nm %in% names(d)) {
-      if (!nm %in% names(d)) d[[nm]] <- d[[base_nm]]
-      d[[nm]] <- dplyr::coalesce(d[[base_nm]], d[[nm]])
-      d[[base_nm]] <- NULL
-    }
-  }
-
-  if (!all(req_cols %in% names(d))) {
-    d$stuff_raw <- NA_real_
-    d$stuff_plus <- NA_real_
     return(d)
   }
 
-  raw_cols <- c(
-    "RelSpeed","SpinRate","Extension","InducedVertBreak","HorzBreak",
-    "VertApprAngle","HorzApprAngle","RelHeight","RelSide"
-  )
-  for (nm in raw_cols) {
-    if (!nm %in% names(d)) d[[nm]] <- NA_real_
+  if (!"TaggedPitchType" %in% names(d) && "PitchType" %in% names(d)) {
+    d$TaggedPitchType <- d$PitchType
   }
-
-  to_num <- function(x) suppressWarnings(readr::parse_number(as.character(x)))
-  d$RelSpeed         <- to_num(d$RelSpeed)
-  d$SpinRate         <- to_num(d$SpinRate)
-  d$InducedVertBreak <- to_num(d$InducedVertBreak)
-  d$HorzBreak        <- to_num(d$HorzBreak)
-  d$VertApprAngle    <- to_num(d$VertApprAngle)
-  d$HorzApprAngle    <- to_num(d$HorzApprAngle)
-  d$RelHeight        <- to_num(d$RelHeight)
-  d$RelSide          <- to_num(d$RelSide)
-  d$Extension        <- to_num(d$Extension)
-  base_num_cols <- c(
-    "RelSpeed_mean","RelSpeed_sd","SpinRate_mean","SpinRate_sd","Extension_mean","Extension_sd",
-    "InducedVertBreak_mean","InducedVertBreak_sd","HorzBreak_mean","HorzBreak_sd",
-    "VertApprAngle_mean","VertApprAngle_sd","HorzApprAngle_mean","HorzApprAngle_sd",
-    "RelHeight_mean","RelHeight_sd","RelSide_mean","RelSide_sd","comp_mean","comp_sd"
+  d$.brew_row_id <- seq_len(nrow(d))
+  scored <- tryCatch(
+    brew_fn(d, brew_model, bullpen = FALSE),
+    error = function(e) {
+      message("BrewStuff scoring failed: ", conditionMessage(e))
+      NULL
+    }
   )
-  for (nm in base_num_cols) {
-    if (nm %in% names(d)) d[[nm]] <- to_num(d[[nm]])
+  if (!is.null(scored) && all(c(".brew_row_id", "Stuff") %in% names(scored))) {
+    matched <- match(d$.brew_row_id, scored$.brew_row_id)
+    d$stuff_plus <- suppressWarnings(as.numeric(scored$Stuff[matched]))
+    if ("rv" %in% names(scored)) {
+      d$stuff_raw <- suppressWarnings(as.numeric(scored$rv[matched]))
+    }
   }
-
-  z_safe <- function(x, mu, sd, abs_val = FALSE) {
-    z <- (x - mu) / sd
-    if (abs_val) z <- abs(z)
-    z
-  }
-
-  z_velo <- z_safe(d$RelSpeed, d$RelSpeed_mean, d$RelSpeed_sd, FALSE)
-  z_spin <- z_safe(d$SpinRate, d$SpinRate_mean, d$SpinRate_sd, FALSE)
-  z_ext  <- z_safe(d$Extension, d$Extension_mean, d$Extension_sd, FALSE)
-  z_ivb  <- z_safe(d$InducedVertBreak, d$InducedVertBreak_mean, d$InducedVertBreak_sd, TRUE)
-  z_hb   <- z_safe(d$HorzBreak, d$HorzBreak_mean, d$HorzBreak_sd, TRUE)
-  z_vaa  <- z_safe(d$VertApprAngle, d$VertApprAngle_mean, d$VertApprAngle_sd, TRUE)
-  z_haa  <- z_safe(d$HorzApprAngle, d$HorzApprAngle_mean, d$HorzApprAngle_sd, TRUE)
-  z_rh   <- z_safe(d$RelHeight, d$RelHeight_mean, d$RelHeight_sd, TRUE)
-  z_rs   <- z_safe(d$RelSide, d$RelSide_mean, d$RelSide_sd, TRUE)
-
-  z_stack <- cbind(z_velo, z_spin, z_ivb, z_hb, z_vaa, z_haa, z_rh, z_rs, z_ext)
-  comp <- suppressWarnings(apply(z_stack, 1, function(v) mean(v[is.finite(v)], na.rm = TRUE)))
-  comp[!is.finite(comp)] <- NA_real_
-
-  d$stuff_raw <- comp
-  d$stuff_plus <- ifelse(
-    is.finite(d$comp_mean) & is.finite(d$comp_sd) & d$comp_sd > 0 & is.finite(comp),
-    100 + (comp - d$comp_mean) / d$comp_sd * 10,
-    NA_real_
-  )
-
+  d$.brew_row_id <- NULL
   d
 }
 
@@ -1025,6 +821,7 @@ compute_strikes_before <- function(d) {
     dplyr::mutate(
       StrikesPre_calc = {
         pc  <- tolower(as.character(PitchCall))
+        pc[is.na(pc)] <- ""
         out <- integer(dplyr::n()); s <- 0L
         for (i in seq_along(out)) {
           out[i] <- s
@@ -1308,9 +1105,9 @@ build_process_table <- function(game_p, season_p, season_header = "Season") {
     D1     = c(d1$strike, d1$zone, d1$fps, d1$pre2k_zone, d1$ea, d1$put_away)
   ) %>%
     dplyr::mutate(
-      Game   = ifelse(is.finite(Game),   scales::percent(Game,   accuracy = 0.1), "—"),
-      Season = ifelse(is.finite(Season), scales::percent(Season, accuracy = 0.1), "—"),
-      D1     = ifelse(is.finite(D1),     scales::percent(D1,     accuracy = 0.1), "—")
+      Game   = ifelse(is.finite(Game),   scales::percent(Game,   accuracy = 0.1), "-"),
+      Season = ifelse(is.finite(Season), scales::percent(Season, accuracy = 0.1), "-"),
+      D1     = ifelse(is.finite(D1),     scales::percent(D1,     accuracy = 0.1), "-")
     )
   
   attr(out, "season_header") <- season_header
@@ -1318,9 +1115,10 @@ build_process_table <- function(game_p, season_p, season_header = "Season") {
   as.data.frame(out)
 }
 
-# Pitch Type Performance (Game + Season) — returns a plain data.frame with hidden numeric columns
+# Pitch Type Performance (season averages) — returns a plain data.frame with hidden numeric columns
 build_pitchtype_perf_table <- function(game_p, season_p = NULL) {
-  g <- prepare_aar_flags(tibble::as_tibble(game_p))
+  performance_source <- if (!is.null(season_p) && nrow(season_p)) season_p else game_p
+  g <- prepare_aar_flags(tibble::as_tibble(performance_source))
   if (!nrow(g)) return(as.data.frame(tibble::tibble(Status = "No data")))
 
   if (!"PitchType" %in% names(g)) g$PitchType <- "Undefined"
@@ -1350,7 +1148,7 @@ build_pitchtype_perf_table <- function(game_p, season_p = NULL) {
       Whiff = sdiv(sum(.aar_whiff, na.rm = TRUE), sum(IsSwing, na.rm = TRUE)),
       Chase = sdiv(sum(.aar_chase, na.rm = TRUE), sum(.aar_chase_opp, na.rm = TRUE)),
       GB = sdiv(sum(.aar_ground, na.rm = TRUE), sum(.aar_bip, na.rm = TRUE)),
-      AvgEV = if (any(.aar_bip & is.finite(.aar_ev))) mean(.aar_ev[.aar_bip & is.finite(.aar_ev)], na.rm = TRUE) else NA_real_,
+      AvgEV = if (any(.aar_bip & is.finite(.aar_ev), na.rm = TRUE)) mean(.aar_ev[.aar_bip & is.finite(.aar_ev)], na.rm = TRUE) else NA_real_,
       .groups = "drop"
     )
 
@@ -1602,7 +1400,7 @@ build_count_breakdown_table <- function(game_p, season_p, season_header = "Seaso
   g <- calc_metrics(game_p)
   s <- calc_metrics(season_p)
   
-  fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "—")
+  fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "-")
   season_label <- season_header %||% "Season"
   
   out <- data.frame(
@@ -1737,11 +1535,11 @@ team_statline_bits <- function(d) {
 
 # --- SAFE cell helpers (return the mutated table or the original on error) ---
 .tbl_bg <- function(tbl, ...) {
-  res <- try(ggpubr::table_cell_bg(tbl, ...), silent = TRUE)
+  res <- suppressWarnings(try(ggpubr::table_cell_bg(tbl, ...), silent = TRUE))
   if (inherits(res, "try-error")) tbl else res
 }
 .tbl_font <- function(tbl, ...) {
-  res <- try(ggpubr::table_cell_font(tbl, ...), silent = TRUE)
+  res <- suppressWarnings(try(ggpubr::table_cell_font(tbl, ...), silent = TRUE))
   if (inherits(res, "try-error")) tbl else res
 }
 
@@ -2409,8 +2207,12 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
 # position. Rays stop at the plot boundary and never extend below y = 0.
 arm_angle_segments <- function(p, limit = 25, default_height_ft = 6 + 2/12) {
   d <- tibble::as_tibble(p)
+  empty_segments <- tibble::tibble(
+    PitchType = character(), x = double(), y = double(),
+    xend = double(), yend = double()
+  )
   required <- c("PitchType", "RelHeight", "RelSide")
-  if (!all(required %in% names(d)) || !nrow(d)) return(tibble::tibble())
+  if (!all(required %in% names(d)) || !nrow(d)) return(empty_segments)
 
   safe_mean <- function(x) {
     x <- suppressWarnings(as.numeric(x))
@@ -4014,6 +3816,10 @@ compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {
     warning("[AAR page2] ", nrow(pa_meta), " PAs; showing first ", max_plots, ".")
     pa_meta <- pa_meta[seq_len(max_plots), , drop = FALSE]
   }
+  preferred_cols <- if (nrow(pa_meta) <= 2L * max_rows) 2L else max_cols
+  grid_cols <- min(preferred_cols, max_cols, max(1L, nrow(pa_meta)))
+  grid_rows <- min(max_rows, max(1L, ceiling(nrow(pa_meta) / grid_cols)))
+  grid_slots <- grid_cols * grid_rows
   
   plots <- lapply(seq_len(nrow(pa_meta)), function(i) {
     pa_id <- pa_meta$PA_GRID_ID[i]
@@ -4053,15 +3859,15 @@ compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {
     p_plot
   })
   
-  if (length(plots) < max_plots) {
-    blanks <- replicate(max_plots - length(plots), patchwork::plot_spacer(), simplify = FALSE)
+  if (length(plots) < grid_slots) {
+    blanks <- replicate(grid_slots - length(plots), patchwork::plot_spacer(), simplify = FALSE)
     plots <- c(plots, blanks)
   }
   
-  patchwork::wrap_plots(plots, ncol = max_cols, nrow = max_rows, byrow = FALSE) +
+  patchwork::wrap_plots(plots, ncol = grid_cols, nrow = grid_rows, byrow = TRUE) +
     patchwork::plot_layout(
-      widths = rep(1, max_cols),
-      heights = rep(1, max_rows)
+      widths = rep(1, grid_cols),
+      heights = rep(1, grid_rows)
     ) +
     patchwork::plot_annotation(theme = theme(plot.margin = margin(0,0,0,0)))
 }
@@ -4238,7 +4044,7 @@ compose_team_report_plot <- function(game_p, season_p, game_id = NULL, season_co
       legend.spacing.x = unit(0.2, "lines"),
       plot.margin = margin(0,0,0,0)
     )
-  legend_grob <- tryCatch(cowplot::get_legend(legend_plot), error = function(e) NULL)
+  legend_grob <- tryCatch(suppressWarnings(cowplot::get_legend(legend_plot)), error = function(e) NULL)
   legend_gg <- if (!is.null(legend_grob)) cowplot::ggdraw(legend_grob) else ggplot() + theme_void()
   
   row3_plots <- (p_l_2k | p_l_h | p_l_b | p_r_2k | p_r_h | p_r_b) +
@@ -9188,7 +8994,7 @@ server <- function(input, output, session){
     if ("PitchType" %in% names(d)) {
       d <- d %>% dplyr::filter(!(as.character(PitchType) %in% "Bad data"))
     }
-    d <- compute_called_stuff(d)
+    d <- compute_brew_stuff(d)
     d
   }
 
@@ -9396,7 +9202,7 @@ server <- function(input, output, session){
     p$Extension        <- suppressWarnings(as.numeric(p$Extension))
     p$xrv              <- suppressWarnings(as.numeric(p$xrv))
     p$xrv_plus         <- xrv_plus_from(p$xrv, params$mu, params$sd)
-    p <- compute_called_stuff(p)
+    p <- compute_brew_stuff(p)
 
     evla <- resolve_ev_la_strict(p)
     p$.ev <- suppressWarnings(as.numeric(evla$ev))

@@ -57,5 +57,4 @@ WallyApps/JucoStatsApp/data/*
 data/external/CapeCod26.parquet
 models/shared/brewstuff.model
 models/shared/pitch_models.rds
-models/pitcher/Stuff+2.rds
 models/pitcher/location_plus_model.rds

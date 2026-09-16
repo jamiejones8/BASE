@@ -266,6 +266,65 @@ base_pitching_embedded_head <- function() {
         font-size: 20px;
         font-weight: 600;
       }
+      .base-pitching-workspace .base-pitching-sidebar .form-group,
+      .base-pitching-workspace .base-pitching-sidebar .shiny-input-container {
+        width: 100% !important;
+        margin-bottom: 18px;
+      }
+      .base-pitching-workspace .base-pitching-sidebar label.control-label {
+        margin-bottom: 7px;
+        color: var(--base-ink);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .base-pitching-workspace .base-pitching-sidebar .form-control,
+      .base-pitching-workspace .base-pitching-sidebar .selectize-input,
+      .base-pitching-workspace .base-pitching-sidebar .bootstrap-select > .dropdown-toggle {
+        min-height: 42px;
+        border-color: #dccbca !important;
+        border-radius: 9px !important;
+        background: #fff !important;
+        box-shadow: none !important;
+      }
+      .base-pitching-workspace .base-pitching-sidebar .form-control:focus,
+      .base-pitching-workspace .base-pitching-sidebar .selectize-input.focus,
+      .base-pitching-workspace .base-pitching-sidebar .bootstrap-select > .dropdown-toggle:focus {
+        border-color: var(--base-maroon) !important;
+        box-shadow: 0 0 0 3px rgba(80,18,20,.10) !important;
+      }
+      .base-pitching-workspace .base-pitching-sidebar .shiny-input-checkboxgroup[id$='season_groups'] {
+        padding: 12px;
+        border: 1px solid var(--base-border);
+        border-radius: 10px;
+        background: #faf8f5;
+      }
+      .base-pitching-workspace .base-pitching-sidebar .shiny-input-checkboxgroup[id$='season_groups'] .shiny-options-group {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 10px;
+      }
+      .base-pitching-workspace .base-pitching-sidebar .shiny-input-checkboxgroup[id$='season_groups'] label.checkbox-inline,
+      .base-pitching-workspace .base-pitching-sidebar .shiny-input-checkboxgroup[id$='season_groups'] label.checkbox,
+      .base-pitching-workspace .base-pitching-sidebar .shiny-input-checkboxgroup[id$='season_groups'] .form-check {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 6px;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: var(--base-ink);
+        font-size: 11px;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+      .base-pitching-workspace .base-pitching-sidebar .shiny-input-checkboxgroup[id$='season_groups'] input[type='checkbox'],
+      .base-pitching-workspace .base-pitching-sidebar .shiny-input-checkboxgroup[id$='season_groups'] .form-check-input {
+        position: static !important;
+        flex: 0 0 auto;
+        width: 14px;
+        height: 14px;
+        margin: 0 !important;
+      }
       .base-pitching-workspace .base-pitching-main,
       .base-pitching-workspace .base-pitching-main > .tabbable,
       .base-pitching-workspace .base-pitching-main .tab-content,
@@ -820,10 +879,10 @@ base_wally_pitching_environment <- function(team_rows) {
   workspace$BASE_PITCHING_HEAD <- base_pitching_embedded_head()
 
   prior_warn <- getOption("warn")
-  prior_baseline_flag <- getOption("stuff_baseline_missing")
+  prior_brewstuff_flag <- getOption("brewstuff_unavailable")
   on.exit({
     options(warn = prior_warn)
-    options(stuff_baseline_missing = prior_baseline_flag)
+    options(brewstuff_unavailable = prior_brewstuff_flag)
   }, add = TRUE)
   sys.source(
     BASE_WALLY_PITCHING_FILE,

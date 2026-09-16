@@ -2188,13 +2188,13 @@ swing_table <- function(d, balls_col = NA_character_, strikes_col = NA_character
 # -------------------- Team Report (Hitters) helpers --------------------
 if (!exists(".tbl_bg", mode = "function")) {
   .tbl_bg <- function(tbl, ...) {
-    res <- try(ggpubr::table_cell_bg(tbl, ...), silent = TRUE)
+    res <- suppressWarnings(try(ggpubr::table_cell_bg(tbl, ...), silent = TRUE))
     if (inherits(res, "try-error")) tbl else res
   }
 }
 if (!exists(".tbl_font", mode = "function")) {
   .tbl_font <- function(tbl, ...) {
-    res <- try(ggpubr::table_cell_font(tbl, ...), silent = TRUE)
+    res <- suppressWarnings(try(ggpubr::table_cell_font(tbl, ...), silent = TRUE))
     if (inherits(res, "try-error")) tbl else res
   }
 }
@@ -2653,7 +2653,7 @@ build_hitter_process_table <- function(game_p, season_p, season_header = "Season
     barrel   = D1_PCT[["Barrel%"]] %||% NA_real_
   )
   
-  fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100 * x), "—")
+  fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100 * x), "-")
   
   raw <- tibble::tibble(
     Metric = c("IZ Swing%","Chase%","Whiff%","Barrel%"),
@@ -2731,7 +2731,7 @@ build_hitter_pitchtype_table <- function(game_p, season_p = NULL) {
   groups <- groups[groups %in% unique(c(g$PitchGroup, s$PitchGroup))]
   if (!length(groups)) return(as.data.frame(tibble::tibble(Status = "No data")))
   
-  fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "—")
+  fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "-")
   fmt_dual <- function(gv, sv) paste0(fmt_pct(gv), " | ", fmt_pct(sv))
   
   g_total <- nrow(g)
@@ -2869,7 +2869,7 @@ build_hitter_count_breakdown_table <- function(game_p, season_p, season_header =
   g <- calc_metrics(game_p)
   s <- calc_metrics(season_p)
   
-  fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "—")
+  fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "-")
   season_label <- season_header %||% "Season"
   
   out <- data.frame(
@@ -8066,15 +8066,37 @@ server <- function(input, output, session){
       }
   }
 
+  hit_aar_download_data <- function() {
+    hitter <- as.character(aar_hitter_value() %||% "")
+    game_id <- as.character(input$AARGame %||% "")
+    if (!length(hitter) || !nzchar(hitter[[1]])) stop("Select a hitter before downloading the AAR.", call. = FALSE)
+    if (!length(game_id) || !nzchar(game_id[[1]])) stop("Select a game before downloading the AAR.", call. = FALSE)
+    report_data <- aar_game_data_for(game_id[[1]], hitter_override = hitter[[1]])
+    if (is.null(report_data) || !nrow(report_data)) stop("The selected hitter and game have no AAR data.", call. = FALSE)
+    report_data
+  }
+
   output$hit_aar_pdf <- downloadHandler(
     filename = function() {
-      d <- aar_data()
+      d <- tryCatch(hit_aar_download_data(), error = function(e) NULL)
       plyr <- if (!is.null(d) && nrow(d) && "Batter" %in% names(d)) gsub("[^A-Za-z0-9]+","_", unique(d$Batter)[1]) else "Player"
       gdt  <- if (!is.null(d) && nrow(d) && "GameDate" %in% names(d)) as.character(sort(unique(d$GameDate))[1]) else as.character(Sys.Date())
       sprintf("AAR_%s_%s.pdf", plyr, gdt)
     },
-    content = function(file) write_hitting_aar_pdf(file, aar_data())
+    content = function(file) {
+      tryCatch({
+        write_hitting_aar_pdf(file, hit_aar_download_data())
+        valid_pdf <- file.exists(file) && file.info(file)$size > 4L &&
+          identical(readBin(file, what = "raw", n = 4L), charToRaw("%PDF"))
+        if (!isTRUE(valid_pdf)) stop("The report renderer did not produce a valid PDF.", call. = FALSE)
+      }, error = function(e) {
+        warning("[Hitting AAR download] ", conditionMessage(e))
+        stop(e)
+      })
+    },
+    contentType = "application/pdf"
   )
+  outputOptions(output, "hit_aar_pdf", suspendWhenHidden = FALSE)
 
   hit_aar_recent_reports <- reactive({
     d <- df

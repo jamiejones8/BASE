@@ -1,4 +1,4 @@
-# Session-scoped password gate for the BASE application.
+# Password gate for the BASE application.
 #
 # The credential is supplied only through BASE_APP_PASSWORD. It is never sent
 # to the browser: submitted values are compared on the Shiny server and the
@@ -10,6 +10,48 @@ base_auth_password <- function() {
 
 base_auth_is_configured <- function(password = base_auth_password()) {
   length(password) == 1L && !is.na(password) && nzchar(trimws(password))
+}
+
+base_auth_remember_hours <- function(value = Sys.getenv("BASE_AUTH_REMEMBER_HOURS", unset = "48")) {
+  hours <- suppressWarnings(as.integer(value))
+  if (length(hours) != 1L || is.na(hours)) hours <- 48L
+  max(0L, min(hours, 24L * 7L))
+}
+
+base_auth_cookie_secret <- function(password = base_auth_password()) {
+  configured <- Sys.getenv("BASE_AUTH_COOKIE_SECRET", unset = "")
+  if (nzchar(configured)) configured else password
+}
+
+base_auth_remember_signature <- function(expiry, password = base_auth_password()) {
+  if (!requireNamespace("digest", quietly = TRUE) || !base_auth_is_configured(password)) return(NA_character_)
+  key <- paste0(base_auth_cookie_secret(password), "\n", password)
+  digest::hmac(
+    key = key,
+    object = paste0("BASE-AUTH-V1|", expiry),
+    algo = "sha256",
+    serialize = FALSE
+  )
+}
+
+base_auth_issue_remember_token <- function(password = base_auth_password(), now = Sys.time(),
+                                           hours = base_auth_remember_hours()) {
+  hours <- suppressWarnings(as.integer(hours))
+  if (!base_auth_is_configured(password) || length(hours) != 1L || is.na(hours) || hours <= 0L) return("")
+  expiry <- format(floor(as.numeric(now) + hours * 3600), scientific = FALSE, trim = TRUE)
+  signature <- base_auth_remember_signature(expiry, password)
+  if (is.na(signature) || !nzchar(signature)) return("")
+  paste(expiry, signature, sep = ".")
+}
+
+base_auth_validate_remember_token <- function(token, password = base_auth_password(), now = Sys.time()) {
+  if (length(token) != 1L || is.na(token) || !nzchar(token) || !base_auth_is_configured(password)) return(FALSE)
+  parts <- strsplit(token, ".", fixed = TRUE)[[1]]
+  if (length(parts) != 2L || !grepl("^[0-9]+$", parts[[1]]) || !grepl("^[0-9a-f]{64}$", parts[[2]])) return(FALSE)
+  expiry <- suppressWarnings(as.numeric(parts[[1]]))
+  if (!is.finite(expiry) || as.numeric(now) > expiry) return(FALSE)
+  expected <- base_auth_remember_signature(parts[[1]], password)
+  !is.na(expected) && base_constant_time_equal(parts[[2]], expected)
 }
 
 base_constant_time_equal <- function(candidate, expected) {
@@ -29,6 +71,16 @@ base_constant_time_equal <- function(candidate, expected) {
 }
 
 base_password_gate_ui <- function(configured = base_auth_is_configured()) {
+  remember_hours <- base_auth_remember_hours()
+  remember_label <- if (remember_hours == 24L) {
+    "Access is retained on this device for up to 1 day."
+  } else if (remember_hours > 0L && remember_hours %% 24L == 0L) {
+    paste0("Access is retained on this device for up to ", remember_hours %/% 24L, " days.")
+  } else if (remember_hours > 0L) {
+    paste0("Access is retained on this device for up to ", remember_hours, " hours.")
+  } else {
+    "Access is retained for this browser session."
+  }
   shiny::tags$main(
     id = "base-auth-screen",
     class = "base-auth-screen",
@@ -76,7 +128,7 @@ base_password_gate_ui <- function(configured = base_auth_is_configured()) {
           ),
           shiny::tags$p(
             class = "base-auth-help",
-            "Access is retained for this browser session."
+            remember_label
           )
         )
       } else {
@@ -89,12 +141,48 @@ base_password_gate_ui <- function(configured = base_auth_is_configured()) {
       }
     ),
     shiny::tags$script(shiny::HTML("
-      $(document).on('keydown', '#base_auth_password', function(event) {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          $('#base_auth_submit').trigger('click');
+      (function() {
+        var cookieName = 'base_auth_remember';
+        function cookieValue(name) {
+          var prefix = name + '=';
+          var values = document.cookie ? document.cookie.split(';') : [];
+          for (var i = 0; i < values.length; i++) {
+            var value = values[i].trim();
+            if (value.indexOf(prefix) === 0) return decodeURIComponent(value.substring(prefix.length));
+          }
+          return '';
         }
-      });
+        function submitStoredToken() {
+          if (window.Shiny) {
+            Shiny.setInputValue('base_auth_remember_token', cookieValue(cookieName), {priority: 'event'});
+          }
+        }
+        function installCookieHandler() {
+          if (!window.baseAuthCookieHandlerInstalled && window.Shiny) {
+            Shiny.addCustomMessageHandler('base-auth-store', function(message) {
+              var secure = window.location.protocol === 'https:' ? '; Secure' : '';
+              document.cookie = cookieName + '=' + encodeURIComponent(message.token) +
+                '; Path=/; Max-Age=' + message.maxAge + '; SameSite=Lax' + secure;
+            });
+            window.baseAuthCookieHandlerInstalled = true;
+          }
+        }
+        if (window.Shiny) { installCookieHandler(); submitStoredToken(); }
+        $(document).off('shiny:connected.baseAuth').on('shiny:connected.baseAuth', function() {
+          installCookieHandler();
+          submitStoredToken();
+        });
+
+        $(document).off('keydown.baseAuth', '#base_auth_password').on('keydown.baseAuth', '#base_auth_password', function(event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            Shiny.setInputValue('base_auth_enter', {
+              password: this.value.replace(/[\r\n]+$/, ''),
+              nonce: Date.now()
+            }, {priority: 'event'});
+          }
+        });
+      })();
     "))
   )
 }
@@ -123,7 +211,17 @@ base_password_gate_server <- function(input, output, session, application_ui) {
     )
   })
 
-  shiny::observeEvent(input$base_auth_submit, {
+  shiny::observeEvent(input$base_auth_remember_token, {
+    if (isTRUE(authenticated())) return()
+    expected <- base_auth_password()
+    if (base_auth_validate_remember_token(input$base_auth_remember_token, expected)) {
+      auth_message(NULL)
+      failed_attempts(0L)
+      authenticated(TRUE)
+    }
+  }, ignoreInit = FALSE)
+
+  authenticate_candidate <- function(candidate) {
     expected <- base_auth_password()
     if (!base_auth_is_configured(expected)) {
       auth_message(list(type = "error", text = "Password access is not configured."))
@@ -146,11 +244,19 @@ base_password_gate_server <- function(input, output, session, application_ui) {
       locked_until(as.POSIXct(NA))
     }
 
-    candidate <- input$base_auth_password
     if (is.null(candidate)) candidate <- ""
+    candidate <- sub("[\r\n]+$", "", candidate)
     if (base_constant_time_equal(candidate, expected)) {
       auth_message(NULL)
       failed_attempts(0L)
+      remember_hours <- base_auth_remember_hours()
+      remember_token <- base_auth_issue_remember_token(expected, hours = remember_hours)
+      if (nzchar(remember_token)) {
+        session$sendCustomMessage(
+          "base-auth-store",
+          list(token = remember_token, maxAge = as.integer(remember_hours * 3600L))
+        )
+      }
       authenticated(TRUE)
       return()
     }
@@ -173,8 +279,17 @@ base_password_gate_server <- function(input, output, session, application_ui) {
         )
       ))
     }
+  }
+
+  shiny::observeEvent(input$base_auth_submit, {
+    authenticate_candidate(input$base_auth_password)
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input$base_auth_enter, {
+    submitted <- input$base_auth_enter
+    candidate <- if (is.list(submitted) && !is.null(submitted$password)) submitted$password else ""
+    authenticate_candidate(candidate)
   }, ignoreInit = TRUE)
 
   authenticated
 }
-
