@@ -3927,14 +3927,6 @@ build_swing_decisions_tbl <- function(d){
   return(tbl)
 }
 
-hitting_aar_pitch_number_color <- function(good_flag) {
-  ifelse(
-    good_flag %in% TRUE,
-    "#2E7D32",
-    ifelse(good_flag %in% FALSE, "#D32F2F", "#FFFFFF")
-  )
-}
-
 # Auto column widths from max string width (header + body), with padding
 compute_table_widths <- function(df, header_cex = 0.9, body_cex = 0.8, pad_mm = 3) {
   hw <- lapply(names(df), function(s) grid::grobWidth(grid::textGrob(s, gp = grid::gpar(cex = header_cex))))
@@ -7571,18 +7563,6 @@ server <- function(input, output, session){
         )
       }
       d_strike <- d %>% dplyr::filter(is.finite(plate_x), is.finite(plate_z))
-      strike_good_flag <- if ("GoodFlag" %in% names(d_strike)) {
-        as.logical(d_strike$GoodFlag)
-      } else {
-        dplyr::case_when(
-          d_strike$in_zone %in% TRUE  & d_strike$Decision == "SWING" ~ TRUE,
-          d_strike$in_zone %in% FALSE & d_strike$Decision == "TAKE"  ~ TRUE,
-          d_strike$in_zone %in% TRUE  & d_strike$Decision == "TAKE"  ~ FALSE,
-          d_strike$in_zone %in% FALSE & d_strike$Decision == "SWING" ~ FALSE,
-          TRUE ~ NA
-        )
-      }
-      d_strike$PitchNumberColor <- hitting_aar_pitch_number_color(strike_good_flag)
       d_strike$TypeGroup <- factor(d_strike$TypeGroup, levels = c("HARD","BREAK","SOFT"))
       d_strike$Decision  <- factor(d_strike$Decision,  levels = c("SWING","TAKE"))
       
@@ -7602,13 +7582,7 @@ server <- function(input, output, session){
                      inherit.aes = FALSE, linetype="dashed", alpha=0.35) +
         geom_point(aes(shape = TypeGroup, fill = Decision),
                    size = 7.8, color = "black", stroke = 0.7, alpha = 0.95, show.legend = TRUE) +
-        geom_text(
-          aes(label = PitchNum, color = PitchNumberColor),
-          size = 5.3,
-          fontface = 700,
-          show.legend = FALSE
-        ) +
-        scale_color_identity() +
+        geom_text(aes(label = PitchNum), size = 5.3, fontface = 700, color = "white") +
         scale_shape_manual(
           name   = "Pitch type",
           values = c("HARD"=21,"BREAK"=24,"SOFT"=22),
