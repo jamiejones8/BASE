@@ -7924,10 +7924,31 @@ server <- function(input, output, session){
         sg <- season_group_for_game(d_game)
         info <- season_info_from_group(sg)
         
-        d_season <- dat_filt()
-        if (!is.na(info$group) && "SeasonGroup" %in% names(d_season)) {
+        # The Postgame Reports AAR has its own hitter/game controls and can be
+        # downloaded without the legacy Hitting sidebar being initialized.
+        # Build the season comparison directly from the source data instead of
+        # calling dat_filt(), which req()s input$Hitter and otherwise aborts the
+        # download with a message-less shiny.silent.error.
+        aar_batter <- if ("Batter" %in% names(d_game)) nz_chr(d_game$Batter) else character(0)
+        aar_batter <- aar_batter[nzchar(aar_batter)]
+        d_season <- df
+        if (length(aar_batter) && "Batter" %in% names(d_season)) {
           d_season <- d_season %>%
-            dplyr::filter(toupper(trimws(.data$SeasonGroup)) == info$group)
+            dplyr::filter(nz_chr(.data$Batter) == aar_batter[[1]])
+        }
+        if ("is_bullpen" %in% names(d_season)) {
+          d_season <- d_season %>% dplyr::filter(!(.data$is_bullpen %in% TRUE))
+        }
+        season_col <- if ("SeasonGroup" %in% names(d_season)) {
+          "SeasonGroup"
+        } else if ("SeasonTag" %in% names(d_season)) {
+          "SeasonTag"
+        } else {
+          NULL
+        }
+        if (!is.na(info$group) && !is.null(season_col)) {
+          d_season <- d_season %>%
+            dplyr::filter(toupper(trimws(nz_chr(.data[[season_col]]))) == info$group)
         }
         
         g <- hsh_rates(d_game)

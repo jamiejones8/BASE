@@ -299,6 +299,15 @@ shiny::testServer(workspace$server, {
   }
   recent_aars <- hit_aar_recent_reports()
   if (!nrow(recent_aars)) fail("Hitting Recent AARs returned no fixture rows.")
+  invisible(output$aar_kpi)
+  invisible(output$aar_swing_tbl)
+  invisible(output$perf_tbl)
+  invisible(output$lineup_builder_ui)
+
+  # Postgame Reports owns separate AAR controls. The PDF must not depend on
+  # the legacy Hitting sidebar's player selection being present.
+  session$setInputs(Hitter = NULL)
+  session$flushReact()
   generator <- session$.__enclos_env__$private$file_generators$get(session$ns("hit_aar_pdf"))
   if (is.null(generator) || !is.function(generator$content)) fail("Hitting AAR download handler was not registered.")
   generator$content(downloaded_aar)
@@ -306,10 +315,6 @@ shiny::testServer(workspace$server, {
       !identical(readBin(downloaded_aar, what = "raw", n = 4L), charToRaw("%PDF"))) {
     fail("Hitting AAR download did not produce a PDF.")
   }
-  invisible(output$aar_kpi)
-  invisible(output$aar_swing_tbl)
-  invisible(output$perf_tbl)
-  invisible(output$lineup_builder_ui)
 })
 
 cat(
