@@ -1,8 +1,9 @@
-# Persistent TrackMan game imports for future Texas State team seasons.
+# Persistent TrackMan game and bullpen imports for Texas State team data.
 #
 # Each target remains one append-only CSV, matching the existing Wally loading
-# model. The shared file keeps the complete game export; the Hitting and
-# Pitching adapters select the Texas State batting and pitching rows they need.
+# model. Season files keep the complete game export; the Hitting and Pitching
+# adapters select the Texas State batting and pitching rows they need. Bullpen
+# imports update the active cumulative file used by the Pitching workspace.
 
 BASE_TEAM_SEASON_IMPORT_TARGETS <- list(
   F26 = list(
@@ -19,6 +20,19 @@ BASE_TEAM_SEASON_IMPORT_TARGETS <- list(
   )
 )
 
+BASE_TEAM_BULLPEN_IMPORT_TARGETS <- list(
+  BP = list(
+    id = "BP",
+    label = "Bullpens",
+    filename = "Bullpens - cleaned.csv",
+    expected_year = NULL
+  )
+)
+
+base_trackman_import_targets <- function() {
+  c(BASE_TEAM_SEASON_IMPORT_TARGETS, BASE_TEAM_BULLPEN_IMPORT_TARGETS)
+}
+
 base_team_season_import_root <- function() {
   configured <- tryCatch(TEAM_CONFIG$data$team_season_import_dir, error = function(e) NULL)
   if (!is.null(configured) && length(configured) && nzchar(configured[[1]])) {
@@ -29,15 +43,29 @@ base_team_season_import_root <- function() {
 
 base_team_season_import_target <- function(target_id) {
   target_id <- toupper(trimws(as.character(target_id)[[1]]))
-  target <- BASE_TEAM_SEASON_IMPORT_TARGETS[[target_id]]
+  target <- base_trackman_import_targets()[[target_id]]
   if (is.null(target)) {
-    stop("Unknown team season import target: ", target_id, call. = FALSE)
+    stop("Unknown TrackMan import target: ", target_id, call. = FALSE)
   }
   target
 }
 
-base_team_season_import_path <- function(target_id, root = base_team_season_import_root()) {
+base_team_season_import_path <- function(target_id, root = NULL) {
   target <- base_team_season_import_target(target_id)
+  if (is.null(root)) {
+    if (identical(target$id, "BP")) {
+      configured <- tryCatch(TEAM_CONFIG$data$bullpen_file, error = function(e) NULL)
+      if (!is.null(configured) && length(configured) && nzchar(configured[[1]])) {
+        return(normalizePath(configured[[1]], winslash = "/", mustWork = FALSE))
+      }
+      return(normalizePath(
+        base_project_path("WallyApps", "PitchingApp", "data", target$filename),
+        winslash = "/",
+        mustWork = FALSE
+      ))
+    }
+    root <- base_team_season_import_root()
+  }
   normalizePath(file.path(root, target$filename), winslash = "/", mustWork = FALSE)
 }
 
@@ -144,7 +172,7 @@ base_validate_trackman_import <- function(rows, target_id) {
     stop("Every uploaded row must have a recognizable TrackMan Date.", call. = FALSE)
   }
   years <- unique(as.integer(format(dates, "%Y")))
-  if (!identical(years, target$expected_year)) {
+  if (!is.null(target$expected_year) && !identical(years, target$expected_year)) {
     stop(
       target$label, " only accepts ", target$expected_year,
       " game dates; this file contains ", paste(sort(years), collapse = ", "), ".",
@@ -205,7 +233,7 @@ base_atomic_write_trackman_csv <- function(rows, path) {
   invisible(path)
 }
 
-base_import_trackman_game <- function(upload_path, target_id, root = base_team_season_import_root()) {
+base_import_trackman_game <- function(upload_path, target_id, root = NULL) {
   target <- base_team_season_import_target(target_id)
   destination <- base_team_season_import_path(target$id, root = root)
   directory <- dirname(destination)
@@ -272,7 +300,7 @@ base_import_trackman_game <- function(upload_path, target_id, root = base_team_s
   )
 }
 
-base_team_season_source_status <- function(target_id, root = base_team_season_import_root()) {
+base_team_season_source_status <- function(target_id, root = NULL) {
   target <- base_team_season_import_target(target_id)
   path <- base_team_season_import_path(target$id, root = root)
   if (!file.exists(path)) {

@@ -181,6 +181,12 @@
           "title": "2027 Season TrackMan Import",
           "storage": "Cumulative 2027 Season CSV in BASE_TEAM_SEASON_IMPORT_DIR",
           "behavior": "Validate one game, enforce 2027 dates and Texas State participation, deduplicate stable pitch IDs, then append atomically."
+        },
+        {
+          "id": "trackman_bullpen_import",
+          "title": "Bullpen TrackMan Import",
+          "storage": "Active cumulative bullpen CSV configured by BASE_BULLPEN_DATA_FILE",
+          "behavior": "Validate one bullpen session and Texas State participation, deduplicate stable pitch IDs, then append atomically to the source loaded by Team Pitching."
         }
       ]
     }

@@ -33,11 +33,13 @@ BASE_WALLY_PITCHING_LEGACY_DATA_FILES <- c(
 
 base_pitching_supplement_candidates <- function() {
   root <- base_project_path("WallyApps", "PitchingApp", "data")
+  legacy_paths <- stats::setNames(
+    file.path(root, unname(BASE_WALLY_PITCHING_LEGACY_DATA_FILES)),
+    names(BASE_WALLY_PITCHING_LEGACY_DATA_FILES)
+  )
+  legacy_paths[["BP"]] <- TEAM_CONFIG$data$bullpen_file
   c(
-    stats::setNames(
-      file.path(root, unname(BASE_WALLY_PITCHING_LEGACY_DATA_FILES)),
-      names(BASE_WALLY_PITCHING_LEGACY_DATA_FILES)
-    ),
+    legacy_paths,
     base_team_season_import_paths(existing_only = FALSE)
   )
 }

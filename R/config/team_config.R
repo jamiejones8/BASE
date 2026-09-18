@@ -251,6 +251,10 @@ TEAM_CONFIG <- list(
         "team-season-imports"
       )
     ),
+    bullpen_file = base_env_path(
+      "BASE_BULLPEN_DATA_FILE",
+      base_project_path("WallyApps", "PitchingApp", "data", "Bullpens - cleaned.csv")
+    ),
     season_file = base_env_path("BASE_SEASON_DATA_FILE", base_default_season_file()),
     runtime_root = base_env_path("BASE_RUNTIME_ROOT", "/base-data/derived2026"),
     pitcher_dataset_dir = base_env_path(

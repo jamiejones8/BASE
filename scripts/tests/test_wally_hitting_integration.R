@@ -297,6 +297,12 @@ shiny::testServer(workspace$server, {
   if (!identical(ump_table$Ump, c("", "🍀", "🤖", ""))) {
     fail("Hitting AAR umpire markers are incorrect or include a swing result.")
   }
+  if (!identical(
+    workspace$hitting_aar_pitch_number_color(c(TRUE, FALSE, NA)),
+    c("#2E7D32", "#D32F2F", "#FFFFFF")
+  )) {
+    fail("Hitting AAR pitch-number colors do not distinguish good and bad decisions.")
+  }
   recent_aars <- hit_aar_recent_reports()
   if (!nrow(recent_aars)) fail("Hitting Recent AARs returned no fixture rows.")
   invisible(output$aar_kpi)

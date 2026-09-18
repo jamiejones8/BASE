@@ -15,6 +15,13 @@ scratch <- tempfile("base-team-season-import-")
 dir.create(scratch, recursive = TRUE)
 on.exit(unlink(scratch, recursive = TRUE, force = TRUE), add = TRUE)
 
+if (!identical(
+  base_team_season_import_path("BP"),
+  normalizePath(TEAM_CONFIG$data$bullpen_file, winslash = "/", mustWork = FALSE)
+)) {
+  fail("The bullpen importer and Pitching loader do not share the configured source file.")
+}
+
 game <- tibble::tibble(
   PitchUID = c("fall-pitch-1", "fall-pitch-2", "fall-pitch-3"),
   GameUID = "fall-game-1",
@@ -53,6 +60,23 @@ if (third$inserted_rows != 2L || third$total_rows != 5L ||
     !"NewTrackManField" %in% names(stored) ||
     !identical(tail(stored$NewTrackManField, 2), c("future-a", "future-b"))) {
   fail("Schema evolution or cumulative append behavior failed.")
+}
+
+bullpen <- game
+bullpen$PitchUID <- paste0("bullpen-pitch-", seq_len(nrow(bullpen)))
+bullpen$GameUID <- "bullpen-session-1"
+bullpen$Date <- "09/15/2025"
+bullpen_path <- file.path(scratch, "bullpen.csv")
+readr::write_csv(bullpen, bullpen_path)
+bullpen_first <- base_import_trackman_game(bullpen_path, "BP", root = scratch)
+bullpen_second <- base_import_trackman_game(bullpen_path, "BP", root = scratch)
+if (!identical(basename(bullpen_first$destination), "Bullpens - cleaned.csv") ||
+    bullpen_first$inserted_rows != 3L || bullpen_first$total_rows != 3L ||
+    bullpen_second$inserted_rows != 0L || bullpen_second$duplicate_rows != 3L) {
+  fail("The bullpen drop did not append to and persist in its cumulative source.")
+}
+if ("BP" %in% names(base_team_season_import_paths(root = scratch))) {
+  fail("The bullpen source leaked into the season-source loader list.")
 }
 
 wrong_year <- game
@@ -98,4 +122,4 @@ if (nrow(future_hitting) != 2L || !all(future_hitting$SeasonGroup == "F26")) {
   fail("The Hitting loader did not select and label future Texas State batting rows.")
 }
 
-cat("Team season TrackMan import tests passed: atomic append, deduplication, schema evolution, and season validation.\n")
+cat("Team TrackMan import tests passed: season and bullpen append, deduplication, schema evolution, and validation.\n")

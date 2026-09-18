@@ -9,6 +9,13 @@ if (!inherits(app, "shiny.appobj")) {
   stop("app.R did not produce a Shiny application object.", call. = FALSE)
 }
 
+data_processing_html <- paste(as.character(data_processing_workspace_ui()), collapse = "")
+if (!grepl("dp_bp_file", data_processing_html, fixed = TRUE) ||
+    !grepl("dp_bp_append", data_processing_html, fixed = TRUE) ||
+    !grepl("dp_bp_status", data_processing_html, fixed = TRUE)) {
+  stop("Data Processing does not expose the bullpen append workflow.", call. = FALSE)
+}
+
 duplicate_percentiles <- tibble::tibble(
   Stat = c("Stuff", "Stuff", "Stuff"),
   TaggedPitchType = c("Fastball", "Fastball", "Fastball"),
