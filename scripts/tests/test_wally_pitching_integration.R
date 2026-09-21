@@ -113,6 +113,11 @@ missing_tabs <- expected_tabs[!vapply(expected_tabs, grepl, logical(1), x = html
 if (length(missing_tabs)) {
   fail("Embedded Pitching UI is missing tabs: ", paste(missing_tabs, collapse = ", "))
 }
+pitching_source <- paste(readLines("WallyApps/PitchingApp/PitchingApp.R", warn = FALSE), collapse = "\n")
+if (grepl("xrv_leader_min_pitches", pitching_source, fixed = TRUE) ||
+    grepl("Minimum pitches to qualify", pitching_source, fixed = TRUE)) {
+  fail("Stuff+ still applies or exposes a minimum-pitch qualification filter.")
+}
 if (!grepl("performance_table", html, fixed = TRUE) ||
     !grepl("base-pitching-performance-insights", html, fixed = TRUE)) {
   fail("Pitching Performance is missing its unified table and insights layout.")

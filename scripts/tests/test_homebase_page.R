@@ -126,6 +126,7 @@ synthetic <- tibble::tibble(
   Angle = c(NA, 18, NA, NA, NA, NA, NA, 28),
   RunsScored = c(0, 0, 0, 0, 0, 0, 0, 1)
 )
+synthetic$StuffPlus <- c(110, rep(NA_real_, nrow(synthetic) - 1L))
 
 pa <- homebase_pa_rows(synthetic)
 if (nrow(pa) != 4L) fail("HomeBASE did not reduce pitch rows to four plate appearances.")
@@ -173,8 +174,11 @@ if (nrow(hitter_percentiles) != 6L || nrow(pitcher_percentiles) != 22L) {
 if (!any(is.finite(hitter_percentiles$Percentile))) {
   fail("HomeBASE hitter percentile profile did not resolve against its benchmarks.")
 }
-if (any(is.finite(pitcher_percentiles$Percentile))) {
-  fail("HomeBASE displayed pitcher percentiles for an ineligible four-PA sample.")
+stuff_percentile <- pitcher_percentiles$Percentile[pitcher_percentiles$Label == "Stuff+"]
+other_pitcher_percentiles <- pitcher_percentiles$Percentile[pitcher_percentiles$Label != "Stuff+"]
+if (length(stuff_percentile) != 1L || !is.finite(stuff_percentile) ||
+    any(is.finite(other_pitcher_percentiles))) {
+  fail("HomeBASE did not remove the Stuff+ sample minimum while preserving other metric thresholds.")
 }
 if (!identical(hitter_percentiles$Label, c("K%", "BB%", "SLG", "Contact%", "Chase%", "Max EV"))) {
   fail("HomeBASE hitter percentile board contains non-stat labels.")

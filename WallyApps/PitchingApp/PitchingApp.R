@@ -6739,11 +6739,6 @@ ui <- base_pitching_page(
         ),
         nav_panel(
           title = "Staff Leaderboard",
-          sliderInput(
-            "xrv_leader_min_pitches",
-            "Minimum pitches to qualify",
-            min = 0, max = 200, value = 0, step = 25
-          ),
           div(class = "table-title mb-1", "Pitch Type Filter"),
           uiOutput("xrv_leader_pitch_filter"),
           div(class = "table-title mt-2 mb-1", "Totals (All Pitches)"),
@@ -10362,7 +10357,6 @@ server <- function(input, output, session){
     if (is.null(d) || !nrow(d)) {
       return(DT::datatable(data.frame(Status = "No data"), rownames = FALSE, options = list(dom = "t", paging = FALSE)))
     }
-    min_p <- input$xrv_leader_min_pitches %||% 0
     out <- d %>%
       dplyr::group_by(Pitcher) %>%
       dplyr::summarise(
@@ -10370,7 +10364,6 @@ server <- function(input, output, session){
         Stuff_avg = mean(stuff_plus, na.rm = TRUE),
         .groups = "drop"
       ) %>%
-      dplyr::filter(Pitches >= min_p) %>%
       dplyr::arrange(dplyr::desc(Stuff_avg)) %>%
       dplyr::rename(`Stuff+ (avg)` = Stuff_avg)
     dt <- DT::datatable(
@@ -10390,7 +10383,6 @@ server <- function(input, output, session){
     }
     sel <- input$xrv_leader_pitch_types %||% character(0)
     if (length(sel)) d <- d %>% dplyr::filter(PitchType %in% sel)
-    min_p <- input$xrv_leader_min_pitches %||% 0
     out <- d %>%
       dplyr::group_by(Pitcher, PitchType) %>%
       dplyr::summarise(
@@ -10401,7 +10393,6 @@ server <- function(input, output, session){
       dplyr::group_by(Pitcher) %>%
       dplyr::mutate(Usage = Pitches / sum(Pitches, na.rm = TRUE)) %>%
       dplyr::ungroup() %>%
-      dplyr::filter(Pitches >= min_p) %>%
       dplyr::arrange(dplyr::desc(Stuff_avg)) %>%
       dplyr::select(Pitcher, PitchType, Pitches, Usage, Stuff_avg) %>%
       dplyr::rename(`Usage %` = Usage, `Stuff+ (avg)` = Stuff_avg)

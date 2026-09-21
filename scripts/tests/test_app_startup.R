@@ -62,4 +62,14 @@ if (nrow(alec_rows) && brewstuff_available) {
 if (!brewstuff_available) {
   cat("HomeBASE Stuff+ regression deferred until the runtime model is mounted.\n")
 }
+
+single_pitch_grade <- pitcher_grade_detail(tibble::tibble(
+  PitchType = "Fastball",
+  StuffPlus = 105,
+  LocationPlus = 100,
+  PitchingPlus = 102
+))
+if (!"Fastball" %in% single_pitch_grade$Category) {
+  stop("Scouting Stuff+ still requires a minimum pitch-type sample.", call. = FALSE)
+}
 cat("BASE startup smoke test passed.\n")

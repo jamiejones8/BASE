@@ -4659,7 +4659,8 @@ ui <- bootstrapPage(
       href = "https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Courier+Prime&family=Source+Sans+3:wght@400;600&display=swap"
     ),
     tags$link(rel = "stylesheet", type = "text/css", href = base_stylesheet_url()),
-    tags$style(HTML(base_brand_css(include_leaderboards = FALSE)))
+    tags$style(HTML(base_brand_css(include_leaderboards = FALSE))),
+    base_password_gate_head()
   ),
   uiOutput("base_app_root")
 )

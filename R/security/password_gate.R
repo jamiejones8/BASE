@@ -70,6 +70,81 @@ base_constant_time_equal <- function(candidate, expected) {
   length(candidate_raw) == length(expected_raw) && sum(differences) == 0L
 }
 
+base_password_gate_head <- function() {
+  shiny::tags$script(shiny::HTML("
+    (function() {
+      var storageKey = 'base_auth_remember';
+
+      function cookieValue(name) {
+        var prefix = name + '=';
+        var values = document.cookie ? document.cookie.split(';') : [];
+        for (var i = 0; i < values.length; i++) {
+          var value = values[i].trim();
+          if (value.indexOf(prefix) === 0) return decodeURIComponent(value.substring(prefix.length));
+        }
+        return '';
+      }
+
+      function persistentToken() {
+        try {
+          var stored = window.localStorage.getItem(storageKey);
+          if (stored) return stored;
+        } catch (error) {}
+        return cookieValue(storageKey);
+      }
+
+      function storeToken(message) {
+        var token = message && message.token ? String(message.token) : '';
+        var maxAge = message && Number.isFinite(Number(message.maxAge)) ? Number(message.maxAge) : 0;
+        if (!token || maxAge <= 0) return;
+        try { window.localStorage.setItem(storageKey, token); } catch (error) {}
+        var secure = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = storageKey + '=' + encodeURIComponent(token) +
+          '; Path=/; Max-Age=' + Math.floor(maxAge) + '; SameSite=Lax' + secure;
+      }
+
+      function submitStoredToken() {
+        if (!window.Shiny || typeof window.Shiny.setInputValue !== 'function') return;
+        window.Shiny.setInputValue('base_auth_remember_token', persistentToken(), {priority: 'event'});
+      }
+
+      function installHandlers() {
+        if (!window.Shiny || !window.jQuery) {
+          window.setTimeout(installHandlers, 50);
+          return;
+        }
+        if (!window.baseAuthStorageHandlerInstalled) {
+          window.Shiny.addCustomMessageHandler('base-auth-store', storeToken);
+          window.baseAuthStorageHandlerInstalled = true;
+        }
+        window.jQuery(document)
+          .off('keydown.baseAuth', '#base_auth_password')
+          .on('keydown.baseAuth', '#base_auth_password', function(event) {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              window.Shiny.setInputValue('base_auth_enter', {
+                password: this.value.replace(/[\\r\\n]+$/, ''),
+                nonce: Date.now()
+              }, {priority: 'event'});
+            }
+          });
+        submitStoredToken();
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', installHandlers, {once: true});
+      } else {
+        installHandlers();
+      }
+      if (window.jQuery) {
+        window.jQuery(document)
+          .off('shiny:connected.baseAuth')
+          .on('shiny:connected.baseAuth', installHandlers);
+      }
+    })();
+  "))
+}
+
 base_password_gate_ui <- function(configured = base_auth_is_configured()) {
   remember_hours <- base_auth_remember_hours()
   remember_label <- if (remember_hours == 24L) {
@@ -139,51 +214,7 @@ base_password_gate_ui <- function(configured = base_auth_is_configured()) {
           shiny::tags$span("Set BASE_APP_PASSWORD in the deployment environment, then restart BASE.")
         )
       }
-    ),
-    shiny::tags$script(shiny::HTML("
-      (function() {
-        var cookieName = 'base_auth_remember';
-        function cookieValue(name) {
-          var prefix = name + '=';
-          var values = document.cookie ? document.cookie.split(';') : [];
-          for (var i = 0; i < values.length; i++) {
-            var value = values[i].trim();
-            if (value.indexOf(prefix) === 0) return decodeURIComponent(value.substring(prefix.length));
-          }
-          return '';
-        }
-        function submitStoredToken() {
-          if (window.Shiny) {
-            Shiny.setInputValue('base_auth_remember_token', cookieValue(cookieName), {priority: 'event'});
-          }
-        }
-        function installCookieHandler() {
-          if (!window.baseAuthCookieHandlerInstalled && window.Shiny) {
-            Shiny.addCustomMessageHandler('base-auth-store', function(message) {
-              var secure = window.location.protocol === 'https:' ? '; Secure' : '';
-              document.cookie = cookieName + '=' + encodeURIComponent(message.token) +
-                '; Path=/; Max-Age=' + message.maxAge + '; SameSite=Lax' + secure;
-            });
-            window.baseAuthCookieHandlerInstalled = true;
-          }
-        }
-        if (window.Shiny) { installCookieHandler(); submitStoredToken(); }
-        $(document).off('shiny:connected.baseAuth').on('shiny:connected.baseAuth', function() {
-          installCookieHandler();
-          submitStoredToken();
-        });
-
-        $(document).off('keydown.baseAuth', '#base_auth_password').on('keydown.baseAuth', '#base_auth_password', function(event) {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            Shiny.setInputValue('base_auth_enter', {
-              password: this.value.replace(/[\r\n]+$/, ''),
-              nonce: Date.now()
-            }, {priority: 'event'});
-          }
-        });
-      })();
-    "))
+    )
   )
 }
 

@@ -631,7 +631,7 @@ homebase_percentile_rows <- function(data, role = c("hitter", "pitcher")) {
     if (is.null(m)) return(tibble::tibble())
     specs <- tibble::tribble(
       ~Group, ~Label, ~Key, ~Metric, ~LowerBetter, ~Kind, ~SampleKey, ~MinSample,
-      "BASE model", "Stuff+", "Stuff+", NA_character_, FALSE, "plus", "Stuff+ pitches", 25,
+      "BASE model", "Stuff+", "Stuff+", NA_character_, FALSE, "plus", "Stuff+ pitches", NA_real_,
       "Run prevention", "FIP", "FIP", "performance_fip", TRUE, "num2", "BF", 50,
       "Run prevention", "WHIP", "WHIP", "performance_whip", TRUE, "num2", "BF", 50,
       "Run prevention", "BAA", "BAA", "performance_baa", TRUE, "dec", "BF", 50,
@@ -659,7 +659,7 @@ homebase_percentile_rows <- function(data, role = c("hitter", "pitcher")) {
       dplyr::mutate(
         Value = as.numeric(m[[Key]]),
         Sample = as.numeric(m[[SampleKey]]),
-        Eligible = is.finite(Sample) && Sample >= MinSample,
+        Eligible = if (Kind == "plus") is.finite(Value) else is.finite(Sample) && Sample >= MinSample,
         Percentile = if (!Eligible) {
           NA_real_
         } else if (Kind == "plus") {

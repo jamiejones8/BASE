@@ -590,11 +590,11 @@ g2080_col <- function(p, m, s) {
   max(20, min(80, round(50 + 10 * (p - m) / s)))
 }
 
-pitcher_grade_detail <- function(d, minpitch = 15, pop = NULL) {
+pitcher_grade_detail <- function(d, pop = NULL) {
   ar <- d %>% filter(!is.na(PitchType)) %>% group_by(PitchType) %>%
     summarise(N = dplyr::n(), st_avg = mnn(StuffPlus), st_top = qn(StuffPlus, .80),
               .groups = "drop") %>%
-    filter(N >= minpitch) %>% arrange(desc(N))
+    arrange(desc(N))
   if (nrow(ar) == 0) return(NULL)
   sm <- if (is.null(pop)) NA_real_ else pop$st_m; ss <- if (is.null(pop)) NA_real_ else pop$st_s
   lm <- if (is.null(pop)) NA_real_ else pop$lo_m; ls <- if (is.null(pop)) NA_real_ else pop$lo_s

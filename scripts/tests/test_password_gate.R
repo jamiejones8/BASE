@@ -59,11 +59,29 @@ assert_true(
 )
 
 gate_html <- paste(as.character(base_password_gate_ui(TRUE)), collapse = "")
+head_html <- paste(as.character(base_password_gate_head()), collapse = "")
 assert_true(
-  grepl("base_auth_enter", gate_html, fixed = TRUE) && grepl("password: this.value", gate_html, fixed = TRUE),
+  grepl("base_auth_enter", head_html, fixed = TRUE) && grepl("password: this.value", head_html, fixed = TRUE),
   "The Enter-key login path does not submit the field value directly."
 )
+assert_true(
+  grepl("localStorage.setItem", head_html, fixed = TRUE) &&
+    grepl("localStorage.getItem", head_html, fixed = TRUE) &&
+    grepl("base-auth-store", head_html, fixed = TRUE) &&
+    grepl("base_auth_remember_token", head_html, fixed = TRUE),
+  "The static password-gate script does not persist and restore remember tokens."
+)
+assert_true(
+  !grepl("localStorage", gate_html, fixed = TRUE),
+  "Remember-token wiring is still embedded in dynamically rendered login UI."
+)
 assert_true(grepl("up to 2 days", gate_html, fixed = TRUE), "The default remember-device duration is not shown.")
+
+app_source <- paste(readLines("R/app_main.R", warn = FALSE), collapse = "\n")
+assert_true(
+  grepl("base_password_gate_head()", app_source, fixed = TRUE),
+  "The static application shell does not install the password persistence script."
+)
 
 old_password <- Sys.getenv("BASE_APP_PASSWORD", unset = NA_character_)
 Sys.setenv(BASE_APP_PASSWORD = "team-secret")
