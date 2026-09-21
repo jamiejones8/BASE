@@ -61,11 +61,11 @@ if (nrow(alec_rows) && brewstuff_available) {
 
 if (brewstuff_available) {
   gholston_rows <- tibble::tibble(
-    Pitcher = "Gholston, Jacob",
+    Pitcher = "Jacob Gholston",
     PitcherTeam = "TEX_BOB",
     TaggedPitchType = "Fastball",
-    PitcherThrows = "Right",
-    BatterSide = "Left",
+    PitcherThrows = "R",
+    BatterSide = "L",
     RelSpeed = 91,
     InducedVertBreak = 15,
     HorzBreak = 10,
@@ -79,7 +79,7 @@ if (brewstuff_available) {
   gholston_scored <- getBrewStuff(gholston_rows, model, bullpen = FALSE)
   if (nrow(gholston_scored) != 1L || !is.finite(gholston_scored$height[[1]]) ||
       !is.finite(gholston_scored$armangle[[1]]) || !is.finite(gholston_scored$Stuff[[1]])) {
-    stop("Stuff+ did not score Jacob Gholston after the unique-name height fallback.", call. = FALSE)
+    stop("Stuff+ did not score the Pitching page's First Last name and L/R handedness values.", call. = FALSE)
   }
 }
 

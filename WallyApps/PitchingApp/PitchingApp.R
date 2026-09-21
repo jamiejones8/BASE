@@ -6463,9 +6463,95 @@ ui <- base_pitching_page(
       width: 100% !important;
       height: auto !important;
     }
+    .base-stuff-page {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
+    .base-stuff-hero-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .base-stuff-hero-card {
+      min-width: 0;
+      padding: 16px 18px;
+      border: 1px solid rgba(80,18,20,.13);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 6px 18px rgba(44,30,23,.07);
+    }
+    .base-stuff-hero-card.is-primary {
+      color: #fff;
+      border-color: #501214;
+      background: linear-gradient(145deg, #501214, #74262b);
+    }
+    .base-stuff-hero-card span {
+      display: block;
+      margin-bottom: 5px;
+      color: #746b64;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .base-stuff-hero-card.is-primary span { color: #e7d6ae; }
+    .base-stuff-hero-card strong {
+      display: block;
+      overflow: hidden;
+      color: #281d1b;
+      font-family: Oswald, sans-serif;
+      font-size: clamp(24px, 2.4vw, 38px);
+      font-weight: 600;
+      line-height: 1.05;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .base-stuff-hero-card.is-primary strong { color: #fff; font-size: clamp(34px, 3.2vw, 50px); }
+    .base-stuff-hero-card small { display: block; margin-top: 5px; color: #8b817b; font-size: 11px; }
+    .base-stuff-hero-card.is-primary small { color: rgba(255,255,255,.74); }
+    .base-stuff-visual-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, .9fr) minmax(420px, 1.1fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+    .base-stuff-panel {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid rgba(80,18,20,.13);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 6px 18px rgba(44,30,23,.06);
+    }
+    .base-stuff-panel.is-wide { grid-column: 1 / -1; }
+    .base-stuff-panel-heading {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(80,18,20,.11);
+      color: #501214;
+      font-family: Oswald, sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+    .base-stuff-panel .shiny-plot-output,
+    .base-stuff-panel .html-widget { width: 100% !important; }
+    .base-stuff-controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
+      gap: 12px;
+      padding: 14px 16px 0;
+      border: 1px solid rgba(80,18,20,.13);
+      border-radius: 12px;
+      background: #fff;
+    }
     @media (max-width: 900px) {
       .base-report-controls,
-      .base-report-controls-team { grid-template-columns: 1fr; }
+      .base-report-controls-team,
+      .base-stuff-hero-grid,
+      .base-stuff-visual-grid,
+      .base-stuff-controls { grid-template-columns: 1fr; }
+      .base-stuff-panel.is-wide { grid-column: auto; }
     }
   "))),
   tags$script(HTML("
@@ -6687,55 +6773,70 @@ ui <- base_pitching_page(
       navset_tab(
         nav_panel(
           title = "Season Summary",
-          uiOutput("xrv_season_header"),
-          div(class = "table-title mb-1", "Stats"),
-          withSpinner(DTOutput("xrv_season_stats"), type = 4, color = "#501214"),
-          div(class = "table-title mt-3 mb-1", "Movement & Usage"),
-          fluidRow(
-            column(6, withSpinner(plotlyOutput("xrv_season_movement", height = "420px", width = "100%"), type = 4, color = "#501214")),
-            column(
-              6,
-              div(class = "table-title mb-1", "Pitch Usage vLHH"),
-              withSpinner(plotlyOutput("xrv_season_usage_lhh", height = "200px", width = "100%"), type = 4, color = "#501214"),
-              div(class = "table-title mt-2 mb-1", "Pitch Usage vRHH"),
-              withSpinner(plotlyOutput("xrv_season_usage_rhh", height = "200px", width = "100%"), type = 4, color = "#501214")
+          div(
+            class = "base-stuff-page",
+            uiOutput("xrv_season_header"),
+            uiOutput("xrv_season_stuff_hero"),
+            div(
+              class = "base-stuff-visual-grid",
+              div(
+                class = "base-stuff-panel",
+                div(class = "base-stuff-panel-heading", "Stuff+ by Pitch Type"),
+                withSpinner(plotlyOutput("xrv_season_stuff_by_pitch", height = "360px", width = "100%"), type = 4, color = "#501214")
+              ),
+              div(
+                class = "base-stuff-panel",
+                div(class = "base-stuff-panel-heading", "Movement Profile"),
+                withSpinner(plotlyOutput("xrv_season_movement", height = "360px", width = "100%"), type = 4, color = "#501214")
+              ),
+              div(
+                class = "base-stuff-panel is-wide",
+                div(class = "base-stuff-panel-heading", "Pitch Shape & Stuff+"),
+                withSpinner(DTOutput("xrv_season_pitch_table"), type = 4, color = "#501214")
+              ),
+              div(
+                class = "base-stuff-panel is-wide",
+                div(class = "base-stuff-panel-heading", "Stuff+ Trend"),
+                withSpinner(plotlyOutput("xrv_season_ts", height = "360px", width = "100%"), type = 4, color = "#501214")
+              )
             )
-          ),
-          div(class = "table-title mt-3 mb-1", "Pitch Summary"),
-          withSpinner(DTOutput("xrv_season_pitch_table"), type = 4, color = "#501214"),
-          div(class = "table-title mt-3 mb-1", "Stuff+ Rolling Average"),
-          withSpinner(plotlyOutput("xrv_season_ts", height = "330px", width = "100%"), type = 4, color = "#501214")
+          )
         ),
         nav_panel(
           title = "Game Summary",
-          fluidRow(
-            column(
-              6,
-              selectInput("xrv_game_pitcher", "Pitcher:", choices = character(0), selected = NULL)
-            ),
-            column(
-              6,
+          div(
+            class = "base-stuff-page",
+            div(
+              class = "base-stuff-controls",
+              selectInput("xrv_game_pitcher", "Pitcher:", choices = character(0), selected = NULL),
               selectInput("xrv_game_game", "Game:", choices = character(0), selected = NULL)
+            ),
+            uiOutput("xrv_game_header"),
+            uiOutput("xrv_game_stuff_hero"),
+            div(
+              class = "base-stuff-visual-grid",
+              div(
+                class = "base-stuff-panel",
+                div(class = "base-stuff-panel-heading", "Stuff+ by Pitch Type"),
+                withSpinner(plotlyOutput("xrv_game_stuff_by_pitch", height = "360px", width = "100%"), type = 4, color = "#501214")
+              ),
+              div(
+                class = "base-stuff-panel",
+                div(class = "base-stuff-panel-heading", "Movement Profile"),
+                withSpinner(plotlyOutput("xrv_game_movement", height = "360px", width = "100%"), type = 4, color = "#501214")
+              ),
+              div(
+                class = "base-stuff-panel is-wide",
+                div(class = "base-stuff-panel-heading", "Pitch Shape & Stuff+"),
+                withSpinner(DTOutput("xrv_game_pitch_table"), type = 4, color = "#501214")
+              ),
+              div(
+                class = "base-stuff-panel is-wide",
+                div(class = "base-stuff-panel-heading", "Stuff+ Trend"),
+                withSpinner(plotlyOutput("xrv_game_ts", height = "360px", width = "100%"), type = 4, color = "#501214")
+              )
             )
-          ),
-          uiOutput("xrv_game_header"),
-          div(class = "table-title mb-1", "Stats"),
-          withSpinner(DTOutput("xrv_game_stats"), type = 4, color = "#501214"),
-          div(class = "table-title mt-3 mb-1", "Movement & Usage"),
-          fluidRow(
-            column(6, withSpinner(plotlyOutput("xrv_game_movement", height = "420px", width = "100%"), type = 4, color = "#501214")),
-            column(
-              6,
-              div(class = "table-title mb-1", "Pitch Usage vLHH"),
-              withSpinner(plotlyOutput("xrv_game_usage_lhh", height = "200px", width = "100%"), type = 4, color = "#501214"),
-              div(class = "table-title mt-2 mb-1", "Pitch Usage vRHH"),
-              withSpinner(plotlyOutput("xrv_game_usage_rhh", height = "200px", width = "100%"), type = 4, color = "#501214")
-            )
-          ),
-          div(class = "table-title mt-3 mb-1", "Pitch Summary"),
-          withSpinner(DTOutput("xrv_game_pitch_table"), type = 4, color = "#501214"),
-          div(class = "table-title mt-3 mb-1", "Stuff+ Rolling Average"),
-          withSpinner(plotlyOutput("xrv_game_ts", height = "330px", width = "100%"), type = 4, color = "#501214")
+          )
         ),
         nav_panel(
           title = "Staff Leaderboard",
@@ -9301,21 +9402,11 @@ server <- function(input, output, session){
         PitchType = PitchType,
         `Pitches` = as.integer(Pitches),
         `Usage %` = fmt_pct0(Usage),
+        `Stuff+` = fmt_num1(Stuff_plus),
         `Avg Velocity (Max)` = mapply(fmt_velo, VeloAvg, VeloMax, SIMPLIFY = TRUE, USE.NAMES = FALSE),
         iVB = fmt_num1(iVB),
         HB  = fmt_num1(HB),
-        Spin = fmt_num0(Spin),
-        VAA = fmt_num1(VAA),
-        HAA = fmt_num1(HAA),
-        RelHt = fmt_num1(RelHt),
-        RelSide = fmt_num1(RelSide),
-        Extension = fmt_num1(Extension),
-        `Stuff+ (avg)` = fmt_num1(Stuff_plus),
-        `CSW%` = fmt_pct0(CSW_pct),
-        `Whiff%` = fmt_pct0(Whiff_pct),
-        `Chase%` = fmt_pct0(Chase_pct),
-        `Barrel%` = fmt_pct0(Barrel_pct),
-        wOBA = fmt_num3(wOBA)
+        Spin = fmt_num0(Spin)
       )
   }
 
@@ -9594,6 +9685,109 @@ server <- function(input, output, session){
       margin = list(t = 60, r = 20, b = 40, l = 60),
       hovermode = "closest"
     )
+  }
+
+  xrv_stuff_summary <- function(d, params) {
+    scored <- xrv_prepare_base(d, params)
+    if (is.null(scored) || !nrow(scored)) {
+      return(list(scored = tibble::tibble(), pitch = tibble::tibble()))
+    }
+    scored$stuff_plus <- suppressWarnings(as.numeric(scored$stuff_plus))
+    scored$PitchType <- if ("PitchType" %in% names(scored)) {
+      as.character(scored$PitchType)
+    } else {
+      as.character(scored$TaggedPitchType)
+    }
+    pitch <- scored %>%
+      dplyr::filter(is.finite(stuff_plus), !is.na(PitchType), nzchar(PitchType)) %>%
+      dplyr::group_by(PitchType) %>%
+      dplyr::summarise(
+        Stuff = mean(stuff_plus, na.rm = TRUE),
+        Pitches = dplyr::n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::arrange(dplyr::desc(Stuff))
+    list(scored = scored, pitch = pitch)
+  }
+
+  build_xrv_stuff_hero <- function(d, params) {
+    summary <- xrv_stuff_summary(d, params)
+    scored <- summary$scored
+    pitch <- summary$pitch
+    total <- nrow(scored)
+    scored_n <- if (total) sum(is.finite(scored$stuff_plus)) else 0L
+    overall <- if (scored_n) mean(scored$stuff_plus, na.rm = TRUE) else NA_real_
+    best <- if (nrow(pitch)) pitch[1, , drop = FALSE] else NULL
+    above_average <- if (nrow(pitch)) sum(pitch$Stuff >= 100, na.rm = TRUE) else 0L
+
+    card <- function(label, value, detail, primary = FALSE) {
+      div(
+        class = paste("base-stuff-hero-card", if (primary) "is-primary" else ""),
+        span(label),
+        strong(value),
+        tags$small(detail)
+      )
+    }
+    div(
+      class = "base-stuff-hero-grid",
+      card(
+        "Overall Stuff+",
+        if (is.finite(overall)) sprintf("%.1f", overall) else "—",
+        "100 is Division I average",
+        primary = TRUE
+      ),
+      card(
+        "Best Pitch",
+        if (!is.null(best)) as.character(best$PitchType[[1]]) else "—",
+        if (!is.null(best)) sprintf("%.1f Stuff+", best$Stuff[[1]]) else "No scored pitches"
+      ),
+      card("Pitches Scored", paste0(scored_n, " / ", total), "Complete model inputs"),
+      card("Above Average", as.character(above_average), "Pitch types at 100+")
+    )
+  }
+
+  build_xrv_stuff_by_pitch <- function(d, params, title_text = "Stuff+ by Pitch Type") {
+    pitch <- xrv_stuff_summary(d, params)$pitch
+    if (!nrow(pitch)) {
+      return(plotly::plot_ly() %>% plotly::layout(
+        title = list(text = title_text, x = 0.5),
+        annotations = list(list(
+          text = "No pitches have complete Stuff+ inputs",
+          x = 0.5, y = 0.5, xref = "paper", yref = "paper", showarrow = FALSE,
+          font = list(color = "#746b64", size = 14)
+        )),
+        xaxis = list(visible = FALSE), yaxis = list(visible = FALSE)
+      ))
+    }
+    pitch <- pitch %>% dplyr::arrange(Stuff)
+    pitch$PitchType <- factor(pitch$PitchType, levels = pitch$PitchType)
+    bar_colors <- ifelse(pitch$Stuff >= 100, "#D7BD8A", "#6A1F24")
+    x_min <- min(80, floor(min(pitch$Stuff, na.rm = TRUE) / 5) * 5 - 5)
+    x_max <- max(120, ceiling(max(pitch$Stuff, na.rm = TRUE) / 5) * 5 + 5)
+
+    plotly::plot_ly(
+      pitch,
+      x = ~Stuff,
+      y = ~PitchType,
+      type = "bar",
+      orientation = "h",
+      marker = list(color = bar_colors),
+      text = ~sprintf("%.1f", Stuff),
+      textposition = "outside",
+      hovertemplate = "%{y}<br>Stuff+: %{x:.1f}<br>Pitches: %{customdata}<extra></extra>",
+      customdata = ~Pitches
+    ) %>%
+      plotly::layout(
+        title = NULL,
+        xaxis = list(title = "Stuff+", range = c(x_min, x_max), zeroline = FALSE),
+        yaxis = list(title = NULL),
+        shapes = list(list(
+          type = "line", x0 = 100, x1 = 100, y0 = 0, y1 = 1,
+          yref = "paper", line = list(color = "#777", dash = "dot", width = 1)
+        )),
+        margin = list(t = 24, r = 44, b = 48, l = 100),
+        showlegend = FALSE
+      )
   }
 
   # ---- xRV data reactives ----
@@ -10272,6 +10466,14 @@ server <- function(input, output, session){
     DT::datatable(xrv_summary_stats_df(d), rownames = FALSE, options = list(dom = "t", paging = FALSE, ordering = FALSE), class = "stripe")
   })
 
+  output$xrv_season_stuff_hero <- renderUI({
+    build_xrv_stuff_hero(xrv_season_data(), xrv_scale_params())
+  })
+
+  output$xrv_season_stuff_by_pitch <- plotly::renderPlotly({
+    build_xrv_stuff_by_pitch(xrv_season_data(), xrv_scale_params())
+  })
+
   output$xrv_season_movement <- plotly::renderPlotly({
     params <- xrv_scale_params()
     d <- xrv_prepare_base(xrv_season_data(), params)
@@ -10306,6 +10508,14 @@ server <- function(input, output, session){
   output$xrv_game_stats <- DT::renderDT({
     d <- xrv_game_data()
     DT::datatable(xrv_summary_stats_df(d), rownames = FALSE, options = list(dom = "t", paging = FALSE, ordering = FALSE), class = "stripe")
+  })
+
+  output$xrv_game_stuff_hero <- renderUI({
+    build_xrv_stuff_hero(xrv_game_data(), xrv_scale_params())
+  })
+
+  output$xrv_game_stuff_by_pitch <- plotly::renderPlotly({
+    build_xrv_stuff_by_pitch(xrv_game_data(), xrv_scale_params())
   })
 
   output$xrv_game_movement <- plotly::renderPlotly({

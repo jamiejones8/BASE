@@ -99,6 +99,20 @@ if (grepl("<body", html, fixed = TRUE)) {
 if (!grepl("base-pitching-embedded-layout", html, fixed = TRUE)) {
   fail("Embedded Pitching UI is missing its scoped BASE layout wrapper.")
 }
+if (!all(vapply(
+  c(
+    "xrv_season_stuff_hero", "xrv_season_stuff_by_pitch",
+    "xrv_game_stuff_hero", "xrv_game_stuff_by_pitch"
+  ),
+  grepl, logical(1), x = html, fixed = TRUE
+))) {
+  fail("Stuff+ is missing its metric-first cards and pitch-type visual layout.")
+}
+if (grepl("xrv_season_stats", html, fixed = TRUE) ||
+    grepl("xrv_season_usage_lhh", html, fixed = TRUE) ||
+    grepl("xrv_season_usage_rhh", html, fixed = TRUE)) {
+  fail("Stuff+ still renders duplicated general stats or handedness usage panels.")
+}
 style_html <- htmltools::renderTags(base_pitching_embedded_head())$head
 if (!grepl("grid-template-columns: repeat(2, minmax(0, 1fr))", style_html, fixed = TRUE) ||
     !grepl("shiny-input-checkboxgroup[id$='season_groups']", style_html, fixed = TRUE)) {
@@ -166,6 +180,15 @@ shiny::testServer(workspace$server, {
     aar_game = games[[1]]
   )
   session$flushReact()
+  stuff_table <- xrv_pitch_table_df(xrv_season_data(), xrv_scale_params())
+  if (!identical(
+    names(stuff_table),
+    c("PitchType", "Pitches", "Usage %", "Stuff+", "Avg Velocity (Max)", "iVB", "HB", "Spin")
+  )) {
+    fail("Stuff+ pitch table is not using the focused pitch-shape layout.")
+  }
+  invisible(output$xrv_season_stuff_hero)
+  invisible(output$xrv_season_stuff_by_pitch)
   perf <- performance_table_data()
   perf_raw <- attr(perf, "raw_df")
   if (!identical(as.character(perf_raw$Batter), c("TOTAL", "vLHH", "vRHH"))) {

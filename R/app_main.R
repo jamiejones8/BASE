@@ -219,13 +219,42 @@ getBrewStuff <- function(game, final_model, bullpen = FALSE,
   BREW_STUFF_MEAN <- -0.025181704334056
   BREW_STUFF_SD   <-  0.0146306446044836
 
-  height_reference <- Height26 %>%
-    transmute(
+  # The embedded Pitching workspace standardizes handedness to L/R for its
+  # tables. BrewStuff historically accepted only Left/Right and consequently
+  # filtered every row on the Stuff+ page. Normalize both representations at
+  # the scorer boundary so every caller follows one contract.
+  normalize_hand <- function(x, batter = FALSE) {
+    value <- toupper(trimws(as.character(x)))
+    left_values <- if (isTRUE(batter)) c("L", "LEFT", "LHH", "LH") else c("L", "LEFT", "LHP", "LH")
+    right_values <- if (isTRUE(batter)) c("R", "RIGHT", "RHH", "RH", "RIGJHT") else c("R", "RIGHT", "RHP", "RH")
+    dplyr::case_when(
+      value %in% left_values ~ "Left",
+      value %in% right_values ~ "Right",
+      TRUE ~ as.character(x)
+    )
+  }
+  if ("PitcherThrows" %in% names(game)) game$PitcherThrows <- normalize_hand(game$PitcherThrows)
+  if ("BatterSide" %in% names(game)) game$BatterSide <- normalize_hand(game$BatterSide, batter = TRUE)
+
+  # PitchingApp displays and stores pitchers as "First Last", while other BASE
+  # callers retain TrackMan's "Last, First" value. Index both canonical names
+  # so the same height reference works in every workspace.
+  height_reference <- dplyr::bind_rows(
+    Height26 %>% transmute(
       Pitcher = as.character(tm_name),
       PitcherTeam = as.character(team_abbr),
       height = suppressWarnings(as.numeric(height)),
       set = suppressWarnings(as.numeric(set))
+    ),
+    Height26 %>% transmute(
+      Pitcher = as.character(bref_name),
+      PitcherTeam = as.character(team_abbr),
+      height = suppressWarnings(as.numeric(height)),
+      set = suppressWarnings(as.numeric(set))
     )
+  ) %>%
+    filter(!is.na(Pitcher), nzchar(trimws(Pitcher))) %>%
+    distinct(Pitcher, PitcherTeam, .keep_all = TRUE)
 
   # Prefer the exact pitcher/team record. TrackMan's height reference can retain
   # a player's former team code after a transfer, though, so use a name-only
