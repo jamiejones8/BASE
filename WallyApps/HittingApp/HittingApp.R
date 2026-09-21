@@ -1606,7 +1606,7 @@ base_hitting_aar_builder_ui <- tagList(
       ),
       checkboxGroupInput(
         "hit_aar_season_groups", "Quick-select seasons",
-        choices = SEASON_CHOICES, selected = "S26", inline = TRUE
+        choices = SEASON_CHOICES, selected = "F26", inline = TRUE
       )
     )
   },
@@ -1691,7 +1691,7 @@ ui <- base_hitting_page(
     checkboxGroupInput(
       "hit_season_groups", "Quick-select seasons",
       choices  = SEASON_CHOICES,
-      selected = "S26",
+      selected = "F26",
       inline   = TRUE
     ),
     div(
@@ -1844,7 +1844,7 @@ ui <- base_hitting_page(
             checkboxGroupInput(
               "hit_leader_seasons", "Seasons",
               choices  = SEASON_CHOICES,
-              selected = "S26",
+              selected = "F26",
               inline   = TRUE
             )
           ),
@@ -4987,14 +4987,42 @@ server <- function(input, output, session){
     gold   <- "#B4975A"
     date_str <- format(Sys.Date(), "%m-%d-%Y")
 
-    logo_path <- get0(
+    fallback_logo_path <- get0(
       "BASE_HITTING_REPORT_LOGO_PATH",
       inherits = FALSE,
       ifnotfound = "www/baseballTS logo gold.png"
     )
-    logo_img <- NULL
-    if (file.exists(logo_path)) {
-      logo_img <- tryCatch(png::readPNG(logo_path), error = function(e) NULL)
+    read_logo_image <- function(path) {
+      if (!is.character(path) || length(path) != 1L || !file.exists(path)) return(NULL)
+      ext <- tolower(tools::file_ext(path))
+      tryCatch(
+        if (ext == "png") png::readPNG(path)
+        else if (ext %in% c("jpg", "jpeg")) jpeg::readJPEG(path)
+        else NULL,
+        error = function(e) NULL
+      )
+    }
+    left_logo_img <- read_logo_image(TXST_LOGO_PATH)
+    right_logo_img <- read_logo_image(BOBCAT_LOGO_PATH)
+    fallback_logo_img <- read_logo_image(fallback_logo_path)
+    if (is.null(left_logo_img)) left_logo_img <- fallback_logo_img
+    if (is.null(right_logo_img)) right_logo_img <- fallback_logo_img
+    logo_grob <- function(img, x, just) {
+      if (is.null(img)) return(grid::nullGrob())
+      aspect <- dim(img)[2] / dim(img)[1]
+      max_w <- 0.92
+      max_h <- 0.72
+      width <- min(max_w, max_h * aspect)
+      height <- width / aspect
+      grid::rasterGrob(
+        img,
+        x = x,
+        y = 0.5,
+        width = grid::unit(width, "in"),
+        height = grid::unit(height, "in"),
+        just = just,
+        interpolate = TRUE
+      )
     }
 
     d1_pct <- c(
@@ -5091,22 +5119,25 @@ server <- function(input, output, session){
       }
 
       title_g <- grid::grobTree(
-        grid::rectGrob(gp = grid::gpar(fill = maroon, col = NA)),
-        grid::textGrob(title, gp = grid::gpar(col = gold, fontsize = 8, fontface = "bold"))
+        grid::rectGrob(gp = grid::gpar(fill = maroon, col = gold, lwd = 0.8)),
+        grid::textGrob(title, gp = grid::gpar(col = gold, fontsize = 11, fontface = "bold"))
       )
       tbl_g <- gridExtra::tableGrob(
         df,
         rows = NULL,
         cols = NULL,
         theme = gridExtra::ttheme_minimal(
-          base_size = 6,
+          base_size = 8.5,
+          padding = grid::unit(c(3, 4), "pt"),
           colhead = list(fg_params = list(fontface = "bold")),
           core = list(
-            fg_params = list(hjust = 0, x = 0.02),
-            bg_params = list(fill = fills, col = NA)
+            fg_params = list(hjust = 0, x = 0.02, col = "#241719"),
+            bg_params = list(fill = fills, col = "#E2D5C3")
           )
         )
       )
+      tbl_g$widths <- grid::unit(c(0.68, 0.32), "null")
+      tbl_g$heights <- grid::unit(rep(1, length(tbl_g$heights)), "null")
       # align Hitter column center, Value column right
       core_idx <- which(tbl_g$layout$name == "core-fg")
       if (length(core_idx)) {
@@ -5161,7 +5192,7 @@ server <- function(input, output, session){
           }
         }
       }
-      gridExtra::arrangeGrob(title_g, tbl_g, ncol = 1, heights = c(0.12, 0.88))
+      gridExtra::arrangeGrob(title_g, tbl_g, ncol = 1, heights = c(0.14, 0.86))
     }
 
     blocks <- lapply(defs, function(d) {
@@ -5176,8 +5207,8 @@ server <- function(input, output, session){
     })
 
     grid_with_spacers <- function(grobs, ncol = 3, nrow = 2,
-                                  col_widths = c(0.30, 0.05, 0.30, 0.05, 0.30),
-                                  row_heights = c(0.40, 0.10, 0.40)) {
+                                  col_widths = c(0.32, 0.02, 0.32, 0.02, 0.32),
+                                  row_heights = c(0.47, 0.06, 0.47)) {
       total_cells <- ncol * nrow
       grobs <- c(grobs, rep(list(grid::nullGrob()), max(0, total_cells - length(grobs))))
 
@@ -5203,12 +5234,13 @@ server <- function(input, output, session){
     grid_body <- grid_with_spacers(blocks)
 
     header_g <- grid::grobTree(
-      if (!is.null(logo_img)) grid::rasterGrob(logo_img, x = 0.05, y = 0.66, width = 0.08, just = c("left","center")) else grid::nullGrob(),
-      if (!is.null(logo_img)) grid::rasterGrob(logo_img, x = 0.95, y = 0.66, width = 0.08, just = c("right","center")) else grid::nullGrob(),
-      grid::textGrob("Hit Strikes Hard Leaderboard", x = 0.5, y = 0.75,
-                     gp = grid::gpar(fontsize = 20, fontface = "bold")),
-      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.40,
-                     gp = grid::gpar(fontsize = 11))
+      grid::rectGrob(gp = grid::gpar(fill = maroon, col = NA)),
+      logo_grob(left_logo_img, x = 0.04, just = c("left", "center")),
+      logo_grob(right_logo_img, x = 0.96, just = c("right", "center")),
+      grid::textGrob("Hit Strikes Hard Leaderboard", x = 0.5, y = 0.64,
+                     gp = grid::gpar(col = gold, fontsize = 22, fontface = "bold")),
+      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.29,
+                     gp = grid::gpar(col = "white", fontsize = 11))
     )
 
     grDevices::pdf(outfile, width = 11, height = 8.5, useDingbats = FALSE)
@@ -5217,7 +5249,7 @@ server <- function(input, output, session){
       header_g,
       grid_body,
       ncol = 1,
-      heights = c(0.18, 0.82)
+      heights = c(0.15, 0.85)
     )
   }
 
@@ -7271,7 +7303,18 @@ server <- function(input, output, session){
           else NULL,
           error = function(e) NULL
         )
-        if (is.null(img)) grid::nullGrob() else grid::rasterGrob(img, interpolate = TRUE)
+        if (is.null(img)) return(grid::nullGrob())
+        aspect <- dim(img)[2] / dim(img)[1]
+        max_w <- 0.78
+        max_h <- 0.55
+        logo_w <- min(max_w, max_h * aspect)
+        logo_h <- logo_w / aspect
+        grid::rasterGrob(
+          img,
+          width = grid::unit(logo_w, "in"),
+          height = grid::unit(logo_h, "in"),
+          interpolate = TRUE
+        )
       }
       left_logo <- load_header_logo(TXST_LOGO_PATH)
       right_logo <- load_header_logo(BOBCAT_LOGO_PATH)
@@ -7281,7 +7324,6 @@ server <- function(input, output, session){
         left_logo <- grid::editGrob(
           left_logo,
           x = grid::unit(0.06, "npc"), y = grid::unit(0.5, "npc"),
-          width = grid::unit(0.78, "in"), height = grid::unit(0.55, "in"),
           just = c("left", "center")
         )
       }
@@ -7289,7 +7331,6 @@ server <- function(input, output, session){
         right_logo <- grid::editGrob(
           right_logo,
           x = grid::unit(0.94, "npc"), y = grid::unit(0.5, "npc"),
-          width = grid::unit(0.78, "in"), height = grid::unit(0.55, "in"),
           just = c("right", "center")
         )
       }
@@ -7531,7 +7572,8 @@ server <- function(input, output, session){
           grid::segmentsGrob(x0 = .50, y0 = .18, x1 = .54, y1 = .42,
                              gp = grid::gpar(col = "#1B5E20", lwd = 1.4)),
           grid::circleGrob(x = c(.43, .57, .43, .57), y = c(.48, .48, .62, .62), r = .10,
-                           gp = grid::gpar(fill = "#2E7D32", col = "#1B5E20", lwd = .6))
+                           gp = grid::gpar(fill = "#2E7D32", col = "#1B5E20", lwd = .6)),
+          vp = grid::viewport(width = grid::unit(0.18, "in"), height = grid::unit(0.18, "in"))
         )
         robot_icon <- function() grid::grobTree(
           grid::segmentsGrob(x0 = .50, y0 = .70, x1 = .56, y1 = .82,
@@ -7543,7 +7585,8 @@ server <- function(input, output, session){
           grid::circleGrob(x = c(.42, .58), y = .55, r = .035,
                            gp = grid::gpar(fill = "#263238", col = NA)),
           grid::segmentsGrob(x0 = .40, y0 = .43, x1 = .60, y1 = .43,
-                             gp = grid::gpar(col = "#455A64", lwd = .8))
+                             gp = grid::gpar(col = "#455A64", lwd = .8)),
+          vp = grid::viewport(width = grid::unit(0.18, "in"), height = grid::unit(0.18, "in"))
         )
         for (j in seq_along(core_fg)) {
           marker <- ump_values_pdf[min(j, length(ump_values_pdf))]
@@ -7977,11 +8020,15 @@ server <- function(input, output, session){
           t0,
           rows = NULL,
           theme = gridExtra::ttheme_minimal(
-            core = list(fg_params = list(cex = 1.00, lineheight = 1.35),
-                        padding   = grid::unit(c(4, 5), "pt")),
+            core = list(
+              fg_params = list(cex = 1.12, lineheight = 1.30, col = "#241719"),
+              bg_params = list(fill = rep(c("#FFFFFF", "#F7F1E8"), length.out = nrow(t0)), col = "#E2D5C3"),
+              padding   = grid::unit(c(5, 7), "pt")
+            ),
             colhead = list(
-              fg_params = list(cex = 0.86, fontface = 2, col = "#B4975A", hjust = 0, x = 0.04),
-              bg_params = list(fill = "#501214", col = NA)
+              fg_params = list(cex = 0.94, fontface = 2, col = "#B4975A", hjust = 0.5, x = 0.5),
+              bg_params = list(fill = "#501214", col = "#B4975A", lwd = 0.8),
+              padding   = grid::unit(c(5, 6), "pt")
             )
           )
         )
@@ -7989,8 +8036,8 @@ server <- function(input, output, session){
         # title bar (match app) - attach directly to table so it never floats
         title_g <- grid::textGrob("Hit Strikes Hard",
                                   x = 0.5, y = 0.5,
-                                  gp = grid::gpar(fontface = 2, col = "#B4975A", cex = 0.9))
-        title_bg <- grid::rectGrob(gp = grid::gpar(fill = "#501214", col = NA))
+                                  gp = grid::gpar(fontface = 2, col = "#B4975A", cex = 1.15))
+        title_bg <- grid::rectGrob(gp = grid::gpar(fill = "#501214", col = "#B4975A", lwd = 1.0))
         
         # Season shading: continuous green/red severity vs the D1 mean.
         season_col <- which(names(t0) == season_label)
@@ -8010,7 +8057,7 @@ server <- function(input, output, session){
         }
         
         # attach title row to table gtable
-        hsh_stack <- gtable::gtable_add_rows(tg, heights = grid::unit(0.20, "in"), pos = 0)
+        hsh_stack <- gtable::gtable_add_rows(tg, heights = grid::unit(0.38, "in"), pos = 0)
         hsh_stack <- gtable::gtable_add_grob(
           hsh_stack, title_bg,
           t = 1, l = 1, r = length(hsh_stack$widths),
@@ -8022,15 +8069,19 @@ server <- function(input, output, session){
           name = "hsh_title_txt"
         )
         
-        # scale up to better fill the right-bottom cell
-        scale_grob <- function(g, sx = 1, sy = 1){
-          if (is.null(g)) return(g)
-          if (!is.null(g$widths)) g$widths <- g$widths * sx
-          if (!is.null(g$heights)) g$heights <- g$heights * sy
-          g
+        # Fill the report cell deliberately instead of inheriting the compact
+        # natural size returned by tableGrob.
+        hsh_stack$widths <- grid::unit(
+          (col_w_in - 0.12) * c(0.29, 0.21, 0.30, 0.20),
+          "in"
+        )
+        if (length(hsh_stack$heights) >= 2L) {
+          hsh_stack$heights <- grid::unit(
+            c(0.38, 0.34, rep(0.43, length(hsh_stack$heights) - 2L)),
+            "in"
+          )
         }
-        # Keep vertical scale at 1 so the title bar stays attached to the table
-        scale_grob(hsh_stack, sx = 1.12, sy = 1.00)
+        hsh_stack
       }
       
       # --- Rule: if 26+ pitches, split into two pages (no layout overflow) ---

@@ -162,6 +162,11 @@ if (!nzchar(downloaded_aar)) {
   downloaded_aar <- tempfile(fileext = ".pdf")
   on.exit(unlink(downloaded_aar), add = TRUE)
 }
+hitting_leaderboard_pdf <- Sys.getenv("BASE_HITTING_LEADERBOARD_QA", unset = "")
+if (!nzchar(hitting_leaderboard_pdf)) {
+  hitting_leaderboard_pdf <- tempfile(fileext = ".pdf")
+  on.exit(unlink(hitting_leaderboard_pdf), add = TRUE)
+}
 
 shiny::testServer(workspace$server, {
   # The embedded server starts before its dynamically inserted UI has sent any
@@ -314,6 +319,14 @@ shiny::testServer(workspace$server, {
   if (!file.exists(downloaded_aar) || file.info(downloaded_aar)$size <= 4 ||
       !identical(readBin(downloaded_aar, what = "raw", n = 4L), charToRaw("%PDF"))) {
     fail("Hitting AAR download did not produce a PDF.")
+  }
+
+  leaderboard_rows <- leaderboard_summary(leaderboard_data())
+  if (!nrow(leaderboard_rows)) fail("Hitting leaderboard returned no fixture rows.")
+  render_leaderboard_pdf(hitting_leaderboard_pdf, leaderboard_rows)
+  if (!file.exists(hitting_leaderboard_pdf) || file.info(hitting_leaderboard_pdf)$size <= 4 ||
+      !identical(readBin(hitting_leaderboard_pdf, what = "raw", n = 4L), charToRaw("%PDF"))) {
+    fail("Hitting leaderboard download did not produce a PDF.")
   }
 })
 

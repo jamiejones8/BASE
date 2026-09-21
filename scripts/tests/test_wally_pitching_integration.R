@@ -135,6 +135,16 @@ if (!grepl("aar_dl", postgame_html, fixed = TRUE) ||
 pitcher <- as.character(workspace$txst_pitchers[[1]])
 games <- unname(workspace$games_txst)
 aar_render_payload <- NULL
+results_leaderboard_pdf <- Sys.getenv("BASE_PITCHING_RESULTS_LEADERBOARD_QA", unset = "")
+if (!nzchar(results_leaderboard_pdf)) {
+  results_leaderboard_pdf <- tempfile(fileext = ".pdf")
+  on.exit(unlink(results_leaderboard_pdf), add = TRUE)
+}
+process_leaderboard_pdf <- Sys.getenv("BASE_PITCHING_PROCESS_LEADERBOARD_QA", unset = "")
+if (!nzchar(process_leaderboard_pdf)) {
+  process_leaderboard_pdf <- tempfile(fileext = ".pdf")
+  on.exit(unlink(process_leaderboard_pdf), add = TRUE)
+}
 shiny::testServer(workspace$server, {
   session$setInputs(
     PitcherInput = pitcher,
@@ -143,6 +153,9 @@ shiny::testServer(workspace$server, {
     GameInput = games,
     BatterHand = c("L", "R"),
     perf_split = "hand",
+    leader_seasons = "S26",
+    leader_pitch_types = "All",
+    leader_hand = c("L", "R"),
     pitch_aar_season_groups = "S26",
     aar_pitcher = pitcher,
     aar_game = games[[1]]
@@ -188,6 +201,17 @@ shiny::testServer(workspace$server, {
   aar_render_payload <<- list(game = gp, season = sp, date = aar_date)
   invisible(output$pitch_decay_table)
   invisible(output$pitch_decay_velocity)
+
+  leaderboard_rows <- leaderboard_summary(leaderboard_data())
+  if (!nrow(leaderboard_rows)) fail("Pitching leaderboard returned no fixture rows.")
+  render_leaderboard_pdf(results_leaderboard_pdf, "results", leaderboard_rows)
+  render_leaderboard_pdf(process_leaderboard_pdf, "process", leaderboard_rows)
+  for (pdf_path in c(results_leaderboard_pdf, process_leaderboard_pdf)) {
+    if (!file.exists(pdf_path) || file.info(pdf_path)$size <= 4 ||
+        !identical(readBin(pdf_path, what = "raw", n = 4L), charToRaw("%PDF"))) {
+      fail("Pitching leaderboard download did not produce a PDF: ", basename(pdf_path))
+    }
+  }
 })
 
 aar_pdf <- Sys.getenv("BASE_PITCHING_AAR_QA", unset = "")

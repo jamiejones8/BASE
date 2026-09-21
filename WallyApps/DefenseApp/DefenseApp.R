@@ -2499,7 +2499,7 @@ ui <- base_defense_page(
     checkboxGroupInput(
       "def_season_groups", "Quick-select seasons",
       choices = SEASON_CHOICES,
-      selected = if ("S26" %in% unname(SEASON_CHOICES)) "S26" else unname(SEASON_CHOICES),
+      selected = if ("F26" %in% unname(SEASON_CHOICES)) "F26" else unname(SEASON_CHOICES),
       inline = TRUE
     )
   ),

@@ -6390,7 +6390,7 @@ base_pitching_postgame_ui <- tagList(
             class = "base-report-controls base-report-controls-team",
             checkboxGroupInput(
               "pitch_aar_season_groups", "Quick-select seasons",
-              choices = SEASON_CHOICES, selected = "S26", inline = TRUE
+              choices = SEASON_CHOICES, selected = "F26", inline = TRUE
             )
           )
         },
@@ -6508,7 +6508,7 @@ ui <- base_pitching_page(
     checkboxGroupInput(
       "season_groups", "Quick-select seasons",
       choices  = SEASON_CHOICES,
-      selected = "S26",
+      selected = "F26",
       inline   = TRUE
     ),
     checkboxInput("Bullpens", "Bullpens", value = FALSE),
@@ -6803,7 +6803,7 @@ ui <- base_pitching_page(
             checkboxGroupInput(
               "leader_seasons", "Seasons",
               choices  = SEASON_CHOICES,
-              selected = "S26",
+              selected = "F26",
               inline   = TRUE
             )
           ),
@@ -6892,7 +6892,7 @@ ui <- base_pitching_page(
             checkboxGroupInput(
               "team_trends_seasons", "Seasons",
               choices  = SEASON_CHOICES,
-              selected = "S26",
+              selected = "F26",
               inline   = TRUE
             )
           ),
@@ -11223,10 +11223,46 @@ server <- function(input, output, session){
     gold   <- "#B4975A"
     date_str <- format(Sys.Date(), "%m-%d-%Y")
     
-    logo_path <- "www/baseballTS logo gold.png"
-    logo_img <- NULL
-    if (file.exists(logo_path)) {
-      logo_img <- tryCatch(png::readPNG(logo_path), error = function(e) NULL)
+    fallback_logo_path <- "www/baseballTS logo gold.png"
+    read_logo_image <- function(path) {
+      if (!is.character(path) || length(path) != 1L || !file.exists(path)) return(NULL)
+      ext <- tolower(tools::file_ext(path))
+      tryCatch(
+        if (ext == "png") png::readPNG(path)
+        else if (ext %in% c("jpg", "jpeg")) jpeg::readJPEG(path)
+        else NULL,
+        error = function(e) NULL
+      )
+    }
+    txst_logo_path <- get0("BASE_PITCHING_TXST_LOGO_PATH", inherits = TRUE, ifnotfound = "")
+    if (!nzchar(txst_logo_path) || !file.exists(txst_logo_path)) {
+      txst_logo_path <- find_asset(c("txstlogo", "TXSTlogo", "Txstlogo", "txst"))
+    }
+    bobcat_logo_path <- get0("BASE_PITCHING_BOBCAT_LOGO_PATH", inherits = TRUE, ifnotfound = "")
+    if (!nzchar(bobcat_logo_path) || !file.exists(bobcat_logo_path)) {
+      bobcat_logo_path <- find_asset(c("Bobcatlogo", "bobcatlogo", "BobcatLogo", "bobcat_logo", "Bobcat"))
+    }
+    left_logo_img <- read_logo_image(txst_logo_path)
+    right_logo_img <- read_logo_image(bobcat_logo_path)
+    fallback_logo_img <- read_logo_image(fallback_logo_path)
+    if (is.null(left_logo_img)) left_logo_img <- fallback_logo_img
+    if (is.null(right_logo_img)) right_logo_img <- fallback_logo_img
+    logo_grob <- function(img, x, just) {
+      if (is.null(img)) return(grid::nullGrob())
+      aspect <- dim(img)[2] / dim(img)[1]
+      max_w <- 0.92
+      max_h <- 0.72
+      width <- min(max_w, max_h * aspect)
+      height <- width / aspect
+      grid::rasterGrob(
+        img,
+        x = x,
+        y = 0.5,
+        width = grid::unit(width, "in"),
+        height = grid::unit(height, "in"),
+        just = just,
+        interpolate = TRUE
+      )
     }
     
     top10_tbl <- function(df, col, label, higher = TRUE, fmt = function(x) x, display_col = NULL) {
@@ -11325,22 +11361,25 @@ server <- function(input, output, session){
       }
       
       title_g <- grid::grobTree(
-        grid::rectGrob(gp = grid::gpar(fill = maroon, col = NA)),
-        grid::textGrob(title, gp = grid::gpar(col = gold, fontsize = 8, fontface = "bold"))
+        grid::rectGrob(gp = grid::gpar(fill = maroon, col = gold, lwd = 0.8)),
+        grid::textGrob(title, gp = grid::gpar(col = gold, fontsize = 11, fontface = "bold"))
       )
       tbl_g <- gridExtra::tableGrob(
         df,
         rows = NULL,
         cols = NULL,
         theme = gridExtra::ttheme_minimal(
-          base_size = 6,
+          base_size = 8.5,
+          padding = grid::unit(c(3, 4), "pt"),
           colhead = list(fg_params = list(fontface = "bold")),
           core = list(
-            fg_params = list(hjust = 0, x = 0.02),
-            bg_params = list(fill = fills, col = NA)
+            fg_params = list(hjust = 0, x = 0.02, col = "#241719"),
+            bg_params = list(fill = fills, col = "#E2D5C3")
           )
         )
       )
+      tbl_g$widths <- grid::unit(c(0.68, 0.32), "null")
+      tbl_g$heights <- grid::unit(rep(1, length(tbl_g$heights)), "null")
       # align Pitcher column center, Value column right
       core_idx <- which(tbl_g$layout$name == "core-fg")
       if (length(core_idx)) {
@@ -11407,7 +11446,7 @@ server <- function(input, output, session){
           }
         }
       }
-      gridExtra::arrangeGrob(title_g, tbl_g, ncol = 1, heights = c(0.12, 0.88))
+      gridExtra::arrangeGrob(title_g, tbl_g, ncol = 1, heights = c(0.14, 0.86))
     }
     
     blocks <- lapply(defs, function(d) {
@@ -11424,8 +11463,8 @@ server <- function(input, output, session){
     
     # 3x2 grid (3 columns, 2 rows) with explicit 30% width / 40% height per table
     grid_with_spacers <- function(grobs, ncol = 3, nrow = 2,
-                                  col_widths = c(0.30, 0.05, 0.30, 0.05, 0.30),
-                                  row_heights = c(0.40, 0.10, 0.40)) {
+                                  col_widths = c(0.32, 0.02, 0.32, 0.02, 0.32),
+                                  row_heights = c(0.47, 0.06, 0.47)) {
       total_cells <- ncol * nrow
       grobs <- c(grobs, rep(list(grid::nullGrob()), max(0, total_cells - length(grobs))))
       
@@ -11453,12 +11492,13 @@ server <- function(input, output, session){
     
     header_title <- if (type == "results") "Staff Results Leaderboard" else "Staff Process Leaderboard"
     header_g <- grid::grobTree(
-      if (!is.null(logo_img)) grid::rasterGrob(logo_img, x = 0.05, y = 0.60, width = 0.08, just = c("left","center")) else grid::nullGrob(),
-      if (!is.null(logo_img)) grid::rasterGrob(logo_img, x = 0.95, y = 0.60, width = 0.08, just = c("right","center")) else grid::nullGrob(),
-      grid::textGrob(header_title, x = 0.5, y = 0.75,
-                     gp = grid::gpar(fontsize = 20, fontface = "bold")),
-      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.40,
-                     gp = grid::gpar(fontsize = 11))
+      grid::rectGrob(gp = grid::gpar(fill = maroon, col = NA)),
+      logo_grob(left_logo_img, x = 0.04, just = c("left", "center")),
+      logo_grob(right_logo_img, x = 0.96, just = c("right", "center")),
+      grid::textGrob(header_title, x = 0.5, y = 0.64,
+                     gp = grid::gpar(col = gold, fontsize = 22, fontface = "bold")),
+      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.29,
+                     gp = grid::gpar(col = "white", fontsize = 11))
     )
     
     grDevices::pdf(outfile, width = 11, height = 8.5, useDingbats = FALSE)
@@ -11467,7 +11507,7 @@ server <- function(input, output, session){
       header_g,
       grid_body,
       ncol = 1,
-      heights = c(0.18, 0.82)
+      heights = c(0.15, 0.85)
     )
   }
   
