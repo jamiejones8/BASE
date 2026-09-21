@@ -324,3 +324,18 @@ base_password_gate_server <- function(input, output, session, application_ui) {
 
   authenticated
 }
+
+# Run the protected application server exactly once after authentication. A
+# plain observe is intentional: a remembered token may authenticate during the
+# first reactive flush, before an observeEvent(ignoreInit = TRUE) sees a change.
+base_auth_initialize_server <- function(authenticated, initialize) {
+  stopifnot(is.function(initialize))
+  initialized <- FALSE
+
+  shiny::observe({
+    shiny::req(isTRUE(authenticated()))
+    if (isTRUE(initialized)) return()
+    initialized <<- TRUE
+    shiny::isolate(initialize())
+  })
+}

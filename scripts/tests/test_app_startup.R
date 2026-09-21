@@ -59,6 +59,30 @@ if (nrow(alec_rows) && brewstuff_available) {
   }
 }
 
+if (brewstuff_available) {
+  gholston_rows <- tibble::tibble(
+    Pitcher = "Gholston, Jacob",
+    PitcherTeam = "TEX_BOB",
+    TaggedPitchType = "Fastball",
+    PitcherThrows = "Right",
+    BatterSide = "Left",
+    RelSpeed = 91,
+    InducedVertBreak = 15,
+    HorzBreak = 10,
+    SpinRate = 2200,
+    RelHeight = 6.1,
+    RelSide = 1.8,
+    Extension = 5.8,
+    PitchCall = "StrikeCalled",
+    PlayResult = "Undefined"
+  )
+  gholston_scored <- getBrewStuff(gholston_rows, model, bullpen = FALSE)
+  if (nrow(gholston_scored) != 1L || !is.finite(gholston_scored$height[[1]]) ||
+      !is.finite(gholston_scored$armangle[[1]]) || !is.finite(gholston_scored$Stuff[[1]])) {
+    stop("Stuff+ did not score Jacob Gholston after the unique-name height fallback.", call. = FALSE)
+  }
+}
+
 if (!brewstuff_available) {
   cat("HomeBASE Stuff+ regression deferred until the runtime model is mounted.\n")
 }

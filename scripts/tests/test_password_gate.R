@@ -107,4 +107,35 @@ shiny::testServer(function(input, output, session) {
   assert_true(auth_state(), "Clicking the login button with the correct password did not authenticate.")
 })
 
+initializations <- 0L
+shiny::testServer(function(input, output, session) {
+  auth_state <- shiny::reactiveVal(TRUE)
+  base_auth_initialize_server(auth_state, function() {
+    initializations <<- initializations + 1L
+  })
+}, {
+  session$flushReact()
+  assert_true(
+    initializations == 1L,
+    "An already-authenticated remembered-token session did not initialize the app server."
+  )
+  session$flushReact()
+  assert_true(initializations == 1L, "The authenticated app server initialized more than once.")
+})
+
+delayed_initializations <- 0L
+shiny::testServer(function(input, output, session) {
+  auth_state <- shiny::reactiveVal(FALSE)
+  base_auth_initialize_server(auth_state, function() {
+    delayed_initializations <<- delayed_initializations + 1L
+  })
+  shiny::observeEvent(input$authenticate, auth_state(TRUE), ignoreInit = TRUE)
+}, {
+  session$flushReact()
+  assert_true(delayed_initializations == 0L, "The protected app initialized before authentication.")
+  session$setInputs(authenticate = 1)
+  session$flushReact()
+  assert_true(delayed_initializations == 1L, "A password-authenticated session did not initialize the app server.")
+})
+
 cat("Password gate tests passed.\n")

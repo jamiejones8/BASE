@@ -219,7 +219,41 @@ getBrewStuff <- function(game, final_model, bullpen = FALSE,
   BREW_STUFF_MEAN <- -0.025181704334056
   BREW_STUFF_SD   <-  0.0146306446044836
 
-  game <- game %>% left_join(Height26, by = c("Pitcher" = "tm_name", "PitcherTeam" = "team_abbr"))
+  height_reference <- Height26 %>%
+    transmute(
+      Pitcher = as.character(tm_name),
+      PitcherTeam = as.character(team_abbr),
+      height = suppressWarnings(as.numeric(height)),
+      set = suppressWarnings(as.numeric(set))
+    )
+
+  # Prefer the exact pitcher/team record. TrackMan's height reference can retain
+  # a player's former team code after a transfer, though, so use a name-only
+  # fallback when that name resolves to one unambiguous height. Without this,
+  # height, arm angle, and ultimately Stuff+ are all NA for those pitchers.
+  name_height_reference <- height_reference %>%
+    filter(!is.na(Pitcher), nzchar(Pitcher), is.finite(height)) %>%
+    group_by(Pitcher) %>%
+    summarise(
+      height_values = n_distinct(height),
+      height_by_name = first(height),
+      set_by_name = {
+        values <- unique(set[is.finite(set)])
+        if (length(values) == 1L) values[[1]] else NA_real_
+      },
+      .groups = "drop"
+    ) %>%
+    filter(height_values == 1L) %>%
+    select(-height_values)
+
+  game <- game %>%
+    left_join(height_reference, by = c("Pitcher", "PitcherTeam")) %>%
+    left_join(name_height_reference, by = "Pitcher") %>%
+    mutate(
+      height = coalesce(height, height_by_name),
+      set = coalesce(set, set_by_name)
+    ) %>%
+    select(-height_by_name, -set_by_name)
 
   # Fallback height for pitchers missing from College26Heights — lets us still
   # estimate arm angle for unlisted pitchers when the user supplies a height.
@@ -4677,8 +4711,7 @@ server <- function(input, output, session) {
     application_ui = base_application_ui
   )
 
-  observeEvent(authenticated(), {
-    req(isTRUE(authenticated()))
+  base_auth_initialize_server(authenticated, function() {
 
   observeEvent(input$nav_to, {
     target <- unname(BASE_NAV_TABS[input$nav_to])
@@ -5373,7 +5406,7 @@ server <- function(input, output, session) {
     id = "homebase"
   )
 
-  }, ignoreInit = TRUE, once = TRUE)
+  })
 }
 
       
