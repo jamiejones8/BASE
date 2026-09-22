@@ -6209,6 +6209,58 @@ load_d1_pitch_metric_reference <- function() {
   out
 }
 
+.heater_movement_ref_cache <- new.env(parent = emptyenv())
+load_heater_movement_reference <- function() {
+  cached <- .heater_movement_ref_cache$value
+  path <- get0(
+    "BASE_PITCHING_HEATER_MOVEMENT_REFERENCE_PATH",
+    inherits = TRUE,
+    ifnotfound = file.path(app_dir, "..", "..", "data", "reference", "d1_heater_movement_reference.csv")
+  )
+  path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  mtime <- if (file.exists(path)) file.info(path)$mtime else as.POSIXct(NA)
+  if (is.list(cached) && !is.null(cached$data) && identical(cached$path, path) && identical(cached$mtime, mtime)) {
+    return(cached$data)
+  }
+
+  required <- c("hand", "arm_angle_min", "arm_angle_max", "pitch_type", "HB", "IVB")
+  empty_ref <- function() tibble::tibble(
+    hand = character(), arm_angle_min = double(), arm_angle_max = double(),
+    pitch_type = character(), HB = double(), IVB = double(),
+    sample_n = integer(), pitcher_n = integer()
+  )
+  if (!file.exists(path)) {
+    out <- empty_ref()
+  } else {
+    out <- suppressMessages(readr::read_csv(path, show_col_types = FALSE))
+    missing <- setdiff(required, names(out))
+    if (length(missing)) {
+      warning("Heater movement reference is missing columns: ", paste(missing, collapse = ", "))
+      out <- empty_ref()
+    } else {
+      if (!"sample_n" %in% names(out)) out$sample_n <- NA_integer_
+      if (!"pitcher_n" %in% names(out)) out$pitcher_n <- NA_integer_
+      out <- out %>%
+        dplyr::transmute(
+          hand = toupper(trimws(as.character(hand))),
+          arm_angle_min = suppressWarnings(as.numeric(arm_angle_min)),
+          arm_angle_max = suppressWarnings(as.numeric(arm_angle_max)),
+          pitch_type = as.character(pitch_type),
+          HB = suppressWarnings(as.numeric(HB)),
+          IVB = suppressWarnings(as.numeric(IVB)),
+          sample_n = suppressWarnings(as.integer(sample_n)),
+          pitcher_n = suppressWarnings(as.integer(pitcher_n))
+        ) %>%
+        dplyr::filter(
+          hand %in% c("RHP", "LHP"), pitch_type %in% c("Fastball", "Sinker"),
+          is.finite(arm_angle_min), is.finite(arm_angle_max), is.finite(HB), is.finite(IVB)
+        )
+    }
+  }
+  .heater_movement_ref_cache$value <- list(path = path, mtime = mtime, data = out)
+  out
+}
+
 # The same D1 population used by the percentile cards also colors these cells.
 pitching_cell_percentiles <- function(values, column) {
   metric <- switch(column,
@@ -6553,6 +6605,19 @@ ui <- base_pitching_page(
       .base-stuff-controls { grid-template-columns: 1fr; }
       .base-stuff-panel.is-wide { grid-column: auto; }
     }
+    .base-hitter-view-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 24px;
+      align-items: center;
+      margin: 14px 0 6px;
+      padding: 12px 16px;
+      border: 1px solid rgba(80,18,20,.16);
+      border-radius: 10px;
+      background: #faf8f5;
+    }
+    .base-hitter-view-controls .form-group,
+    .base-hitter-view-controls .checkbox { margin: 0; }
   "))),
   tags$script(HTML("
     function baseMarkPitchingTotalRows(scope){
@@ -6684,22 +6749,41 @@ ui <- base_pitching_page(
     ),
     nav_panel(
       title = "Pitch Metrics",
-      fluidRow(
-        column(6, div(class = "cr-percentile-column", withSpinner(uiOutput("pitch_metrics_percentiles"), type = 4, color = "#501214"))),
-        column(6, withSpinner(plotlyOutput("pitch_metrics_plot", height = "650px", width = "100%"), type = 4, color = "#501214"))
-      ),
-      div(style = "font-size: 11px; color: #666; margin-top: 4px;",
-          textOutput("pitch_metrics_debug")
-      ),
-      fluidRow(
-        column(6, withSpinner(plotlyOutput("extension_plot", height = "450px", width = "100%"), type = 4, color = "#501214")),
-        column(6, withSpinner(plotlyOutput("release_plot",   height = "450px", width = "100%"), type = 4, color = "#501214"))
-      ),
-      br(),
-      div(class = "table-title mb-1", "Metrics"),
-      withSpinner(DTOutput("metrics"), type = 4, color = "#501214"),
-      div(class = "table-title mt-3 mb-1", "Performance"),
-      withSpinner(DTOutput("metrics_perf"), type = 4, color = "#501214")
+      navset_tab(
+        id = "pitch_metrics_view_tabs",
+        nav_panel(
+          title = "Pitcher View",
+          fluidRow(
+            column(6, div(class = "cr-percentile-column", withSpinner(uiOutput("pitch_metrics_percentiles"), type = 4, color = "#501214"))),
+            column(6, withSpinner(plotlyOutput("pitch_metrics_plot", height = "650px", width = "100%"), type = 4, color = "#501214"))
+          ),
+          div(style = "font-size: 11px; color: #666; margin-top: 4px;",
+              textOutput("pitch_metrics_debug")
+          ),
+          fluidRow(
+            column(6, withSpinner(plotlyOutput("extension_plot", height = "450px", width = "100%"), type = 4, color = "#501214")),
+            column(6, withSpinner(plotlyOutput("release_plot",   height = "450px", width = "100%"), type = 4, color = "#501214"))
+          ),
+          br(),
+          div(class = "table-title mb-1", "Metrics"),
+          withSpinner(DTOutput("metrics"), type = 4, color = "#501214"),
+          div(class = "table-title mt-3 mb-1", "Performance"),
+          withSpinner(DTOutput("metrics_perf"), type = 4, color = "#501214")
+        ),
+        nav_panel(
+          title = "Hitter View",
+          div(
+            class = "base-hitter-view-controls",
+            checkboxInput("hitter_view_show_rays", "Show pitch-separation rays", value = FALSE),
+            checkboxInput("hitter_view_show_distances", "Label separation distance", value = FALSE)
+          ),
+          withSpinner(
+            plotlyOutput("hitter_view_movement", height = "760px", width = "100%"),
+            type = 4,
+            color = "#501214"
+          )
+        )
+      )
     ),
     nav_panel(
       title = "Season Summary",
@@ -13793,6 +13877,282 @@ function(el,x){
   }
 }
 "
+
+  hitter_view_arm_angle <- reactive({
+    d <- movement_plot_data()
+    if (!nrow(d)) return(NA_real_)
+
+    if ("arm_angle" %in% names(d)) {
+      measured <- suppressWarnings(as.numeric(d$arm_angle))
+      measured <- abs(measured[is.finite(measured)])
+      if (length(measured)) return(mean(measured))
+    }
+
+    rel_height <- suppressWarnings(mean(as.numeric(d$RelHeight), na.rm = TRUE))
+    rel_side <- suppressWarnings(mean(as.numeric(d$RelSide), na.rm = TRUE))
+    height_value <- NA_real_
+    if ("PitcherHeight" %in% names(d)) {
+      heights <- suppressWarnings(as.numeric(d$PitcherHeight))
+      heights <- heights[is.finite(heights)]
+      if (length(heights)) height_value <- heights[[1]]
+    }
+    height_ft <- resolve_pitcher_height_ft(input$PitcherInput, height_value)
+    arm_angle_deg_from_rel(rel_height, rel_side, height_ft)
+  })
+
+  hitter_view_pitch_averages <- reactive({
+    movement_plot_data() %>%
+      dplyr::mutate(
+        HitterHB = -HorzBreak,
+        ReferencePitchType = vapply(PitchType_plot, pitch_metric_pitch_type, character(1))
+      ) %>%
+      dplyr::group_by(PitchType_plot, ReferencePitchType) %>%
+      dplyr::summarise(
+        HB = mean(HitterHB, na.rm = TRUE),
+        IVB = mean(InducedVertBreak, na.rm = TRUE),
+        Velo = mean(RelSpeed, na.rm = TRUE),
+        Pitches = dplyr::n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::filter(is.finite(HB), is.finite(IVB))
+  })
+
+  hitter_view_heater_reference <- reactive({
+    angle <- hitter_view_arm_angle()
+    mv <- movement_plot_data()
+    ref <- load_heater_movement_reference()
+    if (!is.finite(angle) || !nrow(mv) || !nrow(ref)) return(tibble::tibble())
+
+    hand <- guess_throw_hand(input$PitcherInput, mv)
+    present_heaters <- unique(vapply(mv$PitchType_plot, pitch_metric_pitch_type, character(1)))
+    present_heaters <- intersect(c("Fastball", "Sinker"), present_heaters)
+    if (!length(present_heaters)) return(tibble::tibble())
+
+    hand_ref <- ref %>% dplyr::filter(.data$hand == .env$hand)
+    if (!nrow(hand_ref)) return(tibble::tibble())
+    max_bucket <- max(hand_ref$arm_angle_max, na.rm = TRUE)
+    bucket <- hand_ref %>%
+      dplyr::filter(
+        .env$angle >= arm_angle_min,
+        .env$angle < arm_angle_max | (arm_angle_max == .env$max_bucket & .env$angle <= arm_angle_max)
+      )
+
+    if (!nrow(bucket)) {
+      closest_center <- (hand_ref$arm_angle_min + hand_ref$arm_angle_max) / 2
+      closest <- closest_center[[which.min(abs(closest_center - angle))]]
+      bucket <- hand_ref %>%
+        dplyr::filter((arm_angle_min + arm_angle_max) / 2 == .env$closest)
+    }
+
+    bucket %>%
+      dplyr::filter(pitch_type %in% .env$present_heaters) %>%
+      dplyr::mutate(
+        HB = -HB,
+        BucketLabel = sprintf("%.0f\u00b0\u2013%.0f\u00b0", arm_angle_min, arm_angle_max),
+        Label = paste0(
+          "<b>D1 ", pitch_type, " arm-slot average</b><br>",
+          hand, " ", BucketLabel,
+          "<br>HB: ", sprintf("%.1f", HB),
+          "<br>iVB: ", sprintf("%.1f", IVB),
+          ifelse(is.finite(sample_n), paste0("<br>Pitches: ", scales::comma(sample_n)), "")
+        )
+      )
+  })
+
+  hitter_view_separation <- reactive({
+    avg <- hitter_view_pitch_averages()
+    if (!nrow(avg)) return(tibble::tibble())
+
+    anchor_pool <- avg %>% dplyr::filter(ReferencePitchType == "Fastball")
+    if (!nrow(anchor_pool)) anchor_pool <- avg %>% dplyr::filter(ReferencePitchType == "Sinker")
+    if (!nrow(anchor_pool)) return(tibble::tibble())
+    anchor <- anchor_pool %>% dplyr::slice_max(Pitches, n = 1, with_ties = FALSE)
+
+    avg %>%
+      dplyr::filter(
+        !(ReferencePitchType %in% c("Fastball", "Sinker")),
+        !is.na(ReferencePitchType), PitchType_plot != "Undefined"
+      ) %>%
+      dplyr::transmute(
+        PitchType_plot,
+        x0 = anchor$HB[[1]], y0 = anchor$IVB[[1]],
+        x1 = HB, y1 = IVB,
+        distance = sqrt((x1 - x0)^2 + (y1 - y0)^2)
+      )
+  })
+
+  output$hitter_view_movement <- plotly::renderPlotly({
+    mv <- movement_plot_data() %>% dplyr::mutate(HitterHB = -HorzBreak)
+    validate(need(nrow(mv) > 0, "No movement data for the current filters."))
+
+    avg <- hitter_view_pitch_averages()
+    ref <- hitter_view_heater_reference()
+    separation <- hitter_view_separation()
+    hand <- guess_throw_hand(input$PitcherInput, mv)
+    angle <- hitter_view_arm_angle()
+    slope <- movement_line_slope(hand, mv)
+    mv_lim <- 30
+
+    x_end <- NA_real_
+    y_end <- NA_real_
+    hitter_side_sign <- if (identical(hand, "LHP")) 1 else -1
+    if (is.finite(slope)) {
+      if (abs(slope) <= 1) {
+        x_end <- mv_lim * hitter_side_sign
+        y_end <- abs(x_end) * slope
+      } else {
+        y_end <- mv_lim * sign(slope)
+        x_end <- hitter_side_sign * abs(y_end / slope)
+      }
+    }
+
+    color_for <- function(pitch_type) {
+      color <- unname(pitch_colors[as.character(pitch_type)])
+      if (!length(color) || is.na(color) || !nzchar(color)) "#808080" else color
+    }
+
+    p <- plotly::plot_ly(source = "hitter_view_movement")
+    for (pitch_type in unique(as.character(mv$PitchType_plot))) {
+      dd <- mv %>% dplyr::filter(as.character(PitchType_plot) == .env$pitch_type)
+      p <- p %>% plotly::add_trace(
+        data = dd,
+        x = ~HitterHB, y = ~InducedVertBreak,
+        type = "scatter", mode = "markers",
+        marker = list(size = 8, opacity = 0.25, color = color_for(pitch_type)),
+        text = ~paste0(
+          "<b>", PitchType_plot, "</b><br>",
+          "HB (hitter view): ", sprintf("%.1f", HitterHB), "<br>",
+          "iVB: ", sprintf("%.1f", InducedVertBreak), "<br>",
+          "Velo: ", sprintf("%.1f", RelSpeed)
+        ),
+        hovertemplate = "%{text}<extra></extra>",
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+    }
+
+    for (i in seq_len(nrow(avg))) {
+      row <- avg[i, , drop = FALSE]
+      pitch_type <- as.character(row$PitchType_plot[[1]])
+      hover <- paste0(
+        "<b>", pitch_type, " average</b><br>",
+        "HB (hitter view): ", sprintf("%.1f", row$HB[[1]]), "<br>",
+        "iVB: ", sprintf("%.1f", row$IVB[[1]]), "<br>",
+        "Velo: ", ifelse(is.finite(row$Velo[[1]]), sprintf("%.1f", row$Velo[[1]]), "\u2014"), "<br>",
+        "Pitches: ", row$Pitches[[1]]
+      )
+      p <- p %>% plotly::add_trace(
+        data = row,
+        x = ~HB, y = ~IVB,
+        type = "scatter", mode = "markers",
+        name = pitch_type,
+        marker = list(
+          size = 14, opacity = 1, color = color_for(pitch_type),
+          line = list(color = "white", width = 1.5)
+        ),
+        text = hover,
+        hovertemplate = "%{text}<extra></extra>",
+        showlegend = TRUE,
+        inherit = FALSE
+      )
+    }
+
+    if (nrow(ref)) {
+      for (i in seq_len(nrow(ref))) {
+        row <- ref[i, , drop = FALSE]
+        pitch_type <- as.character(row$pitch_type[[1]])
+        p <- p %>% plotly::add_trace(
+          data = row,
+          x = ~HB, y = ~IVB,
+          type = "scatter", mode = "markers",
+          name = paste0("D1 ", pitch_type, " (", row$BucketLabel[[1]], ")"),
+          marker = list(
+            size = 22, opacity = 1, color = color_for(pitch_type),
+            line = list(color = "black", width = 3)
+          ),
+          text = ~Label,
+          hovertemplate = "%{text}<extra></extra>",
+          showlegend = TRUE,
+          inherit = FALSE
+        )
+      }
+    }
+
+    shapes <- list(
+      list(type = "line", x0 = -mv_lim, x1 = mv_lim, y0 = 0, y1 = 0,
+           line = list(dash = "dot", width = 1, color = "black")),
+      list(type = "line", x0 = 0, x1 = 0, y0 = -mv_lim, y1 = mv_lim,
+           line = list(dash = "dot", width = 1, color = "black"))
+    )
+    if (is.finite(x_end) && is.finite(y_end)) {
+      shapes <- c(shapes, list(list(
+        type = "line", x0 = 0, y0 = 0, x1 = x_end, y1 = y_end,
+        line = list(dash = "dash", width = 2, color = "rgba(80,18,20,0.85)")
+      )))
+    }
+
+    annotations <- list()
+    if (isTRUE(input$hitter_view_show_rays) && nrow(separation)) {
+      for (i in seq_len(nrow(separation))) {
+        ray <- separation[i, , drop = FALSE]
+        annotations <- c(annotations, list(list(
+          x = ray$x1[[1]], y = ray$y1[[1]], ax = ray$x0[[1]], ay = ray$y0[[1]],
+          xref = "x", yref = "y", axref = "x", ayref = "y",
+          text = "", showarrow = TRUE, arrowhead = 3, arrowsize = 1,
+          arrowwidth = 2.2, arrowcolor = "#111111"
+        )))
+        if (isTRUE(input$hitter_view_show_distances)) {
+          annotations <- c(annotations, list(list(
+            x = (ray$x0[[1]] + ray$x1[[1]]) / 2,
+            y = (ray$y0[[1]] + ray$y1[[1]]) / 2,
+            xref = "x", yref = "y",
+            text = sprintf("%.1f in", ray$distance[[1]]),
+            showarrow = FALSE,
+            bgcolor = "rgba(255,255,255,0.82)",
+            borderpad = 2,
+            font = list(size = 11, color = "#111111")
+          )))
+        }
+      }
+    }
+
+    slot_text <- if (nrow(ref)) {
+      paste0(hand, " ", ref$BucketLabel[[1]], " arm-slot bucket")
+    } else if (is.finite(angle)) {
+      paste0(hand, " arm angle ", sprintf("%.1f\u00b0", angle))
+    } else {
+      paste0(hand, " arm angle unavailable")
+    }
+    title_text <- paste0(
+      name_display(input$PitcherInput %||% "Pitcher"), ": Hitter View",
+      "<br><sup>", slot_text,
+      if (is.finite(angle)) paste0(" | ", sprintf("%.1f\u00b0", angle)) else "",
+      "</sup>"
+    )
+
+    p %>% plotly::layout(
+      title = list(text = title_text, x = 0.5),
+      hovermode = "closest",
+      margin = list(t = 85, r = 190, b = 55, l = 65),
+      xaxis = list(
+        title = "Horizontal Break (in, hitter view)", range = c(-mv_lim, mv_lim),
+        autorange = FALSE, dtick = 3, tickformat = ".0f", zeroline = FALSE,
+        fixedrange = TRUE, constrain = "domain", constraintoward = "center"
+      ),
+      yaxis = list(
+        title = "Induced Vertical Break (in)", range = c(-mv_lim, mv_lim),
+        autorange = FALSE, dtick = 3, tickformat = ".0f", zeroline = FALSE,
+        fixedrange = TRUE, scaleanchor = "x", scaleratio = 1,
+        constrain = "domain", constraintoward = "center"
+      ),
+      legend = list(
+        title = list(text = "Pitch averages"),
+        orientation = "v", x = 1.02, xanchor = "left", y = 1, yanchor = "top"
+      ),
+      shapes = shapes,
+      annotations = annotations
+    )
+  })
   
   output$pitch_metrics_plot <- renderPlotly({
     mv  <- movement_plot_data()

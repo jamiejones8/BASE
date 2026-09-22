@@ -136,6 +136,18 @@ if (!grepl("performance_table", html, fixed = TRUE) ||
     !grepl("base-pitching-performance-insights", html, fixed = TRUE)) {
   fail("Pitching Performance is missing its unified table and insights layout.")
 }
+if (!all(vapply(
+  c("Pitcher View", "Hitter View", "hitter_view_show_rays", "hitter_view_show_distances", "hitter_view_movement"),
+  grepl, logical(1), x = html, fixed = TRUE
+))) {
+  fail("Pitch Metrics is missing the Pitcher/Hitter sub-tabs or hitter-view controls.")
+}
+heater_reference <- workspace$load_heater_movement_reference()
+if (!nrow(heater_reference) ||
+    !all(c("RHP", "LHP") %in% heater_reference$hand) ||
+    !all(c("Fastball", "Sinker") %in% heater_reference$pitch_type)) {
+  fail("Pitching hitter view cannot load the D1 heater movement reference.")
+}
 if (any(vapply(
   c("performance_traditional_table", "performance_process_table", "performance_modern_table", "performance_results_table"),
   grepl, logical(1), x = html, fixed = TRUE
@@ -172,6 +184,8 @@ shiny::testServer(workspace$server, {
     GameInput = games,
     BatterHand = c("L", "R"),
     perf_split = "hand",
+    hitter_view_show_rays = TRUE,
+    hitter_view_show_distances = TRUE,
     leader_seasons = "S26",
     leader_pitch_types = "All",
     leader_hand = c("L", "R"),
@@ -187,6 +201,22 @@ shiny::testServer(workspace$server, {
   }
   session$setInputs(season_groups = "S26", GameInput = games)
   session$flushReact()
+  hitter_avg <- hitter_view_pitch_averages()
+  if (!nrow(hitter_avg) || any(!is.finite(hitter_avg$HB)) || any(!is.finite(hitter_avg$IVB))) {
+    fail("Pitching hitter view did not calculate finite mirrored pitch averages.")
+  }
+  source_avg <- movement_plot_data() %>%
+    dplyr::group_by(PitchType_plot) %>%
+    dplyr::summarise(HB = mean(HorzBreak, na.rm = TRUE), .groups = "drop")
+  mirrored <- hitter_avg %>% dplyr::select(PitchType_plot, HB) %>%
+    dplyr::inner_join(source_avg, by = "PitchType_plot", suffix = c("_hitter", "_pitcher"))
+  if (!nrow(mirrored) || any(abs(mirrored$HB_hitter + mirrored$HB_pitcher) > 1e-8)) {
+    fail("Pitching hitter view does not mirror horizontal break.")
+  }
+  if (!is.finite(hitter_view_arm_angle())) {
+    fail("Pitching hitter view did not resolve the selected pitcher's arm angle.")
+  }
+  invisible(output$hitter_view_movement)
   stuff_table <- xrv_pitch_table_df(xrv_season_data(), xrv_scale_params())
   if (!identical(
     names(stuff_table),

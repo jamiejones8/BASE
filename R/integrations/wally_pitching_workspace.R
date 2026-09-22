@@ -868,6 +868,9 @@ base_wally_pitching_environment <- function(team_rows) {
   workspace$BASE_PITCHING_PERCENTILE_REFERENCE_PATH <- base_project_path(
     "WallyApps", "PitchingApp", "data", "d1_pitch_metric_percentile_reference.csv"
   )
+  workspace$BASE_PITCHING_HEATER_MOVEMENT_REFERENCE_PATH <- base_reference_path(
+    "d1_heater_movement_reference.csv"
+  )
   workspace$BASE_PITCHING_TXST_LOGO_PATH <- base_project_path(
     "WallyApps", "PitchingApp", "www", "txstlogo.jpeg"
   )
