@@ -22,11 +22,17 @@ if (!identical(
   fail("The bullpen importer and Pitching loader do not share the configured source file.")
 }
 
+date_formats <- c("9/17/26", "09-18-26", "09/19/2026", "2026-09-20", "2026/9/21")
+expected_dates <- as.Date(c("2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21"))
+if (!identical(base_parse_trackman_dates(date_formats), expected_dates)) {
+  fail("TrackMan dates with two- and four-digit years were not parsed correctly.")
+}
+
 game <- tibble::tibble(
   PitchUID = c("fall-pitch-1", "fall-pitch-2", "fall-pitch-3"),
   GameUID = "fall-game-1",
   PitchNo = as.character(1:3),
-  Date = "09/15/2026",
+  Date = "09/15/26",
   PitcherTeam = c(TEAM_CONFIG$data_code, "OPP", TEAM_CONFIG$data_code),
   BatterTeam = c("OPP", TEAM_CONFIG$data_code, "OPP"),
   Pitcher = c("Bobcat Pitcher", "Opponent Pitcher", "Bobcat Pitcher"),

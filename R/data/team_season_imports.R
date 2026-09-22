@@ -90,13 +90,28 @@ base_read_trackman_import <- function(path) {
 }
 
 base_parse_trackman_dates <- function(values) {
-  text <- trimws(substr(as.character(values), 1L, 10L))
+  text <- trimws(as.character(values))
+  text <- sub(
+    "^\\s*([0-9]{1,4}[-/][0-9]{1,2}[-/][0-9]{1,4}).*$",
+    "\\1",
+    text,
+    perl = TRUE
+  )
+  text <- gsub("-", "/", text, fixed = TRUE)
   result <- rep(as.Date(NA), length(text))
-  formats <- c("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y/%m/%d")
-  for (format in formats) {
-    missing <- is.na(result) & nzchar(text)
-    if (!any(missing)) break
-    result[missing] <- suppressWarnings(as.Date(text[missing], format = format))
+
+  # R will accept "9/17/26" with %Y and interpret it as year 26. Match the
+  # shape first so two-digit TrackMan years reach %y and become 2026.
+  formats <- list(
+    list(pattern = "^[0-9]{4}/[0-9]{1,2}/[0-9]{1,2}$", format = "%Y/%m/%d"),
+    list(pattern = "^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$", format = "%m/%d/%Y"),
+    list(pattern = "^[0-9]{1,2}/[0-9]{1,2}/[0-9]{2}$", format = "%m/%d/%y")
+  )
+  for (spec in formats) {
+    matches <- is.na(result) & nzchar(text) & grepl(spec$pattern, text)
+    if (any(matches)) {
+      result[matches] <- suppressWarnings(as.Date(text[matches], format = spec$format))
+    }
   }
   result
 }
