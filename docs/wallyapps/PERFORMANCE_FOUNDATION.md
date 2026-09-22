@@ -36,9 +36,21 @@ The current BASE app now defers these server graphs:
 - the season pitcher card;
 - HomeBASE's predecessor page.
 
-This pattern will wrap the final Pitching and Hitting workspaces so their full
-reactive graphs are not constructed for a user who only opens a postgame
-report.
+Postgame Reports also initializes only the visible AAR workspace. Opening the
+default Pitching AAR no longer sources the Hitting and Defense applications in
+the same session. Those workspaces still initialize normally if their AAR tab
+or full workspace is opened.
+
+### Player-level Cape queries
+
+The Cape Cod Parquet source remains an Arrow dataset instead of expanding the
+entire 199-column file into an R data frame at startup. Pitcher and hitter
+pages collect only the selected player's rows, retain the same ID/name matching
+and source labels, and reuse a bounded 16-player process cache.
+
+The full Pitching and Hitting workspaces follow the same deferred pattern, so
+their reactive graphs are not constructed until a user opens the corresponding
+workspace or AAR.
 
 ### Lazy model deserialization
 
@@ -51,8 +63,9 @@ The postgame pitching engine's 8.5 MB BrewStuff model and its two reference
 tables now use the same first-use behavior. Opening Home, Hitting, Defense, or
 opponent scouting no longer pays that pitching-report startup cost.
 
-The older upload-scouting module's model bundle and xwOBA grid also load and
-cache on first scoring use rather than when the R file is sourced.
+The superseded upload-scouting module is no longer sourced by the unified app;
+the active Opponent Scouting adapter retains its existing workflows and lazy
+data access without paying for the unused module's SQLite/XGBoost runtime.
 
 ### Shared bounded cache primitive
 
@@ -62,8 +75,10 @@ prepared player/team payload and share it among their existing tabs without
 allowing per-session memory to grow indefinitely.
 
 BASE's current national pitcher, hitter, and defense loaders already use
-bounded caches. They remain unchanged until the common primitive can replace
-their local implementations with parity tests.
+bounded caches. They now enforce both entry and byte ceilings: 64 MiB each for
+pitcher and hitter rows, and 128 MiB for defense-team rows. An oversized current
+selection remains usable, but older entries are evicted and transparently
+re-read from Parquet when needed.
 
 ## Required migration pattern
 
@@ -89,8 +104,7 @@ eviction, and clearing. The BASE configuration, source contract, retag tests,
 workspace/feature contracts, service tests, startup smoke test, and all Wally
 integration suites are available through `scripts/checks/run_all.R`.
 
-The local system R does not contain Arrow, so a full BASE runtime timing was not
-available in this environment. Deployment-grade before/after measurements must
-be captured with the production dependency image and mounted 2026 runtime. The
-important metrics are process startup time, first Home render, first workspace
-open, repeat workspace open, selected-player query time, and per-session memory.
+Deployment-grade before/after measurements must still be captured with the
+production dependency image and mounted 2026 runtime. The important metrics
+are process startup time, first Home render, first workspace open, repeat
+workspace open, selected-player query time, and per-session memory.

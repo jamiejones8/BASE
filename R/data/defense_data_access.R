@@ -74,16 +74,16 @@ base_defense_dataset <- tryCatch({
 
 .base_defense_cache <- new.env(parent = emptyenv())
 .base_defense_cache_order <- character()
-.base_defense_cache_limit <- 8L
+.base_defense_cache_limit <- base_env_int("BASE_DEFENSE_CACHE_ENTRIES", 2L)
+.base_defense_cache_max_bytes <- base_env_int("BASE_DEFENSE_CACHE_MB", 128L) * 1024^2
 
 base_defense_cache_put <- function(key, value) {
   assign(key, value, envir = .base_defense_cache)
   .base_defense_cache_order <<- c(setdiff(.base_defense_cache_order, key), key)
-  while (length(.base_defense_cache_order) > .base_defense_cache_limit) {
-    evict <- .base_defense_cache_order[[1]]
-    rm(list = evict, envir = .base_defense_cache)
-    .base_defense_cache_order <<- .base_defense_cache_order[-1]
-  }
+  .base_defense_cache_order <<- base_prune_cache_env(
+    .base_defense_cache, .base_defense_cache_order,
+    .base_defense_cache_limit, .base_defense_cache_max_bytes
+  )
   value
 }
 

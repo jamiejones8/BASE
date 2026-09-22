@@ -28,6 +28,14 @@ if (cache$has("b") || !cache$has("a") || !cache$has("c")) {
 cache$clear()
 if (cache$size() != 0L) fail("LRU cache clear failed.")
 
+byte_cache <- new.env(parent = emptyenv())
+assign("small", raw(32), envir = byte_cache)
+assign("large", raw(2048), envir = byte_cache)
+byte_order <- base_prune_cache_env(byte_cache, c("small", "large"), limit = 4L, max_bytes = 1024)
+if (!identical(byte_order, "large") || exists("small", envir = byte_cache, inherits = FALSE)) {
+  fail("Byte-bounded cache did not evict the least recently used value.")
+}
+
 lazy_calls <- 0L
 nested_calls <- 0L
 shiny::testServer(
@@ -61,6 +69,32 @@ shiny::testServer(
     session$setInputs(base_nav = "tab_target")
     session$flushReact()
     if (lazy_calls != 1L) fail("Workspace initialized more than once.")
+  }
+)
+
+conditional_calls <- 0L
+shiny::testServer(
+  function(input, output, session) {
+    base_lazy_workspace_server(
+      input, session, c("tab_workspace", "tab_reports"),
+      initialize = function() conditional_calls <<- conditional_calls + 1L,
+      id = "conditional_workspace",
+      active_when = function() {
+        identical(input$base_nav, "tab_workspace") ||
+          (identical(input$base_nav, "tab_reports") && identical(input$report_tab, "Target"))
+      }
+    )
+  },
+  {
+    session$setInputs(base_nav = "tab_reports", report_tab = "Other")
+    session$flushReact()
+    if (conditional_calls != 0L) fail("Conditional workspace initialized for an inactive nested tab.")
+    session$setInputs(report_tab = "Target")
+    session$flushReact()
+    if (conditional_calls != 1L) fail("Conditional workspace did not initialize for its nested tab.")
+    session$setInputs(base_nav = "tab_workspace")
+    session$flushReact()
+    if (conditional_calls != 1L) fail("Conditional workspace initialized more than once.")
   }
 )
 

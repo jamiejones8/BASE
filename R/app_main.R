@@ -15,25 +15,15 @@ base_bootstrap_root <- normalizePath(
 )
 
 library(shiny)
+library(bslib)
 library(htmltools)
-library(httr)
-library(xml2)
 library(dplyr)
 library(ggplot2)
 library(grid)
-library(magick)
 library(readr)
-library(workflows)
-library(parsnip)
-library(recipes)
-library(tune)
-library(base64enc)
-library(ggridges)
 library(arrow)
-library(shinyBS)
 library(shinyjs)
 library(DT)
-library(stringr)
 library(tibble)
 library(reactable)
 
@@ -75,7 +65,9 @@ between  <- dplyr::between
 first    <- dplyr::first
 last     <- dplyr::last
 
+BASE_SCOUT_COMPAT_FUNCTIONS_ONLY <- TRUE
 base_source("R/modules/scout_app.R", local = FALSE)
+rm(BASE_SCOUT_COMPAT_FUNCTIONS_ONLY)
 base_source("R/pages/cape_pitcher_page.R", local = FALSE)
 base_source("R/pages/hitter_scouting_page.R", local = FALSE)
 base_source("R/pages/defense_page.R", local = FALSE)
@@ -96,7 +88,6 @@ library(ggplot2)
 library(grid)
 library(gridExtra)
 library(png)
-library(lightgbm)
 library(readr)
 
 options(
@@ -107,7 +98,7 @@ delayedAssign(
   "model",
   {
     message("Loading BrewStuff model on first use from ", TEAM_CONFIG$data$brewstuff_model_file)
-    lgb.load(TEAM_CONFIG$data$brewstuff_model_file)
+    lightgbm::lgb.load(TEAM_CONFIG$data$brewstuff_model_file)
   },
   assign.env = environment()
 )
@@ -3260,13 +3251,20 @@ message("Season data rows: ", if (!is.null(season_data)) nrow(season_data) else 
 # ----------------------------------------------------------------------------
 college26_data <- NULL
 
-# CapeCod26 remains a separate supplemental source. It is joined only after a
-# player is selected, so Cape teams never replace or hide college affiliations.
+# CapeCod26 remains a separate supplemental source. Parquet stays on disk and
+# only the selected player's rows are collected by base_player_supplement_rows.
 cape26_data <- tryCatch({
-  df <- read_data_file(TEAM_CONFIG$data$cape_file)
-  if ("Notes" %in% names(df)) df$Notes <- as.character(df$Notes)
-  df$DataSource <- "2026 Cape Cod League"
-  message("Loaded ", TEAM_CONFIG$data$cape_file, " — rows: ", nrow(df))
+  path <- TEAM_CONFIG$data$cape_file
+  if (tolower(tools::file_ext(path)) == "parquet") {
+    df <- arrow::open_dataset(path, format = "parquet")
+    attr(df, "base_data_source_label") <- "2026 Cape Cod League"
+    message("Opened Cape dataset for player-level queries — rows: ", nrow(df))
+  } else {
+    df <- read_data_file(path)
+    if ("Notes" %in% names(df)) df$Notes <- as.character(df$Notes)
+    df$DataSource <- "2026 Cape Cod League"
+    message("Loaded ", path, " — rows: ", nrow(df))
+  }
   df
 }, error = function(e) {
   message(TEAM_CONFIG$data$cape_file, " load failed: ", e$message)
@@ -4754,7 +4752,13 @@ server <- function(input, output, session) {
       output,
       session
     ),
-    id = "team_pitching"
+    id = "team_pitching",
+    active_when = function() {
+      identical(input$base_nav, "tab_team_pitching") ||
+        (identical(input$base_nav, "tab_postgame_reports") &&
+           (is.null(input$base_postgame_report_tabs) ||
+              identical(input$base_postgame_report_tabs, "Pitching AAR")))
+    }
   )
   base_lazy_workspace_server(
     input, session, c("tab_team_hitting", "tab_postgame_reports"),
@@ -4763,7 +4767,12 @@ server <- function(input, output, session) {
       output,
       session
     ),
-    id = "team_hitting"
+    id = "team_hitting",
+    active_when = function() {
+      identical(input$base_nav, "tab_team_hitting") ||
+        (identical(input$base_nav, "tab_postgame_reports") &&
+           identical(input$base_postgame_report_tabs, "Hitting AAR"))
+    }
   )
   base_lazy_workspace_server(
     input, session, "tab_opponent_scouting",
@@ -4787,7 +4796,12 @@ server <- function(input, output, session) {
       session,
       startup_rows = season_data
     ),
-    id = "team_defense"
+    id = "team_defense",
+    active_when = function() {
+      identical(input$base_nav, "tab_defense_workspace") ||
+        (identical(input$base_nav, "tab_postgame_reports") &&
+           identical(input$base_postgame_report_tabs, "Catching AAR"))
+    }
   )
 
   catcher_data <- reactive({

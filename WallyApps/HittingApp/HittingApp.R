@@ -1490,6 +1490,15 @@ performance_table_metrics <- c(
   "MaxEV", "90th EV", "EV>95%", "10-35*%", "GB%", "LD%", "FB%", "PU%", "Foul Ball%", "Airpull%"
 )
 
+leaderboard_table_metrics <- c(
+  "PA", "wOBA", "wOBAcon", "OBP", "SLG", "OPS", "hRV",
+  "K%", "BB%", "Barrel%",
+  "Contact%", "Z-Contact%", "Whiff%", "IZ-Whiff%",
+  "Swing%", "Chase%", "Pre2K Chase%", "2K Chase%", "Z-Swing%",
+  "MaxEV", "90th EV", "EV>95%", "10-35*%",
+  "GB%", "LD%", "FB%", "PU%", "Foul Ball%", "LD+FB%", "Airpull%"
+)
+
 contact_type_levels <- c("Pop Up", "Fly Ball", "Line Drive", "Ground Ball")
 result_type_levels <- c("Out/Error/FC", "1B", "2B", "3B", "HR")
 contact_shape_values <- c("Pop Up"=21, "Fly Ball"=22, "Line Drive"=24, "Ground Ball"=23)
@@ -4730,15 +4739,7 @@ server <- function(input, output, session){
       z_swings <- sum(sw$is_swing & sw$in_zone, na.rm = TRUE)
       z_swing  <- safe_ratio(z_swings, z_seen)
 
-      # Max EV on BIP (PA-level)
-      pa <- pa_last_table(dd, balls_col, strikes_col)
-      bip <- is_bip_txst(pa$pc, pa$pr)
-      max_ev <- if (any(bip %in% TRUE & is.finite(pa$ev_pa))) {
-        suppressWarnings(max(pa$ev_pa[bip %in% TRUE], na.rm = TRUE))
-      } else NA_real_
-
       s$`Z-Swing%` <- z_swing
-      s$`Max EV`   <- max_ev
       s$Hitter     <- name_display(h)
       s
     }
@@ -4748,14 +4749,7 @@ server <- function(input, output, session){
 
     out %>%
       dplyr::mutate(PA = ifelse(is.finite(.data$PA), as.integer(.data$PA), NA_integer_)) %>%
-      dplyr::select(
-        Hitter, PA, wOBA, wOBAcon, OBP, SLG, OPS, hRV,
-        `K%`, `BB%`, `Barrel%`,
-        `Contact%`, `Z-Contact%`, `Whiff%`, `IZ-Whiff%`,
-        `Chase%`, `Pre2K Chase%`, `2K Chase%`, `Z-Swing%`,
-        `EV>95%`, `90th EV`, `LD+FB%`, `Airpull%`,
-        `Max EV`
-      ) %>%
+      dplyr::select(Hitter, dplyr::all_of(leaderboard_table_metrics)) %>%
       dplyr::arrange(.data$Hitter)
   }
 
@@ -4798,26 +4792,12 @@ server <- function(input, output, session){
     z_swings <- sum(sw$is_swing & sw$in_zone, na.rm = TRUE)
     z_swing  <- safe_ratio(z_swings, z_seen)
     
-    pa <- pa_last_table(d, balls_col, strikes_col)
-    bip <- is_bip_txst(pa$pc, pa$pr)
-    max_ev <- if (any(bip %in% TRUE & is.finite(pa$ev_pa))) {
-      suppressWarnings(max(pa$ev_pa[bip %in% TRUE], na.rm = TRUE))
-    } else NA_real_
-    
     s$`Z-Swing%` <- z_swing
-    s$`Max EV`   <- max_ev
     s$Hitter     <- "Team Total"
     
     s %>%
       dplyr::mutate(PA = ifelse(is.finite(.data$PA), as.integer(.data$PA), NA_integer_)) %>%
-      dplyr::select(
-        Hitter, PA, wOBA, wOBAcon, OBP, SLG, OPS, hRV,
-        `K%`, `BB%`, `Barrel%`,
-        `Contact%`, `Z-Contact%`, `Whiff%`, `IZ-Whiff%`,
-        `Chase%`, `Pre2K Chase%`, `2K Chase%`, `Z-Swing%`,
-        `EV>95%`, `90th EV`, `LD+FB%`, `Airpull%`,
-        `Max EV`
-      )
+      dplyr::select(Hitter, dplyr::all_of(leaderboard_table_metrics))
   }
 
   apply_leaderboard_shading <- function(tbl_num, tbl_fmt){
@@ -4840,13 +4820,7 @@ server <- function(input, output, session){
     tab_fmt <- stats_num %>% format_perf_table()
     tab_shaded <- apply_leaderboard_shading(stats_num, tab_fmt)
 
-    leader_cols <- c(
-      "Hitter","PA","wOBA","wOBAcon","OBP","SLG","OPS","hRV",
-      "K%","BB%","Barrel%",
-      "Contact%","Z-Contact%","Whiff%","IZ-Whiff%",
-      "Chase%","Pre2K Chase%","2K Chase%","Z-Swing%",
-      "EV>95%","90th EV","LD+FB%","Airpull%"
-    )
+    leader_cols <- c("Hitter", leaderboard_table_metrics)
 
     tab_shaded <- tab_shaded %>% dplyr::select(dplyr::all_of(leader_cols))
     stats_num  <- stats_num  %>% dplyr::select(dplyr::all_of(leader_cols))
@@ -4879,15 +4853,16 @@ server <- function(input, output, session){
                 tr(class = "group-header",
                    th(colspan = 11, ""),                                 # name + PA + rate/quality
                    th(colspan = 4, class = "group-label", "HIT"),
-                   th(colspan = 4, class = "group-label", "STRIKES"),
-                   th(colspan = 4, class = "group-label", "HARD")
+                   th(colspan = 5, class = "group-label", "STRIKES"),
+                   th(colspan = 11, class = "group-label", "BATTED BALL")
                 ),
                 tr(
                   th(first_col_label), th("PA"), th("wOBA"), th("wOBAcon"), th("OBP"), th("SLG"), th("OPS"), th("hRV"),
                   th("K%"), th("BB%"), th("Barrel%"),
                   th("Contact%"), th("Z-Contact%"), th("Whiff%"), th("IZ-Whiff%"),
-                  th("Chase%"), th("Pre2K Chase%"), th("2K Chase%"), th("IZ Swing%"),
-                  th("EV>95%"), th("90th EV"), th("LD+FB%"), th("Airpull%")
+                  th("Swing%"), th("Chase%"), th("Pre2K Chase%"), th("2K Chase%"), th("IZ Swing%"),
+                  th("Max EV"), th("90th EV"), th("EV>95%"), th("10-35%"),
+                  th("GB%"), th("LD%"), th("FB%"), th("PU%"), th("Foul%"), th("LD+FB%"), th("Airpull%")
                 )
               )
         )
@@ -4907,7 +4882,7 @@ server <- function(input, output, session){
         scrollX  = TRUE,
         columnDefs = c(
           list(list(targets = sort_idx0, visible = FALSE)),
-          list(list(className = "grp-start", targets = c(11,15,19))),
+          list(list(className = "grp-start", targets = c(11,15,20))),
           order_defs
         )
       ),
@@ -4923,15 +4898,16 @@ server <- function(input, output, session){
                 tr(class = "group-header",
                    th(colspan = 11, ""),                                 # name + PA + rate/quality
                    th(colspan = 4, class = "group-label", "HIT"),
-                   th(colspan = 4, class = "group-label", "STRIKES"),
-                   th(colspan = 4, class = "group-label", "HARD")
+                   th(colspan = 5, class = "group-label", "STRIKES"),
+                   th(colspan = 11, class = "group-label", "BATTED BALL")
                 ),
                 tr(
                   th(first_col_label), th("PA"), th("wOBA"), th("wOBAcon"), th("OBP"), th("SLG"), th("OPS"), th("hRV"),
                   th("K%"), th("BB%"), th("Barrel%"),
                   th("Contact%"), th("Z-Contact%"), th("Whiff%"), th("IZ-Whiff%"),
-                  th("Chase%"), th("Pre2K Chase%"), th("2K Chase%"), th("IZ Swing%"),
-                  th("EV>95%"), th("90th EV"), th("LD+FB%"), th("Airpull%")
+                  th("Swing%"), th("Chase%"), th("Pre2K Chase%"), th("2K Chase%"), th("IZ Swing%"),
+                  th("Max EV"), th("90th EV"), th("EV>95%"), th("10-35%"),
+                  th("GB%"), th("LD%"), th("FB%"), th("PU%"), th("Foul%"), th("LD+FB%"), th("Airpull%")
                 )
               )
         )
@@ -4952,13 +4928,7 @@ server <- function(input, output, session){
     tab_fmt <- stats_num %>% format_perf_table()
     tab_shaded <- apply_leaderboard_shading(stats_num, tab_fmt)
     
-    leader_cols <- c(
-      "Hitter","PA","wOBA","wOBAcon","OBP","SLG","OPS","hRV",
-      "K%","BB%","Barrel%",
-      "Contact%","Z-Contact%","Whiff%","IZ-Whiff%",
-      "Chase%","Pre2K Chase%","2K Chase%","Z-Swing%",
-      "EV>95%","90th EV","LD+FB%","Airpull%"
-    )
+    leader_cols <- c("Hitter", leaderboard_table_metrics)
     
     tab_shaded <- tab_shaded %>% dplyr::select(dplyr::all_of(leader_cols))
     stats_num  <- stats_num  %>% dplyr::select(dplyr::all_of(leader_cols))
@@ -4975,7 +4945,7 @@ server <- function(input, output, session){
         stripe   = TRUE,
         scrollX  = TRUE,
         columnDefs = c(
-          list(list(className = "grp-start", targets = c(11,15,19)))
+          list(list(className = "grp-start", targets = c(11,15,20)))
         )
       ),
       class = "stripe"
@@ -5081,7 +5051,7 @@ server <- function(input, output, session){
       list(name = "Z-Contact%", col = "Z-Contact%", higher = TRUE,  fmt = fmt_pct),
       list(name = "Chase%",     col = "Chase%",     higher = FALSE, fmt = fmt_pct),
       list(name = "Z-Swing%",   col = "Z-Swing%",   higher = TRUE,  fmt = fmt_pct),
-      list(name = "Max EV",     col = "Max EV",     higher = TRUE,  fmt = fmt_num1),
+      list(name = "Max EV",     col = "MaxEV",      higher = TRUE,  fmt = fmt_num1),
       list(name = "90th EV",    col = "90th EV",    higher = TRUE,  fmt = fmt_num1),
       list(name = "Barrel%",    col = "Barrel%",    higher = TRUE,  fmt = fmt_pct)
     )

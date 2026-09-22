@@ -308,6 +308,8 @@ shiny::testServer(workspace$server, {
   invisible(output$aar_swing_tbl)
   invisible(output$perf_tbl)
   invisible(output$lineup_builder_ui)
+  invisible(output$hit_leaderboard_table)
+  invisible(output$leaderboard_team_table)
 
   # Postgame Reports owns separate AAR controls. The PDF must not depend on
   # the legacy Hitting sidebar's player selection being present.
@@ -323,6 +325,18 @@ shiny::testServer(workspace$server, {
 
   leaderboard_rows <- leaderboard_summary(leaderboard_data())
   if (!nrow(leaderboard_rows)) fail("Hitting leaderboard returned no fixture rows.")
+  requested_leaderboard_metrics <- c(
+    "Swing%", "MaxEV", "10-35*%", "GB%", "LD%", "FB%", "PU%", "Foul Ball%"
+  )
+  if (!all(requested_leaderboard_metrics %in% names(leaderboard_rows))) {
+    fail(
+      "Hitting leaderboard is missing requested metrics: ",
+      paste(setdiff(requested_leaderboard_metrics, names(leaderboard_rows)), collapse = ", ")
+    )
+  }
+  if (!all(requested_leaderboard_metrics %in% workspace$leaderboard_table_metrics)) {
+    fail("Requested hitting metrics are calculated but not visible on the leaderboard.")
+  }
   render_leaderboard_pdf(hitting_leaderboard_pdf, leaderboard_rows)
   if (!file.exists(hitting_leaderboard_pdf) || file.info(hitting_leaderboard_pdf)$size <= 4 ||
       !identical(readBin(hitting_leaderboard_pdf, what = "raw", n = 4L), charToRaw("%PDF"))) {

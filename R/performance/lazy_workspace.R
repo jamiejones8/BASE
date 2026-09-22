@@ -69,8 +69,32 @@ base_lru_cache <- function(limit = 16L) {
   )
 }
 
+base_prune_cache_env <- function(values, order, limit, max_bytes = Inf) {
+  stopifnot(is.environment(values))
+  limit <- suppressWarnings(as.integer(limit))
+  max_bytes <- suppressWarnings(as.numeric(max_bytes))
+  if (is.na(limit) || limit < 1L) stop("Cache limit must be a positive integer.")
+  if (is.na(max_bytes) || max_bytes <= 0) stop("Cache byte limit must be positive.")
+
+  cache_bytes <- function() {
+    keys <- intersect(order, ls(values, all.names = TRUE))
+    if (!length(keys)) return(0)
+    sum(vapply(keys, function(key) as.numeric(object.size(get(key, envir = values, inherits = FALSE))), numeric(1)))
+  }
+
+  # Retain the newest value even when a single item exceeds the target. That
+  # keeps the current request usable while preventing accumulation around it.
+  while (length(order) > 1L && (length(order) > limit || cache_bytes() > max_bytes)) {
+    evict <- order[[1]]
+    if (exists(evict, envir = values, inherits = FALSE)) rm(list = evict, envir = values)
+    order <- order[-1]
+  }
+  order
+}
+
 base_lazy_workspace_server <- function(input, session, tab_value, initialize,
-                                       id = tab_value, nav_input = "base_nav") {
+                                       id = tab_value, nav_input = "base_nav",
+                                       active_when = NULL) {
   stopifnot(
     is.function(initialize),
     length(tab_value) >= 1L,
@@ -101,9 +125,14 @@ base_lazy_workspace_server <- function(input, session, tab_value, initialize,
     })
   })
 
-  observer <- shiny::observeEvent(input[[nav_input]], {
+  is_active <- shiny::reactive({
+    if (is.function(active_when)) return(isTRUE(active_when()))
     active_tab <- input[[nav_input]]
-    if (is.null(active_tab) || !length(active_tab) || !(active_tab[[1]] %in% tab_value)) return()
+    !is.null(active_tab) && length(active_tab) && active_tab[[1]] %in% tab_value
+  })
+
+  observer <- shiny::observeEvent(is_active(), {
+    if (!isTRUE(is_active())) return()
     tryCatch(
       initialize_once(),
       error = function(e) {
@@ -120,6 +149,7 @@ base_lazy_workspace_server <- function(input, session, tab_value, initialize,
     id = id,
     tab_value = tab_value,
     status = status,
+    is_active = is_active,
     observer = observer
   )
   assign(id, handle, envir = registry)

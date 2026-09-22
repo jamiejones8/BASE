@@ -44,16 +44,16 @@ base_pitcher_dataset <- tryCatch({
 
 .base_pitcher_cache <- new.env(parent = emptyenv())
 .base_pitcher_cache_order <- character()
-.base_pitcher_cache_limit <- 16L
+.base_pitcher_cache_limit <- base_env_int("BASE_PITCHER_CACHE_ENTRIES", 8L)
+.base_pitcher_cache_max_bytes <- base_env_int("BASE_PITCHER_CACHE_MB", 64L) * 1024^2
 
 base_pitcher_cache_put <- function(key, value) {
   assign(key, value, envir = .base_pitcher_cache)
   .base_pitcher_cache_order <<- c(setdiff(.base_pitcher_cache_order, key), key)
-  while (length(.base_pitcher_cache_order) > .base_pitcher_cache_limit) {
-    evict <- .base_pitcher_cache_order[[1]]
-    rm(list = evict, envir = .base_pitcher_cache)
-    .base_pitcher_cache_order <<- .base_pitcher_cache_order[-1]
-  }
+  .base_pitcher_cache_order <<- base_prune_cache_env(
+    .base_pitcher_cache, .base_pitcher_cache_order,
+    .base_pitcher_cache_limit, .base_pitcher_cache_max_bytes
+  )
   value
 }
 
@@ -98,16 +98,16 @@ BASE_HITTER_CATALOG_FILE <- TEAM_CONFIG$data$hitter_catalog_file
 .base_hitter_catalog_cache <- NULL
 .base_hitter_cache <- new.env(parent = emptyenv())
 .base_hitter_cache_order <- character()
-.base_hitter_cache_limit <- 24L
+.base_hitter_cache_limit <- base_env_int("BASE_HITTER_CACHE_ENTRIES", 8L)
+.base_hitter_cache_max_bytes <- base_env_int("BASE_HITTER_CACHE_MB", 64L) * 1024^2
 
 base_hitter_cache_put <- function(key, value) {
   assign(key, value, envir = .base_hitter_cache)
   .base_hitter_cache_order <<- c(setdiff(.base_hitter_cache_order, key), key)
-  while (length(.base_hitter_cache_order) > .base_hitter_cache_limit) {
-    evict <- .base_hitter_cache_order[[1]]
-    rm(list = evict, envir = .base_hitter_cache)
-    .base_hitter_cache_order <<- .base_hitter_cache_order[-1]
-  }
+  .base_hitter_cache_order <<- base_prune_cache_env(
+    .base_hitter_cache, .base_hitter_cache_order,
+    .base_hitter_cache_limit, .base_hitter_cache_max_bytes
+  )
   value
 }
 

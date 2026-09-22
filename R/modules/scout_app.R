@@ -4,15 +4,17 @@
 #  Standalone: no source() files.  Open and Run App.
 # ============================================================================
 
-library(shiny)
-library(bslib)
-library(dplyr)
-library(tidyr)
-library(purrr)
-library(reactable)
-library(DBI)
-library(RSQLite)
-suppressWarnings(suppressMessages(library(xgboost)))
+if (!isTRUE(get0("BASE_SCOUT_COMPAT_FUNCTIONS_ONLY", inherits = TRUE, ifnotfound = FALSE))) {
+  library(shiny)
+  library(bslib)
+  library(dplyr)
+  library(tidyr)
+  library(purrr)
+  library(reactable)
+  library(DBI)
+  library(RSQLite)
+  suppressWarnings(suppressMessages(library(xgboost)))
+}
 
 options(shiny.maxRequestSize = 500 * 1024^2)
 

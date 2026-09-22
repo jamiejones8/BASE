@@ -538,8 +538,90 @@ base_player_key <- function(x) {
   gsub("[^a-z0-9]", "", x)
 }
 
+.base_supplement_catalog_cache <- new.env(parent = emptyenv())
+.base_supplement_rows_cache <- new.env(parent = emptyenv())
+.base_supplement_rows_order <- character()
+.base_supplement_rows_limit <- 16L
+.base_supplement_rows_max_bytes <- 64 * 1024^2
+
+base_arrow_player_supplement_rows <- function(primary, supplemental, player, role) {
+  if (is.null(primary) || !nrow(primary) || !role %in% names(primary)) {
+    return(tibble::tibble())
+  }
+  available <- names(supplemental$schema)
+  if (!role %in% available) return(data.frame())
+
+  id_column <- paste0(role, "Id")
+  catalog_columns <- intersect(c(role, id_column), available)
+  source_files <- tryCatch(supplemental$files, error = function(e) character())
+  source_key <- paste(source_files, collapse = "\u001f")
+  if (!nzchar(source_key)) source_key <- paste(class(supplemental), collapse = ":")
+  catalog_key <- paste(source_key, role, sep = "\u001e")
+
+  if (exists(catalog_key, envir = .base_supplement_catalog_cache, inherits = FALSE)) {
+    catalog <- get(catalog_key, envir = .base_supplement_catalog_cache, inherits = FALSE)
+  } else {
+    catalog <- supplemental %>%
+      dplyr::select(tidyselect::all_of(catalog_columns)) %>%
+      dplyr::distinct() %>%
+      dplyr::collect() %>%
+      tibble::as_tibble()
+    assign(catalog_key, catalog, envir = .base_supplement_catalog_cache)
+  }
+
+  player_key <- base_player_key(player)[[1]]
+  matched_names <- unique(as.character(catalog[[role]][base_player_key(catalog[[role]]) == player_key]))
+  matched_names <- matched_names[!is.na(matched_names) & nzchar(matched_names)]
+
+  player_ids <- character()
+  if (id_column %in% names(primary) && id_column %in% names(catalog)) {
+    player_ids <- unique(as.character(primary[[id_column]]))
+    player_ids <- player_ids[!is.na(player_ids) & nzchar(player_ids)]
+    if (length(player_ids)) {
+      id_names <- as.character(catalog[[role]][
+        !is.na(catalog[[id_column]]) & as.character(catalog[[id_column]]) %in% player_ids
+      ])
+      matched_names <- unique(c(matched_names, id_names))
+    }
+  }
+  if (!length(matched_names)) return(tibble::tibble())
+
+  rows_key <- paste(catalog_key, paste(sort(matched_names), collapse = "\u001f"), sep = "\u001e")
+  if (exists(rows_key, envir = .base_supplement_rows_cache, inherits = FALSE)) {
+    .base_supplement_rows_order <<- c(setdiff(.base_supplement_rows_order, rows_key), rows_key)
+    return(get(rows_key, envir = .base_supplement_rows_cache, inherits = FALSE))
+  }
+
+  role_symbol <- rlang::sym(role)
+  rows <- supplemental %>%
+    dplyr::filter(!!role_symbol %in% matched_names) %>%
+    dplyr::collect() %>%
+    tibble::as_tibble()
+  source_label <- attr(supplemental, "base_data_source_label", exact = TRUE)
+  if (!"DataSource" %in% names(rows) && length(source_label) == 1L && nzchar(source_label)) {
+    rows$DataSource <- source_label
+  }
+
+  assign(rows_key, rows, envir = .base_supplement_rows_cache)
+  .base_supplement_rows_order <<- c(setdiff(.base_supplement_rows_order, rows_key), rows_key)
+  if (exists("base_prune_cache_env", mode = "function", inherits = TRUE)) {
+    .base_supplement_rows_order <<- base_prune_cache_env(
+      .base_supplement_rows_cache, .base_supplement_rows_order,
+      .base_supplement_rows_limit, .base_supplement_rows_max_bytes
+    )
+  } else while (length(.base_supplement_rows_order) > .base_supplement_rows_limit) {
+      evict <- .base_supplement_rows_order[[1]]
+      rm(list = evict, envir = .base_supplement_rows_cache)
+      .base_supplement_rows_order <<- .base_supplement_rows_order[-1]
+  }
+  rows
+}
+
 base_player_supplement_rows <- function(primary, supplemental, player, role = "Pitcher") {
   if (is.null(supplemental)) return(data.frame())
+  if (inherits(supplemental, "Dataset")) {
+    return(base_arrow_player_supplement_rows(primary, supplemental, player, role))
+  }
   if (is.null(primary) || !nrow(primary) || !nrow(supplemental) ||
       !role %in% names(primary) || !role %in% names(supplemental)) {
     return(supplemental[0, , drop = FALSE])
