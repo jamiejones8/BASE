@@ -252,6 +252,15 @@ homebase_parse_dates <- function(data) {
   parsed
 }
 
+homebase_filter_dates <- function(data, range) {
+  if (is.null(data) || !is.data.frame(data) || !nrow(data)) return(tibble::as_tibble(data))
+  range <- suppressWarnings(as.Date(range))
+  if (length(range) < 2L || any(is.na(range[1:2]))) return(tibble::as_tibble(data))
+  dates <- homebase_parse_dates(data)
+  keep <- !is.na(dates) & dates >= min(range[1:2]) & dates <= max(range[1:2])
+  tibble::as_tibble(data[keep, , drop = FALSE])
+}
+
 homebase_game_key <- function(data, dates = homebase_parse_dates(data)) {
   id <- as.character(homebase_first_column(data, c("GameUID", "GameID", "GameId"), ""))
   id[is.na(id)] <- ""
@@ -1146,7 +1155,8 @@ homebase_page_ui <- function() {
             actionButton("hb_load_opponent", "Open", class = "btn btn-primary")
           ),
           uiOutput("hb_opponent_source_note")
-        )
+        ),
+        uiOutput("hb_date_filter")
       )
     ),
     tags$div(
@@ -1189,6 +1199,43 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   pitcher_card_page <- reactiveVal(NULL)
 
   roster <- homebase_roster_data()
+
+  profile_date_bounds <- reactive({
+    profile <- selected_profile()
+    if (is.null(profile)) return(NULL)
+    dates <- c(homebase_parse_dates(profile$hitter), homebase_parse_dates(profile$pitcher))
+    dates <- dates[!is.na(dates)]
+    if (!length(dates)) return(NULL)
+    range(dates)
+  })
+
+  output$hb_date_filter <- renderUI({
+    bounds <- profile_date_bounds()
+    if (is.null(bounds)) {
+      return(tags$div(class = "hb-date-filter is-empty", tags$span("Date range"), tags$small("No dated rows")))
+    }
+    dateRangeInput(
+      "hb_date_range", "Date range",
+      start = bounds[[1]], end = bounds[[2]], min = bounds[[1]], max = bounds[[2]],
+      separator = " to ", format = "M d, yyyy", width = "100%"
+    )
+  })
+
+  active_profile <- reactive({
+    profile <- selected_profile()
+    if (is.null(profile)) return(NULL)
+    date_range <- input$hb_date_range
+    if (is.null(date_range) || length(date_range) < 2L || any(is.na(date_range))) return(profile)
+    profile$hitter <- homebase_filter_dates(profile$hitter, date_range)
+    profile$pitcher <- homebase_filter_dates(profile$pitcher, date_range)
+    profile$pitcher_scored <- homebase_filter_dates(profile$pitcher_scored, date_range)
+    profile
+  })
+
+  observeEvent(input$hb_date_range, {
+    hitter_card_plot(NULL)
+    pitcher_card_page(NULL)
+  }, ignoreInit = TRUE)
 
   output$hb_team_theme <- renderUI({
     profile <- selected_profile()
@@ -1301,7 +1348,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   })
 
   output$hb_profile_header <- renderUI({
-    profile <- selected_profile()
+    profile <- active_profile()
     if (is.null(profile)) return(NULL)
     row <- profile$roster
     number <- if (!is.null(row) && nrow(row)) paste0("#", row$Number[[1]]) else "NCAA"
@@ -1341,7 +1388,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   })
 
   output$hb_overview <- renderUI({
-    profile <- selected_profile()
+    profile <- active_profile()
     if (is.null(profile)) return(NULL)
     sections <- list()
     if (nrow(profile$hitter)) {
@@ -1414,7 +1461,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   })
 
   output$hb_recent <- renderUI({
-    profile <- selected_profile()
+    profile <- active_profile()
     if (is.null(profile)) return(NULL)
     blocks <- list()
     if (nrow(profile$hitter)) blocks <- c(blocks, list(homebase_recent_ui(homebase_recent_games(profile$hitter, "hitter"), "hitter")))
@@ -1424,7 +1471,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   })
 
   output$hb_percentiles <- renderUI({
-    profile <- selected_profile()
+    profile <- active_profile()
     if (is.null(profile)) return(NULL)
     cards <- list()
     if (nrow(profile$hitter)) {
@@ -1454,28 +1501,28 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   })
 
   output$hb_card_studio <- renderUI({
-    profile <- selected_profile()
+    profile <- active_profile()
     if (is.null(profile) || (!nrow(profile$hitter) && !nrow(profile$pitcher))) return(NULL)
     panes <- list()
     if (nrow(profile$hitter)) {
       panes <- c(panes, list(tags$section(
         class = "hb-card-pane",
         tags$div(class = "hb-card-toolbar", tags$div(tags$span("Wally"), tags$h3("Hitter card")), tags$div(actionButton("hb_generate_hitter", "Generate hitter card", class = "btn btn-primary"), downloadButton("hb_download_hitter", "Download PDF", class = "btn btn-outline-secondary"))),
-        if (is.null(hitter_card_plot())) tags$p(class = "hb-card-placeholder", "Generate the Wally hitter card from this player's full tracked sample.") else plotOutput("hb_hitter_card", height = "850px")
+        if (is.null(hitter_card_plot())) tags$p(class = "hb-card-placeholder", "Generate the Wally hitter card from this player's selected tracked sample.") else plotOutput("hb_hitter_card", height = "850px")
       )))
     }
     if (nrow(profile$pitcher)) {
       panes <- c(panes, list(tags$section(
         class = "hb-card-pane",
         tags$div(class = "hb-card-toolbar", tags$div(tags$span("CAPS"), tags$h3("Complete pitcher card")), tags$div(actionButton("hb_generate_pitcher", "Generate full card", class = "btn btn-primary"), downloadButton("hb_download_pitcher", "Download PDF", class = "btn btn-outline-secondary"), downloadButton("hb_download_pitcher_png", "Download PNG", class = "btn btn-outline-secondary"))),
-        if (is.null(pitcher_card_page())) tags$p(class = "hb-card-placeholder", "Generate the original single-page CAPS card from this player's full tracked sample.") else imageOutput("hb_pitcher_card", width = "100%", height = "auto")
+        if (is.null(pitcher_card_page())) tags$p(class = "hb-card-placeholder", "Generate the original single-page CAPS card from this player's selected tracked sample.") else imageOutput("hb_pitcher_card", width = "100%", height = "auto")
       )))
     }
     tags$section(class = "hb-card-studio", tags$div(class = "hb-studio-heading", tags$span("Player reports"), tags$h2("PDF and image generator")), tagList(panes))
   })
 
   observeEvent(input$hb_generate_hitter, {
-    profile <- selected_profile()
+    profile <- active_profile()
     req(profile, nrow(profile$hitter) > 0)
     withProgress(message = "Building Wally hitter card", value = 0.2, {
       engine <- base_wally_scouting_environment()
@@ -1490,7 +1537,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   })
 
   observeEvent(input$hb_generate_pitcher, {
-    profile <- selected_profile()
+    profile <- active_profile()
     req(profile, nrow(profile$pitcher) > 0)
     withProgress(message = "Building CAPS pitcher card", value = 0.2, {
       page <- tryCatch(
@@ -1515,7 +1562,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   }, deleteFile = TRUE)
 
   output$hb_download_hitter <- downloadHandler(
-    filename = function() paste0(gsub("[^A-Za-z0-9]+", "_", selected_profile()$name), "_Wally_Hitter_Card.pdf"),
+    filename = function() paste0(gsub("[^A-Za-z0-9]+", "_", active_profile()$name), "_Wally_Hitter_Card.pdf"),
     content = function(file) {
       req(hitter_card_plot())
       engine <- base_wally_scouting_environment()
@@ -1525,7 +1572,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   )
 
   output$hb_download_pitcher <- downloadHandler(
-    filename = function() paste0(gsub("[^A-Za-z0-9]+", "_", selected_profile()$name), "_CAPS_Pitcher_Card.pdf"),
+    filename = function() paste0(gsub("[^A-Za-z0-9]+", "_", active_profile()$name), "_CAPS_Pitcher_Card.pdf"),
     content = function(file) {
       req(pitcher_card_page())
       draw_cards_to_pdf(list(pitcher_card_page()), file, width = 12.5, height = 12.5, dpi = 300)
@@ -1533,7 +1580,7 @@ homebase_page_server <- function(input, output, session, requested_player = NULL
   )
 
   output$hb_download_pitcher_png <- downloadHandler(
-    filename = function() paste0(gsub("[^A-Za-z0-9]+", "_", selected_profile()$name), "_CAPS_Pitcher_Card.png"),
+    filename = function() paste0(gsub("[^A-Za-z0-9]+", "_", active_profile()$name), "_CAPS_Pitcher_Card.png"),
     content = function(file) {
       req(pitcher_card_page())
       draw_card_to_png(pitcher_card_page(), file,

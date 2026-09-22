@@ -128,6 +128,15 @@ synthetic <- tibble::tibble(
 )
 synthetic$StuffPlus <- c(110, rep(NA_real_, nrow(synthetic) - 1L))
 
+filtered_synthetic <- homebase_filter_dates(synthetic, as.Date(c("2026-03-08", "2026-03-08")))
+if (nrow(filtered_synthetic) != 4L || any(homebase_parse_dates(filtered_synthetic) != as.Date("2026-03-08"))) {
+  fail("HomeBASE date ranges do not strictly filter the shared player sample.")
+}
+if (!grepl('uiOutput("hb_date_filter")', homebase_source, fixed = TRUE) ||
+    !grepl("active_profile <- reactive", homebase_source, fixed = TRUE)) {
+  fail("HomeBASE is not exposing its date range or routing cards through the filtered profile.")
+}
+
 pa <- homebase_pa_rows(synthetic)
 if (nrow(pa) != 4L) fail("HomeBASE did not reduce pitch rows to four plate appearances.")
 

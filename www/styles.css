@@ -1341,7 +1341,7 @@ table tbody td[style*="background-color"] {
 
 .hb-commandbar {
   display: grid;
-  grid-template-columns: minmax(300px, .78fr) minmax(560px, 1.65fr);
+  grid-template-columns: minmax(300px, .72fr) minmax(700px, 1.8fr);
   gap: 10px;
   align-items: stretch;
   margin-bottom: 8px;
@@ -1402,7 +1402,7 @@ table tbody td[style*="background-color"] {
 
 .hb-picker {
   display: grid;
-  grid-template-columns: max-content minmax(280px, 1fr);
+  grid-template-columns: max-content minmax(280px, 1fr) minmax(245px, .72fr);
   gap: 10px;
   align-items: center;
   min-height: 64px;
@@ -1415,9 +1415,17 @@ table tbody td[style*="background-color"] {
 }
 
 .hb-picker .form-group { margin-bottom: 0; }
+.hb-picker > .shiny-html-output { min-width: 0; }
 .hb-picker .radio-inline { margin: 0 12px 0 0; font-size: 13px; font-weight: 700; }
 .hb-picker .selectize-control { margin-bottom: 0; }
 .hb-picker .selectize-input { min-height: 38px; padding-top: 8px; padding-bottom: 8px; }
+.hb-date-filter .control-label,
+.hb-date-filter > span { display: block; margin-bottom: 3px; color: var(--base-muted); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.hb-date-filter .input-daterange { width: 100%; }
+.hb-date-filter .input-daterange .form-control { min-width: 0; height: 34px; padding: 6px 7px; font-size: 12px; }
+.hb-date-filter .input-group-addon { padding: 6px; font-size: 11px; }
+.hb-date-filter.is-empty { padding: 4px 0; }
+.hb-date-filter.is-empty small { color: var(--base-muted); font-size: 12px; }
 .hb-picker .selectize-input.focus,
 .hb-picker .form-control:focus {
   border-color: var(--hb-team-primary);

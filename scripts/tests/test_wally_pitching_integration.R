@@ -180,6 +180,13 @@ shiny::testServer(workspace$server, {
     aar_game = games[[1]]
   )
   session$flushReact()
+  session$setInputs(season_groups = "F26", GameInput = games)
+  session$flushReact()
+  if (length(season_selected_game_ids()) || nrow(dataFilter())) {
+    fail("Pitching expanded an unavailable selected season back to the pitcher's other games.")
+  }
+  session$setInputs(season_groups = "S26", GameInput = games)
+  session$flushReact()
   stuff_table <- xrv_pitch_table_df(xrv_season_data(), xrv_scale_params())
   if (!identical(
     names(stuff_table),

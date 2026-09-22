@@ -7331,10 +7331,10 @@ server <- function(input, output, session){
     if (!length(sg)) return(ch)
     
     # Choose the correct season column robustly
-    season_col <- if ("SeasonTag" %in% names(txst_df)) "SeasonTag" else if ("SeasonGroup" %in% names(txst_df)) "SeasonGroup" else NULL
+    season_col <- if ("SeasonGroup" %in% names(txst_df)) "SeasonGroup" else if ("SeasonTag" %in% names(txst_df)) "SeasonTag" else NULL
     
-    # If we can't find a season column, fall back to ALL (no crash)
-    if (is.null(season_col)) return(ch)
+    # Without season metadata we cannot truthfully satisfy a checked season.
+    if (is.null(season_col)) return(character(0))
     
     sel <- get_pitcher_rows() %>%
       dplyr::filter(.data[[season_col]] %in% sg) %>%
@@ -7343,8 +7343,10 @@ server <- function(input, output, session){
     sel <- sel[!is.na(sel) & nzchar(trimws(sel))]
     sel <- intersect(ch, unique(sel))
     
-    # If a season selection yields nothing, fall back to ALL
-    if (!length(sel)) return(ch)
+    # A checked season is a strict filter. Falling back to every game here made
+    # an unavailable season (or a pitcher with no rows in it) silently display
+    # the pitcher's career sample under the checked season label.
+    if (!length(sel)) return(character(0))
     
     order_game_ids_desc(sel, game_dates)
   })
@@ -7387,7 +7389,7 @@ server <- function(input, output, session){
   
   selected_game_ids <- reactive({
     g <- input$GameInput
-    if (is.null(g) || length(g) == 0) g <- txst_game_ids
+    if (is.null(g) || length(g) == 0) g <- season_selected_game_ids()
     as.character(g)
   })
   # ---- robust date parsing (prevents charToDate crashes) ----
@@ -8989,19 +8991,23 @@ server <- function(input, output, session){
       d$CustomGameID <- d$CustomGameID_BP
     } else {
       sel_hands <- if (length(input$BatterHand)) input$BatterHand else c("L","R")
-      sel_games <- input$GameInput
-      if (is.null(sel_games) || !length(sel_games)) {
-        sel_games <- rv$df %>%
-          dplyr::filter(Pitcher == input$PitcherInput, !(is_bullpen %in% TRUE)) %>%
-          dplyr::pull(CustomGameID) %>% unique()
-      }
+      sel_games <- as.character(input$GameInput %||% character(0))
+      sel_seasons <- as.character(input$season_groups %||% character(0))
       d <- rv$df %>%
         dplyr::filter(
           Pitcher == input$PitcherInput,
           !(is_bullpen %in% TRUE),
-          CustomGameID %in% sel_games,
           !(as.character(PitchType) %in% "Bad data")
-        ) %>%
+        )
+      season_col <- intersect(c("SeasonGroup", "SeasonTag", "Season"), names(d))[1]
+      if (length(sel_seasons)) {
+        d <- if (is.na(season_col)) d[0, , drop = FALSE] else
+          d %>% dplyr::filter(.data[[season_col]] %in% sel_seasons)
+      }
+      if (length(sel_games)) {
+        d <- d %>% dplyr::filter(.data$CustomGameID %in% sel_games)
+      }
+      d <- d %>%
         dplyr::mutate(
           BatterSideStd = dplyr::case_when(
             BatterSide %in% c("L","Left","LHH","LH") ~ "L",
@@ -9031,19 +9037,23 @@ server <- function(input, output, session){
       if (length(gids)) d <- d %>% dplyr::filter(CustomGameID_BP %in% gids)
       d$CustomGameID <- d$CustomGameID_BP
     } else {
-      sel_games <- input$GameInput
-      if (is.null(sel_games) || !length(sel_games)) {
-        sel_games <- rv$df %>%
-          dplyr::filter(Pitcher == input$PitcherInput, !(is_bullpen %in% TRUE)) %>%
-          dplyr::pull(CustomGameID) %>% unique()
-      }
+      sel_games <- as.character(input$GameInput %||% character(0))
+      sel_seasons <- as.character(input$season_groups %||% character(0))
       d <- rv$df %>%
         dplyr::filter(
           Pitcher == input$PitcherInput,
           !(is_bullpen %in% TRUE),
-          CustomGameID %in% sel_games,
           !(as.character(PitchType) %in% "Bad data")
-        ) %>%
+        )
+      season_col <- intersect(c("SeasonGroup", "SeasonTag", "Season"), names(d))[1]
+      if (length(sel_seasons)) {
+        d <- if (is.na(season_col)) d[0, , drop = FALSE] else
+          d %>% dplyr::filter(.data[[season_col]] %in% sel_seasons)
+      }
+      if (length(sel_games)) {
+        d <- d %>% dplyr::filter(.data$CustomGameID %in% sel_games)
+      }
+      d <- d %>%
         dplyr::mutate(
           BatterSideStd = dplyr::case_when(
             BatterSide %in% c("L","Left","LHH","LH") ~ "L",
