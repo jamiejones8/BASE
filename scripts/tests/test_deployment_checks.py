@@ -14,6 +14,10 @@ RUNTIME_MODELS = (
     "BASE_SCOUT_MODELS_FILE",
     "BASE_PITCHER_LOCATION_MODEL_FILE",
 )
+VALDR_ARCHIVE = (
+    "https://cran.r-project.org/src/contrib/Archive/valdr/"
+    "valdr_3.0.0.tar.gz"
+)
 
 
 class DeploymentChecks(unittest.TestCase):
@@ -59,6 +63,17 @@ class DeploymentChecks(unittest.TestCase):
     def test_unknown_mode_cannot_disable_checks(self):
         output = self.check("--skip-models", success=False)
         self.assertIn("Usage:", output)
+
+    def test_valdr_bypasses_the_predating_package_snapshot(self):
+        for filename in ("Dockerfile", "Dockerfile.dependencies"):
+            source = (ROOT / filename).read_text(encoding="utf-8")
+            install2_block = source.split("RUN install2.r --error", 1)[1].split("\nRUN ", 1)[0]
+            install2_packages = "\n".join(
+                line for line in install2_block.splitlines()
+                if not line.lstrip().startswith("#")
+            )
+            self.assertNotIn("valdr", install2_packages, filename)
+            self.assertIn(VALDR_ARCHIVE, source, filename)
 
 
 if __name__ == "__main__":
