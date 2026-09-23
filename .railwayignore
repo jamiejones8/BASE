@@ -4,6 +4,12 @@
 .runtime-builder-deps
 .runtime-build-output*
 .runtime-build-output-defense
+
+Sports Science/data/
+Sports Science/cmj_sprint_share_handoff/
+Sports Science/vald_shiny_app/.R-library/
+Sports Science/vald_shiny_app/.Renviron
+Sports Science/vald_shiny_app/data/
 scripts/__pycache__
 data/D1 Defense File.parquet
 data/external/CapeCod26.parquet

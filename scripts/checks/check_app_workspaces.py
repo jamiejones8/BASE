@@ -18,6 +18,7 @@ WALLY_HITTING_PATH = ROOT / "WallyApps" / "HittingApp" / "HittingApp.R"
 WALLY_DEFENSE_PATH = ROOT / "WallyApps" / "DefenseApp" / "DefenseApp.R"
 WALLY_SCOUTING_PATH = ROOT / "WallyApps" / "ScoutingApp" / "ScoutingApp.R"
 WALLY_JUCO_PATH = ROOT / "WallyApps" / "JucoStatsApp" / "app.R"
+PLAYER_HEALTH_PATH = ROOT / "Sports Science" / "vald_shiny_app" / "dashboard.R"
 
 
 def fail(message: str) -> None:
@@ -38,12 +39,13 @@ def main() -> int:
         "homebase",
         "juco_stats",
         "data_processing",
+        "player_health",
     ]
     ids = [item.get("id") for item in workspaces]
     if ids != expected_ids:
         fail(f"Workspace order differs from the approved hierarchy: {ids}")
-    if [item.get("order") for item in workspaces] != list(range(1, 9)):
-        fail("Workspace order values must be contiguous from 1 through 8.")
+    if [item.get("order") for item in workspaces] != list(range(1, 10)):
+        fail("Workspace order values must be contiguous from 1 through 9.")
 
     navigation = config.get("navigation", {})
     if navigation.get("global_navbar") != "hidden":
@@ -113,6 +115,18 @@ def main() -> int:
     if not {"trackman_2026_fall_import", "trackman_2027_season_import"}.issubset(processing_tool_ids):
         fail("Data Processing must declare both future TrackMan season importers.")
 
+    player_health = by_id["player_health"]
+    expected_health_tools = {
+        "Alert Inbox",
+        "Team Overview",
+        "Athlete Profile",
+        "CMJ Monitoring",
+        "Sprint / SmartSpeed",
+        "Curve View (Force Tracing)",
+    }
+    if set(player_health.get("tools", [])) != expected_health_tools:
+        fail("Player Health must expose all six Sports Science workflows.")
+
     known_routes = set(sources.get("feature_routes", {}))
     for workspace in workspaces:
         route = workspace.get("source_route")
@@ -138,6 +152,7 @@ def main() -> int:
         "tab_defense_workspace",
         "tab_homebase",
         "tab_data_processing",
+        "tab_player_health",
     ]
     missing_tabs = [tab for tab in routed_tabs if tab not in app_source]
     if missing_tabs:
@@ -152,18 +167,11 @@ def main() -> int:
         '"homebase", "homeBASE.jpg"',
         '"juco_stats", "jucoscouting.png"',
         '"data_processing", "dataprocessing.jpg"',
+        '"player_health", "medicine.jpg"',
     ]
     card_positions = [app_source.find(target) for target in card_targets]
     if any(position < 0 for position in card_positions) or card_positions != sorted(card_positions):
-        fail("Home cards are missing or differ from the approved eight-workspace order.")
-    planned_health_card = (
-        '"player_health", "medicine.jpg"'
-    )
-    if planned_health_card not in app_source:
-        fail("The planned Player Health card is missing from Home.")
-    if re.search(r"^\s*player_health\s*=", app_source, re.MULTILINE):
-        fail("Player Health must remain a disabled planned card until its workspace is implemented.")
-
+        fail("Home cards are missing or differ from the approved nine-workspace order.")
     if 'id = "base-shell-home"' not in app_source:
         fail("The persistent Home control is not implemented in the app shell.")
     if 'base_source("R/integrations/wally_pitching_workspace.R"' not in app_source:
@@ -186,6 +194,12 @@ def main() -> int:
         fail("JUCO Scouting is not registered for lazy initialization.")
     if "base_juco_stats_workspace_ui()" not in app_source:
         fail("JUCO Scouting does not render the integrated JucoStatsApp workspace.")
+    if 'base_source("R/integrations/player_health_workspace.R"' not in app_source:
+        fail("The Player Health workspace adapter is not sourced by BASE.")
+    if 'input, session, "tab_player_health"' not in app_source:
+        fail("Player Health is not registered for lazy initialization.")
+    if "base_player_health_workspace_ui()" not in app_source:
+        fail("Player Health does not render the Sports Science dashboard.")
     postgame_outputs = {
         "base_postgame_pitching_aar",
         "base_postgame_hitting_aar",
@@ -218,6 +232,7 @@ def main() -> int:
         "Wally Defense": WALLY_DEFENSE_PATH.read_text(encoding="utf-8"),
         "Wally Scouting": WALLY_SCOUTING_PATH.read_text(encoding="utf-8"),
         "Wally JUCO": WALLY_JUCO_PATH.read_text(encoding="utf-8"),
+        "Player Health": PLAYER_HEALTH_PATH.read_text(encoding="utf-8"),
     }
     source_ids = {name: shiny_ids(source) for name, source in integrated_sources.items()}
     names = list(source_ids)
@@ -230,7 +245,7 @@ def main() -> int:
                     f"{shared_ids}"
                 )
 
-    print("BASE workspace hierarchy and unified shell are valid: Home plus 8 ordered workspaces.")
+    print("BASE workspace hierarchy and unified shell are valid: Home plus 9 ordered workspaces.")
     return 0
 
 

@@ -1,0 +1,11 @@
+# Suitable for a host scheduler; paths resolve independently of its working directory.
+args <- commandArgs(trailingOnly = FALSE)
+file_arg <- sub("^--file=", "", args[grepl("^--file=", args)])
+if (length(file_arg)) setwd(dirname(normalizePath(file_arg[[1]])))
+if (dir.exists(".R-library")) .libPaths(c(normalizePath(".R-library"), .libPaths()))
+if (file.exists(".Renviron")) readRenviron(".Renviron")
+Sys.setenv(VALD_APP_ROOT = normalizePath(getwd()), VALD_REFRESH_WORKER = "true")
+source("dashboard.R", local = globalenv())
+result <- run_refresh_job(force = "--force" %in% commandArgs(trailingOnly = TRUE))
+cat(result$message, "\n")
+quit(status = if (isTRUE(result$ok)) 0L else 1L)

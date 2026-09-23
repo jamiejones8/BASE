@@ -11,6 +11,9 @@ home:
 - `R/reports/`: report rendering code such as pitcher cards.
 - `R/services/`: schedule and external API adapters.
 - `R/integrations/`: adapters for the integrated Wally workspaces.
+- `Sports Science/vald_shiny_app/`: Player Health dashboard and VALD/SmartSpeed
+  refresh source. Runtime athlete data, credentials, and local R libraries are
+  private and excluded from source control.
 - `config/`: team-specific roster and schedule inputs.
 - `data/reference/`: stable lookup tables and reference CSVs used by the app.
 - `data/external/`: optional supplemental datasets such as Cape Cod data.

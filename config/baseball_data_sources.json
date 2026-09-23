@@ -137,6 +137,21 @@
       "rules": [
         "JUCO aggregate statistics are not NCAA Division I pitch events and must not be unioned into the canonical pitch table."
       ]
+    },
+    "player_health_monitoring": {
+      "status": "selected_private_domain",
+      "label": "Texas State Player Health monitoring",
+      "authority": "VALD ForceDecks and SmartSpeed",
+      "deployment_envs": [
+        "BASE_PLAYER_HEALTH_GOLD_DIR",
+        "BASE_PLAYER_HEALTH_LEGACY_DIR",
+        "BASE_PLAYER_HEALTH_STATE_DIR"
+      ],
+      "rules": [
+        "Keep athlete monitoring records and VALD credentials out of source control.",
+        "Use processed dashboard snapshots for reads and a separate background worker for live refreshes.",
+        "Do not merge Player Health measurements into the canonical pitch-event dataset."
+      ]
     }
   },
   "feature_routes": {
@@ -189,6 +204,9 @@
       "texas_state_internal_pitch_events",
       "ncaa_d1_defense_alignment_2026",
       "pitch_retag_overrides"
+    ],
+    "player_health": [
+      "player_health_monitoring"
     ],
     "texas_state_history_and_internal": [
       "texas_state_internal_pitch_events",

@@ -26,6 +26,7 @@ RUN install2.r --error \
     base64enc pdftools \
     plotly gridExtra png sysfonts showtext rsvg \
     shinyBS shinyWidgets shinycssloaders tibble rvest \
-    cowplot ggplotify ggpubr ggtext hms jpeg lubridate ragg readxl
+    cowplot ggplotify ggpubr ggtext hms jpeg lubridate ragg readxl \
+    callr filelock httr2 keyring tidyverse valdr
 
 RUN Rscript -e "install.packages(c('arrow','lightgbm'), repos='https://packagemanager.posit.co/cran/latest')"

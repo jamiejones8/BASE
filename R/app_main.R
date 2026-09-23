@@ -37,6 +37,7 @@ base_source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 base_source("R/integrations/wally_hitting_workspace.R", local = FALSE)
 base_source("R/integrations/wally_scouting_workspace.R", local = FALSE)
 base_source("R/integrations/wally_juco_stats_workspace.R", local = FALSE)
+base_source("R/integrations/player_health_workspace.R", local = FALSE)
 base_source("R/pages/homebase_page.R", local = FALSE)
 base_source("R/data/defense_data_access.R", local = FALSE)
 base_source("R/integrations/wally_defense_workspace.R", local = FALSE)
@@ -4061,6 +4062,7 @@ BASE_NAV_TABS <- c(
   defense_workspace  = "tab_defense_workspace",
   homebase           = "tab_homebase",
   data_processing    = "tab_data_processing",
+  player_health      = "tab_player_health",
   catcher            = "tab_catcher",
   hitter             = "tab_hitter",
   hitter_scouting    = "tab_hitter_scouting",
@@ -4694,6 +4696,7 @@ base_application_ui <- navbarPage(
   tabPanel("HomeBASE",         value = "tab_homebase",       homebase_page_ui()),
   tabPanel("JUCO Scouting",    value = "tab_juco_stats",     base_juco_stats_workspace_ui()),
   tabPanel("Data Processing",  value = "tab_data_processing", data_processing_workspace_ui()),
+  tabPanel("Player Health",    value = "tab_player_health",   base_player_health_workspace_ui()),
   tabPanel("Pitcher Reports",  value = "tab_pitcher",        pitcher_card_ui()),
   tabPanel("Hitter Reports",   value = "tab_hitter",         hitter_ui()),
   tabPanel("Catcher Reports",  value = "tab_catcher",        catcher_ui()),
@@ -4787,6 +4790,11 @@ server <- function(input, output, session) {
     input, session, "tab_juco_stats",
     initialize = function() base_juco_stats_workspace_server(input, output, session),
     id = "juco_stats"
+  )
+  base_lazy_workspace_server(
+    input, session, "tab_player_health",
+    initialize = function() base_player_health_workspace_server(input, output, session),
+    id = "player_health"
   )
   base_lazy_workspace_server(
     input, session, c("tab_defense_workspace", "tab_postgame_reports"),

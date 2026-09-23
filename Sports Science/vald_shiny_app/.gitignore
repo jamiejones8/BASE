@@ -1,0 +1,5 @@
+.Renviron
+.R-library/
+data/
+.Rhistory
+.RData

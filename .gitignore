@@ -54,3 +54,12 @@ data/D1 Defense File.parquet
 /WallyApps/DefenseApp/data/
 /WallyApps/ScoutingApp/data/
 /WallyApps/ScoutingApp/outputs/
+
+# Player Health ships source only. Athlete records, credentials, local package
+# libraries, refresh logs, and the unused raw handoff remain local/private.
+/Sports Science/data/
+/Sports Science/cmj_sprint_share_handoff/
+/Sports Science/vald_shiny_app/.R-library/
+/Sports Science/vald_shiny_app/.Renviron
+/Sports Science/vald_shiny_app/data/
+/Sports Science/**/*.Rapp.history

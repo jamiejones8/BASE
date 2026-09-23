@@ -11,9 +11,9 @@ player in the complete College26 source.
 
 ## Unified application shell
 
-Home is the directory for eight focused workspaces: Postgame Reports,
+Home is the directory for nine focused workspaces: Postgame Reports,
 Pitching, Hitting, Opponent Scouting, Defensive Analytics, HomeBASE,
-JUCO Scouting, and Data Processing. The legacy global navbar is hidden and a
+JUCO Scouting, Data Processing, and Player Health. The legacy global navbar is hidden and a
 persistent Home control remains available from every page.
 
 Pitching, Hitting, Defense, Opponent Scouting, and JUCO Scouting are Wally workspace
@@ -28,6 +28,15 @@ single-game catcher AAR lives under Postgame Reports. See
 [`docs/wallyapps/HITTING_INTEGRATION.md`](docs/wallyapps/HITTING_INTEGRATION.md),
 [`docs/wallyapps/DEFENSE_INTEGRATION.md`](docs/wallyapps/DEFENSE_INTEGRATION.md),
 and [`docs/wallyapps/SCOUTING_INTEGRATION.md`](docs/wallyapps/SCOUTING_INTEGRATION.md).
+
+Player Health embeds the Sports Science VALD/SmartSpeed dashboard as a lazy
+BASE workspace. Its Alert Inbox, Team Overview, Athlete Profile, CMJ
+Monitoring, Sprint/SmartSpeed, and Force Tracing workflows retain their source
+calculations and exports while using scoped BASE presentation. Athlete data,
+refresh state, and API credentials stay in private storage. Configure
+`BASE_PLAYER_HEALTH_GOLD_DIR`, `BASE_PLAYER_HEALTH_LEGACY_DIR`, and
+`BASE_PLAYER_HEALTH_STATE_DIR` for deployment; set the `VALD_*` variables in
+the environment to enable live refresh.
 
 The integrated Pitching and Hitting workspaces use the season, squad, and
 bullpen CSV files stored in their respective `WallyApps/*/data` folders. Their
@@ -93,6 +102,8 @@ import, reload BASE to rebuild that workspace from the updated file.
 
 - `R/` holds the main application source, split by config, data helpers,
   modules, pages, reports, services, and integrations.
+- `Sports Science/vald_shiny_app/` holds the embedded Player Health source and
+  refresh pipeline; its local data, credentials, and package library are ignored.
 - `models/` stores local model artifacts used by scouting and report features.
 - `data/reference/` stores reference tables used directly by the app.
 - `data/external/` stores optional supplemental datasets such as Cape Cod data.

@@ -2,7 +2,8 @@ FROM ghcr.io/jamiejones8/base-r-dependencies:r4.4.2-v1@sha256:e70330ba4c4bc24c34
 WORKDIR /code
 COPY . .
 RUN install2.r --error \
-    shinyWidgets shinycssloaders cowplot ggplotify ggpubr ggtext hms jpeg lubridate ragg readxl
+    shinyWidgets shinycssloaders cowplot ggplotify ggpubr ggtext hms jpeg lubridate ragg readxl \
+    callr filelock httr2 keyring tidyverse valdr
 RUN Rscript -e "files <- list.files('.', pattern='[.]R$', recursive=TRUE); invisible(lapply(files, parse))"
 RUN Rscript scripts/checks/run_all.R --build
 CMD ["sh", "start-railway.sh"]

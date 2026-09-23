@@ -189,6 +189,23 @@
           "behavior": "Validate one bullpen session and Texas State participation, deduplicate stable pitch IDs, then append atomically to the source loaded by Team Pitching."
         }
       ]
+    },
+    {
+      "id": "player_health",
+      "order": 9,
+      "title": "Player Health",
+      "description": "Monitor CMJ readiness, sprint performance, athlete trends, alerts, and ForceDecks traces.",
+      "implementation_policy": "Embed the Sports Science VALD/SmartSpeed dashboard inside the BASE shell, preserve its scoring and exports, and scope only the presentation layer to BASE styling.",
+      "source_route": "player_health",
+      "tools": [
+        "Alert Inbox",
+        "Team Overview",
+        "Athlete Profile",
+        "CMJ Monitoring",
+        "Sprint / SmartSpeed",
+        "Curve View (Force Tracing)"
+      ],
+      "data_policy": "Read processed Player Health datasets from configured private storage. VALD credentials and athlete data are not committed to the repository."
     }
   ]
 }
