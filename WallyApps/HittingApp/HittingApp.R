@@ -3936,6 +3936,48 @@ build_swing_decisions_tbl <- function(d){
   return(tbl)
 }
 
+# PDF devices cannot reliably render color emoji. Build each umpire marker as
+# vector artwork inside a nested, physically square viewport. The outer tree is
+# intentionally viewport-free because gtable assigns it the (rectangular) table
+# cell viewport when drawing; keeping the square on the inner tree prevents the
+# marker from being compressed vertically with the cell.
+hitting_aar_umpire_icon_grob <- function(marker, size_in = 0.18) {
+  marker <- as.character(marker %||% "")
+  icon <- if (identical(marker, "🍀")) {
+    grid::grobTree(
+      grid::segmentsGrob(x0 = .50, y0 = .18, x1 = .54, y1 = .42,
+                         gp = grid::gpar(col = "#1B5E20", lwd = 1.4)),
+      grid::circleGrob(x = c(.43, .57, .43, .57), y = c(.48, .48, .62, .62), r = .10,
+                       gp = grid::gpar(fill = "#2E7D32", col = "#1B5E20", lwd = .6))
+    )
+  } else if (identical(marker, "🤖")) {
+    grid::grobTree(
+      grid::segmentsGrob(x0 = .50, y0 = .70, x1 = .56, y1 = .82,
+                         gp = grid::gpar(col = "#455A64", lwd = 1.1)),
+      grid::circleGrob(x = .57, y = .84, r = .025,
+                       gp = grid::gpar(fill = "#90A4AE", col = "#455A64", lwd = .5)),
+      grid::roundrectGrob(x = .50, y = .51, width = .52, height = .38,
+                          r = grid::unit(.06, "npc"),
+                          gp = grid::gpar(fill = "#B0BEC5", col = "#455A64", lwd = .8)),
+      grid::circleGrob(x = c(.42, .58), y = .55, r = .035,
+                       gp = grid::gpar(fill = "#263238", col = NA)),
+      grid::segmentsGrob(x0 = .40, y0 = .43, x1 = .60, y1 = .43,
+                         gp = grid::gpar(col = "#455A64", lwd = .8))
+    )
+  } else {
+    return(grid::nullGrob())
+  }
+
+  square_icon <- grid::grobTree(
+    icon,
+    vp = grid::viewport(
+      width = grid::unit(size_in, "in"),
+      height = grid::unit(size_in, "in")
+    )
+  )
+  grid::grobTree(square_icon)
+}
+
 # Auto column widths from max string width (header + body), with padding
 compute_table_widths <- function(df, header_cex = 0.9, body_cex = 0.8, pad_mm = 3) {
   hw <- lapply(names(df), function(s) grid::grobWidth(grid::textGrob(s, gp = grid::gpar(cex = header_cex))))
@@ -5884,7 +5926,7 @@ server <- function(input, output, session){
       hb_col  <- pick_col(d, c("HorzBreak", "HorizontalBreak", "HB", "pfx_x", "HorzBrk", "HBreak"))
       ivb_col <- pick_col(d, c("InducedVertBreak", "IVB", "pfx_z", "IndVertBreak", "VertBreak", "VBreak"))
       
-      validate(need(!is.null(hb_col) && !is.null(ivb_col),
+      shiny::validate(shiny::need(!is.null(hb_col) && !is.null(ivb_col),
                     "Missing movement columns (need HorzBreak/HB and InducedVertBreak/IVB or equivalents)."))
       
       d <- d %>%
@@ -5894,7 +5936,7 @@ server <- function(input, output, session){
         ) %>%
         dplyr::filter(is.finite(HB), is.finite(IVB), !is.na(PitchType))
       
-      validate(need(nrow(d) > 10, "Not enough pitches to plot movement density."))
+      shiny::validate(shiny::need(nrow(d) > 10, "Not enough pitches to plot movement density."))
       
       xlim <- calc_limits(d$HB)
       ylim <- calc_limits(d$IVB)
@@ -5957,7 +5999,7 @@ server <- function(input, output, session){
       hb_col  <- pick_col(d, c("HorzBreak", "HorizontalBreak", "HB", "pfx_x", "HorzBrk", "HBreak"))
       ivb_col <- pick_col(d, c("InducedVertBreak", "IVB", "pfx_z", "IndVertBreak", "VertBreak", "VBreak"))
       
-      validate(need(!is.null(hb_col) && !is.null(ivb_col),
+      shiny::validate(shiny::need(!is.null(hb_col) && !is.null(ivb_col),
                     "Missing movement columns (need HorzBreak/HB and InducedVertBreak/IVB or equivalents)."))
       
       d <- d %>%
@@ -5967,7 +6009,7 @@ server <- function(input, output, session){
         ) %>%
         dplyr::filter(is.finite(HB), is.finite(IVB), !is.na(PitchType))
       
-      validate(need(nrow(d) > 10, "Not enough pitches to plot movement density for that pitch type."))
+      shiny::validate(shiny::need(nrow(d) > 10, "Not enough pitches to plot movement density for that pitch type."))
       
       xlim <- calc_limits(d$HB)
       ylim <- calc_limits(d$IVB)
@@ -6028,7 +6070,7 @@ server <- function(input, output, session){
       hb_col  <- pick_col(d, c("HorzBreak", "HorizontalBreak", "HB", "pfx_x", "HorzBrk", "HBreak"))
       ivb_col <- pick_col(d, c("InducedVertBreak", "IVB", "pfx_z", "IndVertBreak", "VertBreak", "VBreak"))
       
-      validate(need(!is.null(hb_col) && !is.null(ivb_col),
+      shiny::validate(shiny::need(!is.null(hb_col) && !is.null(ivb_col),
                     "Missing movement columns (need HorzBreak/HB and InducedVertBreak/IVB or equivalents)."))
       
       d <- d %>%
@@ -6038,7 +6080,7 @@ server <- function(input, output, session){
         ) %>%
         dplyr::filter(is.finite(HB), is.finite(IVB), !is.na(PitchType))
       
-      validate(need(nrow(d) > 10, "Not enough whiffs to plot movement density."))
+      shiny::validate(shiny::need(nrow(d) > 10, "Not enough whiffs to plot movement density."))
       
       xlim <- calc_limits(d$HB)
       ylim <- calc_limits(d$IVB)
@@ -6101,7 +6143,7 @@ server <- function(input, output, session){
       hb_col  <- pick_col(d, c("HorzBreak", "HorizontalBreak", "HB", "pfx_x", "HorzBrk", "HBreak"))
       ivb_col <- pick_col(d, c("InducedVertBreak", "IVB", "pfx_z", "IndVertBreak", "VertBreak", "VBreak"))
       
-      validate(need(!is.null(hb_col) && !is.null(ivb_col),
+      shiny::validate(shiny::need(!is.null(hb_col) && !is.null(ivb_col),
                     "Missing movement columns (need HorzBreak/HB and InducedVertBreak/IVB or equivalents)."))
       
       d <- d %>%
@@ -6111,7 +6153,7 @@ server <- function(input, output, session){
         ) %>%
         dplyr::filter(is.finite(HB), is.finite(IVB), !is.na(PitchType))
       
-      validate(need(nrow(d) > 10, "Not enough whiffs to plot movement density for that pitch type."))
+      shiny::validate(shiny::need(nrow(d) > 10, "Not enough whiffs to plot movement density for that pitch type."))
       
       xlim <- calc_limits(d$HB)
       ylim <- calc_limits(d$IVB)
@@ -6259,11 +6301,11 @@ server <- function(input, output, session){
     if (is.null(sel) || !nzchar(sel) || !(sel %in% gids)) {
       if (length(gids)) sel <- gids[[1]]
     }
-    validate(need(length(gids) > 0 && !is.null(sel) && nzchar(sel), "No games for this hitter."))
+    shiny::validate(shiny::need(length(gids) > 0 && !is.null(sel) && nzchar(sel), "No games for this hitter."))
     
     # Filter to that single game id (BP vs Games use different id columns)
     d <- d %>% dplyr::filter(.data$CustomGameID == sel)
-    validate(need(nrow(d) > 0, "No rows in selected game."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No rows in selected game."))
     
     # robust game-order sorting with fallbacks
     n_now <- nrow(d)
@@ -6423,7 +6465,7 @@ server <- function(input, output, session){
   
   output$aar_table <- DT::renderDT({
     d <- aar_data()
-    validate(need(nrow(d) > 0, "No data for AAR."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No data for AAR."))
     
     tbl <- build_swing_decisions_tbl(d) %>%
       tibble::as_tibble() %>%
@@ -6724,7 +6766,7 @@ server <- function(input, output, session){
   # -------------------- Performance Table --------------------
   output$perf_tbl <- DT::renderDT({
     d <- dat_filt()
-    validate(need(nrow(d) > 0, "No rows in current filter."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No rows in current filter."))
     
     split_mode <- if (is.null(input$hit_perf_split)) "hand" else input$hit_perf_split
     
@@ -6821,14 +6863,14 @@ server <- function(input, output, session){
 
   output$perf_time_series <- renderPlot({
     d <- dat_filt()
-    validate(need(nrow(d) > 0, "No rows in current filter."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No rows in current filter."))
     
     stats_sel <- input$hit_perf_ts_stats
     if (is.null(stats_sel) || !length(stats_sel)) {
       stats_sel <- c("wOBA", "Barrel%", "Whiff%", "Chase%")
     }
     stats_sel <- intersect(stats_sel, performance_timeseries_choices)
-    validate(need(length(stats_sel) > 0, "Select at least one stat."))
+    shiny::validate(shiny::need(length(stats_sel) > 0, "Select at least one stat."))
     
     row_id <- if ("CustomGameID" %in% names(d)) nz_chr(d$CustomGameID) else rep("", nrow(d))
     row_id[!nzchar(row_id)] <- "Selected Data"
@@ -6866,14 +6908,14 @@ server <- function(input, output, session){
     })
     
     ts_wide <- dplyr::bind_rows(rows)
-    validate(need(nrow(ts_wide) > 0, "No date-level rolling stats available."))
+    shiny::validate(shiny::need(nrow(ts_wide) > 0, "No date-level rolling stats available."))
     
     long <- ts_wide %>%
       dplyr::select("DateIndex", "DateLabel", dplyr::all_of(stats_sel)) %>%
       tidyr::pivot_longer(cols = dplyr::all_of(stats_sel), names_to = "Metric", values_to = "Value") %>%
       dplyr::filter(is.finite(.data$Value))
     
-    validate(need(nrow(long) > 0, "No finite values for selected stats."))
+    shiny::validate(shiny::need(nrow(long) > 0, "No finite values for selected stats."))
     
     avg_lookup <- c(D1_NON, D1_PCT)
     ref <- tibble::tibble(
@@ -6934,7 +6976,7 @@ server <- function(input, output, session){
   # ----- AAR strike zone -----
   output$aar_strike <- renderPlot({
     d <- aar_data() %>% dplyr::filter(is.finite(plate_x), is.finite(plate_z))
-    validate(need(nrow(d) > 0, "No zoned pitches."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No zoned pitches."))
     
     d$TypeGroup <- factor(d$TypeGroup, levels = c("HARD","BREAK","SOFT"))
     d$Decision  <- factor(d$Decision,  levels = c("SWING","TAKE"))
@@ -7047,7 +7089,7 @@ server <- function(input, output, session){
   # ----- AAR spray chart (ORIGINAL, authoritative) -----
   output$aar_spray <- renderPlot({
     d <- aar_data()
-    validate(need(nrow(d) > 0, "No spray data"))
+    shiny::validate(shiny::need(nrow(d) > 0, "No spray data"))
     
     grid::grid.newpage()
     grid::grid.draw(build_spray_grob(d, show_numbers = TRUE))
@@ -7056,7 +7098,7 @@ server <- function(input, output, session){
   # ----- AAR contact point (overhead) -----
   output$aar_contact <- renderPlot({
     d <- aar_data()
-    validate(need(nrow(d) > 0, "No contact data"))
+    shiny::validate(shiny::need(nrow(d) > 0, "No contact data"))
     
     # Use same contact columns as app (Z for side, Y for depth)
     cx <- if ("ContactPositionZ" %in% names(d)) to_num(d$ContactPositionZ) else
@@ -7065,7 +7107,7 @@ server <- function(input, output, session){
       if ("ContactY" %in% names(d)) to_num(d$ContactY) else NA_real_
     
     ok <- is.finite(cx) & is.finite(cy)
-    validate(need(any(ok), "No contact points for this game."))
+    shiny::validate(shiny::need(any(ok), "No contact points for this game."))
     
     x <- cx[ok]
     y <- cy[ok]
@@ -7122,7 +7164,7 @@ server <- function(input, output, session){
   # ----- AAR Swing Decisions table (Z-Swing%, Chase%, Pre2K/2K) -----
   output$aar_swing_tbl <- DT::renderDT({
     d <- aar_data()
-    validate(need(nrow(d) > 0, "No rows for selected game."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No rows for selected game."))
     
     balls_col   <- pick_first(c("Balls","BallsBeforePitch","BallCount","BallsCount","PitcherBalls"), d)
     strikes_col <- pick_first(c("Strikes","StrikesBeforePitch","StrikeCount","StrikesCount","PitcherStrikes"), d)
@@ -7206,7 +7248,7 @@ server <- function(input, output, session){
       }
       
       # ---------- get data ----------
-      validate(need(nrow(d) > 0, "No data for AAR."))
+      shiny::validate(shiny::need(nrow(d) > 0, "No data for AAR."))
       
       # ---------- PAGE & COLUMN LAYOUT (Legal 14x8.5, 60/40 split) ----------
       PAGE_W_IN  <- 14.0
@@ -7538,30 +7580,11 @@ server <- function(input, output, session){
       if (length(ump_col) == 1L) {
         core_fg <- which(g_swing_tbl$layout$name == "core-fg" & g_swing_tbl$layout$l == ump_col)
         core_fg <- core_fg[order(g_swing_tbl$layout$t[core_fg])]
-        clover_icon <- function() grid::grobTree(
-          grid::segmentsGrob(x0 = .50, y0 = .18, x1 = .54, y1 = .42,
-                             gp = grid::gpar(col = "#1B5E20", lwd = 1.4)),
-          grid::circleGrob(x = c(.43, .57, .43, .57), y = c(.48, .48, .62, .62), r = .10,
-                           gp = grid::gpar(fill = "#2E7D32", col = "#1B5E20", lwd = .6)),
-          vp = grid::viewport(width = grid::unit(0.18, "in"), height = grid::unit(0.18, "in"))
-        )
-        robot_icon <- function() grid::grobTree(
-          grid::segmentsGrob(x0 = .50, y0 = .70, x1 = .56, y1 = .82,
-                             gp = grid::gpar(col = "#455A64", lwd = 1.1)),
-          grid::circleGrob(x = .57, y = .84, r = .025,
-                           gp = grid::gpar(fill = "#90A4AE", col = "#455A64", lwd = .5)),
-          grid::roundrectGrob(x = .50, y = .51, width = .52, height = .38, r = grid::unit(.06, "npc"),
-                              gp = grid::gpar(fill = "#B0BEC5", col = "#455A64", lwd = .8)),
-          grid::circleGrob(x = c(.42, .58), y = .55, r = .035,
-                           gp = grid::gpar(fill = "#263238", col = NA)),
-          grid::segmentsGrob(x0 = .40, y0 = .43, x1 = .60, y1 = .43,
-                             gp = grid::gpar(col = "#455A64", lwd = .8)),
-          vp = grid::viewport(width = grid::unit(0.18, "in"), height = grid::unit(0.18, "in"))
-        )
         for (j in seq_along(core_fg)) {
           marker <- ump_values_pdf[min(j, length(ump_values_pdf))]
-          if (identical(marker, "🍀")) g_swing_tbl$grobs[[core_fg[j]]] <- clover_icon()
-          if (identical(marker, "🤖")) g_swing_tbl$grobs[[core_fg[j]]] <- robot_icon()
+          if (marker %in% c("🍀", "🤖")) {
+            g_swing_tbl$grobs[[core_fg[j]]] <- hitting_aar_umpire_icon_grob(marker)
+          }
         }
       }
       
@@ -8241,7 +8264,7 @@ server <- function(input, output, session){
   
   # -------------------- Damage Heat Map --------------------
   plot_damage_heat <- function(d){
-    validate(need(nrow(d) > 0, "No rows in current filter."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No rows in current filter."))
     
     # feet for plotting
     x <- to_num(d$plate_x); if (suppressWarnings(max(abs(x), na.rm=TRUE)) > 5) x <- x/12
@@ -8401,7 +8424,7 @@ server <- function(input, output, session){
                                          xlim = c(-2, 2), ylim = c(0, 5),
                                          bw = c(0.55, 0.65), ngrid = 320) {
     
-    validate(need(nrow(d) > 0, "No rows in current filter."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No rows in current filter."))
     
     # Robust feet conversion (handles inches inputs)
     x <- to_num(d$plate_x); if (suppressWarnings(max(abs(x), na.rm = TRUE)) > 5)  x <- x/12
@@ -8413,7 +8436,7 @@ server <- function(input, output, session){
                     px >= xlim[1], px <= xlim[2],
                     pz >= ylim[1], pz <= ylim[2])
     
-    validate(need(nrow(dd) >= 8, "Not enough pitches with locations for a density heatmap."))
+    shiny::validate(shiny::need(nrow(dd) >= 8, "Not enough pitches with locations for a density heatmap."))
     
     # clamp helper (avoids needing scales::squish)
     squish01 <- function(v) pmin(pmax(v, 0), 1)
@@ -8671,7 +8694,7 @@ server <- function(input, output, session){
   output$sd_strikes_taken <- renderPlot({
     d <- sd_filtered_data()
     
-    validate(need("in_zone" %in% names(d), "Zone not computed upstream"))
+    shiny::validate(shiny::need("in_zone" %in% names(d), "Zone not computed upstream"))
     
     # (Common interpretation) called strikes taken in-zone
     d <- d %>%
@@ -8681,7 +8704,7 @@ server <- function(input, output, session){
         is.finite(plate_x), is.finite(plate_z)
       )
     
-    validate(need(nrow(d) > 0, "No taken strikes in-zone in this filter."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No taken strikes in-zone in this filter."))
     
     plot_sd_zone_points(d, title = "Strikes Taken (Called Strikes in Zone)")
   })
@@ -8690,7 +8713,7 @@ server <- function(input, output, session){
   output$sd_balls_chased <- renderPlot({
     d <- sd_filtered_data()
     
-    validate(need("in_zone" %in% names(d), "Zone not computed upstream"))
+    shiny::validate(shiny::need("in_zone" %in% names(d), "Zone not computed upstream"))
    
     d <- d %>%
       dplyr::filter(
@@ -8699,7 +8722,7 @@ server <- function(input, output, session){
         is.finite(plate_x), is.finite(plate_z)
       )
     
-    validate(need(nrow(d) > 0, "No chases (swings outside the zone) in this filter."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No chases (swings outside the zone) in this filter."))
     
     plot_sd_zone_points(d, title = "Balls Chased (Swings Outside Zone Only)")
   })
@@ -8707,7 +8730,7 @@ server <- function(input, output, session){
   output$sd_count_strikes_taken <- renderPlot({
     d <- sd_filtered_data(input$sd_count_groups)
     
-    validate(need("in_zone" %in% names(d), "Zone not computed upstream"))
+    shiny::validate(shiny::need("in_zone" %in% names(d), "Zone not computed upstream"))
     
     d <- d %>%
       dplyr::filter(
@@ -8716,7 +8739,7 @@ server <- function(input, output, session){
         is.finite(plate_x), is.finite(plate_z)
       )
     
-    validate(need(nrow(d) > 0, "No taken strikes in-zone in this filter."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No taken strikes in-zone in this filter."))
     
     plot_sd_zone_points(d, title = "Strikes Taken (Count Filter)")
   })
@@ -8724,7 +8747,7 @@ server <- function(input, output, session){
   output$sd_count_balls_chased <- renderPlot({
     d <- sd_filtered_data(input$sd_count_groups)
     
-    validate(need("in_zone" %in% names(d), "Zone not computed upstream"))
+    shiny::validate(shiny::need("in_zone" %in% names(d), "Zone not computed upstream"))
     
     d <- d %>%
       dplyr::filter(
@@ -8733,7 +8756,7 @@ server <- function(input, output, session){
         is.finite(plate_x), is.finite(plate_z)
       )
     
-    validate(need(nrow(d) > 0, "No chases (swings outside the zone) in this filter."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No chases (swings outside the zone) in this filter."))
     
     plot_sd_zone_points(d, title = "Balls Chased (Count Filter)")
   })
@@ -8950,7 +8973,7 @@ server <- function(input, output, session){
   # --- TOTAL spray chart (this was blank) ---
   output$spray_chart <- renderPlot({
     d <- prep_ball_flight(dat_filt())
-    validate(need(nrow(d) > 0, "No batted balls in this filter (after EV bins)."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No batted balls in this filter (after EV bins)."))
     
     grid::grid.newpage()
     grid::grid.draw(build_spray_grob(d))
@@ -8975,7 +8998,7 @@ server <- function(input, output, session){
         output[[pid_local]] <- renderPlot({
           dd <- prep_ball_flight(dat_filt()) %>%
             dplyr::filter(as.character(PitchType) == pt_local)
-          validate(need(nrow(dd) > 0, ""))
+          shiny::validate(shiny::need(nrow(dd) > 0, ""))
           
           grid::grid.newpage()
           grid::grid.draw(build_spray_grob(dd))
@@ -9075,7 +9098,7 @@ server <- function(input, output, session){
   
   hsh_season_tbl <- function(){
     d_game <- aar_data()
-    validate(need(nrow(d_game) > 0, "No data for AAR."))
+    shiny::validate(shiny::need(nrow(d_game) > 0, "No data for AAR."))
     
     sg <- season_group_for_game(d_game)
     info <- season_info_from_group(sg)
@@ -9176,7 +9199,7 @@ server <- function(input, output, session){
       d <- d %>% dplyr::distinct(Date, Inning, PAofInning, PitchofPA, .keep_all = TRUE)
     }
     
-    validate(need(nrow(d) > 0, "No data for that game."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No data for that game."))
     d
   })
   
@@ -9369,7 +9392,7 @@ server <- function(input, output, session){
   })
   
   contact_depth_table <- function(dd){
-    validate(need(nrow(dd) > 0, "No contact points in this filter."))
+    shiny::validate(shiny::need(nrow(dd) > 0, "No contact points in this filter."))
     
     ev_val <- if ("ev" %in% names(dd)) to_num(dd$ev) else to_num(dd$EV)
     w_con  <- contact_event_weight(dd$play_result)
@@ -9493,7 +9516,7 @@ server <- function(input, output, session){
   
   output$contact_point_total_tbl <- DT::renderDT({
     d <- contact_point_data()
-    validate(need(nrow(d) > 0, "No contact points in this filter."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No contact points in this filter."))
     
     sel <- plotly::event_data("plotly_selected", source = "contact_total")
     if (!is.null(sel) && nrow(sel) > 0 && "key" %in% names(sel)) {

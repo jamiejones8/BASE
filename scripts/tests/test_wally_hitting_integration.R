@@ -82,6 +82,15 @@ if (!grepl("rgba\\(46,125,50", workspace$player_severity_fill(1))) {
 if (!grepl("^#[0-9A-Fa-f]{6}$", workspace$d1_shade_fill(.40, .30))) {
   fail("Hitting AAR shading is not using PDF-safe hexadecimal colors.")
 }
+for (marker in c("🍀", "🤖")) {
+  icon <- workspace$hitting_aar_umpire_icon_grob(marker)
+  square_vp <- icon$children[[1]]$vp
+  icon_width <- grid::convertWidth(square_vp$width, "in", valueOnly = TRUE)
+  icon_height <- grid::convertHeight(square_vp$height, "in", valueOnly = TRUE)
+  if (!isTRUE(all.equal(icon_width, icon_height)) || !is.null(icon$vp)) {
+    fail("Hitting AAR umpire icons are not isolated in a square PDF viewport.")
+  }
+}
 # One standard deviation above/below the supplied means is approximately
 # the 84th/16th percentile; the mean is neutral at the 50th percentile.
 shade_values <- tibble::tibble(
@@ -166,6 +175,15 @@ hitting_leaderboard_pdf <- Sys.getenv("BASE_HITTING_LEADERBOARD_QA", unset = "")
 if (!nzchar(hitting_leaderboard_pdf)) {
   hitting_leaderboard_pdf <- tempfile(fileext = ".pdf")
   on.exit(unlink(hitting_leaderboard_pdf), add = TRUE)
+}
+
+# Reproduce the production package order from the logs: Player Health attaches
+# jsonlite after Hitting, so an unqualified validate() resolves to JSON
+# validation rather than shiny::validate(). Hitting outputs must be immune to
+# that search-path collision.
+suppressPackageStartupMessages(library(jsonlite))
+if (!identical(find("validate")[[1]], "package:jsonlite")) {
+  fail("Regression setup did not mask shiny::validate with jsonlite::validate.")
 }
 
 shiny::testServer(workspace$server, {
