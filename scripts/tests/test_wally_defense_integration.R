@@ -38,12 +38,40 @@ defense_fixture$SeasonGroup <- "S26"
 catching_fixture$source_file <- "2026 Season - canonical.parquet"
 catching_fixture$row_in_file <- seq_len(nrow(catching_fixture))
 catching_fixture$SeasonGroup <- "S26"
+catching_fixture$.base_source_priority <- 1L
+
+if (!"F26" %in% names(base_catching_supplement_candidates()) ||
+    basename(base_catching_supplement_candidates()[["F26"]]) != "2026 Fall - cleaned.csv") {
+  fail("Catcher reports do not discover the volume-backed 2026 Fall TrackMan source.")
+}
+
+# Mirror a current fall scrimmage with distinct game/event identifiers. This
+# exercises the merged season + F26 report pool without a Railway volume.
+fall_catching_fixture <- catching_fixture
+fall_catching_fixture$Date <- as.Date("2026-09-24")
+fall_catching_fixture$GameID <- paste0("fall-", fall_catching_fixture$GameID)
+fall_catching_fixture$GameUID <- paste0("fall-", fall_catching_fixture$GameUID)
+fall_catching_fixture$PitchUID <- paste0("fall-", fall_catching_fixture$PitchUID)
+fall_catching_fixture$PlayID <- paste0("fall-", fall_catching_fixture$PlayID)
+fall_catching_fixture$source_file <- "2026 Fall - cleaned.csv"
+fall_catching_fixture$row_in_file <- seq_len(nrow(fall_catching_fixture))
+fall_catching_fixture$SeasonGroup <- "F26"
+fall_catching_fixture$.base_source_priority <- 2L
+
+catching_history_fixture <- base_prepare_team_catching_data(
+  catching_fixture,
+  fall_catching_fixture
+)
+if (!all(c("F26", "S26") %in% unique(catching_history_fixture$SeasonGroup)) ||
+    nrow(catching_history_fixture) <= nrow(catching_fixture)) {
+  fail("Current and fall catcher rows were not merged into one report pool.")
+}
 
 # Override only the adapter's input boundary. Wally's original standardization,
 # metrics, UI, and server still execute unchanged inside the embedded workspace.
 base_prepare_wally_defense_rows <- function() defense_fixture
 base_prepare_wally_batted_rows <- function(defense_rows) batted_fixture
-base_prepare_wally_catching_rows <- function(startup_rows = NULL) catching_fixture
+base_prepare_wally_catching_rows <- function(startup_rows = NULL) catching_history_fixture
 base_prepare_catcher_framing_baseline <- function() baseline_fixture
 
 workspace <- base_wally_defense_environment(catching_fixture)
@@ -91,6 +119,9 @@ if (!grepl(first_postgame_catcher, postgame_html, fixed = TRUE)) {
 }
 if (!length(workspace$base_catching_postgame_game_choices)) {
   fail("Moved Catcher AAR rendered without initial game choices.")
+}
+if (!"F26" %in% unname(workspace$SEASON_CHOICES)) {
+  fail("Defense season controls do not expose the catcher fall-data season.")
 }
 
 summary_rows <- workspace$summarize_defense(workspace$defense_df)
@@ -162,10 +193,23 @@ shiny::testServer(workspace$server, {
   session$flushReact()
   catcher_games <- games_for_catcher()
   if (!nrow(catcher_games)) fail("Moved Catcher AAR returned no game choices.")
-  session$setInputs(def_AARCatchGame = catcher_games$gid[[1]])
+  fall_games <- catcher_games %>% dplyr::filter(.data$season == "F26")
+  if (!nrow(fall_games)) fail("Moved Catcher AAR did not expose fall game choices.")
+  session$setInputs(def_AARCatchGame = fall_games$gid[[1]])
   session$flushReact()
-  if (!nrow(aar_catch_data())) fail("Moved Catcher AAR returned no fixture rows.")
-  if (!nrow(catch_aar_recent_reports())) fail("Catcher Recent AARs returned no fixture rows.")
+  fall_report <- aar_catch_data()
+  if (!nrow(fall_report) || !all(fall_report$SeasonGroup == "F26")) {
+    fail("Moved Catcher AAR did not load the selected fall report.")
+  }
+  session$setInputs(def_season_groups = "F26")
+  session$flushReact()
+  recent_fall <- catch_aar_recent_reports()
+  fall_game_ids <- unique(workspace$catching_df$CustomGameID[workspace$catching_df$SeasonGroup == "F26"])
+  if (!nrow(recent_fall) || !all(recent_fall$CustomGameID %in% fall_game_ids)) {
+    fail("Catcher Recent AARs did not filter to fall reports.")
+  }
+  session$setInputs(def_season_groups = "S26")
+  session$flushReact()
   invisible(output$def_catcher_ball_to_strike_plot)
   invisible(output$def_catcher_strike_to_ball_plot)
   invisible(output$def_catcher_ball_to_strike_stats)

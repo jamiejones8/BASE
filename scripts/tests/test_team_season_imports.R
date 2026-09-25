@@ -37,7 +37,11 @@ game <- tibble::tibble(
   BatterTeam = c("OPP", TEAM_CONFIG$data_code, "OPP"),
   Pitcher = c("Bobcat Pitcher", "Opponent Pitcher", "Bobcat Pitcher"),
   Batter = c("Opponent Hitter", "Bobcat Hitter", "Opponent Hitter"),
-  PitchCall = c("StrikeCalled", "InPlay", "BallCalled")
+  PitchCall = c("StrikeCalled", "InPlay", "BallCalled"),
+  Catcher = c("Bobcat Catcher", "Opponent Catcher", "Bobcat Catcher"),
+  CatcherTeam = c(TEAM_CONFIG$data_code, "OPP", TEAM_CONFIG$data_code),
+  PlateLocSide = c(-0.2, 0.1, 0.8),
+  PlateLocHeight = c(2.4, 2.8, 1.9)
 )
 game_path <- file.path(scratch, "fall-game.csv")
 readr::write_csv(game, game_path)
@@ -118,14 +122,24 @@ if (!isTRUE(status$exists) || status$size <= 0 || status$target$label != "2026 F
 TEAM_CONFIG$data$team_season_import_dir <- scratch
 source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 source("R/integrations/wally_hitting_workspace.R", local = FALSE)
+source("R/integrations/wally_defense_workspace.R", local = FALSE)
 future_pitching <- base_read_pitching_source(first$destination)
 future_hitting <- base_read_hitting_source(first$destination)
 future_hitting <- future_hitting[base_team_matches(future_hitting$BatterTeam), , drop = FALSE]
+future_catching <- base_read_catching_source(first$destination)
+future_catching <- future_catching[base_team_matches(future_catching$CatcherTeam), , drop = FALSE]
 if (nrow(future_pitching) != 3L || !all(future_pitching$SeasonGroup == "F26")) {
   fail("The Pitching loader did not select and label future Texas State pitching rows.")
 }
 if (nrow(future_hitting) != 2L || !all(future_hitting$SeasonGroup == "F26")) {
   fail("The Hitting loader did not select and label future Texas State batting rows.")
 }
+if (nrow(future_catching) != 3L || !all(future_catching$SeasonGroup == "F26") ||
+    !identical(
+      unname(normalizePath(base_catching_supplement_candidates()[["F26"]], mustWork = FALSE)),
+      normalizePath(first$destination, mustWork = FALSE)
+    )) {
+  fail("The Catcher AAR loader did not read and label 2026 Fall rows from the configured volume.")
+}
 
-cat("Team TrackMan import tests passed: season and bullpen append, deduplication, schema evolution, and validation.\n")
+cat("Team TrackMan import tests passed: season/catcher volume loading, bullpen append, deduplication, schema evolution, and validation.\n")

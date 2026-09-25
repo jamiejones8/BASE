@@ -4483,6 +4483,7 @@ data_processing_server <- function(input, output, session) {
       base_clear_team_hitting_cache()
       base_clear_wally_pitching_state()
       base_clear_wally_hitting_state()
+      base_clear_wally_defense_state()
       homebase_clear_history_cache()
       state(list(type = "success", result = result))
       shiny::showNotification(

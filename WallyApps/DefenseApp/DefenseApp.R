@@ -1227,7 +1227,12 @@ framing_zone_stats <- function(d, mode = c("ball_to_strike", "strike_to_ball")) 
 }
 
 SEASON_CHOICES <- {
-  vals <- unique(defense_df$season)
+  catching_seasons <- if ("SeasonGroup" %in% names(catching_df)) {
+    catching_df$SeasonGroup
+  } else {
+    character(0)
+  }
+  vals <- unique(c(defense_df$season, catching_seasons))
   vals <- vals[!is.na(vals) & nzchar(vals)]
   vals <- unique(c("S26", vals))
   labels <- season_label[vals]

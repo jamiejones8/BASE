@@ -1,5 +1,9 @@
 # Adapter for Wally's DefenseApp inside the unified BASE application.
 
+if (!exists("base_team_season_import_paths", mode = "function")) {
+  base_source("R/data/team_season_imports.R", local = FALSE)
+}
+
 BASE_WALLY_DEFENSE_FILE <- base_project_path("WallyApps", "DefenseApp", "DefenseApp.R")
 BASE_WALLY_DEFENSE_REQUIRED_PACKAGES <- c(
   "bslib", "dplyr", "DT", "ggplot2", "gridExtra", "htmltools", "purrr", "readr",
@@ -7,6 +11,139 @@ BASE_WALLY_DEFENSE_REQUIRED_PACKAGES <- c(
 )
 
 .base_wally_defense_state <- new.env(parent = emptyenv())
+
+# Catcher receiving is recorded on the team's pitching exports. Keep last
+# season available locally and read current/future scrimmage imports from the
+# configured persistent volume (BASE_TEAM_SEASON_IMPORT_DIR).
+BASE_WALLY_CATCHING_LEGACY_DATA_FILES <- c(
+  S26 = "2026 Season - cleaned.csv"
+)
+
+base_catching_supplement_candidates <- function() {
+  root <- base_project_path("WallyApps", "PitchingApp", "data")
+  c(
+    stats::setNames(
+      file.path(root, unname(BASE_WALLY_CATCHING_LEGACY_DATA_FILES)),
+      names(BASE_WALLY_CATCHING_LEGACY_DATA_FILES)
+    ),
+    base_team_season_import_paths(existing_only = FALSE)
+  )
+}
+
+base_read_catching_source <- function(path) {
+  ext <- tolower(tools::file_ext(path))
+  rows <- if (ext == "parquet") {
+    arrow::read_parquet(path) %>% tibble::as_tibble()
+  } else {
+    readr::read_csv(
+      path,
+      col_types = readr::cols(.default = readr::col_character()),
+      show_col_types = FALSE
+    )
+  }
+  rows$source_file <- basename(path)
+  rows$row_in_file <- seq_len(nrow(rows))
+  source_files <- stats::setNames(
+    basename(base_catching_supplement_candidates()),
+    names(base_catching_supplement_candidates())
+  )
+  rows$SeasonGroup <- names(source_files)[match(basename(path), source_files)]
+  rows
+}
+
+base_catching_supplement_rows <- function() {
+  paths <- base_catching_supplement_candidates()
+  paths <- paths[file.exists(paths)]
+  if (!length(paths)) return(tibble::tibble())
+
+  rows <- lapply(paths, function(path) {
+    tryCatch(
+      base_read_catching_source(path),
+      error = function(e) {
+        message("Texas State catching supplement failed: ", path, " — ", e$message)
+        tibble::tibble()
+      }
+    )
+  })
+  rows <- rows[vapply(rows, nrow, integer(1)) > 0L]
+  if (!length(rows)) return(tibble::tibble())
+
+  rows <- lapply(rows, function(frame) {
+    team_col <- intersect(c("CatcherTeam", "PitcherTeam"), names(frame))
+    if (length(team_col)) {
+      frame <- frame[base_team_matches(frame[[team_col[[1]]]]), , drop = FALSE]
+    }
+    frame[] <- lapply(frame, as.character)
+    frame
+  })
+  rows <- rows[vapply(rows, nrow, integer(1)) > 0L]
+  if (!length(rows)) return(tibble::tibble())
+
+  out <- dplyr::bind_rows(rows)
+  out$DataSource <- paste0("Texas State internal — ", out$source_file)
+  out$.base_source_priority <- 2L
+  out
+}
+
+base_catching_event_key <- function(rows) {
+  n <- nrow(rows)
+  value <- function(name) {
+    if (name %in% names(rows)) trimws(as.character(rows[[name]])) else rep("", n)
+  }
+  pitch_uid <- value("PitchUID")
+  play_id <- value("PlayID")
+  fallback <- do.call(
+    paste,
+    c(lapply(
+      c(
+        "Date", "GameID", "GameUID", "Catcher", "Pitcher", "Inning",
+        "PAofInning", "PitchofPA", "Batter", "PlateLocSide", "PlateLocHeight"
+      ),
+      value
+    ), sep = "\u001f")
+  )
+  has_fallback <- nzchar(gsub("\u001f", "", fallback, fixed = TRUE))
+  dplyr::case_when(
+    nzchar(pitch_uid) ~ paste0("pitch:", pitch_uid),
+    nzchar(play_id) ~ paste0("play:", play_id),
+    has_fallback ~ paste0("event:", fallback),
+    TRUE ~ paste0("row:", seq_len(n))
+  )
+}
+
+base_prepare_team_catching_data <- function(current_rows = NULL, supplement_rows = NULL) {
+  sources <- Filter(
+    function(frame) is.data.frame(frame) && nrow(frame) > 0L,
+    list(current_rows, supplement_rows)
+  )
+  if (!length(sources)) return(tibble::tibble())
+
+  sources <- lapply(sources, function(frame) {
+    frame <- tibble::as_tibble(frame)
+    frame[] <- lapply(frame, as.character)
+    frame
+  })
+  rows <- dplyr::bind_rows(sources)
+  rows$.base_source_priority <- suppressWarnings(as.integer(rows$.base_source_priority))
+  rows$.base_source_priority[is.na(rows$.base_source_priority)] <- 2L
+  rows <- rows %>%
+    dplyr::arrange(.data$.base_source_priority) %>%
+    dplyr::mutate(.base_event_key = base_catching_event_key(.)) %>%
+    dplyr::distinct(.data$.base_event_key, .keep_all = TRUE) %>%
+    dplyr::select(-".base_event_key", -".base_source_priority")
+
+  id_like <- intersect(
+    names(rows),
+    c(
+      "PitchUID", "PlayID", "PitcherId", "BatterId", "CatcherId",
+      "GameId", "PitcherID", "BatterID", "CatcherID", "GameID", "GameUID",
+      "source_file", "SeasonGroup"
+    )
+  )
+  spec <- readr::cols(.default = readr::col_guess())
+  for (name in id_like) spec$cols[[name]] <- readr::col_character()
+  suppressMessages(readr::type_convert(rows, col_types = spec))
+}
 
 base_defense_dev_file <- function(name) {
   base_project_path("WallyApps", "DefenseApp", "data", name)
@@ -73,12 +210,15 @@ base_prepare_wally_catching_rows <- function(startup_rows = NULL) {
   if (!nrow(rows)) {
     rows <- base_read_defense_csv(base_defense_dev_file("Catchers - 2026 Season-cleaned.csv"))
   }
-  if (!nrow(rows)) return(rows)
-  rows$source_file <- "2026 Season - NCAA D1.parquet"
-  rows$row_in_file <- seq_len(nrow(rows))
-  rows$SeasonGroup <- "S26"
-  rows$DataSource <- BASE_NCAA_D1_SOURCE_LABEL
-  rows
+  if (nrow(rows)) {
+    rows$source_file <- "2026 Season - NCAA D1.parquet"
+    rows$row_in_file <- seq_len(nrow(rows))
+    rows$SeasonGroup <- "S26"
+    rows$DataSource <- BASE_NCAA_D1_SOURCE_LABEL
+    rows$.base_source_priority <- 1L
+  }
+
+  base_prepare_team_catching_data(rows, base_catching_supplement_rows())
 }
 
 base_prepare_catcher_framing_baseline <- function() {
@@ -156,6 +296,12 @@ base_wally_defense_environment <- function(startup_rows = NULL) {
   }
   assign("environment", workspace, envir = .base_wally_defense_state)
   workspace
+}
+
+base_clear_wally_defense_state <- function() {
+  keys <- ls(.base_wally_defense_state, all.names = TRUE)
+  if (length(keys)) rm(list = keys, envir = .base_wally_defense_state)
+  invisible(TRUE)
 }
 
 base_team_defense_workspace_ui <- function() {
