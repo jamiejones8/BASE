@@ -108,6 +108,14 @@ suppressPackageStartupMessages({
 # ------------------------------------------------------------
 GOLD_DIR   <- Sys.getenv("CMJ_SPRINT_SHARE_GOLD_DIR", file.path(getwd(), "data", "gold"))
 LEGACY_DIR <- Sys.getenv("CMJ_SPRINT_SHARE_LEGACY_DIR", file.path(getwd(), "data", "legacy"))
+PLAYER_HEALTH_ROSTER_FILE <- Sys.getenv(
+  "BASE_PLAYER_HEALTH_ROSTER_FILE",
+  unset = Sys.getenv("BASE_ROSTER_FILE", unset = "")
+)
+PLAYER_HEALTH_CROSSWALK_FILE <- Sys.getenv(
+  "BASE_PLAYER_HEALTH_CROSSWALK_FILE",
+  unset = file.path(LEGACY_DIR, "player_health_crosswalk.csv")
+)
 
 dashboard_data_path <- function(filename) {
   gold_path <- file.path(GOLD_DIR, filename)
@@ -119,6 +127,11 @@ dashboard_data_path <- function(filename) {
 # Small shared utilities
 # ============================================================
 `%||%` <- function(a, b) if (!is.null(a)) a else b
+
+source(
+  file.path(Sys.getenv("VALD_APP_ROOT", getwd()), "R", "player_health_roster.R"),
+  local = TRUE
+)
 
 safe_read_rds <- function(path) {
   if (!file.exists(path)) return(NULL)
@@ -205,7 +218,8 @@ TXST <- list(
   line = "#1f2937", white = "rgba(255,255,255,0.92)"
 )
 
-ACTIVE_CMJ_CUTOFF <- as.Date("2026-08-01")
+ACTIVE_CMJ_CUTOFF <- as.Date(Sys.getenv("BASE_PLAYER_HEALTH_ACTIVE_CUTOFF", "2026-08-01"))
+if (is.na(ACTIVE_CMJ_CUTOFF)) stop("BASE_PLAYER_HEALTH_ACTIVE_CUTOFF must be YYYY-MM-DD.", call. = FALSE)
 
 # ============================================================
 # Season phases (config/season_phases.yml equivalent) -- update these dates
@@ -471,6 +485,13 @@ score_cmj_vulnerability <- function(ms, thresholds = load_thresholds()) {
     group_by(profileId, athleteName, externalId, roleGroup) |>
     group_modify(~{
       df <- .x
+      if (!(.y$roleGroup[[1]] %in% c("Pitchers", "Hitters"))) {
+        return(tibble(
+          TriggerCount = 0L, RedTriggers = 0L, CMJ_Composite = NA_real_,
+          PerformanceTrendingUp = FALSE, Status = "No Recent Data",
+          reason_text = "Athlete role is not assigned; role-specific CMJ scoring was not applied."
+        ))
+      }
       role_key <- if (identical(.y$roleGroup[[1]], "Pitchers")) "pitchers" else "hitters"
       base_path <- c("cmj", role_key, "vulnerability")
 
@@ -546,6 +567,14 @@ score_cmj_performance <- function(ms, thresholds = load_thresholds()) {
     group_by(profileId, athleteName, externalId, roleGroup) |>
     group_modify(~{
       df <- .x
+      if (!(.y$roleGroup[[1]] %in% c("Pitchers", "Hitters"))) {
+        return(tibble(
+          CMJ_Performance_Status = "No Recent Data",
+          CMJ_Performance_Composite = NA_real_,
+          CMJ_Performance_PositiveTriggers = 0L,
+          CMJ_Performance_Reason = "Athlete role is not assigned; role-specific CMJ scoring was not applied."
+        ))
+      }
       role_key <- if (identical(.y$roleGroup[[1]], "Pitchers")) "pitchers" else "hitters"
       base_path <- c("cmj", role_key, "performance")
       ct_delta <- cmj_metric_value(df, "Contraction Time", "delta")
@@ -988,11 +1017,17 @@ resolve_data_paths <- function() {
 load_shared_data <- function() {
   paths <- resolve_data_paths()
   shared_data$paths <- paths
-  shared_data$roster <- ensure_cols(safe_read_rds(paths$roster))
+  shared_data$raw_roster <- ensure_cols(safe_read_rds(paths$roster))
+  shared_data$roster <- reconcile_player_health_roster(
+    shared_data$raw_roster,
+    team_roster_path = if (nzchar(PLAYER_HEALTH_ROSTER_FILE)) PLAYER_HEALTH_ROSTER_FILE else player_health_default_roster_path(),
+    crosswalk_path = PLAYER_HEALTH_CROSSWALK_FILE
+  )
   shared_data$session_summary <- ensure_cols(safe_read_rds(paths$summary))
-  shared_data$sprint <- safe_read_rds(paths$sprint)
+  shared_data$sprint <- reconcile_player_health_sprint(safe_read_rds(paths$sprint), shared_data$roster)
   shared_data$tests <- ensure_cols(safe_read_rds(paths$tests))
   shared_data$trials_long <- safe_read_rds(paths$trials_long)
+  shared_data$identity_summary <- player_health_identity_summary(shared_data$roster, shared_data$raw_roster)
 
   missing <- c()
   if (!file.exists(paths$roster)) missing <- c(missing, "roster_baseball.rds")
@@ -1002,6 +1037,19 @@ load_shared_data <- function() {
   } else {
     paste0("Missing required file(s): ", paste(missing, collapse = ", "), ". Set CMJ_SPRINT_SHARE_GOLD_DIR / CMJ_SPRINT_SHARE_LEGACY_DIR or copy files into ./data/gold or ./Data.")
   }
+  invisible(shared_data)
+}
+
+reconcile_shared_player_health_identity <- function() {
+  raw_roster <- shared_data$raw_roster %||% shared_data$roster
+  shared_data$raw_roster <- raw_roster
+  shared_data$roster <- reconcile_player_health_roster(
+    raw_roster,
+    team_roster_path = if (nzchar(PLAYER_HEALTH_ROSTER_FILE)) PLAYER_HEALTH_ROSTER_FILE else player_health_default_roster_path(),
+    crosswalk_path = PLAYER_HEALTH_CROSSWALK_FILE
+  )
+  shared_data$sprint <- reconcile_player_health_sprint(shared_data$sprint, shared_data$roster)
+  shared_data$identity_summary <- player_health_identity_summary(shared_data$roster, raw_roster)
   invisible(shared_data)
 }
 # Data is loaded by refresh_runtime.R from a complete published snapshot.
@@ -1161,7 +1209,7 @@ player_health_dashboard_content <- tagList(
     layout_sidebar(
       sidebar = sidebar(
         title = "Filters", width = 300, open = "desktop",
-        selectInput("alert_role_filter", "Role", choices = c("Pitchers", "Hitters"), selected = c("Pitchers", "Hitters"), multiple = TRUE),
+        selectInput("alert_role_filter", "Role", choices = c("Pitchers", "Hitters", "Unknown"), selected = c("Pitchers", "Hitters", "Unknown"), multiple = TRUE),
         selectInput("alert_status_filter", "Status", choices = c("Red", "Yellow", "Blue", "Green", "No Recent Data"), selected = c("Red", "Yellow", "Blue", "Green", "No Recent Data"), multiple = TRUE),
         selectInput("alert_confidence_filter", "Confidence", choices = c("High", "Moderate", "Low", "No Recent Data"), selected = c("High", "Moderate", "Low", "No Recent Data"), multiple = TRUE),
         selectInput("alert_window_days", "Date window", choices = c("7 days" = 7, "14 days" = 14, "28 days" = 28, "Season" = 365), selected = 28),
@@ -1185,7 +1233,7 @@ player_health_dashboard_content <- tagList(
     tags$div(class = "tiny subtle", style = "margin-bottom:10px;", "Roster snapshot, coach export pack, and the most recent CMJ preset for every active athlete."),
     layout_columns(
       col_widths = c(1, 11),
-      card(card_body(selectInput("team_group", NULL, choices = c("All", "Pitchers", "Hitters"), selected = "All", width = "100%"))),
+      card(card_body(selectInput("team_group", NULL, choices = c("All", "Pitchers", "Hitters", "Unknown"), selected = "All", width = "100%"))),
       card(card_header(tags$b("Team snapshot")), card_body(uiOutput("team_kpis")))
     ),
     card(card_header(tags$b("Coach Export Pack")), card_body(
@@ -1232,7 +1280,7 @@ player_health_dashboard_content <- tagList(
     layout_sidebar(
       sidebar = sidebar(
         title = "Filters", width = 280, open = "desktop",
-        selectInput("cmj_monitor_role", "Role", choices = c("All", "Pitchers", "Hitters"), selected = "All"),
+        selectInput("cmj_monitor_role", "Role", choices = c("All", "Pitchers", "Hitters", "Unknown"), selected = "All"),
         selectInput("cmj_window_days", "Status window (for coverage + distribution)", choices = c("Last 7 days" = 7, "Last 14 days" = 14, "Last 28 days" = 28), selected = 28),
         downloadButton("cmj_report_csv", "Download CMJ Report CSV")
       ),
@@ -1269,8 +1317,8 @@ player_health_dashboard_content <- tagList(
       sidebar = sidebar(
         title = "Filters", width = 280, open = "desktop",
         selectInput("sprint_window_days", "Date window", choices = c("Last 14 days" = 14, "Last 28 days" = 28, "Season" = 365), selected = 28),
-        selectInput("sprint_role_filter", "Role", choices = c("All", "Pitchers", "Hitters"), selected = "All"),
-        selectInput("sprint_metric", "Sprint metric", choices = c("Best 10-yard" = "best_10yd", "Best 30-yard" = "best_30yd", "Flying 10-yard" = "best_flying_10yd", "Max velocity" = "max_velocity"), selected = "best_10yd"),
+        selectInput("sprint_role_filter", "Role", choices = c("All", "Pitchers", "Hitters", "Unknown"), selected = "All"),
+        uiOutput("sprint_metric_ui"),
         textInput("sprint_search", "Search athlete", value = "", placeholder = "Name or ID")
       ),
       card(card_header(tags$b("Latest Sprint Testing")), card_body(tags$div(style = "overflow-x:auto;", tableOutput("sprint_latest_dt")))),
@@ -1382,7 +1430,36 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   output$data_status_ui <- renderUI({
     reload_trigger(); refresh_message()
-    tags$span(paste(shared_data$status, refresh_message(), sep = " | "))
+    refresh_state <- tryCatch(read_refresh_state(), error = function(e) list())
+    identity <- shared_data$identity_summary %||% list()
+    cmj <- shared_data$session_summary
+    sprint <- shared_data$sprint
+    latest_cmj <- if (!is.null(cmj) && is.data.frame(cmj) && nrow(cmj) && "session_date" %in% names(cmj)) {
+      dates <- as_date_safely(cmj$session_date)
+      if (any(!is.na(dates))) as.character(max(dates, na.rm = TRUE)) else "-"
+    } else "-"
+    latest_sprint <- if (!is.null(sprint) && is.data.frame(sprint) && nrow(sprint) && "test_date" %in% names(sprint)) {
+      dates <- as_date_safely(sprint$test_date)
+      if (any(!is.na(dates))) as.character(max(dates, na.rm = TRUE)) else "-"
+    } else "-"
+    success_text <- if (!is.null(refresh_state$success) && !is.na(refresh_state$success)) {
+      format(refresh_state$success, "%Y-%m-%d %H:%M %Z")
+    } else "not yet"
+    roster_text <- paste0(
+      identity$roster_total %||% 0L, " rostered; ",
+      identity$matched %||% 0L, " mapped; ",
+      identity$unmatched %||% 0L, " awaiting mapping"
+    )
+    tagList(
+      tags$span(paste(shared_data$status, refresh_message(), sep = " | ")),
+      tags$br(),
+      tags$span(class = "tiny subtle", paste0(
+        "Last successful refresh: ", success_text,
+        " | Latest CMJ: ", latest_cmj,
+        " | Latest sprint: ", latest_sprint,
+        " | ", roster_text
+      ))
+    )
   })
 
   team_id <- Sys.getenv("VALD_TEAM_ID")
@@ -1403,13 +1480,15 @@ server <- function(input, output, session) {
     r %>% mutate(
       profileId = as.character(profileId %||% ""), athleteName = as.character(athleteName %||% ""),
       externalId = as.character(externalId %||% ""), primaryGroup = as.character(primaryGroup %||% "Other"),
-      roleGroup = ifelse(primaryGroup == "Pitchers", "Pitchers", "Hitters")
+      roleGroup = if ("roleGroup" %in% names(r)) as.character(roleGroup) else player_health_role_group(primaryGroup),
+      roleGroup = ifelse(is.na(roleGroup) | !nzchar(roleGroup), player_health_role_group(primaryGroup), roleGroup)
     ) %>% filter(nzchar(profileId)) %>% distinct(profileId, .keep_all = TRUE)
   })
 
   season_roster_tbl <- reactive({
     r <- roster_tbl(); s <- fd_session_summary()
     if (is.null(r) || nrow(r) == 0) return(empty_roster_tbl)
+    if ("rosterSource" %in% names(r) && any(r$rosterSource == "BASE roster")) return(r)
     if (is.null(s) || nrow(s) == 0) return(r %>% filter(FALSE))
     dc <- get_date_col(s); if (is.null(dc)) return(r %>% filter(FALSE))
     in_season_ids <- s %>% mutate(session_date__ = as_date_safely(.data[[dc]])) %>%
@@ -1609,14 +1688,21 @@ server <- function(input, output, session) {
         TriggerCount = ifelse(is.na(TriggerCount), 0, TriggerCount),
         PerformanceTrendingUp = ifelse(is.na(PerformanceTrendingUp), FALSE, PerformanceTrendingUp),
         CMJ_Confidence = dplyr::coalesce(CMJ_Confidence, "No Recent Data"),
-        reason_text = dplyr::coalesce(reason_text, "No CMJ vulnerability triggers in the selected window.")
+        reason_text = dplyr::case_when(
+          Status == "No Recent Data" & is.na(CMJ_Last_Date) ~ "No CMJ data is available for this rostered athlete in the current season.",
+          TRUE ~ dplyr::coalesce(reason_text, "No CMJ vulnerability triggers in the selected window.")
+        )
       ) %>% select(-any_of(c("athleteName_roster", "externalId_roster", "roleGroup_roster")))
   })
 
   active_roster_tbl <- reactive({
-    r <- roster_tbl(); s <- fd_session_summary()
+    r <- season_roster_tbl(); s <- fd_session_summary()
     empty_active <- r %>% filter(FALSE) %>% select(profileId, athleteName, externalId, roleGroup)
-    if (is.null(r) || nrow(r) == 0 || is.null(s) || nrow(s) == 0) return(empty_active)
+    if (is.null(r) || nrow(r) == 0) return(empty_active)
+    if ("rosterSource" %in% names(r) && any(r$rosterSource == "BASE roster")) {
+      return(r %>% select(profileId, athleteName, externalId, roleGroup))
+    }
+    if (is.null(s) || nrow(s) == 0) return(empty_active)
     dc <- get_date_col(s); if (is.null(dc)) return(empty_active)
     active_ids <- s %>% filter(testType == "CMJ", profileId %in% r$profileId) %>%
       mutate(session_date__ = as_date_safely(.data[[dc]])) %>% filter(!is.na(session_date__), session_date__ >= ACTIVE_CMJ_CUTOFF) %>%
@@ -1652,7 +1738,7 @@ server <- function(input, output, session) {
   filtered_alert_rows <- reactive({
     rows <- staff_alert_rows_raw()
     if (is.null(rows) || nrow(rows) == 0) return(tibble())
-    role_keep <- input$alert_role_filter %||% c("Pitchers", "Hitters")
+    role_keep <- input$alert_role_filter %||% c("Pitchers", "Hitters", "Unknown")
     status_keep <- input$alert_status_filter %||% c("Red", "Yellow", "Blue", "Green", "No Recent Data")
     conf_keep <- input$alert_confidence_filter %||% c("High", "Moderate", "Low", "No Recent Data")
     days <- as.integer(input$alert_window_days %||% 28L)
@@ -1757,11 +1843,11 @@ server <- function(input, output, session) {
     mc <- get_metric_id_col(s); dc <- get_date_col(s); bc <- get_best_col(s); mnc <- get_mean_col(s); sdc <- get_sd_col(s); cvc <- get_cv_col(s)
     req(!is.null(mc), !is.null(dc)); req(!is.null(bc) || !is.null(mnc))
     role_sel <- input$team_group %||% "All"
-    roster2 <- r; if (role_sel %in% c("Pitchers", "Hitters")) roster2 <- roster2 %>% filter(roleGroup == role_sel)
+    roster2 <- r; if (role_sel %in% c("Pitchers", "Hitters", "Unknown")) roster2 <- roster2 %>% filter(roleGroup == role_sel)
     needed_names <- unique(c(HITTER_METRICS_ORDERED, "Peak Power", "Bodyweight in Pounds", PITCHER_PERF_METRICS, PITCHER_INJURY_VALUE_METRICS, PITCHER_INJURY_SD_METRICS))
     needed_ids <- preset_to_available_ids(s, needed_names); if (length(needed_ids) == 0) return(tibble())
     long <- s %>% filter(testType == "CMJ", profileId %in% roster2$profileId, .data[[mc]] %in% needed_ids) %>%
-      mutate(session_date__ = as_date_safely(.data[[dc]])) %>% filter(!is.na(session_date__)) %>%
+      mutate(session_date__ = as_date_safely(.data[[dc]])) %>% filter(!is.na(session_date__), session_date__ >= ACTIVE_CMJ_CUTOFF) %>%
       group_by(profileId) %>% filter(session_date__ == max(session_date__, na.rm = TRUE)) %>% ungroup() %>%
       left_join(roster2, by = "profileId") %>% standardize_joined_names() %>%
       select(-any_of(c("athleteName.x", "athleteName.y", "externalId.x", "externalId.y"))) %>%
@@ -1796,9 +1882,9 @@ server <- function(input, output, session) {
     mc <- get_metric_id_col(s); dc <- get_date_col(s); bc <- get_best_col(s)
     req(!is.null(mc), !is.null(dc), !is.null(bc))
     role_sel <- input$team_group %||% "All"
-    roster2 <- r; if (role_sel %in% c("Pitchers", "Hitters")) roster2 <- roster2 %>% filter(roleGroup == role_sel)
+    roster2 <- r; if (role_sel %in% c("Pitchers", "Hitters", "Unknown")) roster2 <- roster2 %>% filter(roleGroup == role_sel)
     long <- s %>% filter(testType == "CMJ", profileId %in% roster2$profileId) %>%
-      mutate(session_date__ = as_date_safely(.data[[dc]])) %>% filter(!is.na(session_date__)) %>%
+      mutate(session_date__ = as_date_safely(.data[[dc]])) %>% filter(!is.na(session_date__), session_date__ >= ACTIVE_CMJ_CUTOFF) %>%
       group_by(profileId) %>% filter(session_date__ == max(session_date__, na.rm = TRUE)) %>% ungroup() %>%
       left_join(roster2, by = "profileId") %>% standardize_joined_names() %>%
       select(-any_of(c("athleteName.x", "athleteName.y", "externalId.x", "externalId.y"))) %>%
@@ -1816,7 +1902,7 @@ server <- function(input, output, session) {
 
   output$team_kpis <- renderUI({
     r <- active_roster_tbl(); role_sel <- input$team_group %||% "All"
-    roster2 <- r; if (role_sel %in% c("Pitchers", "Hitters")) roster2 <- roster2 %>% filter(roleGroup == role_sel)
+    roster2 <- r; if (role_sel %in% c("Pitchers", "Hitters", "Unknown")) roster2 <- roster2 %>% filter(roleGroup == role_sel)
     df <- team_latest_cmj_needed()
     last_dates <- if (is.null(df) || nrow(df) == 0) tibble() else df %>% distinct(profileId, session_date)
     layout_columns(col_widths = c(3, 3, 3, 3),
@@ -1924,7 +2010,7 @@ server <- function(input, output, session) {
   build_team_report_status_rows <- function(role_sel) {
     rows <- tryCatch(staff_alert_rows_raw(), error = function(e) tibble())
     if (is.null(rows) || nrow(rows) == 0) return(empty_team_report_status_rows)
-    if (role_sel %in% c("Pitchers", "Hitters")) rows <- rows %>% filter(role == role_sel)
+    if (role_sel %in% c("Pitchers", "Hitters", "Unknown")) rows <- rows %>% filter(role == role_sel)
     if (nrow(rows) == 0) return(empty_team_report_status_rows)
     rows %>% mutate(Reason = trimws(sub("\\s*Threshold used:.*$", "", as.character(primary_reason %||% ""))),
                      Reason = ifelse(nzchar(Reason), Reason, "No elevated signal."), rank__ = status_rank(current_status)) %>%
@@ -1933,7 +2019,7 @@ server <- function(input, output, session) {
   }
   build_team_report_payload <- function(role_override = NULL) {
     role_sel <- role_override %||% (input$team_group %||% "All")
-    active <- active_roster_tbl(); if (!is.null(active) && nrow(active) > 0 && role_sel %in% c("Pitchers", "Hitters")) active <- active %>% filter(roleGroup == role_sel)
+    active <- active_roster_tbl(); if (!is.null(active) && nrow(active) > 0 && role_sel %in% c("Pitchers", "Hitters", "Unknown")) active <- active %>% filter(roleGroup == role_sel)
     active_n <- if (is.null(active)) 0L else nrow(active)
     status_rows <- build_team_report_status_rows(role_sel)
     list(generated_at = format(Sys.time(), tz = "UTC", usetz = TRUE), role_filter = role_sel, active_cutoff = format(ACTIVE_CMJ_CUTOFF, "%Y-%m-%d"),
@@ -2243,6 +2329,13 @@ server <- function(input, output, session) {
   sprint_scored <- reactive({
     sp <- fd_sprint(); if (is.null(sp) || nrow(sp) == 0) return(data.frame())
     tryCatch(score_smartspeed_performance(sp), error = function(e) data.frame())
+  })
+  output$sprint_metric_ui <- renderUI({
+    days <- suppressWarnings(as.integer(input$sprint_window_days %||% 28L))
+    choices <- player_health_sprint_metric_choices(fd_sprint(), days)
+    current <- isolate(input$sprint_metric)
+    selected <- if (!is.null(current) && current %in% unname(choices)) current else unname(choices)[[1]]
+    selectInput("sprint_metric", "Sprint metric", choices = choices, selected = selected)
   })
   sprint_filtered <- reactive({
     sp <- fd_sprint(); if (is.null(sp) || nrow(sp) == 0) return(data.frame())

@@ -7,6 +7,9 @@
 if (!exists("base_team_season_import_paths", mode = "function")) {
   base_source("R/data/team_season_imports.R", local = FALSE)
 }
+if (!exists("base_d1_aar_benchmarks", mode = "function")) {
+  base_source("R/data/d1_aar_benchmarks.R", local = FALSE)
+}
 
 BASE_WALLY_HITTING_FILE <- base_project_path(
   "WallyApps", "HittingApp", "HittingApp.R"
@@ -642,6 +645,7 @@ base_wally_hitting_environment <- function(team_rows) {
 
   workspace <- new.env(parent = globalenv())
   workspace$BASE_HITTING_DATA <- team_rows
+  workspace$BASE_HITTING_D1_BENCHMARKS <- base_d1_aar_benchmarks()$hitting
   workspace$BASE_HITTING_TEAM_CODE <- TEAM_CONFIG$data_code
   workspace$BASE_HITTING_EMBEDDED <- TRUE
   workspace$BASE_HITTING_XWOBA_GRID_PATH <- TEAM_CONFIG$data$xwoba_grid_file

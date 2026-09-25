@@ -26,6 +26,22 @@ suppressPackageStartupMessages({
   library(grid)     
 })
 
+HITTING_AAR_D1_DEFAULTS <- c(whiff = 0.23, chase = 0.24, barrel = 0.17)
+resolve_hitting_aar_d1_benchmarks <- function(values = get0(
+  "BASE_HITTING_D1_BENCHMARKS",
+  inherits = TRUE,
+  ifnotfound = NULL
+)) {
+  out <- HITTING_AAR_D1_DEFAULTS
+  if (!is.null(values)) {
+    values <- suppressWarnings(as.numeric(unlist(values[names(out)])))
+    valid <- length(values) == length(out) & is.finite(values) & values >= 0 & values <= 1
+    if (length(valid) == length(out) && any(valid)) out[valid] <- values[valid]
+  }
+  out
+}
+HITTING_AAR_D1 <- resolve_hitting_aar_d1_benchmarks()
+
 # ---- Static assets path (works for single-file standalone shinyApp) ----
 if (!isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE)) &&
     dir.exists("www")) {
@@ -3735,6 +3751,59 @@ apply_d1_shading <- function(tbl_num, tbl_fmt, palette = c("coach", "player")){
   apply_hitting_percentile_shading(tbl_num, out, palette)
 }
 
+order_hitting_aar_at_bats <- function(d) {
+  d <- tibble::as_tibble(d)
+  n <- nrow(d)
+  if (!n) return(d)
+
+  numeric_key <- function(candidates) {
+    nm <- intersect(candidates, names(d))
+    if (!length(nm)) return(rep(NA_real_, n))
+    out <- suppressWarnings(readr::parse_number(as.character(d[[nm[[1]]]])))
+    if (length(out) != n) rep(NA_real_, n) else out
+  }
+
+  half_col <- intersect(c("Top/Bottom", "TopBottom", "HalfInning"), names(d))
+  half_key <- if (length(half_col)) {
+    half_chr <- tolower(trimws(as.character(d[[half_col[[1]]]])))
+    dplyr::case_when(
+      half_chr %in% c("top", "t") ~ 1,
+      half_chr %in% c("bottom", "bot", "b") ~ 2,
+      TRUE ~ NA_real_
+    )
+  } else {
+    rep(NA_real_, n)
+  }
+
+  pa_key <- if ("PA_ID" %in% names(d)) {
+    match(as.character(d$PA_ID), unique(as.character(d$PA_ID)))
+  } else {
+    seq_len(n)
+  }
+
+  # Column-major reading order for the AAR: finish every pitch in an at-bat
+  # from top to bottom before moving to the next at-bat.
+  d %>%
+    dplyr::mutate(
+      .aar_inning = numeric_key("Inning"),
+      .aar_half = half_key,
+      .aar_pa = numeric_key("PAofInning"),
+      .aar_pa_id = pa_key,
+      .aar_pitch = dplyr::coalesce(
+        numeric_key("PitchofPA"),
+        numeric_key("PitchNo"),
+        numeric_key("PitchNum")
+      ),
+      .aar_source_row = numeric_key("row_in_file"),
+      .aar_original_row = seq_len(n)
+    ) %>%
+    dplyr::arrange(
+      .aar_inning, .aar_half, .aar_pa, .aar_pa_id,
+      .aar_pitch, .aar_source_row, .aar_original_row
+    ) %>%
+    dplyr::select(-dplyr::starts_with(".aar_"))
+}
+
 build_swing_decisions_tbl <- function(d){
   d <- dplyr::distinct(d)
   # De-dupe by pitch index when available
@@ -3760,6 +3829,7 @@ build_swing_decisions_tbl <- function(d){
   
   # Ensure PA_ID exists (defensive – also added inside aar_data())
   if (!("PA_ID" %in% names(d))) d$PA_ID <- make_pa_id(d)
+  d <- order_hitting_aar_at_bats(d)
   
   
   # Helpers
@@ -6204,7 +6274,7 @@ server <- function(input, output, session){
   
   
   # ---- AAR helpers (constants) ----
-  D1_BENCH <- list(whiff = 0.23, chase = 0.24, barrel = 0.17)  # D1 averages matching the PDF look
+  D1_BENCH <- as.list(HITTING_AAR_D1)
   ptype_group_map <- function(pt){
     ifelse(pt %in% c("Fastball","Sinker"), "HARD",
            ifelse(pt %in% c("Cutter","Slider","Curveball","Sweeper"), "BREAK",
@@ -6356,10 +6426,11 @@ server <- function(input, output, session){
       d <- d %>% dplyr::distinct(dplyr::across(dplyr::everything()), .keep_all = TRUE)
     }
     
-    # Pitch numbering 1..N for this game
-    d$PitchNum <- seq_len(nrow(d))
     # Ensure PA_ID exists for tables that number plate appearances
     d$PA_ID <- make_pa_id(d)
+    d <- order_hitting_aar_at_bats(d)
+    # Pitch numbering 1..N follows the top-to-bottom AAR reading order.
+    d$PitchNum <- seq_len(nrow(d))
     
     # Normalize pitch type (length-safe, works when columns are missing)
     n_now <- nrow(d)
@@ -7990,7 +8061,7 @@ server <- function(input, output, session){
         g <- hsh_rates(d_game)
         s <- hsh_rates(d_season)
         s_perf <- summarize_overall(d_season)
-        d1 <- c(whiff = 0.23, chase = 0.24, barrel = 0.17)
+        d1 <- HITTING_AAR_D1
         
         t0 <- tibble::tibble(
           Metric = c("Whiffs", "Chases", "Barrels"),
@@ -9117,7 +9188,7 @@ server <- function(input, output, session){
     # Season rates should match performance table logic
     s_perf <- summarize_overall(d_season)
     
-    d1 <- c(whiff = 0.23, chase = 0.24, barrel = 0.17)
+    d1 <- HITTING_AAR_D1
     
     tibble::tibble(
       Metric = c("Whiffs", "Chases", "Barrels"),

@@ -68,6 +68,15 @@ if (!any(prepared$PitchUID == "fixture-unique-bullpen-pitch", na.rm = TRUE)) {
 
 workspace <- base_wally_pitching_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Pitching server is unavailable.")
+expected_d1_pitching <- base_d1_aar_benchmarks()$pitching
+actual_d1_pitching <- unlist(workspace$D1_REF[names(expected_d1_pitching)])
+if (!isTRUE(all.equal(actual_d1_pitching, expected_d1_pitching, tolerance = 1e-12))) {
+  fail("Pitching AAR is not using the parquet-derived D1 process benchmarks.")
+}
+empty_evla <- workspace$resolve_ev_la_strict(tibble::tibble(Angle = numeric()))
+if (length(empty_evla$ev) || length(empty_evla$la)) {
+  fail("Empty EV/launch-angle input did not return empty vectors safely.")
+}
 brew_scored <- workspace$compute_brew_stuff(prepared[1:3, , drop = FALSE])
 if (!identical(as.numeric(brew_scored$stuff_plus), rep(123, 3))) {
   fail("Pitching Stuff+ does not delegate to BrewStuff.")
@@ -165,6 +174,12 @@ if (!grepl("aar_dl", postgame_html, fixed = TRUE) ||
 
 pitcher <- as.character(workspace$txst_pitchers[[1]])
 games <- unname(workspace$games_txst)
+pa_grid_game <- workspace$txst_df %>%
+  dplyr::filter(.data$CustomGameID == games[[1]])
+pa_grid <- workspace$compose_AAR_pa_grid_plot(pa_grid_game, max_cols = 2, max_rows = 9)
+if (!identical(pa_grid$patches$layout$byrow, FALSE)) {
+  fail("Pitching AAR plate appearances do not fill top-to-bottom before moving right.")
+}
 aar_render_payload <- NULL
 results_leaderboard_pdf <- Sys.getenv("BASE_PITCHING_RESULTS_LEADERBOARD_QA", unset = "")
 if (!nzchar(results_leaderboard_pdf)) {

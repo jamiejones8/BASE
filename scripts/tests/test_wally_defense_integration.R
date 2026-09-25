@@ -146,6 +146,11 @@ if (!file.exists(report_path) || file.info(report_path)$size <= 0) {
 }
 unlink(report_path)
 
+# Reproduce the unified app's symbol collision from the production log. Catcher
+# outputs must call Shiny's validator explicitly even when another package (for
+# example jsonlite) provides a function with the same name.
+workspace$validate <- function(...) stop("masked non-Shiny validate() was called")
+
 shiny::testServer(workspace$server, {
   session$setInputs(def_season_groups = "S26")
   session$flushReact()
@@ -161,6 +166,12 @@ shiny::testServer(workspace$server, {
   session$flushReact()
   if (!nrow(aar_catch_data())) fail("Moved Catcher AAR returned no fixture rows.")
   if (!nrow(catch_aar_recent_reports())) fail("Catcher Recent AARs returned no fixture rows.")
+  invisible(output$def_catcher_ball_to_strike_plot)
+  invisible(output$def_catcher_strike_to_ball_plot)
+  invisible(output$def_catcher_ball_to_strike_stats)
+  invisible(output$def_catcher_strike_to_ball_stats)
+  invisible(output$def_catcher_ball_to_strike_tbl)
+  invisible(output$def_catcher_strike_to_ball_tbl)
   invisible(output$leaderboard_overall_table)
 })
 

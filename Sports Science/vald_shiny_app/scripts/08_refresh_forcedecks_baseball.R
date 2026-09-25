@@ -39,6 +39,8 @@ suppressPackageStartupMessages({
   library(readr)
 })
 
+sys.source(file.path(ROOT_DIR, "R", "player_health_roster.R"), envir = environment())
+
 # ----------------------------
 # Helpers, config, and a fresh groups/profiles pull -- this now runs BEFORE
 # the full VALD pull below (05/06/07). 06/07 classify "is this athlete
@@ -573,11 +575,17 @@ cat("Unique athletes:", dplyr::n_distinct(m$profileId), "\n")
 # ----------------------------
 # Roster output (baseball only)
 # ----------------------------
-roster <- m %>%
+vald_roster <- m %>%
   distinct(profileId, athleteName, externalId, groupNames_csv, primaryGroup) %>%
   arrange(primaryGroup, athleteName)
 
-saveRDS(roster, OUT_ROSTER_RDS)
+roster <- reconcile_player_health_roster(vald_roster)
+
+# Persist the source VALD catalog. The dashboard reconciles it to the current
+# BASE roster when loading, and retaining the source rows prevents placeholder
+# roster identities from being mistaken for real VALD profiles on a later
+# refresh.
+saveRDS(vald_roster, OUT_ROSTER_RDS)
 cat("Saved roster:\n ", OUT_ROSTER_RDS, "\n")
 
 # ----------------------------

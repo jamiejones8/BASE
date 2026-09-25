@@ -36,7 +36,10 @@ calculations and exports while using scoped BASE presentation. Athlete data,
 refresh state, and API credentials stay in private storage. Configure
 `BASE_PLAYER_HEALTH_GOLD_DIR`, `BASE_PLAYER_HEALTH_LEGACY_DIR`, and
 `BASE_PLAYER_HEALTH_STATE_DIR` for deployment; set the `VALD_*` variables in
-the environment to enable live refresh.
+the environment to enable live refresh. Player Health uses `BASE_ROSTER_FILE`
+as its authoritative current roster. Exact unique athlete-name matches are
+linked automatically; store exceptions in the private CSV configured by
+`BASE_PLAYER_HEALTH_CROSSWALK_FILE` rather than hard-coding athlete IDs.
 
 The integrated Pitching and Hitting workspaces use the season, squad, and
 bullpen CSV files stored in their respective `WallyApps/*/data` folders. Their

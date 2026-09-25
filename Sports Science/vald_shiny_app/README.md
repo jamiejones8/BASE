@@ -25,7 +25,21 @@ Copy `.Renviron.example` to `.Renviron` and fill in your VALD API client ID, cli
 
 Place the optional VALD athlete export with `vald-id` and `Group 1`, `Group 2`, etc. columns in `data/legacy/athletes_export.csv`. It controls pitcher/position grouping. Existing profile groups are retained when the CSV is absent; new athletes without groups remain `Other` under the supplied classification logic. The original dashboard treats non-pitcher roles as hitters.
 
-The original baseball filter is preserved: external IDs must match `TXST-Baseball-` followed by three digits. Athletes outside that pattern are excluded. The supplied cutoff is August 1, 2026; season phases extend through June 2027. Review these constants in `dashboard.R` for future seasons.
+Inside BASE, `BASE_ROSTER_FILE` is the authoritative current roster and its
+`pos_type` column controls pitcher/hitter classification. The integration
+automatically accepts unique exact-name matches between that roster and VALD.
+Players without a safe match remain visible as **No Recent Data**. Resolve
+exceptions with a private `player_health_crosswalk.csv` containing
+`roster_name`, `profileId`, and/or `externalId`, then point
+`BASE_PLAYER_HEALTH_CROSSWALK_FILE` at it. An empty template is available at
+`config_examples/player_health_crosswalk.csv` in the BASE repository.
+
+The original VALD baseball filter is preserved: source identities must have an
+external ID matching `TXST-Baseball-` followed by three digits. Current BASE
+roster players without a matching VALD identity still remain visible. The
+default cutoff is August 1, 2026; set `BASE_PLAYER_HEALTH_ACTIVE_CUTOFF` to a
+new `YYYY-MM-DD` value for a future season. Season phases extend through June
+2027 and remain configured in `dashboard.R`.
 
 No ForceDecks RDS history or API credentials were included in the supplied folder. The three top-level CSV files are not inputs referenced by these scripts. The app therefore starts with an empty-data state rather than invented athlete results.
 
@@ -44,6 +58,11 @@ Rscript "/absolute/path/to/vald_shiny_app/refresh.R" --force
 ```
 
 Without `--force`, it respects the configured interval and retry delay. The command exits nonzero on failure. No operating-system schedule or hosted deployment has been installed by this project. Deploy behind your organization's normal access controls before giving staff network access.
+
+Run `Rscript scripts/checks/audit_player_health_roster.R` from the BASE root
+after refreshing data. It writes two private reconciliation reports into the
+configured Player Health state directory: the current roster mapping and any
+active VALD identities that are not on the current roster.
 
 ## Files and maintenance
 

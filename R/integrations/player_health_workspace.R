@@ -198,11 +198,21 @@ base_player_health_environment <- function() {
     stop("Player Health source is unavailable at ", BASE_PLAYER_HEALTH_FILE)
   }
 
+  configured_roster <- Sys.getenv("BASE_PLAYER_HEALTH_ROSTER_FILE", unset = "")
+  if (!nzchar(trimws(configured_roster)) && exists("TEAM_CONFIG", inherits = TRUE)) {
+    roster_candidate <- get("TEAM_CONFIG", inherits = TRUE)$data$roster_file
+    configured_roster <- if (is.null(roster_candidate)) "" else roster_candidate
+  }
+  if (!nzchar(trimws(configured_roster))) {
+    configured_roster <- base_project_path("config", "texas_state_roster_2027.csv")
+  }
+
   Sys.setenv(
     VALD_APP_ROOT = normalizePath(BASE_PLAYER_HEALTH_ROOT, winslash = "/", mustWork = TRUE),
     CMJ_SPRINT_SHARE_GOLD_DIR = base_player_health_path("BASE_PLAYER_HEALTH_GOLD_DIR", "data", "gold"),
     CMJ_SPRINT_SHARE_LEGACY_DIR = base_player_health_path("BASE_PLAYER_HEALTH_LEGACY_DIR", "data", "legacy"),
-    VALD_REFRESH_DIR = base_player_health_path("BASE_PLAYER_HEALTH_STATE_DIR", "data", "refresh")
+    VALD_REFRESH_DIR = base_player_health_path("BASE_PLAYER_HEALTH_STATE_DIR", "data", "refresh"),
+    BASE_PLAYER_HEALTH_ROSTER_FILE = normalizePath(configured_roster, winslash = "/", mustWork = FALSE)
   )
 
   workspace <- new.env(parent = globalenv())

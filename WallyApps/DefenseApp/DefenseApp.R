@@ -2878,7 +2878,7 @@ server <- function(input, output, session) {
     req(input$def_AARCatcher, input$def_AARCatchGame)
     d <- catcher_receiving_pool() %>%
       dplyr::filter(.data$Catcher == input$def_AARCatcher, .data$CustomGameID == input$def_AARCatchGame)
-    validate(need(nrow(d) > 0, "No rows in selected game for this catcher."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No rows in selected game for this catcher."))
     prepare_catcher_receiving_rows(d)
   })
 
@@ -2907,11 +2907,11 @@ server <- function(input, output, session) {
   cr_strike_to_ball <- reactive(catcher_framing_subset(cr_catch_data(), "strike_to_ball"))
 
   output$def_catcher_ball_to_strike_plot <- renderPlot({
-    validate(need(nrow(catcher_receiving_pool()) > 0, "Add Catchers - (Seasonname).csv to DefenseApp/data to populate catcher reports."))
+    shiny::validate(shiny::need(nrow(catcher_receiving_pool()) > 0, "Add Catchers - (Seasonname).csv to DefenseApp/data to populate catcher reports."))
     catcher_framing_zone_plot(catch_ball_to_strike(), title = "Ball to Strike")
   })
   output$def_catcher_strike_to_ball_plot <- renderPlot({
-    validate(need(nrow(catcher_receiving_pool()) > 0, "Add Catchers - (Seasonname).csv to DefenseApp/data to populate catcher reports."))
+    shiny::validate(shiny::need(nrow(catcher_receiving_pool()) > 0, "Add Catchers - (Seasonname).csv to DefenseApp/data to populate catcher reports."))
     catcher_framing_zone_plot(catch_strike_to_ball(), title = "Strike to Ball")
   })
   output$def_catcher_pitch_legend <- renderPlot(catcher_framing_legend_plot())
@@ -2922,11 +2922,11 @@ server <- function(input, output, session) {
   output$def_catcher_strike_to_ball_tbl <- DT::renderDT(render_catcher_dt(catcher_framing_table(catch_strike_to_ball())))
 
   output$def_cr_ball_to_strike_plot <- renderPlot({
-    validate(need(nrow(catcher_receiving_pool()) > 0, "Add Catchers - (Seasonname).csv to DefenseApp/data to populate catcher season."))
+    shiny::validate(shiny::need(nrow(catcher_receiving_pool()) > 0, "Add Catchers - (Seasonname).csv to DefenseApp/data to populate catcher season."))
     catcher_framing_zone_plot(cr_ball_to_strike(), title = "Strikes Stolen", show_pitch_numbers = FALSE)
   })
   output$def_cr_strike_to_ball_plot <- renderPlot({
-    validate(need(nrow(catcher_receiving_pool()) > 0, "Add Catchers - (Seasonname).csv to DefenseApp/data to populate catcher season."))
+    shiny::validate(shiny::need(nrow(catcher_receiving_pool()) > 0, "Add Catchers - (Seasonname).csv to DefenseApp/data to populate catcher season."))
     catcher_framing_zone_plot(cr_strike_to_ball(), title = "Strikes Lost", show_pitch_numbers = FALSE)
   })
 
@@ -2953,7 +2953,7 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       d <- aar_catch_data()
-      validate(need(nrow(d) > 0, "No data for catcher receiving."))
+      shiny::validate(shiny::need(nrow(d) > 0, "No data for catcher receiving."))
       write_catcher_receiving_pdf(d, name_display(input$def_AARCatcher %||% "Catcher"), file)
     }
   )
@@ -2985,7 +2985,7 @@ server <- function(input, output, session) {
   catcher_aar_data_for <- function(catcher, game_id) {
     d <- catcher_receiving_pool() %>%
       dplyr::filter(.data$Catcher == catcher, .data$CustomGameID == game_id)
-    validate(need(nrow(d) > 0, "No rows in selected game for this catcher."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No rows in selected game for this catcher."))
     prepare_catcher_receiving_rows(d)
   }
 

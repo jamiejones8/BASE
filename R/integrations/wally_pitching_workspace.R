@@ -7,6 +7,9 @@
 if (!exists("base_team_season_import_paths", mode = "function")) {
   base_source("R/data/team_season_imports.R", local = FALSE)
 }
+if (!exists("base_d1_aar_benchmarks", mode = "function")) {
+  base_source("R/data/d1_aar_benchmarks.R", local = FALSE)
+}
 
 BASE_WALLY_PITCHING_FILE <- base_project_path(
   "WallyApps", "PitchingApp", "PitchingApp.R"
@@ -864,6 +867,7 @@ base_wally_pitching_environment <- function(team_rows) {
 
   workspace <- new.env(parent = globalenv())
   workspace$BASE_PITCHING_DATA <- team_rows
+  workspace$BASE_PITCHING_D1_PROCESS_BENCHMARKS <- base_d1_aar_benchmarks()$pitching
   workspace$BASE_PITCHING_EMBEDDED <- TRUE
   workspace$BASE_PITCHING_PERCENTILE_REFERENCE_PATH <- base_project_path(
     "WallyApps", "PitchingApp", "data", "d1_pitch_metric_percentile_reference.csv"

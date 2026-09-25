@@ -65,6 +65,7 @@ load_published_snapshot <- function() {
   if (identical(stamp, snapshot_stamp)) return(FALSE)
   snapshot <- readRDS(snapshot_file)
   list2env(snapshot, shared_data)
+  reconcile_shared_player_health_identity()
   # Snapshots may have been produced on another machine. Never surface its
   # absolute filesystem path in the staff-facing status strip.
   shared_data$status <- paste0(

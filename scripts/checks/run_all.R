@@ -23,6 +23,7 @@ checks <- list(
   c("Rscript", "scripts/tests/test_wally_defense_integration.R"),
   c("Rscript", "scripts/tests/test_wally_scouting_integration.R"),
   c("Rscript", "scripts/tests/test_player_health_integration.R"),
+  c("Rscript", "scripts/tests/test_player_health_roster.R"),
   c("Rscript", "scripts/tests/test_app_startup.R")
 )
 

@@ -28,6 +28,11 @@ library(scales)
 library(lubridate)
 library(hms)
 
+# Pin Shiny's validation helpers inside the isolated workspace. The unified
+# app also loads jsonlite, whose `validate()` otherwise wins name resolution.
+validate <- shiny::validate
+need <- shiny::need
+
 .severity_hex_color <- function(score, good = "#2E7D32", bad = "#D62828") {
   if (!is.finite(score)) return(NA_character_)
   score <- pmin(pmax(score, -1), 1)
@@ -329,8 +334,9 @@ woba_weights <- list(
   HR  = 2.031
 )
 
-# D1 reference constants
-D1_REF <- list(
+# D1 reference values. BASE injects parquet-derived population rates; the
+# historical values remain only as a standalone-development fallback.
+D1_REF_DEFAULTS <- c(
   strike_pct    = 0.65,
   fps_pct       = 0.63,
   pre2k_zone    = 0.50,
@@ -339,6 +345,20 @@ D1_REF <- list(
   zone_pct      = 0.50,
   put_away_pct  = 0.19
 )
+resolve_pitching_aar_d1_benchmarks <- function(values = get0(
+  "BASE_PITCHING_D1_PROCESS_BENCHMARKS",
+  inherits = TRUE,
+  ifnotfound = NULL
+)) {
+  out <- D1_REF_DEFAULTS
+  if (!is.null(values)) {
+    values <- suppressWarnings(as.numeric(unlist(values[names(out)])))
+    valid <- length(values) == length(out) & is.finite(values) & values >= 0 & values <= 1
+    if (length(valid) == length(out) && any(valid)) out[valid] <- values[valid]
+  }
+  as.list(out)
+}
+D1_REF <- resolve_pitching_aar_d1_benchmarks()
 
 # Ensure PA_ID, PitchNum, StrikesPre/BallsPre exist; returns updated df
 ensure_counts <- function(d) {
@@ -474,8 +494,12 @@ resolve_ev_la_strict <- function(d) {
   if (!length(la_cols)) return(list(ev = ev, la = rep(NA_real_, nrow(d))))
   la_list <- lapply(la_cols, function(nm) .to_num(d[[nm]]))
   # pick the column that “looks like LA” (finite & within [-10,60])
-  score <- function(v) mean(is.finite(v) & v >= -10 & v <= 60, na.rm = TRUE)
-  idx <- if ("Angle" %in% la_cols && score(la_list[[which(la_cols=="Angle")]]) >= 0.25) {
+  score <- function(v) {
+    if (!length(v)) return(0)
+    value <- mean(is.finite(v) & v >= -10 & v <= 60, na.rm = TRUE)
+    if (is.finite(value)) value else 0
+  }
+  idx <- if (isTRUE("Angle" %in% la_cols && score(la_list[[which(la_cols=="Angle")]]) >= 0.25)) {
     which(la_cols=="Angle")
   } else {
     which.max(vapply(la_list, score, numeric(1)))
@@ -3864,7 +3888,9 @@ compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {
     plots <- c(plots, blanks)
   }
   
-  patchwork::wrap_plots(plots, ncol = grid_cols, nrow = grid_rows, byrow = TRUE) +
+  # Fill each column from top to bottom so plate appearances read vertically
+  # before continuing in the next column.
+  patchwork::wrap_plots(plots, ncol = grid_cols, nrow = grid_rows, byrow = FALSE) +
     patchwork::plot_layout(
       widths = rep(1, grid_cols),
       heights = rep(1, grid_rows)
@@ -7170,8 +7196,12 @@ resolve_ev_la_strict <- function(d) {
   if (!length(la_cols)) return(list(ev = ev, la = rep(NA_real_, nrow(d))))
   la_list <- lapply(la_cols, function(nm) .to_num(d[[nm]]))
   # pick the column that “looks like LA” (finite & within [-10,60])
-  score <- function(v) mean(is.finite(v) & v >= -10 & v <= 60, na.rm = TRUE)
-  idx <- if ("Angle" %in% la_cols && score(la_list[[which(la_cols=="Angle")]]) >= 0.25) {
+  score <- function(v) {
+    if (!length(v)) return(0)
+    value <- mean(is.finite(v) & v >= -10 & v <= 60, na.rm = TRUE)
+    if (is.finite(value)) value else 0
+  }
+  idx <- if (isTRUE("Angle" %in% la_cols && score(la_list[[which(la_cols=="Angle")]]) >= 0.25)) {
     which(la_cols=="Angle")
   } else {
     which.max(vapply(la_list, score, numeric(1)))
@@ -13007,14 +13037,14 @@ server <- function(input, output, session){
     d
   }
   
-  # ---- D1 benchmarks for AAR process tables (edit if you want different targets) ----
+  # ---- D1 benchmarks for AAR process tables ----
   d1_process_targets <- c(
-    "Strike%"            = 65,
-    "Zone%"              = 50,
-    "1st Pitch Strike%"  = 63,
-    "Pre2K Zone%"        = 50,
-    "E&A%"               = 70,
-    "Put Away%"          = 19
+    "Strike%"            = 100 * D1_REF$strike_pct,
+    "Zone%"              = 100 * D1_REF$zone_pct,
+    "1st Pitch Strike%"  = 100 * D1_REF$fps_pct,
+    "Pre2K Zone%"        = 100 * D1_REF$pre2k_zone,
+    "E&A%"               = 100 * D1_REF$ea_pct,
+    "Put Away%"          = 100 * D1_REF$put_away_pct
   )
   
   output$aar_process_overall <- DT::renderDT({

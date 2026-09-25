@@ -97,6 +97,7 @@ standardize_smartspeed_export <- function(x, roster = NULL, source = "SmartSpeed
   }
   ten_route <- grepl("^\\s*10\\s*yd\\s*sprint\\s*$", test_name_vals, ignore.case = TRUE)
   thirty_route <- grepl("^\\s*30\\s*yd\\s*sprint\\s*$", test_name_vals, ignore.case = TRUE)
+  flying_route <- grepl("fly\\s*10", test_name_vals, ignore.case = TRUE)
   # Only "10yd Sprint"/"30yd Sprint" rows have sane velocity/time data in
   # practice -- other real-API test types (20yd Sprint, 100yd Sprint, Pro
   # Agility, the RSA test) have shown physically impossible values (e.g. a
@@ -105,7 +106,7 @@ standardize_smartspeed_export <- function(x, roster = NULL, source = "SmartSpeed
   # otherwise silently feed into Red/Yellow scoring. Gate max_velocity/
   # total_time to the same trusted test types when routing by name; explicit
   # flat/legacy exports with their own named columns are left untouched.
-  trusted_route <- ten_route | thirty_route
+  trusted_route <- ten_route | thirty_route | flying_route
   routing_by_name <- is.null(ten_col) && is.null(thirty_col)
 
   out <- data.frame(
@@ -119,7 +120,7 @@ standardize_smartspeed_export <- function(x, roster = NULL, source = "SmartSpeed
     sprint_distance = if (!is.null(distance_col)) as.character(x[[distance_col]]) else NA_character_,
     best_10yd = if (!is.null(ten_col)) smartspeed_num(x[[ten_col]]) else ifelse(ten_route, time_val, NA_real_),
     best_30yd = if (!is.null(thirty_col)) smartspeed_num(x[[thirty_col]]) else ifelse(thirty_route, time_val, NA_real_),
-    best_flying_10yd = if (!is.null(flying_col)) smartspeed_num(x[[flying_col]]) else NA_real_,
+    best_flying_10yd = if (!is.null(flying_col)) smartspeed_num(x[[flying_col]]) else ifelse(flying_route, time_val, NA_real_),
     mean_10yd = if (!is.null(ten_col)) smartspeed_num(x[[ten_col]]) else ifelse(ten_route, time_val, NA_real_),
     cv_10yd = NA_real_,
     max_velocity = {

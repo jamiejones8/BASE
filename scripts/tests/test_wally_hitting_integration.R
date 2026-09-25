@@ -57,6 +57,13 @@ if (!any(prepared$PitchUID == "fixture-unique-hitting-supplement", na.rm = TRUE)
 
 workspace <- base_wally_hitting_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Hitting server is unavailable.")
+expected_d1_hitting <- base_d1_aar_benchmarks()$hitting
+if (!isTRUE(all.equal(workspace$HITTING_AAR_D1, expected_d1_hitting, tolerance = 1e-12))) {
+  fail("Hitting AAR is not using the parquet-derived D1 Hit Strikes Hard benchmarks.")
+}
+if (isTRUE(all.equal(workspace$HITTING_AAR_D1, workspace$HITTING_AAR_D1_DEFAULTS))) {
+  fail("Hitting AAR silently fell back to hard-coded D1 Hit Strikes Hard values.")
+}
 if (!all(c(F26 = "2026 Fall", S27 = "2027 Season") %in% stats::setNames(names(workspace$SEASON_CHOICES), workspace$SEASON_CHOICES))) {
   fail("Hitting season controls do not expose 2026 Fall and 2027 Season.")
 }
@@ -304,6 +311,18 @@ shiny::testServer(workspace$server, {
   session$setInputs(AARGame = aar_games[[1]])
   session$flushReact()
   if (!nrow(aar_data())) fail("Moved Hitting AAR returned no fixture rows.")
+  order_cases <- aar_data()[rep(1, 4), , drop = FALSE]
+  order_cases$PA_ID <- c("pa-2", "pa-1", "pa-2", "pa-1")
+  order_cases$Inning <- c(2, 1, 2, 1)
+  order_cases$PAofInning <- 1
+  order_cases$PitchofPA <- c(2, 2, 1, 1)
+  order_cases$PitchNum <- c(1, 4, 2, 3)
+  order_cases$row_in_file <- seq_len(4)
+  ordered_at_bats <- workspace$build_swing_decisions_tbl(order_cases)
+  if (!identical(ordered_at_bats$PA, c(1L, 1L, 2L, 2L)) ||
+      !identical(as.integer(ordered_at_bats$`#`), c(3L, 4L, 2L, 1L))) {
+    fail("Hitting AAR at-bats do not read top-to-bottom in chronological pitch order.")
+  }
   ump_cases <- aar_data()[rep(1, 4), , drop = FALSE]
   ump_cases$PitchNum <- seq_len(4)
   ump_cases$PA_ID <- paste0("ump-case-", seq_len(4))
