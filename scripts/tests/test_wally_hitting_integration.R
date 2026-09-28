@@ -107,14 +107,36 @@ if (!grepl("rgba\\(227,52,52", workspace$stat_severity_fill(1))) {
 if (!grepl("rgba\\(46,125,50", workspace$player_severity_fill(1))) {
   fail("Player-facing Hitting shading is not green for favorable values.")
 }
+leaderboard_benchmarks <- c(
+  xwOBA = 0.363,
+  xwOBAcon = 0.395,
+  `BB%` = 0.114,
+  `K%` = 0.192,
+  `95+%` = 0.365,
+  `10-35°%` = 0.330
+)
+actual_leaderboard_benchmarks <- vapply(
+  workspace$HITTING_PDF_LEADERBOARD_BENCHMARKS[names(leaderboard_benchmarks)],
+  function(spec) unname(spec[["average"]]),
+  numeric(1)
+)
 if (!isTRUE(all.equal(
-  workspace$hitting_leaderboard_rank_score(c(.100, .200, .300), higher = TRUE),
-  c(-1, 0, 1)
-)) || !isTRUE(all.equal(
-  workspace$hitting_leaderboard_rank_score(c(.100, .200, .300), higher = FALSE),
-  c(1, 0, -1)
+  unname(actual_leaderboard_benchmarks),
+  unname(leaderboard_benchmarks),
+  tolerance = 1e-12
 ))) {
-  fail("Hitting leaderboard conditional formatting does not respect metric direction.")
+  fail("Hitting PDF leaderboard benchmark averages changed unexpectedly.")
+}
+if (!isTRUE(all.equal(
+  workspace$hitting_leaderboard_benchmark_score(c(.338, .363, .388), "xwOBA"),
+  c(-1, 0, 1),
+  tolerance = 1e-12
+)) || !isTRUE(all.equal(
+  workspace$hitting_leaderboard_benchmark_score(c(.142, .192, .242), "K%"),
+  c(1, 0, -1),
+  tolerance = 1e-12
+))) {
+  fail("Hitting PDF leaderboard formatting is not relative to fixed stat averages.")
 }
 leaderboard_d1_pct <- c(
   `Z-Contact%` = 0.843,

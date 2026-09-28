@@ -1544,21 +1544,6 @@ HITTING_PDF_STAT_METRICS <- c(
   "IZ-Swing%" = "IZ-Swing%"
 )
 
-hitting_leaderboard_rank_score <- function(values, higher = TRUE) {
-  values <- suppressWarnings(as.numeric(values))
-  scores <- rep(NA_real_, length(values))
-  valid <- which(is.finite(values))
-  if (!length(valid)) return(scores)
-  if (length(valid) == 1L) {
-    scores[valid] <- 0
-    return(scores)
-  }
-  percentile <- (rank(values[valid], ties.method = "average") - 1) / (length(valid) - 1)
-  if (!isTRUE(higher)) percentile <- 1 - percentile
-  scores[valid] <- 2 * percentile - 1
-  scores
-}
-
 contact_type_levels <- c("Pop Up", "Fly Ball", "Line Drive", "Ground Ball")
 result_type_levels <- c("Out/Error/FC", "1B", "2B", "3B", "HR")
 contact_shape_values <- c("Pop Up"=21, "Fly Ball"=22, "Line Drive"=24, "Ground Ball"=23)
@@ -3672,6 +3657,35 @@ D1_NON <- c(
 )
 lower_better <- c("K%","Whiff%","IZ-Whiff%","Chase%","Pre2K Chase%","2K Chase%")
 
+# Fixed comparison points for the downloadable hitting leaderboard. These are
+# deliberately independent of the players currently shown on the sheet: the
+# same performance always receives the same color.
+HITTING_PDF_LEADERBOARD_BENCHMARKS <- list(
+  xwOBA = c(average = unname(D1_NON[["xwOBA"]]), step = 0.025, direction = 1),
+  xwOBAcon = c(average = unname(D1_NON[["xwOBAcon"]]), step = 0.025, direction = 1),
+  `BB%` = c(average = unname(D1_PCT[["BB%"]]), step = 0.050, direction = 1),
+  `K%` = c(average = unname(D1_PCT[["K%"]]), step = 0.050, direction = -1),
+  `95+%` = c(average = 0.365, step = 0.050, direction = 1),
+  `10-35°%` = c(average = 0.330, step = 0.050, direction = 1)
+)
+
+hitting_leaderboard_benchmark_score <- function(values, metric) {
+  values <- suppressWarnings(as.numeric(values))
+  spec <- HITTING_PDF_LEADERBOARD_BENCHMARKS[[metric]]
+  if (is.null(spec)) return(rep(NA_real_, length(values)))
+  score <- (values - spec[["average"]]) / spec[["step"]]
+  score <- score * spec[["direction"]]
+  score[!is.finite(values)] <- NA_real_
+  score
+}
+
+hitting_leaderboard_benchmark_label <- function(metric) {
+  spec <- HITTING_PDF_LEADERBOARD_BENCHMARKS[[metric]]
+  if (is.null(spec)) return("")
+  value <- spec[["average"]]
+  if (grepl("%$", metric)) sprintf("Avg %.1f%%", 100 * value) else sprintf("Avg %.3f", value)
+}
+
 shade_cell <- function(txt, bg){
   if (is.na(bg) || bg == "") return(txt)
   alpha <- suppressWarnings(as.numeric(sub(".*,(0?\\.[0-9]+)\\)$", "\\1", bg)))
@@ -5231,8 +5245,8 @@ server <- function(input, output, session){
     make_stat_block <- function(title, df_info, higher = TRUE) {
       df <- df_info$display
 
-      # Color the ranked value cells on a consistent player-facing scale.
-      # Green is stronger, red is weaker, and lower K% is correctly inverted.
+      # Color values against the fixed benchmark for this stat, never against
+      # the other players included on this particular sheet.
       n <- nrow(df)
       zebra1 <- "#FFFFFF"
       zebra2 <- "#F7F4EF"
@@ -5240,7 +5254,7 @@ server <- function(input, output, session){
 
       val_num <- suppressWarnings(as.numeric(df_info$values))
       if (length(val_num) < n) val_num <- c(val_num, rep(NA_real_, n - length(val_num)))
-      severity_score <- hitting_leaderboard_rank_score(val_num, higher = higher)
+      severity_score <- hitting_leaderboard_benchmark_score(val_num, title)
       severity_alpha <- pdf_severity_alpha(severity_score)
       severity_fill <- mapply(
         pdf_severity_fill,
@@ -5254,7 +5268,10 @@ server <- function(input, output, session){
 
       title_g <- grid::grobTree(
         grid::rectGrob(gp = grid::gpar(fill = maroon, col = gold, lwd = 0.8)),
-        grid::textGrob(title, gp = grid::gpar(col = gold, fontsize = 11, fontface = "bold"))
+        grid::textGrob(
+          paste0(title, "  |  ", hitting_leaderboard_benchmark_label(title)),
+          gp = grid::gpar(col = gold, fontsize = 10, fontface = "bold")
+        )
       )
       tbl_g <- gridExtra::tableGrob(
         df,
