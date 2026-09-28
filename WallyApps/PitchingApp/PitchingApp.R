@@ -146,16 +146,6 @@ EXCLUDE_PLAYERS <- c(
   "Taylor Seay"
 )
 
-filter_pdf_player_exclusions <- function(data, player_column, excluded = character(0)) {
-  if (is.null(data) || !is.data.frame(data) || !nrow(data) ||
-      !(player_column %in% names(data)) || !length(excluded)) {
-    return(data)
-  }
-  excluded <- as.character(excluded)
-  data[!(as.character(data[[player_column]]) %in% excluded), , drop = FALSE]
-}
-
-
 # ---- Name & season helpers ----
 fix_name_commas <- function(x) {
   x <- as.character(x)
@@ -165,6 +155,15 @@ fix_name_commas <- function(x) {
                     sub("^\\s*([^,]+),\\s*([^,]+)\\s*$", "\\2 \\1", x),
                     x)
   gsub("\\s+", " ", swapped)
+}
+
+is_walk_on_player_name <- function(x) {
+  grepl(
+    "^walk\\s+on(?:\\s|$)",
+    trimws(gsub("\\s+", " ", fix_name_commas(x))),
+    ignore.case = TRUE,
+    perl = TRUE
+  )
 }
 
 name_display <- function(x) {
@@ -4810,7 +4809,8 @@ df <- df %>%
       BatterSide %in% c("R","Right","RHH","RH") ~ "R",
       TRUE ~ as.character(BatterSide)
     )
-  )
+  ) %>%
+  dplyr::filter(!(is_walk_on_player_name(.data$Pitcher) %in% TRUE))
 
 # ---- Bullpens (Bullpens CSV only) ----
 normalize_person_name <- function(x) {
@@ -5639,25 +5639,6 @@ head_css <- htmltools::tags$head(
     .dropdown-menu .dropdown-item:hover{
       background-color:var(--txst-maroon) !important;
       color:var(--txst-gold) !important;
-    }
-
-    .leader-pdf-controls{
-      display:flex;
-      align-items:flex-end;
-      flex-wrap:wrap;
-      gap:10px;
-      margin-bottom:10px;
-    }
-    .leader-pdf-controls .form-group{
-      width:min(380px, 100%);
-      margin:0;
-    }
-    .leader-pdf-controls .selectize-control{
-      margin-bottom:0;
-    }
-    .leader-pdf-controls .btn{
-      margin-bottom:0;
-      white-space:nowrap;
     }
 
     /* ================= NAV / TITLE BAR ================= */
@@ -7068,18 +7049,7 @@ ui <- base_pitching_page(
         )
       ),
       div(
-        class = "leader-pdf-controls",
-        selectizeInput(
-          "leader_exclude", "Exclude from PDF",
-          choices = character(0),
-          selected = character(0),
-          multiple = TRUE,
-          options = list(
-            plugins = list("remove_button"),
-            placeholder = "Type pitcher names"
-          ),
-          width = "380px"
-        ),
+        class = "mb-2 d-flex gap-2",
         downloadButton("leader_results_pdf", "Download results pdf"),
         downloadButton("leader_process_pdf", "Download Process pdf")
       ),
@@ -11912,17 +11882,6 @@ server <- function(input, output, session){
     if (length(pitchers)) updateSelectInput(session, "aar_pitcher", choices = as_pitcher_choices(pitchers), selected = pitchers[1])
   })
 
-  observe({
-    pitchers <- setdiff(sort(unique(txst_df$Pitcher)), EXCLUDE_PLAYERS)
-    updateSelectizeInput(
-      session,
-      "leader_exclude",
-      choices = as_pitcher_choices(pitchers),
-      selected = intersect(input$leader_exclude %||% character(0), pitchers),
-      server = TRUE
-    )
-  })
-  
   # ---- AAR: game dropdown respects the report's season selection ----
   observeEvent(list(input$aar_pitcher, aar_season_group_values()), {
     req(input$aar_pitcher)
@@ -20637,9 +20596,7 @@ function(el,x){
       paste0("Staff_Leaderboard_Results_", format(Sys.Date(), "%Y%m%d"), ".pdf")
     },
     content = function(file) {
-      d <- filter_pdf_player_exclusions(
-        leaderboard_data(), "Pitcher", input$leader_exclude %||% character(0)
-      )
+      d <- leaderboard_data()
       stats_df <- leaderboard_summary(d)
       render_leaderboard_pdf(file, "results", stats_df)
     }
@@ -20650,9 +20607,7 @@ function(el,x){
       paste0("Staff_Leaderboard_Process_", format(Sys.Date(), "%Y%m%d"), ".pdf")
     },
     content = function(file) {
-      d <- filter_pdf_player_exclusions(
-        leaderboard_data(), "Pitcher", input$leader_exclude %||% character(0)
-      )
+      d <- leaderboard_data()
       stats_df <- leaderboard_summary(d)
       render_leaderboard_pdf(file, "process", stats_df)
     }

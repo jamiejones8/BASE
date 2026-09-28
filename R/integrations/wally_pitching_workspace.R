@@ -180,6 +180,7 @@ base_prepare_team_pitching_data <- function(source_rows = NULL) {
     frame
   })
   rows <- dplyr::bind_rows(sources)
+  rows <- base_exclude_walk_on_players(rows)
   rows$.base_source_priority <- suppressWarnings(as.integer(rows$.base_source_priority))
   rows <- rows %>%
     dplyr::arrange(.data$.base_source_priority) %>%

@@ -9,6 +9,7 @@ suppressPackageStartupMessages({
 })
 
 source("team_config.R", local = FALSE)
+source("R/data/source_contract.R", local = FALSE)
 BASE_NCAA_D1_SOURCE_LABEL <- "2026 NCAA Division I"
 source("R/integrations/wally_defense_workspace.R", local = FALSE)
 

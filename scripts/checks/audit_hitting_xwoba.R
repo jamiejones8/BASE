@@ -3,6 +3,7 @@
 # Run from the repository root. Optional argument: directory for CSV findings.
 suppressPackageStartupMessages({ library(dplyr); library(readr) })
 source("team_config.R")
+source("R/data/source_contract.R")
 source("R/integrations/wally_hitting_workspace.R")
 w <- base_wally_hitting_environment(base_prepare_team_hitting_data())
 d <- w$txst_df

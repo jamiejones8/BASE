@@ -9,6 +9,7 @@ suppressPackageStartupMessages({
 })
 
 source("team_config.R", local = FALSE)
+source("R/data/source_contract.R", local = FALSE)
 BASE_NCAA_D1_SOURCE_LABEL <- "2026 NCAA Division I"
 source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 
@@ -57,21 +58,32 @@ supplement <- fixture[1:2, , drop = FALSE]
 supplement$source_file <- "Bullpens - cleaned.csv"
 supplement$DataSource <- "Texas State internal — Bullpens - cleaned.csv"
 supplement$PitchUID[[2]] <- "fixture-unique-bullpen-pitch"
+walk_on_row <- fixture[1, , drop = FALSE]
+walk_on_row$Pitcher <- "Pitcher, Walk On"
+walk_on_row$PitchUID <- "fixture-walk-on-pitcher"
 
-prepared <- base_prepare_team_pitching_data(dplyr::bind_rows(fixture, supplement))
+prepared <- base_prepare_team_pitching_data(dplyr::bind_rows(fixture, supplement, walk_on_row))
 if (sum(prepared$PitchUID == fixture$PitchUID[[1]], na.rm = TRUE) != 1L) {
   fail("Duplicate folder pitch was not removed.")
 }
 if (!any(prepared$PitchUID == "fixture-unique-bullpen-pitch", na.rm = TRUE)) {
   fail("Unique bullpen supplement row was lost.")
 }
+if (any(base_is_walk_on_player_name(prepared$Pitcher)) ||
+    !all(base_is_walk_on_player_name(c("Walk On Player", "Player, Walk On"))) ||
+    base_is_walk_on_player_name("Walker On Player")) {
+  fail("Walk On pitchers are not excluded at the shared data boundary.")
+}
 
-workspace <- base_wally_pitching_environment(prepared)
+workspace_rows <- dplyr::bind_rows(
+  prepared,
+  dplyr::mutate(prepared[1, , drop = FALSE], Pitcher = "Walk On Workspace", PitchUID = "workspace-walk-on-pitcher")
+)
+workspace <- base_wally_pitching_environment(workspace_rows)
 if (!is.function(workspace$server)) fail("Embedded Pitching server is unavailable.")
-pdf_filter_fixture <- tibble::tibble(Pitcher = c("Keep One", "Exclude Me", "Keep Two"), Pitches = 1:3)
-pdf_filter_result <- workspace$filter_pdf_player_exclusions(pdf_filter_fixture, "Pitcher", "Exclude Me")
-if (!identical(pdf_filter_result$Pitcher, c("Keep One", "Keep Two"))) {
-  fail("Pitching PDF player exclusions do not remove the selected pitcher.")
+if (any(workspace$is_walk_on_player_name(workspace$df$Pitcher)) ||
+    any(workspace$is_walk_on_player_name(workspace$txst_df$Pitcher))) {
+  fail("Standalone Pitching data still exposes a Walk On pitcher.")
 }
 report_logo <- png::readPNG(workspace$BASE_PITCHING_REPORT_LOGO_PATH)
 if (length(dim(report_logo)) != 3L || dim(report_logo)[3] != 4L || !any(report_logo[, , 4] == 0)) {
@@ -180,9 +192,8 @@ missing_tabs <- expected_tabs[!vapply(expected_tabs, grepl, logical(1), x = html
 if (length(missing_tabs)) {
   fail("Embedded Pitching UI is missing tabs: ", paste(missing_tabs, collapse = ", "))
 }
-if (!grepl("leader_exclude", html, fixed = TRUE) ||
-    !grepl("Exclude from PDF", html, fixed = TRUE)) {
-  fail("Pitching leaderboard is missing its PDF-only player exclusion control.")
+if (grepl("leader_exclude", html, fixed = TRUE) || grepl("Exclude from PDF", html, fixed = TRUE)) {
+  fail("Pitching leaderboard still exposes the removed player exclusion control.")
 }
 pitching_source <- paste(readLines("WallyApps/PitchingApp/PitchingApp.R", warn = FALSE), collapse = "\n")
 if (grepl("xrv_leader_min_pitches", pitching_source, fixed = TRUE) ||

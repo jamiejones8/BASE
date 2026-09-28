@@ -124,6 +124,7 @@ base_prepare_team_catching_data <- function(current_rows = NULL, supplement_rows
     frame
   })
   rows <- dplyr::bind_rows(sources)
+  rows <- base_exclude_walk_on_players(rows)
   rows$.base_source_priority <- suppressWarnings(as.integer(rows$.base_source_priority))
   rows$.base_source_priority[is.na(rows$.base_source_priority)] <- 2L
   rows <- rows %>%

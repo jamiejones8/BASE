@@ -7,6 +7,7 @@ suppressPackageStartupMessages({
 })
 
 source("team_config.R", local = FALSE)
+source("R/data/source_contract.R", local = FALSE)
 source("R/data/team_season_imports.R", local = FALSE)
 
 fail <- function(...) stop(paste0(...), call. = FALSE)

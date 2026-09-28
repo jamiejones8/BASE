@@ -9,6 +9,7 @@ suppressPackageStartupMessages({
 })
 
 source("team_config.R", local = FALSE)
+source("R/data/source_contract.R", local = FALSE)
 BASE_NCAA_D1_SOURCE_LABEL <- "2026 NCAA Division I"
 source("R/integrations/wally_hitting_workspace.R", local = FALSE)
 
@@ -46,21 +47,32 @@ supplement <- fixture[1:2, , drop = FALSE]
 supplement$source_file <- "2026 Squads - cleaned.csv"
 supplement$DataSource <- "Texas State internal — 2026 Squads - cleaned.csv"
 supplement$PitchUID[[2]] <- "fixture-unique-hitting-supplement"
+walk_on_row <- fixture[1, , drop = FALSE]
+walk_on_row$Batter <- "Walk On Hitter"
+walk_on_row$PitchUID <- "fixture-walk-on-hitter"
 
-prepared <- base_prepare_team_hitting_data(dplyr::bind_rows(fixture, supplement))
+prepared <- base_prepare_team_hitting_data(dplyr::bind_rows(fixture, supplement, walk_on_row))
 if (sum(prepared$PitchUID == fixture$PitchUID[[1]], na.rm = TRUE) != 1L) {
   fail("Duplicate folder pitch was not removed.")
 }
 if (!any(prepared$PitchUID == "fixture-unique-hitting-supplement", na.rm = TRUE)) {
   fail("Unique hitting supplement row was lost.")
 }
+if (any(base_is_walk_on_player_name(prepared$Batter)) ||
+    !all(base_is_walk_on_player_name(c("Walk On Player", "Player, Walk On"))) ||
+    base_is_walk_on_player_name("Walker On Player")) {
+  fail("Walk On hitters are not excluded at the shared data boundary.")
+}
 
-workspace <- base_wally_hitting_environment(prepared)
+workspace_rows <- dplyr::bind_rows(
+  prepared,
+  dplyr::mutate(prepared[1, , drop = FALSE], Batter = "Walk On Workspace", PitchUID = "workspace-walk-on-hitter")
+)
+workspace <- base_wally_hitting_environment(workspace_rows)
 if (!is.function(workspace$server)) fail("Embedded Hitting server is unavailable.")
-pdf_filter_fixture <- tibble::tibble(Batter = c("Keep One", "Exclude Me", "Keep Two"), PA = 1:3)
-pdf_filter_result <- workspace$filter_pdf_player_exclusions(pdf_filter_fixture, "Batter", "Exclude Me")
-if (!identical(pdf_filter_result$Batter, c("Keep One", "Keep Two"))) {
-  fail("Hitting PDF player exclusions do not remove the selected hitter.")
+if (any(workspace$is_walk_on_player_name(workspace$df$Batter)) ||
+    any(workspace$is_walk_on_player_name(workspace$txst_df$Batter))) {
+  fail("Standalone Hitting data still exposes a Walk On hitter.")
 }
 report_logo <- png::readPNG(workspace$BASE_HITTING_REPORT_LOGO_PATH)
 if (length(dim(report_logo)) != 3L || dim(report_logo)[3] != 4L || !any(report_logo[, , 4] == 0)) {
@@ -186,13 +198,13 @@ if (!grepl("hit_aar_pdf", postgame_html, fixed = TRUE) ||
     !grepl("aar_hitter", postgame_html, fixed = TRUE)) {
   fail("Hitting AAR was not exposed to the Postgame Reports workspace.")
 }
-if (!grepl("hit_leader_exclude", html, fixed = TRUE) ||
-    !grepl("Exclude from PDF", html, fixed = TRUE)) {
-  fail("Hitting leaderboard is missing its PDF-only player exclusion control.")
-}
 if (!grepl("Recent AARs", postgame_html, fixed = TRUE) ||
     !grepl("hit_aar_recent_list_ui", postgame_html, fixed = TRUE)) {
   fail("Hitting AAR is missing its Recent AARs tab.")
+}
+if (!all(vapply(c("leaderboard_pdf", "leaderboard_stats_pdf"), grepl, logical(1), x = html, fixed = TRUE)) ||
+    grepl("hit_leader_exclude", html, fixed = TRUE) || grepl("Exclude from PDF", html, fixed = TRUE)) {
+  fail("Hitting leaderboard does not expose exactly the two automatic-filter PDF downloads.")
 }
 
 hitter <- as.character(workspace$hitters_txst[[1]])
@@ -208,6 +220,11 @@ hitting_leaderboard_pdf <- Sys.getenv("BASE_HITTING_LEADERBOARD_QA", unset = "")
 if (!nzchar(hitting_leaderboard_pdf)) {
   hitting_leaderboard_pdf <- tempfile(fileext = ".pdf")
   on.exit(unlink(hitting_leaderboard_pdf), add = TRUE)
+}
+hitting_stat_sheet_pdf <- Sys.getenv("BASE_HITTING_STAT_SHEET_QA", unset = "")
+if (!nzchar(hitting_stat_sheet_pdf)) {
+  hitting_stat_sheet_pdf <- tempfile(fileext = ".pdf")
+  on.exit(unlink(hitting_stat_sheet_pdf), add = TRUE)
 }
 
 # Reproduce the production package order from the logs: Player Health attaches
@@ -388,22 +405,37 @@ shiny::testServer(workspace$server, {
 
   leaderboard_rows <- leaderboard_summary(leaderboard_data())
   if (!nrow(leaderboard_rows)) fail("Hitting leaderboard returned no fixture rows.")
-  requested_leaderboard_metrics <- c(
-    "Swing%", "MaxEV", "10-35*%", "GB%", "LD%", "FB%", "PU%", "Foul Ball%"
-  )
+  requested_leaderboard_metrics <- unique(c(
+    unname(workspace$HITTING_PDF_LEADERBOARD_METRICS),
+    unname(workspace$HITTING_PDF_STAT_METRICS)
+  ))
   if (!all(requested_leaderboard_metrics %in% names(leaderboard_rows))) {
     fail(
       "Hitting leaderboard is missing requested metrics: ",
       paste(setdiff(requested_leaderboard_metrics, names(leaderboard_rows)), collapse = ", ")
     )
   }
-  if (!all(requested_leaderboard_metrics %in% workspace$leaderboard_table_metrics)) {
-    fail("Requested hitting metrics are calculated but not visible on the leaderboard.")
+  if (!identical(names(workspace$HITTING_PDF_LEADERBOARD_METRICS),
+                 c("xwOBA", "xwOBAcon", "BB%", "K%", "95+%", "10-35°%")) ||
+      !identical(names(workspace$HITTING_PDF_STAT_METRICS),
+                 c("IZ-Whiff%", "Chase%", "Barrel%", "Max EV", "90th EV", "IZ-Swing%"))) {
+    fail("Hitting PDF metric sets or their display order changed unexpectedly.")
   }
-  render_leaderboard_pdf(hitting_leaderboard_pdf, leaderboard_rows)
+  leaderboard_generator <- session$.__enclos_env__$private$file_generators$get(session$ns("leaderboard_pdf"))
+  stat_sheet_generator <- session$.__enclos_env__$private$file_generators$get(session$ns("leaderboard_stats_pdf"))
+  if (is.null(leaderboard_generator) || !is.function(leaderboard_generator$content) ||
+      is.null(stat_sheet_generator) || !is.function(stat_sheet_generator$content)) {
+    fail("One or both Hitting leaderboard download handlers were not registered.")
+  }
+  leaderboard_generator$content(hitting_leaderboard_pdf)
   if (!file.exists(hitting_leaderboard_pdf) || file.info(hitting_leaderboard_pdf)$size <= 4 ||
       !identical(readBin(hitting_leaderboard_pdf, what = "raw", n = 4L), charToRaw("%PDF"))) {
     fail("Hitting leaderboard download did not produce a PDF.")
+  }
+  stat_sheet_generator$content(hitting_stat_sheet_pdf)
+  if (!file.exists(hitting_stat_sheet_pdf) || file.info(hitting_stat_sheet_pdf)$size <= 4 ||
+      !identical(readBin(hitting_stat_sheet_pdf, what = "raw", n = 4L), charToRaw("%PDF"))) {
+    fail("Hitting stat-sheet download did not produce a PDF.")
   }
 })
 

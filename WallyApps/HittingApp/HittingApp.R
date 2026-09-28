@@ -42,15 +42,6 @@ resolve_hitting_aar_d1_benchmarks <- function(values = get0(
 }
 HITTING_AAR_D1 <- resolve_hitting_aar_d1_benchmarks()
 
-filter_pdf_player_exclusions <- function(data, player_column, excluded = character(0)) {
-  if (is.null(data) || !is.data.frame(data) || !nrow(data) ||
-      !(player_column %in% names(data)) || !length(excluded)) {
-    return(data)
-  }
-  excluded <- as.character(excluded)
-  data[!(as.character(data[[player_column]]) %in% excluded), , drop = FALSE]
-}
-
 # ---- Static assets path (works for single-file standalone shinyApp) ----
 if (!isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE)) &&
     dir.exists("www")) {
@@ -131,6 +122,14 @@ name_display <- function(x){
 }
 name_norm <- function(x){
   tolower(name_display(x))
+}
+is_walk_on_player_name <- function(x) {
+  grepl(
+    "^walk\\s+on(?:\\s|$)",
+    trimws(gsub("\\s+", " ", name_display(x))),
+    ignore.case = TRUE,
+    perl = TRUE
+  )
 }
 
 # -------------------- Zone logic helpers (INCHES) --------------------
@@ -249,6 +248,10 @@ if (exists("BASE_HITTING_DATA", inherits = FALSE) &&
     )
     df$source_file <- character(0); df$row_in_file <- integer(0)
   }
+}
+
+if ("Batter" %in% names(df)) {
+  df <- df[!(is_walk_on_player_name(df$Batter) %in% TRUE), , drop = FALSE]
 }
 
 # -------------------- Normalize columns --------------------
@@ -912,24 +915,6 @@ head_css <- htmltools::tags$head(
         display:block;width:100%;min-height:32px;
         padding:6px 8px;margin:0;box-sizing:border-box;
       }
-      .leader-pdf-controls{
-        display:flex;
-        align-items:flex-end;
-        flex-wrap:wrap;
-        gap:10px;
-        margin-bottom:10px;
-      }
-      .leader-pdf-controls .form-group{
-        width:min(380px, 100%);
-        margin:0;
-      }
-      .leader-pdf-controls .selectize-control{
-        margin-bottom:0;
-      }
-      .leader-pdf-controls .btn{
-        margin-bottom:0;
-        white-space:nowrap;
-      }
 
       /* Keep card/table containers white, but allow DT cells to override bg */
 .table, .bslib-card, .card{
@@ -1534,12 +1519,29 @@ performance_table_metrics <- c(
 )
 
 leaderboard_table_metrics <- c(
-  "PA", "wOBA", "wOBAcon", "OBP", "SLG", "OPS", "hRV",
+  "PA", "wOBA", "wOBAcon", "xwOBA", "xwOBAcon", "OBP", "SLG", "OPS", "hRV",
   "K%", "BB%", "Barrel%",
   "Contact%", "Z-Contact%", "Whiff%", "IZ-Whiff%",
   "Swing%", "Chase%", "Pre2K Chase%", "2K Chase%", "Z-Swing%",
   "MaxEV", "90th EV", "EV>95%", "10-35*%",
   "GB%", "LD%", "FB%", "PU%", "Foul Ball%", "LD+FB%", "Airpull%"
+)
+
+HITTING_PDF_LEADERBOARD_METRICS <- c(
+  "xwOBA" = "xwOBA",
+  "xwOBAcon" = "xwOBAcon",
+  "BB%" = "BB%",
+  "K%" = "K%",
+  "95+%" = "EV>95%",
+  "10-35°%" = "10-35*%"
+)
+HITTING_PDF_STAT_METRICS <- c(
+  "IZ-Whiff%" = "IZ-Whiff%",
+  "Chase%" = "Chase%",
+  "Barrel%" = "Barrel%",
+  "Max EV" = "MaxEV",
+  "90th EV" = "90th EV",
+  "IZ-Swing%" = "IZ-Swing%"
 )
 
 contact_type_levels <- c("Pop Up", "Fly Ball", "Line Drive", "Ground Ball")
@@ -1922,19 +1924,9 @@ ui <- base_hitting_page(
         )
       ),
       div(
-        class = "leader-pdf-controls",
-        selectizeInput(
-          "hit_leader_exclude", "Exclude from PDF",
-          choices = character(0),
-          selected = character(0),
-          multiple = TRUE,
-          options = list(
-            plugins = list("remove_button"),
-            placeholder = "Type hitter names"
-          ),
-          width = "380px"
-        ),
-        downloadButton("leaderboard_pdf", "Download Leaderboard PDF", class = "btn btn-primary")
+        class = "mb-2 d-flex gap-2",
+        downloadButton("leaderboard_pdf", "Download Leaderboard PDF", class = "btn btn-primary"),
+        downloadButton("leaderboard_stats_pdf", "Download Stat Sheet PDF", class = "btn btn-primary")
       ),
       withSpinner(DTOutput("hit_leaderboard_table"), type = 4, color = "#501214"),
       withSpinner(DTOutput("leaderboard_team_table"), type = 4, color = "#501214")
@@ -4899,21 +4891,16 @@ server <- function(input, output, session){
 
     out %>%
       dplyr::mutate(PA = ifelse(is.finite(.data$PA), as.integer(.data$PA), NA_integer_)) %>%
-      dplyr::select(Hitter, dplyr::all_of(leaderboard_table_metrics)) %>%
+      dplyr::select(
+        Hitter,
+        dplyr::all_of(unique(c(
+          leaderboard_table_metrics,
+          unname(HITTING_PDF_LEADERBOARD_METRICS),
+          unname(HITTING_PDF_STAT_METRICS)
+        )))
+      ) %>%
       dplyr::arrange(.data$Hitter)
   }
-
-  observe({
-    hitters <- sort(unique(as.character(txst_df$Batter)))
-    hitters <- hitters[!is.na(hitters) & nzchar(trimws(hitters))]
-    updateSelectizeInput(
-      session,
-      "hit_leader_exclude",
-      choices = stats::setNames(hitters, name_display(hitters)),
-      selected = intersect(input$hit_leader_exclude %||% character(0), hitters),
-      server = TRUE
-    )
-  })
 
   leaderboard_team_summary <- function(d){
     if (is.null(d) || !nrow(d)) return(tibble::tibble())
@@ -5209,6 +5196,7 @@ server <- function(input, output, session){
 
     fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "NA")
     fmt_num1 <- function(x) ifelse(is.finite(x), sprintf("%.1f", x), "NA")
+    fmt_num3 <- function(x) ifelse(is.finite(x), sprintf("%.3f", x), "NA")
 
     # Reproduce the live leaderboard's player palette and continuous severity
     # curve. PDF grid cells need solid colors, so the CSS alpha is composited
@@ -5228,12 +5216,12 @@ server <- function(input, output, session){
     }
 
     defs <- list(
-      list(name = "Z-Contact%", col = "Z-Contact%", higher = TRUE,  fmt = fmt_pct),
-      list(name = "Chase%",     col = "Chase%",     higher = FALSE, fmt = fmt_pct),
-      list(name = "Z-Swing%",   col = "Z-Swing%",   higher = TRUE,  fmt = fmt_pct),
-      list(name = "Max EV",     col = "MaxEV",      higher = TRUE,  fmt = fmt_num1),
-      list(name = "90th EV",    col = "90th EV",    higher = TRUE,  fmt = fmt_num1),
-      list(name = "Barrel%",    col = "Barrel%",    higher = TRUE,  fmt = fmt_pct)
+      list(name = "xwOBA",     col = HITTING_PDF_LEADERBOARD_METRICS[["xwOBA"]],     higher = TRUE,  fmt = fmt_num3),
+      list(name = "xwOBAcon",  col = HITTING_PDF_LEADERBOARD_METRICS[["xwOBAcon"]],  higher = TRUE,  fmt = fmt_num3),
+      list(name = "BB%",       col = HITTING_PDF_LEADERBOARD_METRICS[["BB%"]],       higher = TRUE,  fmt = fmt_pct),
+      list(name = "K%",        col = HITTING_PDF_LEADERBOARD_METRICS[["K%"]],        higher = FALSE, fmt = fmt_pct),
+      list(name = "95+%",      col = HITTING_PDF_LEADERBOARD_METRICS[["95+%"]],      higher = TRUE,  fmt = fmt_pct),
+      list(name = "10-35°%", col = HITTING_PDF_LEADERBOARD_METRICS[["10-35°%"]], higher = TRUE, fmt = fmt_pct)
     )
 
     make_stat_block <- function(title, df_info, higher = TRUE) {
@@ -5423,7 +5411,7 @@ server <- function(input, output, session){
       logo_grob(right_logo_img, x = 0.965, just = c("right", "center"), max_w = 0.68, max_h = 0.72),
       grid::textGrob("TEXAS STATE BASEBALL | PLAYER DEVELOPMENT", x = 0.5, y = 0.81,
                      gp = grid::gpar(col = "#E8DCC3", fontsize = 7.5, fontface = "bold")),
-      grid::textGrob("Hit Strikes Hard Leaderboard", x = 0.5, y = 0.56,
+      grid::textGrob("Hitting Results Leaderboard", x = 0.5, y = 0.56,
                      gp = grid::gpar(col = gold, fontsize = 21, fontface = "bold")),
       grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.25,
                      gp = grid::gpar(col = "white", fontsize = 9.5))
@@ -5439,16 +5427,149 @@ server <- function(input, output, session){
     )
   }
 
+  render_leaderboard_stat_pdf <- function(outfile, data_df) {
+    maroon <- "#501214"
+    gold <- "#B4975A"
+    cream <- "#F7F4EF"
+    date_str <- format(Sys.Date(), "%m-%d-%Y")
+
+    read_logo_image <- function(path) {
+      if (!is.character(path) || length(path) != 1L || !file.exists(path)) return(NULL)
+      ext <- tolower(tools::file_ext(path))
+      tryCatch(
+        if (ext == "png") png::readPNG(path)
+        else if (ext %in% c("jpg", "jpeg")) jpeg::readJPEG(path)
+        else NULL,
+        error = function(e) NULL
+      )
+    }
+    fallback_logo_path <- get0(
+      "BASE_HITTING_REPORT_LOGO_PATH",
+      inherits = TRUE,
+      ifnotfound = "www/baseballTS logo gold.png"
+    )
+    left_logo_img <- read_logo_image(fallback_logo_path)
+    if (is.null(left_logo_img)) left_logo_img <- read_logo_image(TXST_LOGO_PATH)
+    right_logo_img <- read_logo_image(BOBCAT_LOGO_PATH)
+    fallback_logo_img <- read_logo_image(fallback_logo_path)
+    if (is.null(left_logo_img)) left_logo_img <- fallback_logo_img
+    if (is.null(right_logo_img)) right_logo_img <- fallback_logo_img
+    logo_grob <- function(img, x, just, max_w = 0.92, max_h = 0.72) {
+      if (is.null(img)) return(grid::nullGrob())
+      aspect <- dim(img)[2] / dim(img)[1]
+      width <- min(max_w, max_h * aspect)
+      height <- width / aspect
+      grid::rasterGrob(
+        img,
+        x = x,
+        y = 0.5,
+        width = grid::unit(width, "in"),
+        height = grid::unit(height, "in"),
+        just = just,
+        interpolate = TRUE
+      )
+    }
+
+    format_pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100 * x), "NA")
+    format_ev <- function(x) ifelse(is.finite(x), sprintf("%.1f", x), "NA")
+    stat_data <- data.frame(Hitter = as.character(data_df$Hitter), stringsAsFactors = FALSE)
+    for (label in names(HITTING_PDF_STAT_METRICS)) {
+      source_column <- HITTING_PDF_STAT_METRICS[[label]]
+      values <- if (source_column %in% names(data_df)) {
+        suppressWarnings(as.numeric(data_df[[source_column]]))
+      } else {
+        rep(NA_real_, nrow(data_df))
+      }
+      stat_data[[label]] <- if (label %in% c("Max EV", "90th EV")) {
+        format_ev(values)
+      } else {
+        format_pct(values)
+      }
+    }
+    if (!nrow(stat_data)) {
+      stat_data <- data.frame(
+        Hitter = "No qualifying hitters",
+        matrix("NA", nrow = 1, ncol = length(HITTING_PDF_STAT_METRICS)),
+        check.names = FALSE,
+        stringsAsFactors = FALSE
+      )
+      names(stat_data)[-1] <- names(HITTING_PDF_STAT_METRICS)
+    }
+
+    n <- nrow(stat_data)
+    zebra <- rep(c("#FFFFFF", cream), length.out = n)
+    body_fill <- matrix(rep(zebra, ncol(stat_data)), nrow = n, ncol = ncol(stat_data))
+    body_size <- if (n > 28) 7 else if (n > 22) 8 else 9
+    table_g <- gridExtra::tableGrob(
+      stat_data,
+      rows = NULL,
+      theme = gridExtra::ttheme_minimal(
+        base_size = body_size,
+        padding = grid::unit(c(4, 5), "pt"),
+        colhead = list(
+          fg_params = list(col = gold, fontface = "bold"),
+          bg_params = list(fill = maroon, col = gold, lwd = 0.7)
+        ),
+        core = list(
+          fg_params = list(col = "#241719"),
+          bg_params = list(fill = body_fill, col = "#DED1BD", lwd = 0.5)
+        )
+      )
+    )
+    table_g$widths <- grid::unit(c(1.65, rep(1, length(HITTING_PDF_STAT_METRICS))), "null")
+    row_height <- min(0.34, 6.55 / length(table_g$heights))
+    table_height <- row_height * length(table_g$heights)
+    table_g$heights <- grid::unit(rep(row_height, length(table_g$heights)), "in")
+    table_panel <- gridExtra::arrangeGrob(
+      table_g,
+      grid::nullGrob(),
+      ncol = 1,
+      heights = grid::unit.c(grid::unit(table_height, "in"), grid::unit(1, "null")),
+      padding = grid::unit(0.2, "in")
+    )
+
+    header_g <- grid::grobTree(
+      grid::rectGrob(gp = grid::gpar(fill = maroon, col = NA)),
+      grid::segmentsGrob(x0 = 0, x1 = 1, y0 = 0.015, y1 = 0.015,
+                         gp = grid::gpar(col = gold, lwd = 1.5)),
+      logo_grob(left_logo_img, x = 0.035, just = c("left", "center"), max_w = 0.72, max_h = 0.88),
+      logo_grob(right_logo_img, x = 0.965, just = c("right", "center"), max_w = 0.68, max_h = 0.72),
+      grid::textGrob("TEXAS STATE BASEBALL | PLAYER DEVELOPMENT", x = 0.5, y = 0.81,
+                     gp = grid::gpar(col = "#E8DCC3", fontsize = 7.5, fontface = "bold")),
+      grid::textGrob("Hitting Stat Sheet", x = 0.5, y = 0.56,
+                     gp = grid::gpar(col = gold, fontsize = 21, fontface = "bold")),
+      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.25,
+                     gp = grid::gpar(col = "white", fontsize = 9.5))
+    )
+    body_g <- grid::grobTree(
+      grid::rectGrob(gp = grid::gpar(fill = cream, col = NA)),
+      table_panel
+    )
+
+    grDevices::pdf(outfile, width = 11, height = 8.5, useDingbats = FALSE)
+    on.exit(grDevices::dev.off(), add = TRUE)
+    gridExtra::grid.arrange(header_g, body_g, ncol = 1, heights = c(0.15, 0.85))
+  }
+
   output$leaderboard_pdf <- downloadHandler(
     filename = function() {
       paste0("Hit_Strikes_Hard_Leaderboard_", format(Sys.Date(), "%Y%m%d"), ".pdf")
     },
     content = function(file) {
-      d <- filter_pdf_player_exclusions(
-        leaderboard_data(), "Batter", input$hit_leader_exclude %||% character(0)
-      )
+      d <- leaderboard_data()
       stats_df <- leaderboard_summary(d)
       render_leaderboard_pdf(file, stats_df)
+    }
+  )
+
+  output$leaderboard_stats_pdf <- downloadHandler(
+    filename = function() {
+      paste0("Hitting_Stat_Sheet_", format(Sys.Date(), "%Y%m%d"), ".pdf")
+    },
+    content = function(file) {
+      d <- leaderboard_data()
+      stats_df <- leaderboard_summary(d)
+      render_leaderboard_stat_pdf(file, stats_df)
     }
   )
 

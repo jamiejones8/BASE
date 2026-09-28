@@ -2,6 +2,30 @@
 
 BASE_DATA_SOURCE_CONTRACT_FILE <- TEAM_CONFIG$data$source_contract_file
 
+base_is_walk_on_player_name <- function(x) {
+  x <- trimws(gsub("\\s+", " ", as.character(x)))
+  comma_name <- grepl(",", x, fixed = TRUE)
+  if (any(comma_name, na.rm = TRUE)) {
+    x[comma_name] <- paste0(
+      trimws(sub("^[^,]*,", "", x[comma_name])), " ",
+      trimws(sub(",.*$", "", x[comma_name]))
+    )
+  }
+  grepl("^walk\\s+on(?:\\s|$)", x, ignore.case = TRUE, perl = TRUE)
+}
+
+base_exclude_walk_on_players <- function(data, player_columns = c(
+  "Pitcher", "Batter", "Catcher", "Player", "Name", "player_name"
+)) {
+  if (is.null(data) || !is.data.frame(data) || !nrow(data)) return(data)
+  player_columns <- intersect(player_columns, names(data))
+  if (!length(player_columns)) return(data)
+  excluded <- Reduce(`|`, lapply(player_columns, function(column) {
+    base_is_walk_on_player_name(data[[column]])
+  }))
+  data[!(excluded %in% TRUE), , drop = FALSE]
+}
+
 base_load_data_source_contract <- function(path = BASE_DATA_SOURCE_CONTRACT_FILE) {
   if (!file.exists(path)) stop("BASE data-source contract was not found at ", path)
   contract <- jsonlite::fromJSON(path, simplifyVector = FALSE)

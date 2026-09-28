@@ -2656,6 +2656,8 @@ if (is.null(roster_raw)) {
   roster_raw <- tryCatch(fetch_team_roster(), error = function(e) NULL)
 }
 
+roster_raw <- base_exclude_walk_on_players(roster_raw, "Name")
+
 if (!is.null(roster_raw)) {
   roster_pitchers   <- roster_raw %>% filter(pos_type == "Pitcher")   %>% select(Name, Pos, Number, Bats, Throws)
   roster_catchers   <- roster_raw %>% filter(pos_type == "Catcher")   %>% select(Name, Pos, Number, Bats, Throws)
@@ -3218,6 +3220,7 @@ message("Loading master game data...")
 
 season_data <- tryCatch({
   df <- read_season_runtime_data(SEASON_DATA_FILE)
+  df <- base_exclude_walk_on_players(df)
   if (nrow(df) == 0) {
     df <- df %>%
       mutate(across(any_of(c(
