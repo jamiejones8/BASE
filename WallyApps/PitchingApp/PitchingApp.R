@@ -146,6 +146,15 @@ EXCLUDE_PLAYERS <- c(
   "Taylor Seay"
 )
 
+filter_pdf_player_exclusions <- function(data, player_column, excluded = character(0)) {
+  if (is.null(data) || !is.data.frame(data) || !nrow(data) ||
+      !(player_column %in% names(data)) || !length(excluded)) {
+    return(data)
+  }
+  excluded <- as.character(excluded)
+  data[!(as.character(data[[player_column]]) %in% excluded), , drop = FALSE]
+}
+
 
 # ---- Name & season helpers ----
 fix_name_commas <- function(x) {
@@ -5632,34 +5641,23 @@ head_css <- htmltools::tags$head(
       color:var(--txst-gold) !important;
     }
 
-    #leader_exclude,
-    #leader_exclude .form-group{
-      width:100%;
-    }
-    #leader_exclude .shiny-options-group{
-      display:grid;
-      grid-template-columns:repeat(6, minmax(140px, 1fr));
-      column-gap:2rem;
-      row-gap:1rem;
-      width:100%;
-    }
-    #leader_exclude .checkbox{
-      margin:0;
+    .leader-pdf-controls{
       display:flex;
-      align-items:flex-start;
-      gap:6px;
-      width:100%;
+      align-items:flex-end;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-bottom:10px;
     }
-    #leader_exclude .checkbox input[type='checkbox']{
-      margin-top:3px;
-      flex:0 0 auto;
-    }
-    #leader_exclude .checkbox label{
-      display:block;
-      line-height:2.0;
-      white-space:normal;
+    .leader-pdf-controls .form-group{
+      width:min(380px, 100%);
       margin:0;
-      flex:1 1 auto;
+    }
+    .leader-pdf-controls .selectize-control{
+      margin-bottom:0;
+    }
+    .leader-pdf-controls .btn{
+      margin-bottom:0;
+      white-space:nowrap;
     }
 
     /* ================= NAV / TITLE BAR ================= */
@@ -7051,20 +7049,6 @@ ui <- base_pitching_page(
             )
           ),
           column(
-            12,
-            selectizeInput(
-              "leader_exclude", "Exclude Pitchers",
-              choices = character(0),
-              selected = character(0),
-              multiple = TRUE,
-              options = list(
-                plugins = list("remove_button"),
-                placeholder = "Type a pitcher name to exclude"
-              ),
-              width = "100%"
-            )
-          ),
-          column(
             3,
             dateRangeInput(
               "leader_dates", "Date range",
@@ -7084,7 +7068,18 @@ ui <- base_pitching_page(
         )
       ),
       div(
-        class = "mb-2 d-flex gap-2",
+        class = "leader-pdf-controls",
+        selectizeInput(
+          "leader_exclude", "Exclude from PDF",
+          choices = character(0),
+          selected = character(0),
+          multiple = TRUE,
+          options = list(
+            plugins = list("remove_button"),
+            placeholder = "Type pitcher names"
+          ),
+          width = "380px"
+        ),
         downloadButton("leader_results_pdf", "Download results pdf"),
         downloadButton("leader_process_pdf", "Download Process pdf")
       ),
@@ -11281,12 +11276,6 @@ server <- function(input, output, session){
       d <- d %>% dplyr::filter(!(as.character(PitchType) %in% "Bad data"))
     }
 
-    # Exclude pitchers
-    excl <- input$leader_exclude %||% character(0)
-    if (length(excl) && "Pitcher" %in% names(d)) {
-      d <- d %>% dplyr::filter(!(Pitcher %in% excl))
-    }
-
     # Season filter
     season_col <- if ("SeasonTag" %in% names(d)) "SeasonTag" else if ("SeasonGroup" %in% names(d)) "SeasonGroup" else NULL
     sel_seasons <- input$leader_seasons %||% character(0)
@@ -11928,7 +11917,7 @@ server <- function(input, output, session){
     updateSelectizeInput(
       session,
       "leader_exclude",
-      choices = pitchers,
+      choices = as_pitcher_choices(pitchers),
       selected = intersect(input$leader_exclude %||% character(0), pitchers),
       server = TRUE
     )
@@ -20648,7 +20637,9 @@ function(el,x){
       paste0("Staff_Leaderboard_Results_", format(Sys.Date(), "%Y%m%d"), ".pdf")
     },
     content = function(file) {
-      d <- leaderboard_data()
+      d <- filter_pdf_player_exclusions(
+        leaderboard_data(), "Pitcher", input$leader_exclude %||% character(0)
+      )
       stats_df <- leaderboard_summary(d)
       render_leaderboard_pdf(file, "results", stats_df)
     }
@@ -20659,7 +20650,9 @@ function(el,x){
       paste0("Staff_Leaderboard_Process_", format(Sys.Date(), "%Y%m%d"), ".pdf")
     },
     content = function(file) {
-      d <- leaderboard_data()
+      d <- filter_pdf_player_exclusions(
+        leaderboard_data(), "Pitcher", input$leader_exclude %||% character(0)
+      )
       stats_df <- leaderboard_summary(d)
       render_leaderboard_pdf(file, "process", stats_df)
     }

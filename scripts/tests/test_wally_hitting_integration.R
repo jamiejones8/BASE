@@ -57,6 +57,11 @@ if (!any(prepared$PitchUID == "fixture-unique-hitting-supplement", na.rm = TRUE)
 
 workspace <- base_wally_hitting_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Hitting server is unavailable.")
+pdf_filter_fixture <- tibble::tibble(Batter = c("Keep One", "Exclude Me", "Keep Two"), PA = 1:3)
+pdf_filter_result <- workspace$filter_pdf_player_exclusions(pdf_filter_fixture, "Batter", "Exclude Me")
+if (!identical(pdf_filter_result$Batter, c("Keep One", "Keep Two"))) {
+  fail("Hitting PDF player exclusions do not remove the selected hitter.")
+}
 report_logo <- png::readPNG(workspace$BASE_HITTING_REPORT_LOGO_PATH)
 if (length(dim(report_logo)) != 3L || dim(report_logo)[3] != 4L || !any(report_logo[, , 4] == 0)) {
   fail("Hitting leaderboard is not configured with a transparent TS report logo.")
@@ -180,6 +185,10 @@ postgame_html <- paste(as.character(workspace$base_hitting_postgame_ui), collaps
 if (!grepl("hit_aar_pdf", postgame_html, fixed = TRUE) ||
     !grepl("aar_hitter", postgame_html, fixed = TRUE)) {
   fail("Hitting AAR was not exposed to the Postgame Reports workspace.")
+}
+if (!grepl("hit_leader_exclude", html, fixed = TRUE) ||
+    !grepl("Exclude from PDF", html, fixed = TRUE)) {
+  fail("Hitting leaderboard is missing its PDF-only player exclusion control.")
 }
 if (!grepl("Recent AARs", postgame_html, fixed = TRUE) ||
     !grepl("hit_aar_recent_list_ui", postgame_html, fixed = TRUE)) {

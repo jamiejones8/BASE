@@ -42,6 +42,15 @@ resolve_hitting_aar_d1_benchmarks <- function(values = get0(
 }
 HITTING_AAR_D1 <- resolve_hitting_aar_d1_benchmarks()
 
+filter_pdf_player_exclusions <- function(data, player_column, excluded = character(0)) {
+  if (is.null(data) || !is.data.frame(data) || !nrow(data) ||
+      !(player_column %in% names(data)) || !length(excluded)) {
+    return(data)
+  }
+  excluded <- as.character(excluded)
+  data[!(as.character(data[[player_column]]) %in% excluded), , drop = FALSE]
+}
+
 # ---- Static assets path (works for single-file standalone shinyApp) ----
 if (!isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE)) &&
     dir.exists("www")) {
@@ -902,6 +911,24 @@ head_css <- htmltools::tags$head(
       #hit_leaderboard_table td > .cf-cell{
         display:block;width:100%;min-height:32px;
         padding:6px 8px;margin:0;box-sizing:border-box;
+      }
+      .leader-pdf-controls{
+        display:flex;
+        align-items:flex-end;
+        flex-wrap:wrap;
+        gap:10px;
+        margin-bottom:10px;
+      }
+      .leader-pdf-controls .form-group{
+        width:min(380px, 100%);
+        margin:0;
+      }
+      .leader-pdf-controls .selectize-control{
+        margin-bottom:0;
+      }
+      .leader-pdf-controls .btn{
+        margin-bottom:0;
+        white-space:nowrap;
       }
 
       /* Keep card/table containers white, but allow DT cells to override bg */
@@ -1895,7 +1922,18 @@ ui <- base_hitting_page(
         )
       ),
       div(
-        class = "mb-2 d-flex gap-2",
+        class = "leader-pdf-controls",
+        selectizeInput(
+          "hit_leader_exclude", "Exclude from PDF",
+          choices = character(0),
+          selected = character(0),
+          multiple = TRUE,
+          options = list(
+            plugins = list("remove_button"),
+            placeholder = "Type hitter names"
+          ),
+          width = "380px"
+        ),
         downloadButton("leaderboard_pdf", "Download Leaderboard PDF", class = "btn btn-primary")
       ),
       withSpinner(DTOutput("hit_leaderboard_table"), type = 4, color = "#501214"),
@@ -4865,6 +4903,18 @@ server <- function(input, output, session){
       dplyr::arrange(.data$Hitter)
   }
 
+  observe({
+    hitters <- sort(unique(as.character(txst_df$Batter)))
+    hitters <- hitters[!is.na(hitters) & nzchar(trimws(hitters))]
+    updateSelectizeInput(
+      session,
+      "hit_leader_exclude",
+      choices = stats::setNames(hitters, name_display(hitters)),
+      selected = intersect(input$hit_leader_exclude %||% character(0), hitters),
+      server = TRUE
+    )
+  })
+
   leaderboard_team_summary <- function(d){
     if (is.null(d) || !nrow(d)) return(tibble::tibble())
     
@@ -5394,7 +5444,9 @@ server <- function(input, output, session){
       paste0("Hit_Strikes_Hard_Leaderboard_", format(Sys.Date(), "%Y%m%d"), ".pdf")
     },
     content = function(file) {
-      d <- leaderboard_data()
+      d <- filter_pdf_player_exclusions(
+        leaderboard_data(), "Batter", input$hit_leader_exclude %||% character(0)
+      )
       stats_df <- leaderboard_summary(d)
       render_leaderboard_pdf(file, stats_df)
     }
