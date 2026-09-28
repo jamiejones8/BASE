@@ -6289,22 +6289,50 @@ load_heater_movement_reference <- function() {
 
 # The same D1 population used by the percentile cards also colors these cells.
 pitching_cell_percentiles <- function(values, column) {
-  metric <- switch(column,
-    wOBAcon = "performance_wobacon",
-    `2k Zone%` = "performance_2k_zone_pct",
-    `2K Zone%` = "performance_2k_zone_pct",
+  config <- switch(column,
+    BAA = list(metric = "performance_baa", lower_better = TRUE, percent = FALSE),
+    wOBA = list(metric = "performance_woba", lower_better = TRUE, percent = FALSE),
+    wOBAcon = list(metric = "performance_wobacon", lower_better = TRUE, percent = FALSE),
+    SLG = list(metric = "performance_slg", lower_better = TRUE, percent = FALSE),
+    OPS = list(metric = "performance_ops", lower_better = TRUE, percent = FALSE),
+    WHIP = list(metric = "performance_whip", lower_better = TRUE, percent = FALSE),
+    `K/9` = list(metric = "performance_k9", lower_better = FALSE, percent = FALSE),
+    `BB/9` = list(metric = "performance_bb9", lower_better = TRUE, percent = FALSE),
+    `H/9` = list(metric = "performance_h9", lower_better = TRUE, percent = FALSE),
+    pRV = list(metric = "performance_prv", lower_better = TRUE, percent = FALSE),
+    `K%` = list(metric = "performance_k_pct", lower_better = FALSE, percent = TRUE),
+    `BB%` = list(metric = "performance_bb_pct", lower_better = TRUE, percent = TRUE),
+    `BB+HBP%` = list(metric = "performance_bb_hbp_pct", lower_better = TRUE, percent = TRUE),
+    `Barrel%` = list(metric = "performance_barrel_pct", lower_better = TRUE, percent = TRUE),
+    `GB%` = list(metric = "performance_gb_pct", lower_better = FALSE, percent = TRUE),
+    FIP = list(metric = "performance_fip", lower_better = TRUE, percent = FALSE),
+    `FPS%` = list(metric = "performance_fps_pct", lower_better = FALSE, percent = TRUE),
+    `E&A%` = list(metric = "performance_ea_pct", lower_better = FALSE, percent = TRUE),
+    `Strike%` = list(metric = "performance_strike_pct", lower_better = FALSE, percent = TRUE),
+    `Zone%` = list(metric = "performance_zone_pct", lower_better = FALSE, percent = TRUE),
+    `Pre2k Zone%` = list(metric = "performance_pre2k_zone_pct", lower_better = FALSE, percent = TRUE),
+    `Pre2K Zone%` = list(metric = "performance_pre2k_zone_pct", lower_better = FALSE, percent = TRUE),
+    `2k Zone%` = list(metric = "performance_2k_zone_pct", lower_better = FALSE, percent = TRUE),
+    `2K Zone%` = list(metric = "performance_2k_zone_pct", lower_better = FALSE, percent = TRUE),
+    `Put Away%` = list(metric = "performance_put_away_pct", lower_better = FALSE, percent = TRUE),
+    `Whiff%` = list(metric = "performance_whiff_pct", lower_better = FALSE, percent = TRUE),
+    `CSW%` = list(metric = "performance_csw_pct", lower_better = FALSE, percent = TRUE),
+    `IZWhiff%` = list(metric = "performance_izwhiff_pct", lower_better = FALSE, percent = TRUE),
+    `Chase%` = list(metric = "performance_chase_pct", lower_better = FALSE, percent = TRUE),
     NULL
   )
   out <- rep(NA_real_, length(values))
-  if (is.null(metric)) return(out)
+  if (is.null(config)) return(out)
   ref <- load_d1_pitch_metric_reference()
-  pool <- ref$value[ref$scope == "overall" & ref$metric == metric & is.finite(ref$value)]
+  pool <- ref$value[
+    ref$scope == "overall" & ref$metric == config$metric & is.finite(ref$value)
+  ]
   if (!length(pool)) return(out)
   v <- vapply(values, parse_num, numeric(1))
-  if (column != "wOBAcon") v <- vapply(v, .as_fraction_if_percentish, numeric(1))
+  if (isTRUE(config$percent)) v <- vapply(v, .as_fraction_if_percentish, numeric(1))
   ok <- is.finite(v)
   out[ok] <- vapply(v[ok], function(value) {
-    pct <- if (column == "wOBAcon") mean(pool >= value) else mean(pool <= value)
+    pct <- if (isTRUE(config$lower_better)) mean(pool >= value) else mean(pool <= value)
     pmin(99, pmax(1, round(100 * pct)))
   }, numeric(1))
   out
@@ -11548,7 +11576,11 @@ server <- function(input, output, session){
     gold   <- "#B4975A"
     date_str <- format(Sys.Date(), "%m-%d-%Y")
     
-    fallback_logo_path <- "www/baseballTS logo gold.png"
+    fallback_logo_path <- get0(
+      "BASE_PITCHING_REPORT_LOGO_PATH",
+      inherits = TRUE,
+      ifnotfound = "www/baseballTS logo gold.png"
+    )
     read_logo_image <- function(path) {
       if (!is.character(path) || length(path) != 1L || !file.exists(path)) return(NULL)
       ext <- tolower(tools::file_ext(path))
@@ -11567,16 +11599,17 @@ server <- function(input, output, session){
     if (!nzchar(bobcat_logo_path) || !file.exists(bobcat_logo_path)) {
       bobcat_logo_path <- find_asset(c("Bobcatlogo", "bobcatlogo", "BobcatLogo", "bobcat_logo", "Bobcat"))
     }
-    left_logo_img <- read_logo_image(txst_logo_path)
+    # Prefer the transparent TS mark for report headers. The older TXST JPEG
+    # remains a fallback for deployments that do not bundle the report asset.
+    left_logo_img <- read_logo_image(fallback_logo_path)
+    if (is.null(left_logo_img)) left_logo_img <- read_logo_image(txst_logo_path)
     right_logo_img <- read_logo_image(bobcat_logo_path)
     fallback_logo_img <- read_logo_image(fallback_logo_path)
     if (is.null(left_logo_img)) left_logo_img <- fallback_logo_img
     if (is.null(right_logo_img)) right_logo_img <- fallback_logo_img
-    logo_grob <- function(img, x, just) {
+    logo_grob <- function(img, x, just, max_w = 0.92, max_h = 0.72) {
       if (is.null(img)) return(grid::nullGrob())
       aspect <- dim(img)[2] / dim(img)[1]
-      max_w <- 0.92
-      max_h <- 0.72
       width <- min(max_w, max_h * aspect)
       height <- width / aspect
       grid::rasterGrob(
@@ -11631,6 +11664,23 @@ server <- function(input, output, session){
     
     fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "NA")
     fmt_num1 <- function(x) ifelse(is.finite(x), sprintf("%.1f", x), "NA")
+
+    # Match the continuous player-facing severity scale used by the live
+    # leaderboard. grid graphics cannot paint CSS rgba() values, so blend the
+    # same colors/alpha over white before assigning the PDF cell fill.
+    pdf_severity_alpha <- function(score) {
+      score <- pmin(pmax(score, -1), 1)
+      severity <- abs(score)
+      ifelse(is.finite(severity) & severity >= 0.08,
+             0.16 + 0.72 * severity^0.80,
+             NA_real_)
+    }
+    pdf_severity_fill <- function(score, alpha) {
+      if (!is.finite(score) || !is.finite(alpha)) return(NA_character_)
+      base <- grDevices::col2rgb(if (score > 0) "#2E7D32" else "#D62828")[, 1]
+      mixed <- round(255 * (1 - alpha) + base * alpha)
+      grDevices::rgb(mixed[1], mixed[2], mixed[3], maxColorValue = 255)
+    }
     
     defs_results <- list(
       # Row 1 (left -> right): K%, BB%, Barrel%
@@ -11656,34 +11706,36 @@ server <- function(input, output, session){
     make_stat_block <- function(title, df_info) {
       df <- df_info$display
       
-      # zebra fills (Pitcher col only) + conditional green for Value col
+      # Zebra rows plus the same continuous benchmark severity used in-app.
       n <- nrow(df)
       zebra1 <- "#FFFFFF"
-      zebra2 <- "#F5F5F5"
+      zebra2 <- "#F7F4EF"
       fills <- matrix(rep(c(zebra1, zebra2), length.out = n), nrow = n, ncol = 2, byrow = FALSE)
-      
-      # compute green mask only for the Value column
-      val_num <- suppressWarnings(as.numeric(gsub("%", "", df$Value))) / 100
-      if (title %in% names(D1_PCT_AVG)) {
+
+      val_num <- suppressWarnings(as.numeric(df_info$values))
+      if (length(val_num) < n) val_num <- c(val_num, rep(NA_real_, n - length(val_num)))
+      severity_score <- rep(NA_real_, n)
+      reference_percentile <- pitching_cell_percentiles(val_num, title)
+      if (any(is.finite(reference_percentile))) {
+        severity_score <- (reference_percentile - 50) / 50
+      } else if (title %in% names(D1_PCT_AVG)) {
         avg <- D1_PCT_AVG[[title]]
         if (is.finite(avg)) {
           lower_better <- title %in% c("BB%","Barrel%")
-          v_pp <- val_num * 100
-          avg_pp <- avg * 100
-          lo <- avg_pp - 5
-          hi <- avg_pp + 5
-          if (isTRUE(lower_better)) {
-            good <- v_pp < lo
-            bad  <- v_pp > hi
-          } else {
-            good <- v_pp > hi
-            bad  <- v_pp < lo
-          }
-          # grid does not accept rgba() strings; use solid hex for PDF
-          fills[good, 2] <- "#D6EBD3"
-          fills[bad,  2] <- "#F3B9B9"
+          severity_score <- (val_num - avg) / 0.05
+          if (isTRUE(lower_better)) severity_score <- -severity_score
         }
       }
+      severity_alpha <- pdf_severity_alpha(severity_score)
+      severity_fill <- mapply(
+        pdf_severity_fill,
+        severity_score,
+        severity_alpha,
+        USE.NAMES = FALSE
+      )
+      colored <- which(!is.na(severity_fill))
+      if (length(colored)) fills[colored, 2] <- severity_fill[colored]
+      value_text <- ifelse(is.finite(severity_alpha) & severity_alpha >= 0.58, "#FFFFFF", "#241719")
       
       title_g <- grid::grobTree(
         grid::rectGrob(gp = grid::gpar(fill = maroon, col = gold, lwd = 0.8)),
@@ -11699,11 +11751,12 @@ server <- function(input, output, session){
           colhead = list(fg_params = list(fontface = "bold")),
           core = list(
             fg_params = list(hjust = 0, x = 0.02, col = "#241719"),
-            bg_params = list(fill = fills, col = "#E2D5C3")
+            bg_params = list(fill = fills, col = "#DED1BD")
           )
         )
       )
-      tbl_g$widths <- grid::unit(c(0.68, 0.32), "null")
+      value_share <- if (identical(title, "Avg Velo")) 0.38 else 0.29
+      tbl_g$widths <- grid::unit(c(1 - value_share, value_share), "null")
       tbl_g$heights <- grid::unit(rep(1, length(tbl_g$heights)), "null")
       # align Pitcher column center, Value column right
       core_idx <- which(tbl_g$layout$name == "core-fg")
@@ -11716,6 +11769,7 @@ server <- function(input, output, session){
           for (i in idx_pitch) {
             g <- tbl_g$grobs[[i]]
             g$just <- "center"
+            g$hjust <- 0.5
             g$x <- grid::unit(0.5, "npc")
             tbl_g$grobs[[i]] <- g
           }
@@ -11723,13 +11777,23 @@ server <- function(input, output, session){
           for (i in idx_val) {
             g <- tbl_g$grobs[[i]]
             g$just <- "center"
+            g$hjust <- 0.5
             g$x <- grid::unit(0.5, "npc")
+            tbl_g$grobs[[i]] <- g
+          }
+          idx_val_ordered <- idx_val[order(tbl_g$layout$t[idx_val])]
+          for (row_i in seq_along(idx_val_ordered)) {
+            i <- idx_val_ordered[[row_i]]
+            g <- tbl_g$grobs[[i]]
+            g$gp$col <- value_text[[row_i]]
+            if (is.finite(severity_alpha[[row_i]])) {
+              g$gp$font <- NULL
+              g$gp$fontface <- "bold"
+            }
             tbl_g$grobs[[i]] <- g
           }
         }
       }
-      # two columns: Pitcher 2/3 + Value 1/3 (bounded to table width)
-      tbl_g$widths <- grid::unit(c(0.67, 0.33), "npc")
       
       # bold leader names/values (including ties)
       core_idx <- which(tbl_g$layout$name == "core-fg")
@@ -11786,10 +11850,11 @@ server <- function(input, output, session){
       make_stat_block(d$name, df_top)
     })
     
-    # 3x2 grid (3 columns, 2 rows) with explicit 30% width / 40% height per table
+    # 3x2 grid with proportional gutters; null units stay relative to each
+    # nested card instead of resolving against the full PDF page.
     grid_with_spacers <- function(grobs, ncol = 3, nrow = 2,
-                                  col_widths = c(0.32, 0.02, 0.32, 0.02, 0.32),
-                                  row_heights = c(0.47, 0.06, 0.47)) {
+                                  col_widths = c(1, 0.06, 1, 0.06, 1),
+                                  row_heights = c(1, 0.10, 1)) {
       total_cells <- ncol * nrow
       grobs <- c(grobs, rep(list(grid::nullGrob()), max(0, total_cells - length(grobs))))
       
@@ -11805,25 +11870,40 @@ server <- function(input, output, session){
         }
       }
       
-      widths <- grid::unit(col_widths, "npc")
-      heights <- grid::unit(row_heights, "npc")
+      widths <- grid::unit(col_widths, "null")
+      heights <- grid::unit(row_heights, "null")
       
       # arrangeGrob fills by row; use row-major vector from matrix
       gridExtra::arrangeGrob(grobs = as.vector(t(mat)), ncol = cols,
                              widths = widths, heights = heights)
     }
     
-    grid_body <- grid_with_spacers(blocks)
+    grid_core <- grid_with_spacers(blocks)
+    body_cells <- rep(list(grid::nullGrob()), 9)
+    body_cells[[5]] <- grid_core
+    grid_body <- grid::grobTree(
+      grid::rectGrob(gp = grid::gpar(fill = "#F7F4EF", col = NA)),
+      gridExtra::arrangeGrob(
+        grobs = body_cells,
+        ncol = 3,
+        widths = grid::unit(c(0.025, 0.95, 0.025), "npc"),
+        heights = grid::unit(c(0.03, 0.94, 0.03), "npc")
+      )
+    )
     
     header_title <- if (type == "results") "Staff Results Leaderboard" else "Staff Process Leaderboard"
     header_g <- grid::grobTree(
       grid::rectGrob(gp = grid::gpar(fill = maroon, col = NA)),
-      logo_grob(left_logo_img, x = 0.04, just = c("left", "center")),
-      logo_grob(right_logo_img, x = 0.96, just = c("right", "center")),
-      grid::textGrob(header_title, x = 0.5, y = 0.64,
-                     gp = grid::gpar(col = gold, fontsize = 22, fontface = "bold")),
-      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.29,
-                     gp = grid::gpar(col = "white", fontsize = 11))
+      grid::segmentsGrob(x0 = 0, x1 = 1, y0 = 0.015, y1 = 0.015,
+                         gp = grid::gpar(col = gold, lwd = 1.5)),
+      logo_grob(left_logo_img, x = 0.035, just = c("left", "center"), max_w = 0.72, max_h = 0.88),
+      logo_grob(right_logo_img, x = 0.965, just = c("right", "center"), max_w = 0.68, max_h = 0.72),
+      grid::textGrob("TEXAS STATE BASEBALL | PLAYER DEVELOPMENT", x = 0.5, y = 0.81,
+                     gp = grid::gpar(col = "#E8DCC3", fontsize = 7.5, fontface = "bold")),
+      grid::textGrob(header_title, x = 0.5, y = 0.56,
+                     gp = grid::gpar(col = gold, fontsize = 21, fontface = "bold")),
+      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.25,
+                     gp = grid::gpar(col = "white", fontsize = 9.5))
     )
     
     grDevices::pdf(outfile, width = 11, height = 8.5, useDingbats = FALSE)

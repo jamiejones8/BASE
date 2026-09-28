@@ -57,6 +57,10 @@ if (!any(prepared$PitchUID == "fixture-unique-hitting-supplement", na.rm = TRUE)
 
 workspace <- base_wally_hitting_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Hitting server is unavailable.")
+report_logo <- png::readPNG(workspace$BASE_HITTING_REPORT_LOGO_PATH)
+if (length(dim(report_logo)) != 3L || dim(report_logo)[3] != 4L || !any(report_logo[, , 4] == 0)) {
+  fail("Hitting leaderboard is not configured with a transparent TS report logo.")
+}
 expected_d1_hitting <- base_d1_aar_benchmarks()$hitting
 if (!isTRUE(all.equal(workspace$HITTING_AAR_D1, expected_d1_hitting, tolerance = 1e-12))) {
   fail("Hitting AAR is not using the parquet-derived D1 Hit Strikes Hard benchmarks.")
@@ -85,6 +89,19 @@ if (!grepl("rgba\\(227,52,52", workspace$stat_severity_fill(1))) {
 }
 if (!grepl("rgba\\(46,125,50", workspace$player_severity_fill(1))) {
   fail("Player-facing Hitting shading is not green for favorable values.")
+}
+leaderboard_d1_pct <- c(
+  `Z-Contact%` = 0.843,
+  `Chase%` = 0.242,
+  `Z-Swing%` = 0.680,
+  `Barrel%` = 0.174
+)
+if (!isTRUE(all.equal(
+  unname(workspace$D1_PCT[names(leaderboard_d1_pct)]),
+  unname(leaderboard_d1_pct),
+  tolerance = 1e-12
+)) || !isTRUE(all.equal(unname(workspace$D1_NON[["90th EV"]]), 103.1, tolerance = 1e-12))) {
+  fail("Hitting leaderboard D1 reference values changed unexpectedly.")
 }
 if (!grepl("^#[0-9A-Fa-f]{6}$", workspace$d1_shade_fill(.40, .30))) {
   fail("Hitting AAR shading is not using PDF-safe hexadecimal colors.")

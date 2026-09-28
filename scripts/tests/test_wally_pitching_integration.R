@@ -68,6 +68,10 @@ if (!any(prepared$PitchUID == "fixture-unique-bullpen-pitch", na.rm = TRUE)) {
 
 workspace <- base_wally_pitching_environment(prepared)
 if (!is.function(workspace$server)) fail("Embedded Pitching server is unavailable.")
+report_logo <- png::readPNG(workspace$BASE_PITCHING_REPORT_LOGO_PATH)
+if (length(dim(report_logo)) != 3L || dim(report_logo)[3] != 4L || !any(report_logo[, , 4] == 0)) {
+  fail("Pitching leaderboard is not configured with a transparent TS report logo.")
+}
 expected_d1_pitching <- base_d1_aar_benchmarks()$pitching
 actual_d1_pitching <- unlist(workspace$D1_REF[names(expected_d1_pitching)])
 if (!isTRUE(all.equal(actual_d1_pitching, expected_d1_pitching, tolerance = 1e-12))) {
@@ -92,6 +96,41 @@ if (!grepl("rgba\\(227,52,52", workspace$.severity_fill(1, "coach"))) {
 }
 if (!grepl("rgba\\(46,125,50", workspace$.severity_fill(1, "player"))) {
   fail("Player-facing Pitching shading is not green for favorable values.")
+}
+leaderboard_reference_metrics <- c(
+  `K%` = "performance_k_pct",
+  `BB%` = "performance_bb_pct",
+  `Barrel%` = "performance_barrel_pct",
+  `Whiff%` = "performance_whiff_pct",
+  `CSW%` = "performance_csw_pct",
+  `Strike%` = "performance_strike_pct",
+  `Zone%` = "performance_zone_pct",
+  `Pre2k Zone%` = "performance_pre2k_zone_pct",
+  `FPS%` = "performance_fps_pct",
+  `E&A%` = "performance_ea_pct",
+  `Put Away%` = "performance_put_away_pct"
+)
+leaderboard_reference <- workspace$load_d1_pitch_metric_reference()
+for (column in names(leaderboard_reference_metrics)) {
+  metric <- leaderboard_reference_metrics[[column]]
+  pool <- leaderboard_reference$value[
+    leaderboard_reference$scope == "overall" &
+      leaderboard_reference$metric == metric &
+      is.finite(leaderboard_reference$value)
+  ]
+  if (!length(pool)) fail("Pitching leaderboard percentile reference is missing: ", metric)
+  midpoint_percentile <- workspace$pitching_cell_percentiles(stats::median(pool), column)
+  if (!is.finite(midpoint_percentile) || abs(midpoint_percentile - 50) > 1) {
+    fail("Pitching leaderboard is not using the empirical D1 percentile pool for ", column)
+  }
+}
+bb_pool <- leaderboard_reference$value[
+  leaderboard_reference$scope == "overall" &
+    leaderboard_reference$metric == "performance_bb_pct" &
+    is.finite(leaderboard_reference$value)
+]
+if (workspace$pitching_cell_percentiles(stats::quantile(bb_pool, 0.25), "BB%") <= 50) {
+  fail("Pitching leaderboard did not reverse the lower-is-better BB% percentile direction.")
 }
 aar_fill <- workspace$aar_severity_fill(.40, .30)
 if (!grepl("^#[0-9A-Fa-f]{6}$", aar_fill) || grepl("rgba", aar_fill, fixed = TRUE)) {

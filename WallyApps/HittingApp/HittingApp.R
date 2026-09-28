@@ -5071,7 +5071,7 @@ server <- function(input, output, session){
 
     fallback_logo_path <- get0(
       "BASE_HITTING_REPORT_LOGO_PATH",
-      inherits = FALSE,
+      inherits = TRUE,
       ifnotfound = "www/baseballTS logo gold.png"
     )
     read_logo_image <- function(path) {
@@ -5084,16 +5084,17 @@ server <- function(input, output, session){
         error = function(e) NULL
       )
     }
-    left_logo_img <- read_logo_image(TXST_LOGO_PATH)
+    # Prefer the transparent TS mark for report headers. The older TXST JPEG
+    # remains a fallback for deployments that do not bundle the report asset.
+    left_logo_img <- read_logo_image(fallback_logo_path)
+    if (is.null(left_logo_img)) left_logo_img <- read_logo_image(TXST_LOGO_PATH)
     right_logo_img <- read_logo_image(BOBCAT_LOGO_PATH)
     fallback_logo_img <- read_logo_image(fallback_logo_path)
     if (is.null(left_logo_img)) left_logo_img <- fallback_logo_img
     if (is.null(right_logo_img)) right_logo_img <- fallback_logo_img
-    logo_grob <- function(img, x, just) {
+    logo_grob <- function(img, x, just, max_w = 0.92, max_h = 0.72) {
       if (is.null(img)) return(grid::nullGrob())
       aspect <- dim(img)[2] / dim(img)[1]
-      max_w <- 0.92
-      max_h <- 0.72
       width <- min(max_w, max_h * aspect)
       height <- width / aspect
       grid::rasterGrob(
@@ -5159,6 +5160,23 @@ server <- function(input, output, session){
     fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "NA")
     fmt_num1 <- function(x) ifelse(is.finite(x), sprintf("%.1f", x), "NA")
 
+    # Reproduce the live leaderboard's player palette and continuous severity
+    # curve. PDF grid cells need solid colors, so the CSS alpha is composited
+    # over white before drawing.
+    pdf_severity_alpha <- function(score) {
+      score <- pmin(pmax(score, -1), 1)
+      severity <- abs(score)
+      ifelse(is.finite(severity) & severity >= 0.08,
+             0.16 + 0.72 * severity^0.80,
+             NA_real_)
+    }
+    pdf_severity_fill <- function(score, alpha) {
+      if (!is.finite(score) || !is.finite(alpha)) return(NA_character_)
+      base <- grDevices::col2rgb(if (score > 0) "#2E7D32" else "#D62828")[, 1]
+      mixed <- round(255 * (1 - alpha) + base * alpha)
+      grDevices::rgb(mixed[1], mixed[2], mixed[3], maxColorValue = 255)
+    }
+
     defs <- list(
       list(name = "Z-Contact%", col = "Z-Contact%", higher = TRUE,  fmt = fmt_pct),
       list(name = "Chase%",     col = "Chase%",     higher = FALSE, fmt = fmt_pct),
@@ -5171,34 +5189,44 @@ server <- function(input, output, session){
     make_stat_block <- function(title, df_info, higher = TRUE) {
       df <- df_info$display
 
-      # zebra fills (Hitter col only) + conditional green for Value col
+      # Zebra rows plus the same benchmark/percentile severity used in-app.
       n <- nrow(df)
       zebra1 <- "#FFFFFF"
-      zebra2 <- "#F5F5F5"
+      zebra2 <- "#F7F4EF"
       fills <- matrix(rep(c(zebra1, zebra2), length.out = n), nrow = n, ncol = 2, byrow = FALSE)
 
-      val_num <- df_info$values
+      val_num <- suppressWarnings(as.numeric(df_info$values))
       if (length(val_num) < n) val_num <- c(val_num, rep(NA_real_, n - length(val_num)))
-
+      severity_score <- rep(NA_real_, n)
       if (title %in% names(d1_pct)) {
         avg <- d1_pct[[title]]
         if (is.finite(avg)) {
-          if (title == "Z-Swing%") {
-            good <- val_num > 0.68
-          } else {
-            tol <- 0.05
-            good <- if (higher) (val_num > avg * (1 + tol)) else (val_num < avg * (1 - tol))
-          }
-          fills[good, 2] <- STAT_GOOD_SOLID
+          severity_score <- (val_num - avg) / 0.05
+          if (!isTRUE(higher)) severity_score <- -severity_score
         }
       }
-      if (title %in% names(d1_non)) {
+      if (identical(title, "90th EV") && title %in% names(d1_non)) {
         avg <- d1_non[[title]]
-        if (is.finite(avg)) {
-          good <- val_num > (avg + 2.5)
-          fills[good, 2] <- STAT_GOOD_SOLID
-        }
+        if (is.finite(avg)) severity_score <- (val_num - avg) / 2.5
       }
+      if (identical(title, "Max EV")) {
+        percentile <- 100 * stats::pnorm(
+          val_num,
+          mean = HITTING_PERCENTILE_REFERENCE$MaxEV[["mean"]],
+          sd = HITTING_PERCENTILE_REFERENCE$MaxEV[["sd"]]
+        )
+        severity_score <- (percentile - 50) / 50
+      }
+      severity_alpha <- pdf_severity_alpha(severity_score)
+      severity_fill <- mapply(
+        pdf_severity_fill,
+        severity_score,
+        severity_alpha,
+        USE.NAMES = FALSE
+      )
+      colored <- which(!is.na(severity_fill))
+      if (length(colored)) fills[colored, 2] <- severity_fill[colored]
+      value_text <- ifelse(is.finite(severity_alpha) & severity_alpha >= 0.58, "#FFFFFF", "#241719")
 
       title_g <- grid::grobTree(
         grid::rectGrob(gp = grid::gpar(fill = maroon, col = gold, lwd = 0.8)),
@@ -5214,11 +5242,11 @@ server <- function(input, output, session){
           colhead = list(fg_params = list(fontface = "bold")),
           core = list(
             fg_params = list(hjust = 0, x = 0.02, col = "#241719"),
-            bg_params = list(fill = fills, col = "#E2D5C3")
+            bg_params = list(fill = fills, col = "#DED1BD")
           )
         )
       )
-      tbl_g$widths <- grid::unit(c(0.68, 0.32), "null")
+      tbl_g$widths <- grid::unit(c(0.71, 0.29), "null")
       tbl_g$heights <- grid::unit(rep(1, length(tbl_g$heights)), "null")
       # align Hitter column center, Value column right
       core_idx <- which(tbl_g$layout$name == "core-fg")
@@ -5231,6 +5259,7 @@ server <- function(input, output, session){
           for (i in idx_hit) {
             g <- tbl_g$grobs[[i]]
             g$just <- "center"
+            g$hjust <- 0.5
             g$x <- grid::unit(0.5, "npc")
             tbl_g$grobs[[i]] <- g
           }
@@ -5238,13 +5267,23 @@ server <- function(input, output, session){
           for (i in idx_val) {
             g <- tbl_g$grobs[[i]]
             g$just <- "center"
+            g$hjust <- 0.5
             g$x <- grid::unit(0.5, "npc")
+            tbl_g$grobs[[i]] <- g
+          }
+          idx_val_ordered <- idx_val[order(tbl_g$layout$t[idx_val])]
+          for (row_i in seq_along(idx_val_ordered)) {
+            i <- idx_val_ordered[[row_i]]
+            g <- tbl_g$grobs[[i]]
+            g$gp$col <- value_text[[row_i]]
+            if (is.finite(severity_alpha[[row_i]])) {
+              g$gp$font <- NULL
+              g$gp$fontface <- "bold"
+            }
             tbl_g$grobs[[i]] <- g
           }
         }
       }
-      # two columns: Hitter 2/3 + Value 1/3
-      tbl_g$widths <- grid::unit(c(0.67, 0.33), "npc")
 
       # bold leader names/values (including ties)
       core_idx <- which(tbl_g$layout$name == "core-fg")
@@ -5289,8 +5328,8 @@ server <- function(input, output, session){
     })
 
     grid_with_spacers <- function(grobs, ncol = 3, nrow = 2,
-                                  col_widths = c(0.32, 0.02, 0.32, 0.02, 0.32),
-                                  row_heights = c(0.47, 0.06, 0.47)) {
+                                  col_widths = c(1, 0.06, 1, 0.06, 1),
+                                  row_heights = c(1, 0.10, 1)) {
       total_cells <- ncol * nrow
       grobs <- c(grobs, rep(list(grid::nullGrob()), max(0, total_cells - length(grobs))))
 
@@ -5306,23 +5345,38 @@ server <- function(input, output, session){
         }
       }
 
-      widths <- grid::unit(col_widths, "npc")
-      heights <- grid::unit(row_heights, "npc")
+      widths <- grid::unit(col_widths, "null")
+      heights <- grid::unit(row_heights, "null")
 
       gridExtra::arrangeGrob(grobs = as.vector(t(mat)), ncol = cols,
                              widths = widths, heights = heights)
     }
 
-    grid_body <- grid_with_spacers(blocks)
+    grid_core <- grid_with_spacers(blocks)
+    body_cells <- rep(list(grid::nullGrob()), 9)
+    body_cells[[5]] <- grid_core
+    grid_body <- grid::grobTree(
+      grid::rectGrob(gp = grid::gpar(fill = "#F7F4EF", col = NA)),
+      gridExtra::arrangeGrob(
+        grobs = body_cells,
+        ncol = 3,
+        widths = grid::unit(c(0.025, 0.95, 0.025), "npc"),
+        heights = grid::unit(c(0.03, 0.94, 0.03), "npc")
+      )
+    )
 
     header_g <- grid::grobTree(
       grid::rectGrob(gp = grid::gpar(fill = maroon, col = NA)),
-      logo_grob(left_logo_img, x = 0.04, just = c("left", "center")),
-      logo_grob(right_logo_img, x = 0.96, just = c("right", "center")),
-      grid::textGrob("Hit Strikes Hard Leaderboard", x = 0.5, y = 0.64,
-                     gp = grid::gpar(col = gold, fontsize = 22, fontface = "bold")),
-      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.29,
-                     gp = grid::gpar(col = "white", fontsize = 11))
+      grid::segmentsGrob(x0 = 0, x1 = 1, y0 = 0.015, y1 = 0.015,
+                         gp = grid::gpar(col = gold, lwd = 1.5)),
+      logo_grob(left_logo_img, x = 0.035, just = c("left", "center"), max_w = 0.72, max_h = 0.88),
+      logo_grob(right_logo_img, x = 0.965, just = c("right", "center"), max_w = 0.68, max_h = 0.72),
+      grid::textGrob("TEXAS STATE BASEBALL | PLAYER DEVELOPMENT", x = 0.5, y = 0.81,
+                     gp = grid::gpar(col = "#E8DCC3", fontsize = 7.5, fontface = "bold")),
+      grid::textGrob("Hit Strikes Hard Leaderboard", x = 0.5, y = 0.56,
+                     gp = grid::gpar(col = gold, fontsize = 21, fontface = "bold")),
+      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.25,
+                     gp = grid::gpar(col = "white", fontsize = 9.5))
     )
 
     grDevices::pdf(outfile, width = 11, height = 8.5, useDingbats = FALSE)

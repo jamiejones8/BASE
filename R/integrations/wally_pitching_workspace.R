@@ -878,6 +878,9 @@ base_wally_pitching_environment <- function(team_rows) {
   workspace$BASE_PITCHING_TXST_LOGO_PATH <- base_project_path(
     "WallyApps", "PitchingApp", "www", "txstlogo.jpeg"
   )
+  workspace$BASE_PITCHING_REPORT_LOGO_PATH <- base_project_path(
+    "WallyApps", "PitchingApp", "www", "baseballTS logo gold.png"
+  )
   workspace$BASE_PITCHING_BOBCAT_LOGO_PATH <- base_project_path(
     "WallyApps", "PitchingApp", "www", "Bobcatlogo.png"
   )
