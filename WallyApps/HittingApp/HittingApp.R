@@ -1544,6 +1544,21 @@ HITTING_PDF_STAT_METRICS <- c(
   "IZ-Swing%" = "IZ-Swing%"
 )
 
+hitting_leaderboard_rank_score <- function(values, higher = TRUE) {
+  values <- suppressWarnings(as.numeric(values))
+  scores <- rep(NA_real_, length(values))
+  valid <- which(is.finite(values))
+  if (!length(valid)) return(scores)
+  if (length(valid) == 1L) {
+    scores[valid] <- 0
+    return(scores)
+  }
+  percentile <- (rank(values[valid], ties.method = "average") - 1) / (length(valid) - 1)
+  if (!isTRUE(higher)) percentile <- 1 - percentile
+  scores[valid] <- 2 * percentile - 1
+  scores
+}
+
 contact_type_levels <- c("Pop Up", "Fly Ball", "Line Drive", "Ground Ball")
 result_type_levels <- c("Out/Error/FC", "1B", "2B", "3B", "HR")
 contact_shape_values <- c("Pop Up"=21, "Fly Ball"=22, "Line Drive"=24, "Ground Ball"=23)
@@ -5145,16 +5160,6 @@ server <- function(input, output, session){
       )
     }
 
-    d1_pct <- c(
-      `Z-Contact%` = D1_PCT[["Z-Contact%"]],
-      `Chase%`     = D1_PCT[["Chase%"]],
-      `Barrel%`    = D1_PCT[["Barrel%"]],
-      `Z-Swing%`   = D1_PCT[["Z-Swing%"]]
-    )
-    d1_non <- c(
-      `90th EV` = D1_NON[["90th EV"]]
-    )
-
     top10_tbl <- function(df, col, label, higher = TRUE, fmt = function(x) x) {
       if (is.null(df) || !nrow(df) || !"Hitter" %in% names(df) || !(col %in% names(df))) {
         blank <- data.frame(Hitter = rep(" ", 10), Value = rep(" ", 10), stringsAsFactors = FALSE)
@@ -5195,7 +5200,6 @@ server <- function(input, output, session){
     }
 
     fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.0f%%", 100 * x), "NA")
-    fmt_num1 <- function(x) ifelse(is.finite(x), sprintf("%.1f", x), "NA")
     fmt_num3 <- function(x) ifelse(is.finite(x), sprintf("%.3f", x), "NA")
 
     # Reproduce the live leaderboard's player palette and continuous severity
@@ -5227,7 +5231,8 @@ server <- function(input, output, session){
     make_stat_block <- function(title, df_info, higher = TRUE) {
       df <- df_info$display
 
-      # Zebra rows plus the same benchmark/percentile severity used in-app.
+      # Color the ranked value cells on a consistent player-facing scale.
+      # Green is stronger, red is weaker, and lower K% is correctly inverted.
       n <- nrow(df)
       zebra1 <- "#FFFFFF"
       zebra2 <- "#F7F4EF"
@@ -5235,26 +5240,7 @@ server <- function(input, output, session){
 
       val_num <- suppressWarnings(as.numeric(df_info$values))
       if (length(val_num) < n) val_num <- c(val_num, rep(NA_real_, n - length(val_num)))
-      severity_score <- rep(NA_real_, n)
-      if (title %in% names(d1_pct)) {
-        avg <- d1_pct[[title]]
-        if (is.finite(avg)) {
-          severity_score <- (val_num - avg) / 0.05
-          if (!isTRUE(higher)) severity_score <- -severity_score
-        }
-      }
-      if (identical(title, "90th EV") && title %in% names(d1_non)) {
-        avg <- d1_non[[title]]
-        if (is.finite(avg)) severity_score <- (val_num - avg) / 2.5
-      }
-      if (identical(title, "Max EV")) {
-        percentile <- 100 * stats::pnorm(
-          val_num,
-          mean = HITTING_PERCENTILE_REFERENCE$MaxEV[["mean"]],
-          sd = HITTING_PERCENTILE_REFERENCE$MaxEV[["sd"]]
-        )
-        severity_score <- (percentile - 50) / 50
-      }
+      severity_score <- hitting_leaderboard_rank_score(val_num, higher = higher)
       severity_alpha <- pdf_severity_alpha(severity_score)
       severity_fill <- mapply(
         pdf_severity_fill,

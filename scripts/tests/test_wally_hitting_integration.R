@@ -107,6 +107,15 @@ if (!grepl("rgba\\(227,52,52", workspace$stat_severity_fill(1))) {
 if (!grepl("rgba\\(46,125,50", workspace$player_severity_fill(1))) {
   fail("Player-facing Hitting shading is not green for favorable values.")
 }
+if (!isTRUE(all.equal(
+  workspace$hitting_leaderboard_rank_score(c(.100, .200, .300), higher = TRUE),
+  c(-1, 0, 1)
+)) || !isTRUE(all.equal(
+  workspace$hitting_leaderboard_rank_score(c(.100, .200, .300), higher = FALSE),
+  c(1, 0, -1)
+))) {
+  fail("Hitting leaderboard conditional formatting does not respect metric direction.")
+}
 leaderboard_d1_pct <- c(
   `Z-Contact%` = 0.843,
   `Chase%` = 0.242,
