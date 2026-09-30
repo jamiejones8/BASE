@@ -137,18 +137,19 @@ calculate_hitter_stats <- function(df,
   df <- df %>%
     mutate(
       Swing    = PitchCall %in% c("StrikeSwinging", "FoulBallNotFieldable",
-                                  "FoulBallFieldable", "InPlay"),
-      Contact  = PitchCall %in% c("FoulBallNotFieldable", "FoulBallFieldable","InPlay"),
+                                  "FoulBallFieldable", "FoulTip",
+                                  "InPlay", "InPlayOut", "InPlayNoOut"),
+      Contact  = PitchCall %in% c("FoulBallNotFieldable", "FoulBallFieldable", "FoulTip",
+                                  "InPlay", "InPlayOut", "InPlayNoOut"),
       Whiff    = PitchCall == "StrikeSwinging",
       ZSwing   = (Zone == "InZone") & Swing,
       ZContact = (Zone == "InZone") & Contact,
       OOPitch  = (Zone == "OutZone"),
       OOSwing  = OOPitch & Swing,
-      BBE      = PitchCall == "InPlay",
-      BarrelFlag = BBE & !is.na(ExitSpeed) & !is.na(Angle) &
-        ((ExitSpeed >= 95 & Angle >= 5 & Angle <= 30) |
-           (ExitSpeed >= 105 & Angle >= 5 & Angle <= 40)),
-      HardHit  = BBE & !is.na(ExitSpeed) & ExitSpeed >= 95,
+      BBE      = PitchCall %in% c("InPlay", "InPlayOut", "InPlayNoOut"),
+      BarrelFlag = BBE & is.finite(ExitSpeed) & is.finite(Angle) &
+        ExitSpeed >= 95 & Angle >= 5 & Angle <= 35,
+      HardHit  = BBE & is.finite(ExitSpeed) & ExitSpeed >= 95,
       AirBall  = BBE & (TaggedHitType %in% c("LineDrive", "FlyBall", "Popup"))
     )
   
@@ -221,18 +222,26 @@ calculate_hitter_stats <- function(df,
   bbe_rates <- df %>%
     group_by(Batter_group) %>%
     summarise(
-      BBE      = sum(BBE,        na.rm = TRUE),
+      BBECount = sum(BBE, na.rm = TRUE),
+      EVOpportunities = sum(BBE & is.finite(ExitSpeed), na.rm = TRUE),
+      BarrelOpportunities = sum(BBE & is.finite(ExitSpeed) & is.finite(Angle), na.rm = TRUE),
       HitsInPlay = sum(BBE & PlayResult %in% hit_results, na.rm = TRUE),
       Barrels  = sum(BarrelFlag, na.rm = TRUE),
       HardHits = sum(HardHit,    na.rm = TRUE),
-      MaxEV    = suppressWarnings(max(ExitSpeed, na.rm = TRUE)),
-      P90EV    = ifelse(BBE > 0, as.numeric(stats::quantile(ExitSpeed, 0.9, na.rm = TRUE)), NA_real_),
+      MaxEV    = {
+        values <- ExitSpeed[BBE & is.finite(ExitSpeed)]
+        if (length(values)) max(values) else NA_real_
+      },
+      P90EV    = {
+        values <- ExitSpeed[BBE & is.finite(ExitSpeed)]
+        if (length(values)) as.numeric(stats::quantile(values, 0.9, na.rm = TRUE)) else NA_real_
+      },
       .groups  = "drop"
     ) %>%
     mutate(
-      BABIP     = ifelse(BBE > 0, round(HitsInPlay / BBE, 3), NA_real_),
-      `EV>95%`  = ifelse(BBE > 0, round(HardHits / BBE * 100, 1), 0),
-      `Barrel%` = ifelse(BBE > 0, round(Barrels  / BBE * 100, 1), 0)
+      BABIP     = ifelse(BBECount > 0, round(HitsInPlay / BBECount, 3), NA_real_),
+      `EV>95%`  = ifelse(EVOpportunities > 0, round(HardHits / EVOpportunities * 100, 1), NA_real_),
+      `Barrel%` = ifelse(BarrelOpportunities > 0, round(Barrels / BarrelOpportunities * 100, 1), NA_real_)
     ) %>%
     select(Batter_group, BABIP, `EV>95%`, MaxEV, P90EV, `Barrel%`)
   

@@ -256,7 +256,7 @@ base_import_trackman_game <- function(upload_path, target_id, root = NULL) {
     stop("Could not create the season-data directory: ", directory, call. = FALSE)
   }
 
-  lock <- file.path(directory, paste0(".", target$id, "-import.lock"))
+  lock <- file.path(directory, paste0(".", target$id, "-write.lock"))
   if (!dir.create(lock, showWarnings = FALSE)) {
     stop(target$label, " is already being updated by another import.", call. = FALSE)
   }
@@ -328,5 +328,140 @@ base_team_season_source_status <- function(target_id, root = NULL) {
     path = path,
     size = unname(info$size[[1]]),
     modified = unname(info$mtime[[1]])
+  )
+}
+
+# The Data Processing editor intentionally exposes only the cumulative CSVs
+# managed by the import workflow. Keeping the allow-list here prevents a
+# browser value from ever being interpreted as an arbitrary filesystem path.
+base_editable_trackman_sources <- function(root = NULL) {
+  targets <- base_trackman_import_targets()
+  rows <- lapply(targets, function(target) {
+    path <- base_team_season_import_path(target$id, root = root)
+    info <- if (file.exists(path)) file.info(path) else NULL
+    data.frame(
+      id = target$id,
+      label = target$label,
+      filename = target$filename,
+      path = path,
+      exists = !is.null(info),
+      size = if (is.null(info)) 0 else unname(info$size[[1]]),
+      modified = if (is.null(info)) as.POSIXct(NA) else unname(info$mtime[[1]]),
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
+}
+
+base_trackman_csv_fingerprint <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  info <- file.info(path)
+  list(
+    path = normalizePath(path, winslash = "/", mustWork = TRUE),
+    size = unname(info$size[[1]]),
+    modified = as.numeric(unname(info$mtime[[1]]))
+  )
+}
+
+base_validate_trackman_manual_edit <- function(rows, target_id, before = NULL) {
+  target <- base_team_season_import_target(target_id)
+  rows <- tibble::as_tibble(rows)
+  if (!is.null(before)) before <- tibble::as_tibble(before)
+  required <- c("Date", "PitcherTeam", "BatterTeam", "Pitcher", "Batter", "PitchCall")
+  missing <- setdiff(required, names(rows))
+  if (length(missing)) {
+    stop(
+      "The edited CSV is missing required columns: ",
+      paste(missing, collapse = ", "),
+      ". No changes were written.",
+      call. = FALSE
+    )
+  }
+
+  dates <- base_parse_trackman_dates(rows$Date)
+  before_dates <- if (is.null(before)) rep(as.Date(NA), nrow(rows)) else base_parse_trackman_dates(before$Date)
+  unchanged_dates <- if (is.null(before)) rep(FALSE, nrow(rows)) else {
+    old <- as.character(before$Date)
+    new <- as.character(rows$Date)
+    (is.na(old) & is.na(new)) | (!is.na(old) & !is.na(new) & old == new)
+  }
+  if (any(is.na(dates) & !unchanged_dates)) {
+    stop("An edit introduced an unrecognized TrackMan Date. No changes were written.", call. = FALSE)
+  }
+  wrong_year <- !is.na(dates) & as.integer(format(dates, "%Y")) != target$expected_year
+  if (!is.null(target$expected_year) && any(wrong_year & !unchanged_dates)) {
+    stop(
+      target$label, " can contain only ", target$expected_year,
+      " dates. No changes were written.",
+      call. = FALSE
+    )
+  }
+
+  keys <- base_trackman_event_key(rows)
+  before_keys <- if (is.null(before)) rep(NA_character_, nrow(rows)) else base_trackman_event_key(before)
+  newly_missing <- (is.na(keys) | !nzchar(keys)) & !(is.na(before_keys) | !nzchar(before_keys))
+  duplicate_values <- unique(keys[
+    !is.na(keys) & nzchar(keys) & (duplicated(keys) | duplicated(keys, fromLast = TRUE))
+  ])
+  before_duplicate_values <- unique(before_keys[
+    !is.na(before_keys) & nzchar(before_keys) &
+      (duplicated(before_keys) | duplicated(before_keys, fromLast = TRUE))
+  ])
+  if (any(newly_missing) || length(setdiff(duplicate_values, before_duplicate_values))) {
+    stop(
+      "An edit introduced a missing or duplicate TrackMan pitch identity. No changes were written.",
+      call. = FALSE
+    )
+  }
+  invisible(rows)
+}
+
+base_trackman_changed_cells <- function(before, after) {
+  if (!identical(dim(before), dim(after)) || !identical(names(before), names(after))) return(NA_integer_)
+  changed <- vapply(names(before), function(column) {
+    old <- as.character(before[[column]])
+    new <- as.character(after[[column]])
+    old[is.na(old)] <- "\u001e<NA>"
+    new[is.na(new)] <- "\u001e<NA>"
+    sum(old != new)
+  }, integer(1))
+  sum(changed)
+}
+
+base_save_trackman_manual_edit <- function(rows, target_id, fingerprint, root = NULL) {
+  target <- base_team_season_import_target(target_id)
+  path <- base_team_season_import_path(target$id, root = root)
+  directory <- dirname(path)
+  lock <- file.path(directory, paste0(".", target$id, "-write.lock"))
+  if (!dir.create(lock, showWarnings = FALSE)) {
+    stop(target$label, " is already being edited or imported. Try again in a moment.", call. = FALSE)
+  }
+  on.exit(unlink(lock, recursive = TRUE, force = TRUE), add = TRUE)
+
+  current_fingerprint <- base_trackman_csv_fingerprint(path)
+  if (is.null(current_fingerprint) || !identical(current_fingerprint, fingerprint)) {
+    stop(
+      "This CSV changed after it was opened. Reload it before saving so another update is not overwritten.",
+      call. = FALSE
+    )
+  }
+
+  current <- base_read_trackman_import(path)
+  rows <- tibble::as_tibble(rows)
+  if (!identical(dim(current), dim(rows)) || !identical(names(current), names(rows))) {
+    stop("Manual editing cannot add, remove, or rename rows or columns. No changes were written.", call. = FALSE)
+  }
+  base_validate_trackman_manual_edit(rows, target$id, before = current)
+  changed_cells <- base_trackman_changed_cells(current, rows)
+  if (changed_cells > 0L) base_atomic_write_trackman_csv(rows, path)
+
+  list(
+    ok = TRUE,
+    target_id = target$id,
+    target_label = target$label,
+    destination = path,
+    changed_cells = changed_cells,
+    total_rows = nrow(rows),
+    fingerprint = base_trackman_csv_fingerprint(path)
   )
 }

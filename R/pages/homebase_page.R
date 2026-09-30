@@ -484,7 +484,7 @@ homebase_pitcher_metrics <- function(data) {
   is_bip <- grepl("^in.?play", pitch_call) |
     grepl("single|double|triple|home.?run|ground|fly|line|pop|error|sac|out", play_result)
   barrel_ok <- is_bip & is.finite(ev) & is.finite(angle)
-  is_barrel <- barrel_ok & ev >= 95 & angle >= 5 & angle <= 40
+  is_barrel <- barrel_ok & ev >= 95 & angle >= 5 & angle <= 35
   is_hard_hit <- is_bip & is.finite(ev) & ev >= 95
   hit_type <- tolower(as.character(homebase_first_column(data, c("TaggedHitType", "AutoHitType"), "")))
   is_gb <- is_bip & ((is.finite(angle) & angle < 5) | grepl("ground", hit_type))

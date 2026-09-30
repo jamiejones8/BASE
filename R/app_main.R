@@ -4352,6 +4352,18 @@ data_processing_workspace_ui <- function() {
       .base-import-status.is-success { border-color:rgba(37,99,69,.24);background:var(--base-success-soft); }
       .base-import-status.is-error { border-color:rgba(155,44,44,.24);background:var(--base-danger-soft);color:var(--base-danger); }
       .base-import-path { display:block;overflow-wrap:anywhere;color:var(--base-muted);font-family:var(--base-font-data);font-size:10px; }
+      .base-csv-editor { margin-top:28px;padding:18px;border:1px solid var(--base-border);border-radius:var(--base-radius);background:var(--base-surface);box-shadow:var(--base-shadow-sm); }
+      .base-csv-editor-heading { display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px; }
+      .base-csv-editor-heading h3 { margin:2px 0 5px;font-family:var(--base-font-display);font-size:24px; }
+      .base-csv-editor-heading p { max-width:760px;margin:0;color:var(--base-muted); }
+      .base-csv-editor-controls { display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:10px;align-items:end;margin-bottom:12px; }
+      .base-csv-editor-controls .form-group { margin:0; }
+      .base-csv-editor-status { min-height:42px;margin:10px 0;padding:10px 12px;border-radius:8px;background:var(--base-surface-soft);color:var(--base-muted);font-size:12px;line-height:1.45; }
+      .base-csv-editor-status.is-dirty { background:var(--base-gold-soft);color:var(--base-maroon);font-weight:700; }
+      .base-csv-editor-status.is-success { background:var(--base-success-soft);color:#256345; }
+      .base-csv-editor-status.is-error { background:var(--base-danger-soft);color:var(--base-danger); }
+      .base-csv-table-wrap { width:100%;overflow-x:auto; }
+      .base-csv-table-wrap table.dataTable td { white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis; }
       @media(max-width:800px){.base-import-grid{grid-template-columns:1fr}.base-import-card>p{min-height:0}}
     "))),
     tags$div(
@@ -4386,6 +4398,27 @@ data_processing_workspace_ui <- function() {
         import_card("F26", "dp_f26", "dp_f26_status"),
         import_card("S27", "dp_s27", "dp_s27_status"),
         import_card("BP", "dp_bp", "dp_bp_status")
+      ),
+      tags$section(
+        class = "base-csv-editor",
+        tags$div(
+          class = "base-csv-editor-heading",
+          tags$div(
+            tags$div(class = "base-eyebrow", "Persistent CSV sources"),
+            tags$h3("View and correct stored data"),
+            tags$p(
+              "Open a cumulative TrackMan CSV, double-click a cell to edit it, then review and save your corrections. Row and column structure is protected."
+            )
+          )
+        ),
+        tags$div(
+          class = "base-csv-editor-controls",
+          shiny::selectInput("dp_csv_source", "CSV file", choices = character()),
+          shiny::actionButton("dp_csv_reload", "Reload file", class = "btn btn-outline-secondary"),
+          shiny::actionButton("dp_csv_save", "Save changes", class = "btn-primary")
+        ),
+        shiny::uiOutput("dp_csv_editor_status"),
+        tags$div(class = "base-csv-table-wrap", DT::DTOutput("dp_csv_editor"))
       )
     ),
     tags$div(class = "hub-footer", base_brand_footer())
@@ -4456,6 +4489,220 @@ data_processing_server <- function(input, output, session) {
   output$dp_s27_status <- shiny::renderUI(render_status("S27", states$S27()))
   output$dp_bp_status <- shiny::renderUI(render_status("BP", states$BP()))
 
+  csv_rows <- shiny::reactiveVal(NULL)
+  csv_original <- shiny::reactiveVal(NULL)
+  csv_fingerprint <- shiny::reactiveVal(NULL)
+  csv_loaded_id <- shiny::reactiveVal(NULL)
+  csv_message <- shiny::reactiveVal(NULL)
+  csv_pending_load <- shiny::reactiveVal(NULL)
+
+  refresh_csv_choices <- function(selected = NULL) {
+    sources <- base_editable_trackman_sources()
+    available <- sources[sources$exists, , drop = FALSE]
+    choices <- stats::setNames(
+      available$id,
+      paste0(available$label, " — ", available$filename)
+    )
+    if (is.null(selected) || !selected %in% unname(choices)) {
+      selected <- if (length(choices)) unname(choices[[1]]) else character()
+    }
+    shiny::updateSelectInput(session, "dp_csv_source", choices = choices, selected = selected)
+    invisible(available)
+  }
+
+  load_csv_editor <- function(target_id) {
+    if (is.null(target_id) || !nzchar(target_id)) {
+      csv_rows(NULL)
+      csv_original(NULL)
+      csv_fingerprint(NULL)
+      csv_loaded_id(NULL)
+      csv_message(list(type = "empty", text = "No managed CSV files are currently present on the writable volume."))
+      return(invisible(FALSE))
+    }
+    target <- base_team_season_import_target(target_id)
+    path <- base_team_season_import_path(target$id)
+    loaded <- tryCatch(base_read_trackman_import(path), error = identity)
+    if (inherits(loaded, "error")) {
+      csv_rows(NULL)
+      csv_original(NULL)
+      csv_fingerprint(NULL)
+      csv_loaded_id(NULL)
+      csv_message(list(type = "error", text = conditionMessage(loaded)))
+      return(invisible(FALSE))
+    }
+    loaded[] <- lapply(loaded, as.character)
+    csv_rows(loaded)
+    csv_original(loaded)
+    csv_fingerprint(base_trackman_csv_fingerprint(path))
+    csv_loaded_id(target$id)
+    csv_message(list(
+      type = "ready",
+      text = paste0(
+        format(nrow(loaded), big.mark = ","), " rows and ", ncol(loaded),
+        " columns loaded from ", target$filename, ". Double-click a cell to edit."
+      )
+    ))
+    invisible(TRUE)
+  }
+
+  shiny::observeEvent(TRUE, {
+    available <- refresh_csv_choices()
+    if (nrow(available)) load_csv_editor(available$id[[1]]) else load_csv_editor(NULL)
+  }, once = TRUE)
+
+  request_csv_load <- function(target_id) {
+    current <- csv_rows()
+    original <- csv_original()
+    changed <- if (!is.null(current) && !is.null(original)) {
+      base_trackman_changed_cells(original, current)
+    } else {
+      0L
+    }
+    if (is.finite(changed) && changed > 0L) {
+      csv_pending_load(target_id)
+      if (!is.null(csv_loaded_id())) {
+        shiny::updateSelectInput(session, "dp_csv_source", selected = csv_loaded_id())
+      }
+      shiny::showModal(shiny::modalDialog(
+        title = "Discard unsaved CSV changes?",
+        paste0(changed, if (changed == 1L) " edited cell has" else " edited cells have", " not been saved."),
+        footer = tagList(
+          shiny::modalButton("Keep editing"),
+          shiny::actionButton("dp_csv_confirm_discard", "Discard and reload", class = "btn-danger")
+        ),
+        easyClose = FALSE
+      ))
+      return(invisible(FALSE))
+    }
+    load_csv_editor(target_id)
+  }
+
+  shiny::observeEvent(input$dp_csv_source, {
+    if (!is.null(input$dp_csv_source) && !identical(input$dp_csv_source, csv_loaded_id())) {
+      request_csv_load(input$dp_csv_source)
+    }
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input$dp_csv_reload, {
+    request_csv_load(input$dp_csv_source)
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input$dp_csv_confirm_discard, {
+    target_id <- csv_pending_load()
+    shiny::removeModal()
+    csv_pending_load(NULL)
+    if (!is.null(target_id) && nzchar(target_id)) {
+      load_csv_editor(target_id)
+      shiny::updateSelectInput(session, "dp_csv_source", selected = target_id)
+    }
+  }, ignoreInit = TRUE)
+
+  output$dp_csv_editor <- DT::renderDT({
+    rows <- csv_rows()
+    shiny::req(!is.null(rows))
+    DT::datatable(
+      rows,
+      rownames = FALSE,
+      editable = list(target = "cell"),
+      filter = "top",
+      selection = "none",
+      options = list(
+        pageLength = 25,
+        lengthMenu = c(10, 25, 50, 100),
+        scrollX = TRUE,
+        autoWidth = TRUE,
+        deferRender = TRUE
+      ),
+      class = "stripe hover compact"
+    )
+  }, server = TRUE)
+
+  shiny::observeEvent(input$dp_csv_editor_cell_edit, {
+    rows <- csv_rows()
+    shiny::req(!is.null(rows))
+    updated <- DT::editData(
+      rows,
+      input$dp_csv_editor_cell_edit,
+      proxy = DT::dataTableProxy("dp_csv_editor", session = session),
+      rownames = FALSE
+    )
+    updated[] <- lapply(updated, as.character)
+    csv_rows(updated)
+    changed <- base_trackman_changed_cells(csv_original(), updated)
+    csv_message(list(
+      type = if (changed > 0L) "dirty" else "ready",
+      text = if (changed > 0L) {
+        paste0(changed, if (changed == 1L) " cell has" else " cells have", " unsaved changes.")
+      } else {
+        "All changes have been reverted; the file matches the saved source."
+      }
+    ))
+  }, ignoreInit = TRUE)
+
+  output$dp_csv_editor_status <- shiny::renderUI({
+    message <- csv_message()
+    if (is.null(message)) return(NULL)
+    tags$div(
+      class = paste("base-csv-editor-status", paste0("is-", message$type)),
+      message$text
+    )
+  })
+
+  shiny::observeEvent(input$dp_csv_save, {
+    rows <- csv_rows()
+    original <- csv_original()
+    shiny::req(!is.null(rows), !is.null(original))
+    changed <- base_trackman_changed_cells(original, rows)
+    if (!is.finite(changed) || changed <= 0L) {
+      shiny::showNotification("There are no CSV changes to save.", type = "message", duration = 4)
+      return()
+    }
+    shiny::showModal(shiny::modalDialog(
+      title = "Save CSV corrections?",
+      paste0(
+        "This will replace ", base_team_season_import_target(csv_loaded_id())$filename,
+        " with ", changed, if (changed == 1L) " edited cell." else " edited cells."
+      ),
+      footer = tagList(
+        shiny::modalButton("Cancel"),
+        shiny::actionButton("dp_csv_confirm_save", "Save corrections", class = "btn-primary")
+      ),
+      easyClose = FALSE
+    ))
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input$dp_csv_confirm_save, {
+    shiny::removeModal()
+    target_id <- csv_loaded_id()
+    result <- tryCatch(
+      base_save_trackman_manual_edit(
+        csv_rows(), target_id, csv_fingerprint()
+      ),
+      error = identity
+    )
+    if (inherits(result, "error")) {
+      csv_message(list(type = "error", text = conditionMessage(result)))
+      shiny::showNotification(conditionMessage(result), type = "error", duration = 8)
+      return()
+    }
+    csv_original(csv_rows())
+    csv_fingerprint(result$fingerprint)
+    csv_message(list(
+      type = "success",
+      text = paste0(
+        result$changed_cells, if (result$changed_cells == 1L) " correction was" else " corrections were",
+        " saved to ", basename(result$destination), "."
+      )
+    ))
+    base_clear_team_pitching_cache()
+    base_clear_team_hitting_cache()
+    base_clear_wally_pitching_state()
+    base_clear_wally_hitting_state()
+    base_clear_wally_defense_state()
+    homebase_clear_history_cache()
+    shiny::showNotification("CSV corrections saved.", type = "message", duration = 6)
+  }, ignoreInit = TRUE)
+
   register_import <- function(target_id, input_prefix, state) {
     shiny::observeEvent(input[[paste0(input_prefix, "_append")]], {
       upload <- input[[paste0(input_prefix, "_file")]]
@@ -4489,6 +4736,8 @@ data_processing_server <- function(input, output, session) {
       base_clear_wally_defense_state()
       homebase_clear_history_cache()
       state(list(type = "success", result = result))
+      refresh_csv_choices(selected = result$target_id)
+      if (identical(csv_loaded_id(), result$target_id)) request_csv_load(result$target_id)
       shiny::showNotification(
         paste(result$target_label, "saved:", result$inserted_rows, "new pitches"),
         type = "message",

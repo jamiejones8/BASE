@@ -74,6 +74,64 @@ if (any(workspace$is_walk_on_player_name(workspace$df$Batter)) ||
     any(workspace$is_walk_on_player_name(workspace$txst_df$Batter))) {
   fail("Standalone Hitting data still exposes a Walk On hitter.")
 }
+
+# Event identity must honor TrackMan's uppercase IDs. The previous fallback
+# collapsed pitches from separate games that happened to share inning/PA/pitch.
+identity_rows <- tibble::tibble(
+  PitchUID = c("pitch-a", "pitch-b", "pitch-a"),
+  GameUID = c("game-a", "game-b", "game-a"),
+  Date = "2026-02-06",
+  `Top/Bottom` = c("Top", "Bottom", "Top"),
+  Inning = 1,
+  PAofInning = 1,
+  PitchofPA = 1,
+  Batter = c("Batter A", "Batter B", "Batter A"),
+  Pitcher = "Pitcher A"
+)
+deduped_identity_rows <- workspace$dedupe_hitting_events(identity_rows)
+if (nrow(deduped_identity_rows) != 2L ||
+    !identical(deduped_identity_rows$PitchUID, c("pitch-a", "pitch-b"))) {
+  fail("Hitting event deduplication drops distinct uppercase PitchUID events.")
+}
+fallback_rows <- dplyr::select(identity_rows[1:2, ], -PitchUID)
+if (nrow(workspace$dedupe_hitting_events(fallback_rows)) != 2L) {
+  fail("Hitting event fallback identity still collides across games or inning halves.")
+}
+
+expected_barrels <- c(TRUE, FALSE, TRUE, FALSE)
+actual_barrels <- workspace$is_barrel_txst(
+  rep("InPlay", 4), rep("HomeRun", 4),
+  c(95, 94.9, 100, 100), c(5, 20, 35, 35.1)
+)
+if (!identical(actual_barrels, expected_barrels)) {
+  fail("Hitting barrel boundaries are not consistently 95+ mph and 5-35 degrees.")
+}
+
+barrel_fixture <- tibble::tibble(
+  PA_ID = c("measured", "unmeasured"),
+  PitchCall = c("InPlay", "InPlay"),
+  PlayResult = c("HomeRun", "Single"),
+  PitchofPA = c(1, 1),
+  ExitSpeed = c(100, NA_real_),
+  Angle = c(20, NA_real_)
+)
+barrel_summary <- workspace$summarize_overall(barrel_fixture)
+if (!isTRUE(all.equal(barrel_summary$`Barrel%`, 1))) {
+  fail("Unmeasured balls in play still dilute Hitting Barrel%.")
+}
+
+unordered_pa <- tibble::tibble(
+  PA_ID = c("pa-one", "pa-one"),
+  PitchCall = c("InPlay", "BallCalled"),
+  PlayResult = c("HomeRun", ""),
+  PitchofPA = c(2, 1),
+  ExitSpeed = c(101, NA_real_),
+  Angle = c(20, NA_real_)
+)
+unordered_summary <- workspace$summarize_overall(unordered_pa)
+if (!isTRUE(all.equal(unordered_summary$MaxEV, 101))) {
+  fail("Hitting PA summaries do not select the terminal pitch after sorting PitchofPA.")
+}
 report_logo <- png::readPNG(workspace$BASE_HITTING_REPORT_LOGO_PATH)
 if (length(dim(report_logo)) != 3L || dim(report_logo)[3] != 4L || !any(report_logo[, , 4] == 0)) {
   fail("Hitting leaderboard is not configured with a transparent TS report logo.")
@@ -332,10 +390,17 @@ shiny::testServer(workspace$server, {
   }
   pa_check <- filtered
   pa_check$PA_ID <- workspace$make_pa_id(pa_check)
+  pa_check$.base_row_order <- seq_len(nrow(pa_check))
+  pa_check$.base_pitch_order <- workspace$.get_num(
+    pa_check,
+    c("PitchofPA", "PitchOfPA", "PitchNo", "PitchNum")
+  )
   pa_check <- pa_check %>%
+    dplyr::arrange(.data$PA_ID, dplyr::coalesce(.data$.base_pitch_order, -Inf), .data$.base_row_order) %>%
     dplyr::group_by(.data$PA_ID) %>%
     dplyr::slice_tail(n = 1) %>%
-    dplyr::ungroup()
+    dplyr::ungroup() %>%
+    dplyr::select(-dplyr::all_of(c(".base_row_order", ".base_pitch_order")))
   pc_check <- workspace$.get_chr(pa_check, c("pitch_call", "PitchCall"))
   pr_check <- workspace$.get_chr(pa_check, c("play_result", "PlayResult"))
   la_check <- if ("la" %in% names(pa_check)) pa_check$la else workspace$.get_num(pa_check, c("Angle", "LaunchAngle"))

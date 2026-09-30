@@ -140,22 +140,40 @@ base_hitting_supplement_rows <- function() {
 
 base_hitting_event_key <- function(rows) {
   n <- nrow(rows)
-  value <- function(name) {
-    if (name %in% names(rows)) trimws(as.character(rows[[name]])) else rep("", n)
+  value <- function(candidates) {
+    out <- rep("", n)
+    for (name in candidates) {
+      if (!name %in% names(rows)) next
+      candidate <- trimws(as.character(rows[[name]]))
+      candidate[is.na(candidate)] <- ""
+      take <- !nzchar(out) & nzchar(candidate)
+      out[take] <- candidate[take]
+    }
+    out
   }
-  pitch_uid <- value("PitchUID")
-  play_id <- value("PlayID")
-  fallback <- do.call(
-    paste,
-    c(lapply(
-      c(
-        "Date", "GameID", "GameUID", "Batter", "Inning", "PAofInning",
-        "PitchofPA", "Pitcher", "RelSpeed", "PlateLocSide", "PlateLocHeight"
-      ),
-      value
-    ), sep = "\u001f")
+  pitch_uid <- value(c("PitchUID", "pitch_uid", "PitchUid"))
+  play_id <- value(c("PlayID", "play_id", "PlayId"))
+  fallback_fields <- list(
+    value(c("Date", "GameDate", "date")),
+    value(c("GameID", "game_id")),
+    value(c("GameUID", "game_uid")),
+    value(c("CustomGameID", "custom_game_id")),
+    value(c("Top/Bottom", "TopBottom", "HalfInning")),
+    value(c("Batter", "batter")),
+    value(c("Inning", "inning")),
+    value(c("PAofInning", "PAOfInning", "pa_of_inning")),
+    value(c("PitchofPA", "PitchOfPA", "pitch_of_pa")),
+    value(c("Pitcher", "pitcher")),
+    value(c("RelSpeed", "rel_speed")),
+    value(c("PlateLocSide", "plate_x")),
+    value(c("PlateLocHeight", "plate_z"))
   )
-  has_fallback <- nzchar(gsub("\u001f", "", fallback, fixed = TRUE))
+  fallback <- do.call(paste, c(fallback_fields, sep = "\u001f"))
+  has_game_or_date <- Reduce(`|`, lapply(fallback_fields[1:4], nzchar))
+  has_pitch_location <- nzchar(fallback_fields[[7]]) &
+    nzchar(fallback_fields[[8]]) & nzchar(fallback_fields[[9]])
+  has_people <- nzchar(fallback_fields[[6]]) | nzchar(fallback_fields[[10]])
+  has_fallback <- has_game_or_date & has_pitch_location & has_people
   dplyr::case_when(
     nzchar(pitch_uid) ~ paste0("pitch:", pitch_uid),
     nzchar(play_id) ~ paste0("play:", play_id),

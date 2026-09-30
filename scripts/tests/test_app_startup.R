@@ -12,8 +12,11 @@ if (!inherits(app, "shiny.appobj")) {
 data_processing_html <- paste(as.character(data_processing_workspace_ui()), collapse = "")
 if (!grepl("dp_bp_file", data_processing_html, fixed = TRUE) ||
     !grepl("dp_bp_append", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_bp_status", data_processing_html, fixed = TRUE)) {
-  stop("Data Processing does not expose the bullpen append workflow.", call. = FALSE)
+    !grepl("dp_bp_status", data_processing_html, fixed = TRUE) ||
+    !grepl("dp_csv_source", data_processing_html, fixed = TRUE) ||
+    !grepl("dp_csv_editor", data_processing_html, fixed = TRUE) ||
+    !grepl("dp_csv_save", data_processing_html, fixed = TRUE)) {
+  stop("Data Processing does not expose the bullpen import and CSV editor workflows.", call. = FALSE)
 }
 
 duplicate_percentiles <- tibble::tibble(

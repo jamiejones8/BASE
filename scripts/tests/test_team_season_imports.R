@@ -120,6 +120,43 @@ if (!isTRUE(status$exists) || status$size <= 0 || status$target$label != "2026 F
   fail("Season source status did not describe the saved cumulative file.")
 }
 
+editable_sources <- base_editable_trackman_sources(root = scratch)
+if (!identical(editable_sources$id, c("F26", "S27", "BP")) ||
+    !all(editable_sources$exists[c(1, 3)]) || editable_sources$exists[[2]]) {
+  fail("The CSV editor did not expose exactly the managed TrackMan sources and their availability.")
+}
+
+editor_rows <- base_read_trackman_import(first$destination)
+editor_fingerprint <- base_trackman_csv_fingerprint(first$destination)
+editor_rows$PitchCall[[1]] <- "HitByPitch"
+editor_result <- base_save_trackman_manual_edit(
+  editor_rows, "F26", editor_fingerprint, root = scratch
+)
+editor_saved <- base_read_trackman_import(first$destination)
+if (editor_result$changed_cells != 1L || editor_saved$PitchCall[[1]] != "HitByPitch") {
+  fail("A valid manual CSV cell correction was not saved atomically.")
+}
+
+stale_error <- tryCatch({
+  base_save_trackman_manual_edit(editor_rows, "F26", editor_fingerprint, root = scratch)
+  NULL
+}, error = identity)
+if (is.null(stale_error) || !grepl("changed after it was opened", conditionMessage(stale_error), fixed = TRUE)) {
+  fail("The CSV editor did not reject a stale save after the source changed.")
+}
+
+invalid_rows <- editor_saved
+invalid_rows$PitchUID[[2]] <- invalid_rows$PitchUID[[1]]
+invalid_error <- tryCatch({
+  base_save_trackman_manual_edit(
+    invalid_rows, "F26", base_trackman_csv_fingerprint(first$destination), root = scratch
+  )
+  NULL
+}, error = identity)
+if (is.null(invalid_error) || !grepl("duplicate TrackMan pitch identity", conditionMessage(invalid_error), fixed = TRUE)) {
+  fail("The CSV editor did not protect unique pitch identity fields.")
+}
+
 TEAM_CONFIG$data$team_season_import_dir <- scratch
 source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 source("R/integrations/wally_hitting_workspace.R", local = FALSE)
@@ -143,4 +180,4 @@ if (nrow(future_catching) != 3L || !all(future_catching$SeasonGroup == "F26") ||
   fail("The Catcher AAR loader did not read and label 2026 Fall rows from the configured volume.")
 }
 
-cat("Team TrackMan import tests passed: season/catcher volume loading, bullpen append, deduplication, schema evolution, and validation.\n")
+cat("Team TrackMan import tests passed: season/catcher volume loading, bullpen append, safe CSV editing, deduplication, schema evolution, and validation.\n")

@@ -36,9 +36,7 @@ is_barrel <- function(exit_speed, angle) {
   ev <- safe_metric_num(exit_speed)
   la <- safe_metric_num(angle)
 
-  !is.na(ev) & !is.na(la) &
-    ((ev >= 95 & la >= 5 & la <= 30) |
-       (ev >= 105 & la >= 5 & la <= 40))
+  is.finite(ev) & is.finite(la) & ev >= 95 & la >= 5 & la <= 35
 }
 
 safe_zscore <- function(x) {

@@ -58,6 +58,12 @@ mount it as persistent writable storage. The bullpen importer writes to
 If Pitching, Hitting, Postgame Reports, or HomeBASE was already open during an
 import, reload BASE to rebuild that workspace from the updated file.
 
+The same Data Processing page includes a table editor for every managed CSV
+that currently exists. Users can filter the table, double-click individual
+cells, and explicitly confirm a save. Saves are atomic, revalidate dates and
+unique TrackMan pitch identity, and refuse to overwrite a file changed by
+another import or editor session after it was opened.
+
 ## 2026 data model
 
 - The visible Opponent Scouting workspace can query the existing mounted

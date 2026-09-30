@@ -81,6 +81,7 @@ source("helpers/pitch_type_summary.R", local = TRUE)
 source("helpers/cache_loader.R", local = TRUE)
 source("helpers/leaderboard_rankings.R", local = TRUE)
 source("helpers/print_layouts.R", local = TRUE)
+source("helpers/period_sources.R", local = TRUE)
 
 # ---- THEME ----
 team_analytics_theme <- bs_theme(
@@ -212,17 +213,17 @@ team_analytics_shell_ui <- function() {
           tags$button(
             type = "button", class = "leaderboards-season-option active",
             `data-period` = "2026-season", `aria-pressed` = "true",
-            title = "Dataset mapping will be added later", "2026 Season"
+            title = "Use the 2026 NCAA Division I source", "2026 Season"
           ),
           tags$button(
             type = "button", class = "leaderboards-season-option",
             `data-period` = "2026-fall", `aria-pressed` = "false",
-            title = "Dataset mapping will be added later", "2026 Fall"
+            title = "Use the managed 2026 Fall CSV", "2026 Fall"
           ),
           tags$button(
             type = "button", class = "leaderboards-season-option",
             `data-period` = "2027-season", `aria-pressed` = "false",
-            title = "Dataset mapping will be added later", "2027 Season"
+            title = "Use the managed 2027 Season CSV", "2027 Season"
           )
         )
       ),
@@ -283,9 +284,29 @@ server <- function(input, output, session) {
   # =========================================================
   #  LOAD LEADERBOARD DATA (ONLY on init + manual refresh)
   # =========================================================
-  load_local_data <- function() {
+  load_local_data <- function(period = "2026-season") {
       tryCatch({
-        message("Loading leaderboard data from ", TEAM_CONFIG$data$season_file, "...")
+        period_spec <- leaderboards_period_spec(period)
+        message("Loading ", period_spec$label, " leaderboard data from ", period_spec$path, "...")
+
+        if (!isTRUE(period_spec$shared_source)) {
+          precomputed_bundle(NULL)
+          if (!file.exists(period_spec$path)) {
+            combined_data(tibble::tibble())
+            message(period_spec$label, " has no managed CSV yet; showing an empty leaderboard state.")
+            return(invisible(NULL))
+          }
+
+          managed_rows <- readr::read_csv(
+            period_spec$path,
+            col_types = readr::cols(.default = readr::col_character()),
+            progress = FALSE,
+            show_col_types = FALSE
+          )
+          combined_data(process_data(as.data.frame(managed_rows)))
+          message("Loaded ", nrow(managed_rows), " rows for ", period_spec$label, ".")
+          return(invisible(NULL))
+        }
 
         shared_college_data <- get0(
           "season_data",
@@ -354,8 +375,10 @@ server <- function(input, output, session) {
     }
   
   # ---- INITIAL LOAD + MANUAL REFRESH (Data Files page) ----
-  observeEvent(refresh_trigger(), {
-    load_local_data()
+  observeEvent(list(refresh_trigger(), input$leaderboards_period_placeholder), {
+    period <- input$leaderboards_period_placeholder
+    if (is.null(period) || !nzchar(period)) period <- "2026-season"
+    load_local_data(period)
   }, ignoreInit = FALSE)
 
   # =========================================================

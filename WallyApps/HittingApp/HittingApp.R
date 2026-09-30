@@ -180,6 +180,63 @@ is_barrel_txst <- function(pc, pr, ev, la){
   bip & is.finite(ev) & is.finite(la) & ev >= 95.0 & la >= 5 & la <= 35
 }
 
+# Build one stable identity for a pitch before any leaderboard/report summary.
+# TrackMan exports are not consistent about identifier capitalization, and the
+# old Date/Inning/PA/Pitch fallback collided whenever two games shared a date.
+hitting_event_value <- function(d, candidates) {
+  n <- nrow(d)
+  out <- rep("", n)
+  for (candidate in candidates) {
+    if (!candidate %in% names(d)) next
+    value <- trimws(as.character(d[[candidate]]))
+    value[is.na(value)] <- ""
+    take <- !nzchar(out) & nzchar(value)
+    out[take] <- value[take]
+  }
+  out
+}
+
+hitting_event_key <- function(d) {
+  n <- nrow(d)
+  if (!n) return(character())
+
+  pitch_uid <- hitting_event_value(d, c("PitchUID", "pitch_uid", "PitchUid"))
+  play_id <- hitting_event_value(d, c("PlayID", "play_id", "PlayId"))
+  fallback_fields <- list(
+    hitting_event_value(d, c("GameUID", "game_uid")),
+    hitting_event_value(d, c("GameID", "game_id")),
+    hitting_event_value(d, c("CustomGameID", "custom_game_id")),
+    hitting_event_value(d, c("Date", "GameDate", "date")),
+    hitting_event_value(d, c("Top/Bottom", "TopBottom", "HalfInning")),
+    hitting_event_value(d, c("Inning", "inning")),
+    hitting_event_value(d, c("PAofInning", "PAOfInning", "pa_of_inning")),
+    hitting_event_value(d, c("PitchofPA", "PitchOfPA", "pitch_of_pa")),
+    hitting_event_value(d, c("Batter", "batter")),
+    hitting_event_value(d, c("Pitcher", "pitcher"))
+  )
+  fallback <- do.call(paste, c(fallback_fields, sep = "\u001f"))
+  has_game_or_date <- Reduce(`|`, lapply(fallback_fields[1:4], nzchar))
+  has_pitch_location <- nzchar(fallback_fields[[6]]) &
+    nzchar(fallback_fields[[7]]) & nzchar(fallback_fields[[8]])
+  has_people <- nzchar(fallback_fields[[9]]) | nzchar(fallback_fields[[10]])
+  has_fallback <- has_game_or_date & has_pitch_location & has_people
+
+  dplyr::case_when(
+    nzchar(pitch_uid) ~ paste0("pitch:", pitch_uid),
+    nzchar(play_id) ~ paste0("play:", play_id),
+    has_fallback ~ paste0("event:", fallback),
+    TRUE ~ paste0("row:", seq_len(n))
+  )
+}
+
+dedupe_hitting_events <- function(d) {
+  if (is.null(d) || !is.data.frame(d) || nrow(d) < 2L) return(d)
+  d$.base_hitting_event_key <- hitting_event_key(d)
+  d <- dplyr::distinct(d, .data$.base_hitting_event_key, .keep_all = TRUE)
+  d$.base_hitting_event_key <- NULL
+  d
+}
+
 
 # -------------------- Pitch palette & mapping --------------------
 pitch_colors <- c(
@@ -1259,11 +1316,15 @@ summarize_overall <- function(d){
   # ---------- PA-level table ----------
   d2 <- d
   if (!("PA_ID" %in% names(d2))) d2$PA_ID <- make_pa_id(d2)
+  d2$.base_row_order <- seq_len(nrow(d2))
+  d2$.base_pitch_order <- .get_num(d2, c("PitchofPA", "PitchOfPA", "PitchNo", "PitchNum"))
   
   pa_last <- d2 %>%
+    dplyr::arrange(.data$PA_ID, dplyr::coalesce(.data$.base_pitch_order, -Inf), .data$.base_row_order) %>%
     dplyr::group_by(.data$PA_ID) %>%
     dplyr::slice_tail(n = 1) %>%
-    dplyr::ungroup()
+    dplyr::ungroup() %>%
+    dplyr::select(-dplyr::all_of(c(".base_row_order", ".base_pitch_order")))
   
   PA <- nrow(pa_last)
   
@@ -1323,7 +1384,8 @@ summarize_overall <- function(d){
   } else {
     (bip_pa %in% TRUE) & is.finite(ev_pa) & is.finite(la_pa) & ev_pa >= 95.0 & la_pa >= 5 & la_pa <= 35
   }
-  barrel_pct <- safe_ratio(sum(barrel_flag %in% TRUE, na.rm = TRUE), bip_den)
+  barrel_den <- sum((bip_pa %in% TRUE) & is.finite(ev_pa) & is.finite(la_pa), na.rm = TRUE)
+  barrel_pct <- safe_ratio(sum(barrel_flag %in% TRUE, na.rm = TRUE), barrel_den)
   
   ev95_pct <- safe_ratio(sum((bip_pa %in% TRUE) & is.finite(ev_pa) & ev_pa >= 95, na.rm = TRUE), bip_den)
 
@@ -4845,14 +4907,8 @@ server <- function(input, output, session){
       }
     }
 
-    # Deduplicate pitches to avoid inflated counts
-    if ("pitch_uid" %in% names(d)) d <- d %>% dplyr::distinct(pitch_uid, .keep_all = TRUE)
-    if ("row_id"   %in% names(d)) d <- d %>% dplyr::distinct(row_id,   .keep_all = TRUE)
-    if (!("pitch_uid" %in% names(d)) && !("row_id" %in% names(d)) &&
-        all(c("Date","Inning","PAofInning","PitchofPA") %in% names(d))) {
-      d <- d %>% dplyr::distinct(Date, Inning, PAofInning, PitchofPA, .keep_all = TRUE)
-    }
-    d
+    # Deduplicate exact event identities without collapsing separate games.
+    dedupe_hitting_events(d)
   })
 
   leaderboard_summary <- function(d){
@@ -6647,14 +6703,8 @@ server <- function(input, output, session){
       ) %>%
       dplyr::select(-.k_inn, -.k_half, -.k_pa, -.k_pop, -.k_pno, -.k_pnum, -.k_row)
     
-    # --- HARD DE-DUPE: identical pitch rows sneaking in from file merges ---
-    if (all(c("source_file","row_in_file") %in% names(d))) {
-      d <- d %>% dplyr::distinct(source_file, row_in_file, .keep_all = TRUE)
-    } else if (all(c("Date","Inning","PAofInning","PitchofPA") %in% names(d))) {
-      d <- d %>% dplyr::distinct(Date, Inning, PAofInning, PitchofPA, .keep_all = TRUE)
-    } else {
-      d <- d %>% dplyr::distinct(dplyr::across(dplyr::everything()), .keep_all = TRUE)
-    }
+    # --- HARD DE-DUPE: identical event identities from merged exports ---
+    d <- dedupe_hitting_events(d)
     
     # Ensure PA_ID exists for tables that number plate appearances
     d$PA_ID <- make_pa_id(d)
@@ -9493,12 +9543,7 @@ server <- function(input, output, session){
     
     d <- filter_team(d, "BatterTeam")
     
-    if ("pitch_uid" %in% names(d)) d <- d %>% dplyr::distinct(pitch_uid, .keep_all = TRUE)
-    if ("row_id"   %in% names(d)) d <- d %>% dplyr::distinct(row_id,   .keep_all = TRUE)
-    if (!("pitch_uid" %in% names(d)) && !("row_id" %in% names(d)) &&
-        all(c("Date","Inning","PAofInning","PitchofPA") %in% names(d))) {
-      d <- d %>% dplyr::distinct(Date, Inning, PAofInning, PitchofPA, .keep_all = TRUE)
-    }
+    d <- dedupe_hitting_events(d)
     
     shiny::validate(shiny::need(nrow(d) > 0, "No data for that game."))
     d
@@ -9518,8 +9563,7 @@ server <- function(input, output, session){
       d <- d %>% dplyr::filter(toupper(trimws(.data[[season_col]])) == toupper(trimws(info$group)))
     }
     
-    if ("pitch_uid" %in% names(d)) d <- d %>% dplyr::distinct(pitch_uid, .keep_all = TRUE)
-    if ("row_id"   %in% names(d)) d <- d %>% dplyr::distinct(row_id,   .keep_all = TRUE)
+    d <- dedupe_hitting_events(d)
     
     d
   })
