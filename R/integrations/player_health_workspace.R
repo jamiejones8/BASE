@@ -5,7 +5,7 @@ BASE_PLAYER_HEALTH_FILE <- file.path(BASE_PLAYER_HEALTH_ROOT, "dashboard.R")
 base_source("R/config/player_health_deployment.R", local = FALSE)
 BASE_PLAYER_HEALTH_REQUIRED_PACKAGES <- c(
   "bslib", "callr", "dplyr", "DT", "filelock", "httr", "httr2",
-  "jsonlite", "keyring", "lubridate", "plotly", "purrr", "readr", "readxl",
+  "jsonlite", "lubridate", "plotly", "purrr", "readr", "readxl",
   "rlang", "shiny", "stringr", "tibble", "tidyr", "tidyverse", "valdr"
 )
 

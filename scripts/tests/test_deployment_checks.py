@@ -103,6 +103,23 @@ class DeploymentChecks(unittest.TestCase):
         self.assertIn('base_source("R/config/player_health_deployment.R"', integration)
         self.assertIn('"/base-data/app_state/player-health"', integration)
 
+    def test_player_health_checks_valdr_not_its_internal_keyring_import(self):
+        integration = (
+            ROOT / "R" / "integrations" / "player_health_workspace.R"
+        ).read_text(encoding="utf-8")
+        required_block = integration.split(
+            "BASE_PLAYER_HEALTH_REQUIRED_PACKAGES <- c(", 1
+        )[1].split("\n)", 1)[0]
+        self.assertIn('"valdr"', required_block)
+        self.assertNotIn('"keyring"', required_block)
+
+        # valdr imports keyring, so it remains installed in both the current
+        # image and the reusable dependency image. It just is not a separate
+        # app-level startup gate.
+        for filename in ("Dockerfile", "Dockerfile.dependencies"):
+            source = (ROOT / filename).read_text(encoding="utf-8")
+            self.assertIn("keyring", source, filename)
+
 
 if __name__ == "__main__":
     unittest.main()
