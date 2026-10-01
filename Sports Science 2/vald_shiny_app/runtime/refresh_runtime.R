@@ -14,9 +14,32 @@ atomic_rds <- function(value, path) {
   saveRDS(value, tmp)
   if (!file.rename(tmp, path)) stop("Could not publish ", basename(path))
 }
+refresh_state_cache <- new.env(parent = emptyenv())
 read_refresh_state <- function() {
-  if (!file.exists(state_file)) return(list(message = "Not refreshed yet", attempted = as.POSIXct(NA), success = as.POSIXct(NA)))
-  readRDS(state_file)
+  key <- normalizePath(state_file, mustWork = FALSE)
+  cached <- refresh_state_cache[[key]]
+  empty <- list(message = "Not refreshed yet", attempted = as.POSIXct(NA), success = as.POSIXct(NA))
+  if (!file.exists(state_file) && is.null(cached)) return(empty)
+  state <- tryCatch({
+    value <- suppressWarnings(readRDS(state_file))
+    valid_time <- function(x) is.null(x) || (inherits(x, "POSIXt") && length(x) == 1L && (is.na(x) || is.finite(as.numeric(x))))
+    if (!is.list(value) || length(value$message) != 1L || !is.character(value$message) || is.na(value$message) ||
+        !valid_time(value$attempted) || !valid_time(value$success)) stop("Invalid refresh status")
+    value
+  }, error = function(e) NULL)
+  if (!is.null(state)) {
+    refresh_state_cache[[key]] <- state
+    return(state)
+  }
+  # Keep the last known refresh timestamps and retry reading on the next poll.
+  # On a cold start, use the normal one-hour backoff rather than a retry storm.
+  if (is.null(cached)) {
+    cached <- empty
+    cached$attempted <- Sys.time()
+    refresh_state_cache[[key]] <- cached
+  }
+  cached$message <- "Refresh status could not be read; keeping existing dashboard data. Status will be checked again automatically."
+  cached
 }
 refresh_due <- function(state, now = Sys.time()) {
   interval <- suppressWarnings(as.numeric(Sys.getenv("VALD_REFRESH_HOURS", "24")))
@@ -65,12 +88,11 @@ load_published_snapshot <- function() {
   if (identical(stamp, snapshot_stamp)) return(FALSE)
   snapshot <- readRDS(snapshot_file)
   list2env(snapshot, shared_data)
-  reconcile_shared_player_health_identity()
-  # Snapshots may have been produced on another machine. Never surface its
-  # absolute filesystem path in the staff-facing status strip.
+  # Do not surface a serialized absolute path from whichever machine created
+  # the snapshot. The configured directories remain available in diagnostics.
   shared_data$status <- paste0(
-    "Player Health snapshot loaded at ",
-    format(file.info(snapshot_file)$mtime, "%H:%M:%S")
+    "Published Player Health snapshot loaded at ",
+    format(file.info(snapshot_file)$mtime, "%Y-%m-%d %H:%M:%S")
   )
   snapshot_stamp <<- stamp
   shared_revision(shiny::isolate(shared_revision()) + 1L)
@@ -91,24 +113,16 @@ if (!identical(Sys.getenv("VALD_REFRESH_WORKER"), "true")) {
 }
 start_refresh <- function(force = FALSE) {
   if (!is.null(refresh_process) && refresh_process$is_alive()) return("A refresh is already running")
-  missing_runtime <- c("callr", "filelock", "httr2", "valdr", "keyring")
-  missing_runtime <- missing_runtime[
-    !vapply(missing_runtime, requireNamespace, logical(1), quietly = TRUE)
-  ]
-  if (length(missing_runtime)) {
-    msg <- paste0("Live refresh is unavailable; missing packages: ", paste(missing_runtime, collapse = ", "), ".")
-    refresh_message(msg)
-    return(msg)
-  }
   if (!vald_credentials_status()$ok) {
-    msg <- "Live refresh needs VALD credentials in .Renviron; existing data remains available."
+    msg <- "Live refresh needs VALD credentials in the deployment configuration; existing data remains available."
     refresh_message(msg)
     return(msg)
   }
   if (!force && !refresh_due(read_refresh_state())) return("Refresh not due")
   refresh_process <<- callr::r_bg(function(app_root, force) {
     setwd(app_root)
-    if (dir.exists(".R-library")) .libPaths(c(normalizePath(".R-library"), .libPaths()))
+    source("local_library.R", local = TRUE)
+    use_vald_local_library()
     if (file.exists(".Renviron")) readRenviron(".Renviron")
     Sys.setenv(VALD_APP_ROOT = app_root, VALD_REFRESH_WORKER = "true")
     source("dashboard.R", local = globalenv())

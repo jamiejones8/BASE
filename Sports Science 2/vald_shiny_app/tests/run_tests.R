@@ -1,5 +1,6 @@
 # Run from the app folder: Rscript tests/run_tests.R
-.libPaths(c(normalizePath(".R-library"), .libPaths()))
+source("local_library.R", local = TRUE)
+use_vald_local_library()
 Sys.setenv(VALD_AUTO_REFRESH = "false", VALD_REFRESH_WORKER = "true", VALD_APP_ROOT = normalizePath(getwd()))
 source("dashboard.R")
 library(testthat)
@@ -112,6 +113,9 @@ test_that("a first refresh builds summaries without pre-existing metrics files",
   expect_true(file.exists(file.path(env$DATA_DIR,"roster_baseball.rds")))
 })
 # Synthetic data exists only in this process, never in the delivered app.
+read_fall_roster <- function(...) list(players=data.frame(name=c("Test Pitcher","Test Hitter"),
+  key=c("test pitcher","test hitter"),position=c("RHP","INF"),role=c("Pitchers","Hitters")),
+  aliases=data.frame(alias=character(),key=character()),error=NULL)
 metrics <- unique(c(HITTER_METRICS_ORDERED,PITCHER_PERF_METRICS,PITCHER_INJURY_VALUE_METRICS,CMJ_MONITOR_METRICS))
 shared_data$roster <- tibble(profileId=c("p1","p2"),athleteName=c("Test Pitcher","Test Hitter"),externalId=c("TXST-Baseball-001","TXST-Baseball-002"),primaryGroup=c("Pitchers","Infielders"))
 shared_data$session_summary <- tidyr::crossing(profileId=c("p1","p2"),session_date=seq(Sys.Date()-49,Sys.Date(),by=7),metricName=metrics) %>%

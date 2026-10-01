@@ -18,7 +18,7 @@ WALLY_HITTING_PATH = ROOT / "WallyApps" / "HittingApp" / "HittingApp.R"
 WALLY_DEFENSE_PATH = ROOT / "WallyApps" / "DefenseApp" / "DefenseApp.R"
 WALLY_SCOUTING_PATH = ROOT / "WallyApps" / "ScoutingApp" / "ScoutingApp.R"
 WALLY_JUCO_PATH = ROOT / "WallyApps" / "JucoStatsApp" / "app.R"
-PLAYER_HEALTH_PATH = ROOT / "Sports Science" / "vald_shiny_app" / "dashboard.R"
+PLAYER_HEALTH_PATH = ROOT / "Sports Science 2" / "vald_shiny_app" / "dashboard.R"
 
 
 def fail(message: str) -> None:
@@ -123,9 +123,13 @@ def main() -> int:
         "CMJ Monitoring",
         "Sprint / SmartSpeed",
         "Curve View (Force Tracing)",
+        "ArmCare",
+        "PULSE",
+        "Combined Health",
+        "KPI Correlations",
     }
     if set(player_health.get("tools", [])) != expected_health_tools:
-        fail("Player Health must expose all six Sports Science workflows.")
+        fail("Player Health must expose every Sports Science 2 workflow.")
 
     known_routes = set(sources.get("feature_routes", {}))
     for workspace in workspaces:

@@ -1,13 +1,33 @@
-# Adapter for the Sports Science VALD/SmartSpeed dashboard inside BASE.
+# Adapter for the Sports Science 2 Player Health dashboard inside BASE.
 
-BASE_PLAYER_HEALTH_ROOT <- base_project_path("Sports Science", "vald_shiny_app")
+BASE_PLAYER_HEALTH_ROOT <- base_project_path("Sports Science 2", "vald_shiny_app")
 BASE_PLAYER_HEALTH_FILE <- file.path(BASE_PLAYER_HEALTH_ROOT, "dashboard.R")
+base_source("R/config/player_health_deployment.R", local = FALSE)
 BASE_PLAYER_HEALTH_REQUIRED_PACKAGES <- c(
-  "bslib", "dplyr", "DT", "httr", "jsonlite", "lubridate", "plotly",
-  "purrr", "readr", "rlang", "shiny", "stringr", "tibble", "tidyr"
+  "bslib", "callr", "dplyr", "DT", "filelock", "httr", "httr2",
+  "jsonlite", "keyring", "lubridate", "plotly", "purrr", "readr", "readxl",
+  "rlang", "shiny", "stringr", "tibble", "tidyr", "tidyverse", "valdr"
 )
 
 .base_player_health_state <- new.env(parent = emptyenv())
+
+base_player_health_load_local_env <- function() {
+  env_file <- file.path(BASE_PLAYER_HEALTH_ROOT, ".Renviron")
+  if (!file.exists(env_file)) return(invisible(FALSE))
+
+  # Hosting/runtime environment variables always win. The private file is a
+  # local-development fallback and remains ignored by Git.
+  keys <- c(
+    "VALD_CLIENT_ID", "VALD_CLIENT_SECRET", "VALD_TEAM_ID", "VALD_REGION",
+    "VALD_AUTO_REFRESH", "VALD_REFRESH_HOURS"
+  )
+  existing <- Sys.getenv(keys, unset = NA_character_, names = TRUE)
+  readRenviron(env_file)
+  for (key in names(existing)[!is.na(existing)]) {
+    do.call(Sys.setenv, setNames(list(existing[[key]]), key))
+  }
+  invisible(TRUE)
+}
 
 base_player_health_path <- function(env_name, ...) {
   configured <- Sys.getenv(env_name, unset = "")
@@ -15,6 +35,74 @@ base_player_health_path <- function(env_name, ...) {
     return(normalizePath(configured, winslash = "/", mustWork = FALSE))
   }
   normalizePath(file.path(BASE_PLAYER_HEALTH_ROOT, ...), winslash = "/", mustWork = FALSE)
+}
+
+base_player_health_runtime_paths <- function() {
+  configured_root <- Sys.getenv("BASE_PLAYER_HEALTH_STORAGE_ROOT", unset = "")
+  deployed_root <- if (nzchar(trimws(configured_root))) {
+    normalizePath(configured_root, winslash = "/", mustWork = FALSE)
+  } else if (dir.exists("/base-data")) {
+    "/base-data/app_state/player-health"
+  } else {
+    ""
+  }
+
+  choose <- function(env_name, deployed_name, ...) {
+    configured <- Sys.getenv(env_name, unset = "")
+    if (nzchar(trimws(configured))) {
+      return(normalizePath(configured, winslash = "/", mustWork = FALSE))
+    }
+    if (nzchar(deployed_root)) {
+      return(normalizePath(file.path(deployed_root, deployed_name), winslash = "/", mustWork = FALSE))
+    }
+    normalizePath(file.path(BASE_PLAYER_HEALTH_ROOT, ...), winslash = "/", mustWork = FALSE)
+  }
+
+  list(
+    deployed = nzchar(deployed_root),
+    root = deployed_root,
+    gold = choose("BASE_PLAYER_HEALTH_GOLD_DIR", "gold", "data", "gold"),
+    legacy = choose("BASE_PLAYER_HEALTH_LEGACY_DIR", "legacy", "data", "legacy"),
+    state = choose("BASE_PLAYER_HEALTH_STATE_DIR", "refresh", "data", "refresh"),
+    exports = choose("BASE_PLAYER_HEALTH_EXPORT_DIR", "imports", "..", "data"),
+    roster = choose(
+      "BASE_PLAYER_HEALTH_FALL_ROSTER_FILE",
+      "2026 Fall Roster Template.xlsx",
+      "..", "2026 Fall Roster Template.xlsx"
+    )
+  )
+}
+
+base_player_health_seed_deployment_storage <- function(paths) {
+  if (!isTRUE(paths$deployed)) return(invisible(FALSE))
+
+  for (path in unname(unlist(paths[c("gold", "legacy", "state", "exports")]))) {
+    if (!dir.exists(path) && !dir.create(path, recursive = TRUE, showWarnings = FALSE)) {
+      stop("Player Health could not create deployment storage at ", path)
+    }
+    if (file.access(path, 2L) != 0L) {
+      stop("Player Health deployment storage is not writable at ", path)
+    }
+  }
+
+  bundled_exports <- base_project_path("Sports Science 2", "data")
+  if (dir.exists(bundled_exports)) {
+    seeds <- list.files(bundled_exports, full.names = TRUE, recursive = FALSE)
+    seeds <- seeds[file.info(seeds)$isdir %in% FALSE]
+    for (source in seeds) {
+      destination <- file.path(paths$exports, basename(source))
+      if (!file.exists(destination) && !file.copy(source, destination)) {
+        stop("Player Health could not seed deployment import: ", basename(source))
+      }
+    }
+  }
+
+  bundled_roster <- base_project_path("Sports Science 2", "2026 Fall Roster Template.xlsx")
+  if (!file.exists(paths$roster) && file.exists(bundled_roster) &&
+      !file.copy(bundled_roster, paths$roster)) {
+    stop("Player Health could not seed the deployment roster.")
+  }
+  invisible(TRUE)
 }
 
 base_player_health_embedded_head <- function() {
@@ -198,6 +286,15 @@ base_player_health_environment <- function() {
     stop("Player Health source is unavailable at ", BASE_PLAYER_HEALTH_FILE)
   }
 
+  # Local files are optional. The checked-in deployment defaults below make
+  # the Docker image self-contained, while non-empty host variables can still
+  # override them for credential rotation.
+  base_player_health_load_local_env()
+  base_player_health_apply_deployment_defaults()
+
+  runtime_paths <- base_player_health_runtime_paths()
+  base_player_health_seed_deployment_storage(runtime_paths)
+
   configured_roster <- Sys.getenv("BASE_PLAYER_HEALTH_ROSTER_FILE", unset = "")
   if (!nzchar(trimws(configured_roster)) && exists("TEAM_CONFIG", inherits = TRUE)) {
     roster_candidate <- get("TEAM_CONFIG", inherits = TRUE)$data$roster_file
@@ -209,14 +306,29 @@ base_player_health_environment <- function() {
 
   Sys.setenv(
     VALD_APP_ROOT = normalizePath(BASE_PLAYER_HEALTH_ROOT, winslash = "/", mustWork = TRUE),
-    CMJ_SPRINT_SHARE_GOLD_DIR = base_player_health_path("BASE_PLAYER_HEALTH_GOLD_DIR", "data", "gold"),
-    CMJ_SPRINT_SHARE_LEGACY_DIR = base_player_health_path("BASE_PLAYER_HEALTH_LEGACY_DIR", "data", "legacy"),
-    VALD_REFRESH_DIR = base_player_health_path("BASE_PLAYER_HEALTH_STATE_DIR", "data", "refresh"),
-    BASE_PLAYER_HEALTH_ROSTER_FILE = normalizePath(configured_roster, winslash = "/", mustWork = FALSE)
+    CMJ_SPRINT_SHARE_GOLD_DIR = runtime_paths$gold,
+    CMJ_SPRINT_SHARE_LEGACY_DIR = runtime_paths$legacy,
+    VALD_REFRESH_DIR = runtime_paths$state,
+    BASE_PLAYER_HEALTH_ROSTER_FILE = normalizePath(configured_roster, winslash = "/", mustWork = FALSE),
+    PLAYER_HEALTH_DATA_DIR = runtime_paths$exports,
+    FALL_ROSTER_FILE = runtime_paths$roster
   )
+
+  asset_prefix <- "base-player-health-assets"
+  asset_dir <- file.path(BASE_PLAYER_HEALTH_ROOT, "www", "health")
+  registered_assets <- shiny::resourcePaths()
+  expected_asset_dir <- normalizePath(asset_dir, winslash = "/", mustWork = FALSE)
+  registered_asset_dir <- if (asset_prefix %in% names(registered_assets)) {
+    unname(registered_assets[[asset_prefix]])
+  } else ""
+  if (!identical(registered_asset_dir, expected_asset_dir)) {
+    if (asset_prefix %in% names(registered_assets)) shiny::removeResourcePath(asset_prefix)
+    shiny::addResourcePath(asset_prefix, asset_dir)
+  }
 
   workspace <- new.env(parent = globalenv())
   workspace$BASE_PLAYER_HEALTH_EMBEDDED <- TRUE
+  workspace$BASE_PLAYER_HEALTH_ASSET_PREFIX <- asset_prefix
   sys.source(BASE_PLAYER_HEALTH_FILE, envir = workspace, chdir = TRUE, keep.source = FALSE)
   if (!inherits(workspace$ui, c("shiny.tag", "shiny.tag.list", "list")) ||
       !is.function(workspace$server)) {
@@ -237,14 +349,14 @@ base_player_health_workspace_ui <- function() {
         htmltools::tags$div(
           htmltools::tags$div(class = "base-eyebrow", "Sports science monitoring"),
           htmltools::tags$h1("Player Health"),
-          htmltools::tags$p("Review CMJ readiness, sprint performance, athlete trends, alerts, and ForceDecks traces.")
+          htmltools::tags$p("Review VALD, ArmCare, PULSE, TrackMan, athlete trends, alerts, and force traces.")
         ),
         htmltools::tags$div(
           class = "base-workspace-heading-actions",
           htmltools::tags$div(
             class = "base-source-chip",
             htmltools::tags$span(class = "home-status-dot"),
-            "VALD + SmartSpeed"
+            "VALD + ArmCare + PULSE + TrackMan"
           ),
           shiny::actionButton(
             "reload_data",

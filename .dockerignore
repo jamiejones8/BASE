@@ -9,11 +9,11 @@ scripts/__pycache__
 data/D1 Defense File.parquet
 .runtime-build-output-defense/
 
-Sports Science/data/
-Sports Science/cmj_sprint_share_handoff/
-Sports Science/vald_shiny_app/.R-library/
-Sports Science/vald_shiny_app/.Renviron
-Sports Science/vald_shiny_app/data/
+Sports Science 2/TXST LOGOS/
+Sports Science 2/cmj_sprint_share_handoff/
+Sports Science 2/vald_shiny_app/.R-library/
+Sports Science 2/vald_shiny_app/.Renviron
+Sports Science 2/vald_shiny_app/data/
 
 # Only migrated workspace sources and their small reference/assets enter the
 # production context. Private season files, model artifacts, and unmigrated

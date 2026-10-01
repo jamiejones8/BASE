@@ -194,8 +194,8 @@
       "id": "player_health",
       "order": 9,
       "title": "Player Health",
-      "description": "Monitor CMJ readiness, sprint performance, athlete trends, alerts, and ForceDecks traces.",
-      "implementation_policy": "Embed the Sports Science VALD/SmartSpeed dashboard inside the BASE shell, preserve its scoring and exports, and scope only the presentation layer to BASE styling.",
+      "description": "Monitor VALD, ArmCare, PULSE, TrackMan, combined trends, KPI correlations, alerts, and force traces.",
+      "implementation_policy": "Embed the Sports Science 2 dashboard inside the BASE shell as a distinct application version, preserve its source calculations and exports, and scope only the presentation layer to BASE styling.",
       "source_route": "player_health",
       "tools": [
         "Alert Inbox",
@@ -203,9 +203,13 @@
         "Athlete Profile",
         "CMJ Monitoring",
         "Sprint / SmartSpeed",
-        "Curve View (Force Tracing)"
+        "Curve View (Force Tracing)",
+        "ArmCare",
+        "PULSE",
+        "Combined Health",
+        "KPI Correlations"
       ],
-      "data_policy": "Read processed Player Health datasets from configured private storage. VALD credentials and athlete data are not committed to the repository."
+      "data_policy": "Read VALD snapshots plus ArmCare, PULSE, TrackMan, and roster exports from configured private storage. Credentials and athlete data are not committed to the repository."
     }
   ]
 }

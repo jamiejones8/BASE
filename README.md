@@ -29,17 +29,19 @@ single-game catcher AAR lives under Postgame Reports. See
 [`docs/wallyapps/DEFENSE_INTEGRATION.md`](docs/wallyapps/DEFENSE_INTEGRATION.md),
 and [`docs/wallyapps/SCOUTING_INTEGRATION.md`](docs/wallyapps/SCOUTING_INTEGRATION.md).
 
-Player Health embeds the Sports Science VALD/SmartSpeed dashboard as a lazy
-BASE workspace. Its Alert Inbox, Team Overview, Athlete Profile, CMJ
-Monitoring, Sprint/SmartSpeed, and Force Tracing workflows retain their source
-calculations and exports while using scoped BASE presentation. Athlete data,
-refresh state, and API credentials stay in private storage. Configure
-`BASE_PLAYER_HEALTH_GOLD_DIR`, `BASE_PLAYER_HEALTH_LEGACY_DIR`, and
-`BASE_PLAYER_HEALTH_STATE_DIR` for deployment; set the `VALD_*` variables in
-the environment to enable live refresh. Player Health uses `BASE_ROSTER_FILE`
-as its authoritative current roster. Exact unique athlete-name matches are
-linked automatically; store exceptions in the private CSV configured by
-`BASE_PLAYER_HEALTH_CROSSWALK_FILE` rather than hard-coding athlete IDs.
+Player Health embeds the replacement Sports Science 2 app as a lazy BASE
+workspace. Its VALD, ArmCare, PULSE, TrackMan, Combined Health, KPI
+Correlations, and force-tracing workflows retain their source calculations and
+exports while using scoped BASE presentation. In Railway, generated VALD data
+and refresh state persist under `/base-data/app_state/player-health`; the
+supplied ArmCare, PULSE, TrackMan, and roster files seed that storage on its
+first start. Configure
+`BASE_PLAYER_HEALTH_GOLD_DIR`, `BASE_PLAYER_HEALTH_LEGACY_DIR`,
+`BASE_PLAYER_HEALTH_STATE_DIR`, `BASE_PLAYER_HEALTH_EXPORT_DIR`, and
+`BASE_PLAYER_HEALTH_FALL_ROSTER_FILE` only to use a different layout. The Texas
+State VALD connection defaults ship in `R/config/player_health_deployment.R`,
+so a deployed image can refresh without a local `.Renviron`; non-empty host
+`VALD_*` variables remain supported for later credential rotation.
 
 The integrated Pitching and Hitting workspaces use the season, squad, and
 bullpen CSV files stored in their respective `WallyApps/*/data` folders. Their
@@ -111,8 +113,9 @@ another import or editor session after it was opened.
 
 - `R/` holds the main application source, split by config, data helpers,
   modules, pages, reports, services, and integrations.
-- `Sports Science/vald_shiny_app/` holds the embedded Player Health source and
-  refresh pipeline; its local data, credentials, and package library are ignored.
+- `Sports Science 2/vald_shiny_app/` holds the embedded Player Health source and
+  refresh pipeline. `Sports Science 2/data/` and the fall roster are deployment
+  seeds; generated VALD caches and the local package library remain ignored.
 - `models/` stores local model artifacts used by scouting and report features.
 - `data/reference/` stores reference tables used directly by the app.
 - `data/external/` stores optional supplemental datasets such as Cape Cod data.

@@ -55,11 +55,13 @@ data/D1 Defense File.parquet
 /WallyApps/ScoutingApp/data/
 /WallyApps/ScoutingApp/outputs/
 
-# Player Health ships source only. Athlete records, credentials, local package
-# libraries, refresh logs, and the unused raw handoff remain local/private.
-/Sports Science/data/
-/Sports Science/cmj_sprint_share_handoff/
-/Sports Science/vald_shiny_app/.R-library/
-/Sports Science/vald_shiny_app/.Renviron
-/Sports Science/vald_shiny_app/data/
-/Sports Science/**/*.Rapp.history
+# Player Health ships its source plus the supplied ArmCare, PULSE, TrackMan,
+# and roster seed files so a fresh deployment has every non-VALD workspace.
+# The large generated VALD cache, local package library, refresh logs, and raw
+# handoff remain excluded; deployed VALD data is rebuilt through the API.
+/Sports Science 2/TXST LOGOS/
+/Sports Science 2/cmj_sprint_share_handoff/
+/Sports Science 2/vald_shiny_app/.R-library/
+/Sports Science 2/vald_shiny_app/.Renviron
+/Sports Science 2/vald_shiny_app/data/
+/Sports Science 2/**/*.Rapp.history

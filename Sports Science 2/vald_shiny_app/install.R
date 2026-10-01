@@ -1,7 +1,7 @@
 # Run from this directory in a fresh R session.
 dir.create(".R-library", showWarnings = FALSE)
 .libPaths(c(normalizePath(".R-library"), .libPaths()))
-packages <- c("shiny", "bslib", "dplyr", "tidyr", "DT", "plotly", "readr",
+packages <- c("shiny", "bslib", "dplyr", "tidyr", "DT", "plotly", "readr", "readxl",
               "httr", "httr2", "jsonlite", "lubridate", "rlang", "tibble",
               "stringr", "tidyverse", "valdr", "keyring", "callr", "filelock", "testthat")
 missing <- packages[!vapply(packages, requireNamespace, logical(1), quietly = TRUE)]

@@ -75,6 +75,34 @@ class DeploymentChecks(unittest.TestCase):
             self.assertNotIn("valdr", install2_packages, filename)
             self.assertIn(VALDR_ARCHIVE, source, filename)
 
+    def test_player_health_runtime_inputs_enter_the_image(self):
+        dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+        excluded = {
+            "Sports Science 2/data/",
+            "Sports Science 2/2026 Fall Roster Template.xlsx",
+        }
+        for item in excluded:
+            self.assertNotIn(item, dockerignore)
+
+        deployment_config = (
+            ROOT / "R" / "config" / "player_health_deployment.R"
+        ).read_text(encoding="utf-8")
+        for name in (
+            "VALD_CLIENT_ID",
+            "VALD_CLIENT_SECRET",
+            "VALD_TEAM_ID",
+            "VALD_REGION",
+            "VALD_AUTO_REFRESH",
+            "VALD_REFRESH_HOURS",
+        ):
+            self.assertRegex(deployment_config, rf'{name}\s*=\s*"[^"]+"')
+
+        integration = (
+            ROOT / "R" / "integrations" / "player_health_workspace.R"
+        ).read_text(encoding="utf-8")
+        self.assertIn('base_source("R/config/player_health_deployment.R"', integration)
+        self.assertIn('"/base-data/app_state/player-health"', integration)
+
 
 if __name__ == "__main__":
     unittest.main()

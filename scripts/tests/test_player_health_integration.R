@@ -7,7 +7,7 @@ source("R/integrations/player_health_workspace.R", local = FALSE)
 fail <- function(...) stop(paste0(...), call. = FALSE)
 
 landing_html <- paste(as.character(base_player_health_workspace_ui()), collapse = "")
-for (needle in c("Player Health", "VALD + SmartSpeed", "base_player_health_app", "reload_data")) {
+for (needle in c("Player Health", "VALD + ArmCare + PULSE + TrackMan", "base_player_health_app", "reload_data")) {
   if (!grepl(needle, landing_html, fixed = TRUE)) {
     fail("Player Health landing UI is missing: ", needle)
   }
@@ -26,7 +26,8 @@ if (!grepl("base-player-health-embedded", html, fixed = TRUE)) {
 }
 expected_tabs <- c(
   "Alert Inbox", "Team Overview", "Athlete Profile", "CMJ Monitoring",
-  "Sprint / SmartSpeed", "Curve View (Force Tracing)"
+  "Sprint / SmartSpeed", "Curve View (Force Tracing)", "ArmCare", "PULSE",
+  "Combined Health", "Time Series", "KPI Correlations"
 )
 missing_tabs <- expected_tabs[
   !vapply(expected_tabs, grepl, logical(1), x = html, fixed = TRUE)
@@ -34,6 +35,17 @@ missing_tabs <- expected_tabs[
 if (length(missing_tabs)) {
   fail("Embedded Player Health UI is missing tabs: ", paste(missing_tabs, collapse = ", "))
 }
+for (asset in c("base-player-health-assets/health.css", "base-player-health-assets/bobcat.png")) {
+  if (!grepl(asset, html, fixed = TRUE)) fail("Embedded Player Health UI is missing asset: ", asset)
+}
+if (!identical(
+  normalizePath(Sys.getenv("PLAYER_HEALTH_DATA_DIR"), mustWork = FALSE),
+  normalizePath("Sports Science 2/data", mustWork = FALSE)
+)) fail("Player Health exports are not pointed at Sports Science 2/data.")
+if (!identical(
+  normalizePath(Sys.getenv("FALL_ROSTER_FILE"), mustWork = FALSE),
+  normalizePath("Sports Science 2/2026 Fall Roster Template.xlsx", mustWork = FALSE)
+)) fail("Player Health fall roster is not pointed at the replacement workbook.")
 
 if (!is.environment(workspace$shared_data) || is.null(workspace$shared_data$status)) {
   fail("Player Health did not initialize its shared data store.")
@@ -44,5 +56,5 @@ if (!identical(base_player_health_environment(), workspace)) {
 
 cat(
   "Player Health integration passed:", length(expected_tabs),
-  "Sports Science workflows embedded with scoped BASE presentation.\n"
+  "Sports Science 2 workflows embedded with scoped BASE presentation.\n"
 )

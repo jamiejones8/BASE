@@ -4,12 +4,7 @@
 # ------------------------------------------------------------
 
 suppressPackageStartupMessages({
-  library(dplyr)
-  library(purrr)
-  library(readr)
-  library(stringr)
-  library(tibble)
-  library(tidyr)
+  library(tidyverse)
 })
 
 # ----------------------------
