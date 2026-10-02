@@ -41,4 +41,29 @@ test_that('a missing status on first launch still permits the initial refresh',{
   expect_equal(read_refresh_state()$message,'Not refreshed yet')
   expect_true(refresh_due(read_refresh_state()))
 })
+test_that('the background worker receives deployment credentials and storage paths',{
+  withr::local_envvar(c(
+    VALD_CLIENT_ID='worker-client',
+    VALD_CLIENT_SECRET='worker-secret',
+    VALD_TEAM_ID='worker-team',
+    CMJ_SPRINT_SHARE_GOLD_DIR='/tmp/worker-gold',
+    CMJ_SPRINT_SHARE_LEGACY_DIR='/tmp/worker-legacy',
+    VALD_REFRESH_DIR='/tmp/worker-refresh'
+  ))
+  worker_env<-refresh_worker_environment()
+  expect_identical(unname(worker_env['VALD_CLIENT_ID']),'worker-client')
+  expect_identical(unname(worker_env['VALD_CLIENT_SECRET']),'worker-secret')
+  expect_identical(unname(worker_env['VALD_TEAM_ID']),'worker-team')
+  expect_identical(unname(worker_env['CMJ_SPRINT_SHARE_GOLD_DIR']),'/tmp/worker-gold')
+  expect_identical(unname(worker_env['CMJ_SPRINT_SHARE_LEGACY_DIR']),'/tmp/worker-legacy')
+  expect_identical(unname(worker_env['VALD_REFRESH_DIR']),'/tmp/worker-refresh')
+})
+test_that('an empty cold-start data set is never considered publishable',{
+  expect_false(dashboard_snapshot_ready(list(roster=NULL,session_summary=NULL)))
+  expect_false(dashboard_snapshot_ready(list(roster=data.frame(),session_summary=data.frame(value=1))))
+  expect_true(dashboard_snapshot_ready(list(
+    roster=data.frame(profileId='p1'),
+    session_summary=data.frame(profileId='p1',value=42)
+  )))
+})
 unlink(root,recursive=TRUE)

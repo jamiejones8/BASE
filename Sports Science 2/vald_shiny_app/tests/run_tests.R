@@ -22,6 +22,29 @@ test_that("daily refresh respects success intervals and failure backoff", {
   expect_false(refresh_due(list(attempted=now-60),now))
   expect_true(refresh_due(list(success=now-90000,attempted=now-4000),now))
 })
+test_that("the callr refresh process receives deployment credentials and paths", {
+  withr::local_envvar(c(
+    VALD_CLIENT_ID="callr-client",
+    VALD_CLIENT_SECRET="callr-secret",
+    VALD_TEAM_ID="callr-team",
+    CMJ_SPRINT_SHARE_GOLD_DIR="/tmp/callr-gold",
+    CMJ_SPRINT_SHARE_LEGACY_DIR="/tmp/callr-legacy",
+    VALD_REFRESH_DIR="/tmp/callr-refresh"
+  ))
+  names <- c(
+    "VALD_CLIENT_ID", "VALD_CLIENT_SECRET", "VALD_TEAM_ID",
+    "CMJ_SPRINT_SHARE_GOLD_DIR", "CMJ_SPRINT_SHARE_LEGACY_DIR", "VALD_REFRESH_DIR"
+  )
+  observed <- callr::r(
+    function(names) Sys.getenv(names, unset=NA_character_, names=TRUE),
+    args=list(names),
+    env=c(callr::rcmd_safe_env(),R_ENVIRON_USER="",refresh_worker_environment())
+  )
+  expect_identical(unname(observed),c(
+    "callr-client", "callr-secret", "callr-team",
+    "/tmp/callr-gold", "/tmp/callr-legacy", "/tmp/callr-refresh"
+  ))
+})
 test_that("failed pulls retain the last published snapshot", {
   atomic_rds(list(marker="previous"),snapshot_file)
   run_live_vald_refresh <<- function() list(ok=FALSE,forcedecks_ok=FALSE,message="Mock API outage")

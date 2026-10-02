@@ -14,6 +14,31 @@ atomic_rds <- function(value, path) {
   saveRDS(value, tmp)
   if (!file.rename(tmp, path)) stop("Could not publish ", basename(path))
 }
+
+# callr's default environment is deliberately minimal.  The live refresh needs
+# the deployment's credentials and storage paths, so pass only the variables
+# used by this pipeline instead of relying on ambient process inheritance.
+refresh_worker_environment <- function() {
+  names <- c(
+    "VALD_CLIENT_ID", "VALD_CLIENT_SECRET", "VALD_TEAM_ID", "VALD_REGION",
+    "VALD_USERNAME", "VALD_PASSWORD", "VALD_TENANT_ID", "VALD_DUENDE_ID",
+    "VALD_TOKEN_URL", "VALD_REFRESH_DIR", "VALD_REFRESH_HOURS",
+    "VALD_FORCE_FULL_REPULL_TESTS", "VALD_FORCE_FULL_REPULL_METRICS",
+    "VALD_FORCE_FULL_REPULL_SMARTSPEED", "VALD_METRICS_PULL_MAX_ACTIVE",
+    "VALD_RUN_FULL_PULL_FIRST", "VALD_RUN_VALDR_PROFILE_PULL",
+    "CMJ_SPRINT_SHARE_GOLD_DIR", "CMJ_SPRINT_SHARE_LEGACY_DIR",
+    "SMARTSPEED_FILE", "PLAYER_HEALTH_DATA_DIR", "FALL_ROSTER_FILE"
+  )
+  values <- Sys.getenv(names, unset = NA_character_, names = TRUE)
+  values[!is.na(values)]
+}
+
+dashboard_snapshot_ready <- function(value) {
+  is.list(value) &&
+    is.data.frame(value$roster) && nrow(value$roster) > 0L &&
+    is.data.frame(value$session_summary) && nrow(value$session_summary) > 0L
+}
+
 refresh_state_cache <- new.env(parent = emptyenv())
 read_refresh_state <- function() {
   key <- normalizePath(state_file, mustWork = FALSE)
@@ -64,7 +89,7 @@ run_refresh_job <- function(force = FALSE) {
   if (isTRUE(result$forcedecks_ok)) {
     published <- tryCatch({
       load_shared_data()
-      if (is.null(shared_data$roster) || is.null(shared_data$session_summary)) stop("Missing dashboard outputs")
+      if (!dashboard_snapshot_ready(as.list(shared_data))) stop("Missing or empty dashboard outputs")
       atomic_rds(as.list(shared_data), snapshot_file)
       TRUE
     }, error = function(e) { result$message <<- paste("Snapshot publication failed:", conditionMessage(e)); FALSE })
@@ -87,6 +112,11 @@ load_published_snapshot <- function() {
   stamp <- paste(file.info(snapshot_file)$mtime, file.info(snapshot_file)$size)
   if (identical(stamp, snapshot_stamp)) return(FALSE)
   snapshot <- readRDS(snapshot_file)
+  if (!dashboard_snapshot_ready(snapshot)) {
+    shared_data$status <- "Waiting for the first successful VALD refresh; no populated dashboard snapshot is available yet."
+    snapshot_stamp <<- stamp
+    return(FALSE)
+  }
   list2env(snapshot, shared_data)
   # Do not surface a serialized absolute path from whichever machine created
   # the snapshot. The configured directories remain available in diagnostics.
@@ -103,7 +133,11 @@ if (!identical(Sys.getenv("VALD_REFRESH_WORKER"), "true")) {
     lock <- filelock::lock(lock_file, timeout = 0)
     if (!is.null(lock)) {
       load_shared_data()
-      atomic_rds(as.list(shared_data), snapshot_file)
+      if (dashboard_snapshot_ready(as.list(shared_data))) {
+        atomic_rds(as.list(shared_data), snapshot_file)
+      } else {
+        shared_data$status <- "Waiting for the first successful VALD refresh; deployment storage does not contain populated VALD data yet."
+      }
       filelock::unlock(lock)
     } else {
       shared_data$status <- "Waiting for first data refresh"
@@ -123,13 +157,13 @@ start_refresh <- function(force = FALSE) {
     setwd(app_root)
     source("local_library.R", local = TRUE)
     use_vald_local_library()
-    if (file.exists(".Renviron")) readRenviron(".Renviron")
     Sys.setenv(VALD_APP_ROOT = app_root, VALD_REFRESH_WORKER = "true")
     source("dashboard.R", local = globalenv())
     run_refresh_job(force)
   }, args = list(app_root = Sys.getenv("VALD_APP_ROOT", getwd()), force = force),
   libpath = .libPaths(), stdout = file.path(refresh_dir, "worker.log"),
-  stderr = "2>&1", supervise = TRUE)
+  stderr = "2>&1", supervise = TRUE,
+  env = c(callr::rcmd_safe_env(), R_ENVIRON_USER = "", refresh_worker_environment()))
   refresh_message("Refreshing VALD data in the background")
   "Refresh started; you can continue using the dashboard."
 }
