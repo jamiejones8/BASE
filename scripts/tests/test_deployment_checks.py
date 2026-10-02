@@ -120,6 +120,22 @@ class DeploymentChecks(unittest.TestCase):
             source = (ROOT / filename).read_text(encoding="utf-8")
             self.assertIn("keyring", source, filename)
 
+    def test_player_health_container_has_keyring_runtime_library(self):
+        for filename in ("Dockerfile", "Dockerfile.dependencies"):
+            source = (ROOT / filename).read_text(encoding="utf-8")
+            self.assertIn("libsecret-1-0", source, filename)
+
+    def test_forcedecks_throttle_supports_deployed_httr2(self):
+        source = (
+            ROOT
+            / "Sports Science 2"
+            / "vald_shiny_app"
+            / "scripts"
+            / "07_pull_forcedecks_metrics_all_history_baseball.R"
+        ).read_text(encoding="utf-8")
+        self.assertIn("req_throttle(rate = 10)", source)
+        self.assertNotIn("req_throttle(capacity", source)
+
 
 if __name__ == "__main__":
     unittest.main()

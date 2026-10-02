@@ -1,5 +1,8 @@
 FROM ghcr.io/jamiejones8/base-r-dependencies:r4.4.2-v1@sha256:e70330ba4c4bc24c34c8220679923678b28825ba0fce92bdfad9f95324220dcc
 WORKDIR /code
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsecret-1-0 \
+    && rm -rf /var/lib/apt/lists/*
 COPY . .
 RUN install2.r --error \
     shinyWidgets shinycssloaders cowplot ggplotify ggpubr ggtext hms jpeg lubridate ragg readxl \

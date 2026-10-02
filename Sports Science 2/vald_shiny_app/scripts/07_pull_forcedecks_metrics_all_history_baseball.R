@@ -114,7 +114,10 @@ build_trial_request <- function(test_id, token) {
   httr2::request(trials_url_for(test_id)) %>%
     httr2::req_headers(Authorization = paste("Bearer", token)) %>%
     httr2::req_timeout(30) %>%
-    httr2::req_throttle(capacity = 10, fill_time_s = 1) %>%
+    # `rate` is supported by both the older httr2 in the deployed base image
+    # and current httr2.  Newer-only capacity/fill_time_s arguments caused the
+    # production refresh worker to fail before making its first trial request.
+    httr2::req_throttle(rate = 10) %>%
     httr2::req_retry(
       max_tries = 4,
       is_transient = function(resp) httr2::resp_status(resp) %in% c(408, 429, 500, 502, 503, 504)
