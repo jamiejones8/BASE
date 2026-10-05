@@ -116,6 +116,8 @@ def main() -> int:
         fail("Data Processing must declare both future TrackMan season importers.")
 
     player_health = by_id["player_health"]
+    if player_health.get("title") != "Sports Science":
+        fail("The player_health route must be presented as Sports Science.")
     expected_health_tools = {
         "Alert Inbox",
         "Team Overview",

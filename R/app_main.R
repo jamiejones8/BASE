@@ -33,6 +33,7 @@ base_source("R/data/source_contract.R", local = FALSE)
 base_source("R/performance/lazy_workspace.R", local = FALSE)
 base_source("R/data/data_access.R", local = FALSE)
 base_source("R/data/team_season_imports.R", local = FALSE)
+base_source("R/data/player_health_imports.R", local = FALSE)
 base_source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 base_source("R/integrations/wally_hitting_workspace.R", local = FALSE)
 base_source("R/integrations/wally_scouting_workspace.R", local = FALSE)
@@ -4331,6 +4332,36 @@ data_processing_workspace_ui <- function() {
       shiny::uiOutput(output_id)
     )
   }
+  replacement_card <- function(target_id, input_id, output_id) {
+    target <- base_sports_science_import_target(target_id)
+    tags$section(
+      class = "base-import-card",
+      tags$div(
+        class = "base-import-card-heading",
+        tags$div(
+          tags$span(class = "base-tool-eyebrow", "Sports Science source"),
+          tags$h3(target$label)
+        ),
+        tags$span(class = "base-import-year", "Replace")
+      ),
+      tags$p(
+        "Upload a complete vendor CSV. BASE validates its schema, then atomically replaces the previous file used by the Sports Science workspace."
+      ),
+      shiny::fileInput(
+        inputId = paste0(input_id, "_file"),
+        label = paste(target$label, "CSV"),
+        accept = c("text/csv", ".csv"),
+        buttonLabel = paste("Choose", target$label),
+        placeholder = "No file selected"
+      ),
+      shiny::actionButton(
+        inputId = paste0(input_id, "_replace"),
+        label = paste("Validate and replace", target$label),
+        class = "btn-primary base-import-submit"
+      ),
+      shiny::uiOutput(output_id)
+    )
+  }
 
   tagList(
     tags$head(tags$style(HTML("
@@ -4345,6 +4376,7 @@ data_processing_workspace_ui <- function() {
       .base-import-card h3 { margin:1px 0 0;font-family:var(--base-font-display);font-size:22px;color:var(--base-ink); }
       .base-import-card > p { min-height:42px;color:var(--base-muted);font-size:13px;line-height:1.45; }
       .base-import-year { padding:5px 8px;border-radius:999px;background:var(--base-gold-soft);color:var(--base-maroon);font-size:11px;font-weight:800; }
+      .base-health-import-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
       .base-import-card .form-group { margin:14px 0 10px; }
       .base-import-submit { width:100%;white-space:normal; }
       .base-import-status { margin-top:12px;padding:11px 12px;border:1px solid var(--base-border);border-radius:8px;background:var(--base-surface-soft);font-size:12px;line-height:1.45; }
@@ -4364,6 +4396,7 @@ data_processing_workspace_ui <- function() {
       .base-csv-editor-status.is-error { background:var(--base-danger-soft);color:var(--base-danger); }
       .base-csv-table-wrap { width:100%;overflow-x:auto; }
       .base-csv-table-wrap table.dataTable td { white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis; }
+      @media(max-width:1100px){.base-health-import-grid{grid-template-columns:1fr}}
       @media(max-width:800px){.base-import-grid{grid-template-columns:1fr}.base-import-card>p{min-height:0}}
     "))),
     tags$div(
@@ -4384,6 +4417,20 @@ data_processing_workspace_ui <- function() {
           "Source Health", "Coverage, freshness, schema, and runtime-build validation.",
           status = "Integration queued"
         )
+      ),
+      tags$div(
+        class = "base-import-section-heading",
+        tags$div(class = "base-eyebrow", "Sports Science ingestion"),
+        tags$h3("Replace Arm Care and PULSE exports"),
+        tags$p(
+          "Each validated upload replaces the complete previous vendor export. Existing data remains active if validation or saving fails."
+        )
+      ),
+      tags$div(
+        class = "base-import-grid base-health-import-grid",
+        replacement_card("PULSE_EVENTS", "dp_pulse_events", "dp_pulse_events_status"),
+        replacement_card("PULSE_WORKLOAD", "dp_pulse_workload", "dp_pulse_workload_status"),
+        replacement_card("ARM_CARE", "dp_arm_care", "dp_arm_care_status")
       ),
       tags$div(
         class = "base-import-section-heading",
@@ -4429,7 +4476,10 @@ data_processing_server <- function(input, output, session) {
   states <- list(
     F26 = shiny::reactiveVal(NULL),
     S27 = shiny::reactiveVal(NULL),
-    BP = shiny::reactiveVal(NULL)
+    BP = shiny::reactiveVal(NULL),
+    PULSE_EVENTS = shiny::reactiveVal(NULL),
+    PULSE_WORKLOAD = shiny::reactiveVal(NULL),
+    ARM_CARE = shiny::reactiveVal(NULL)
   )
 
   render_status <- function(target_id, state) {
@@ -4488,6 +4538,50 @@ data_processing_server <- function(input, output, session) {
   output$dp_f26_status <- shiny::renderUI(render_status("F26", states$F26()))
   output$dp_s27_status <- shiny::renderUI(render_status("S27", states$S27()))
   output$dp_bp_status <- shiny::renderUI(render_status("BP", states$BP()))
+
+  render_replacement_status <- function(target_id, state) {
+    status <- base_sports_science_source_status(target_id)
+    target <- status$target
+    if (!is.null(state) && identical(state$type, "error")) {
+      return(tags$div(
+        class = "base-import-status is-error",
+        tags$strong("Replacement not saved"),
+        state$message,
+        tags$span(class = "base-import-path", status$path)
+      ))
+    }
+    if (!is.null(state) && identical(state$type, "success")) {
+      result <- state$result
+      return(tags$div(
+        class = "base-import-status is-success",
+        tags$strong(paste(target$label, "source replaced")),
+        paste0(
+          format(result$received_rows, big.mark = ","), " rows saved for ",
+          result$first_date, " through ", result$last_date, "."
+        ),
+        tags$br(),
+        "The Sports Science page will detect this replacement automatically.",
+        tags$span(class = "base-import-path", result$destination)
+      ))
+    }
+    tags$div(
+      class = "base-import-status",
+      tags$strong(if (status$exists) paste(target$label, "source ready") else paste("Waiting for", target$label)),
+      if (status$exists) {
+        paste0(
+          "Last saved ", format(status$modified, "%b %d, %Y at %I:%M %p"),
+          " (", format(round(status$size / 1024^2, 1), nsmall = 1), " MB)."
+        )
+      } else {
+        "The source will be created after the first valid upload."
+      },
+      tags$span(class = "base-import-path", status$path)
+    )
+  }
+
+  output$dp_pulse_events_status <- shiny::renderUI(render_replacement_status("PULSE_EVENTS", states$PULSE_EVENTS()))
+  output$dp_pulse_workload_status <- shiny::renderUI(render_replacement_status("PULSE_WORKLOAD", states$PULSE_WORKLOAD()))
+  output$dp_arm_care_status <- shiny::renderUI(render_replacement_status("ARM_CARE", states$ARM_CARE()))
 
   csv_rows <- shiny::reactiveVal(NULL)
   csv_original <- shiny::reactiveVal(NULL)
@@ -4749,6 +4843,44 @@ data_processing_server <- function(input, output, session) {
   register_import("F26", "dp_f26", states$F26)
   register_import("S27", "dp_s27", states$S27)
   register_import("BP", "dp_bp", states$BP)
+
+  register_replacement <- function(target_id, input_prefix, state) {
+    shiny::observeEvent(input[[paste0(input_prefix, "_replace")]], {
+      target <- base_sports_science_import_target(target_id)
+      upload <- input[[paste0(input_prefix, "_file")]]
+      if (is.null(upload) || !nzchar(upload$datapath)) {
+        state(list(type = "error", message = paste("Choose a", target$label, "CSV before replacing the source.")))
+        return()
+      }
+      result <- tryCatch(
+        shiny::withProgress(
+          message = paste("Replacing", target$label),
+          value = 0.35,
+          {
+            replaced <- base_replace_sports_science_import(upload$datapath, target$id)
+            shiny::incProgress(0.65)
+            replaced
+          }
+        ),
+        error = identity
+      )
+      if (inherits(result, "error")) {
+        state(list(type = "error", message = conditionMessage(result)))
+        shiny::showNotification(conditionMessage(result), type = "error", duration = 8)
+        return()
+      }
+      state(list(type = "success", result = result))
+      shiny::showNotification(
+        paste(result$target_label, "replaced with", format(result$received_rows, big.mark = ","), "rows."),
+        type = "message",
+        duration = 6
+      )
+    }, ignoreInit = TRUE)
+  }
+
+  register_replacement("PULSE_EVENTS", "dp_pulse_events", states$PULSE_EVENTS)
+  register_replacement("PULSE_WORKLOAD", "dp_pulse_workload", states$PULSE_WORKLOAD)
+  register_replacement("ARM_CARE", "dp_arm_care", states$ARM_CARE)
   invisible(states)
 }
 
@@ -4792,7 +4924,7 @@ home_tab_ui <- function() {
             home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "homeBASE.jpg"),
             home_quick_link("JUCO Scouting", "Compare junior-college hitters and pitchers", "juco_stats", "jucoscouting.png"),
             home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "dataprocessing.jpg"),
-            home_quick_link("Player Health", "Player availability and health tools", "player_health", "medicine.jpg")
+            home_quick_link("Sports Science", "Player availability and health tools", "player_health", "medicine.jpg")
           )
         ),
         tags$section(
@@ -4949,7 +5081,7 @@ base_application_ui <- navbarPage(
   tabPanel("HomeBASE",         value = "tab_homebase",       homebase_page_ui()),
   tabPanel("JUCO Scouting",    value = "tab_juco_stats",     base_juco_stats_workspace_ui()),
   tabPanel("Data Processing",  value = "tab_data_processing", data_processing_workspace_ui()),
-  tabPanel("Player Health",    value = "tab_player_health",   base_player_health_workspace_ui()),
+  tabPanel("Sports Science",   value = "tab_player_health",   base_player_health_workspace_ui()),
   tabPanel("Pitcher Reports",  value = "tab_pitcher",        pitcher_card_ui()),
   tabPanel("Hitter Reports",   value = "tab_hitter",         hitter_ui()),
   tabPanel("Catcher Reports",  value = "tab_catcher",        catcher_ui()),

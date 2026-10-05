@@ -13,7 +13,7 @@ player in the complete College26 source.
 
 Home is the directory for nine focused workspaces: Postgame Reports,
 Pitching, Hitting, Opponent Scouting, Defensive Analytics, HomeBASE,
-JUCO Scouting, Data Processing, and Player Health. The legacy global navbar is hidden and a
+JUCO Scouting, Data Processing, and Sports Science. The legacy global navbar is hidden and a
 persistent Home control remains available from every page.
 
 Pitching, Hitting, Defense, Opponent Scouting, and JUCO Scouting are Wally workspace
@@ -29,7 +29,7 @@ single-game catcher AAR lives under Postgame Reports. See
 [`docs/wallyapps/DEFENSE_INTEGRATION.md`](docs/wallyapps/DEFENSE_INTEGRATION.md),
 and [`docs/wallyapps/SCOUTING_INTEGRATION.md`](docs/wallyapps/SCOUTING_INTEGRATION.md).
 
-Player Health embeds the replacement Sports Science 2 app as a lazy BASE
+Sports Science embeds the replacement Sports Science 2 app as a lazy BASE
 workspace. Its VALD, ArmCare, PULSE, TrackMan, Combined Health, KPI
 Correlations, and force-tracing workflows retain their source calculations and
 exports while using scoped BASE presentation. In Railway, generated VALD data
@@ -59,6 +59,12 @@ mount it as persistent writable storage. The bullpen importer writes to
 `WallyApps/PitchingApp/data/Bullpens - cleaned.csv` source loaded by Pitching.
 If Pitching, Hitting, Postgame Reports, or HomeBASE was already open during an
 import, reload BASE to rebuild that workspace from the updated file.
+
+Data Processing also contains PULSE Events, PULSE Workload, and Arm Care
+replacement uploads. Each accepts a complete vendor CSV, validates the expected
+schema and dates, and atomically replaces the prior source used by Sports
+Science. These imports never append rows, and a rejected upload leaves the
+current source unchanged.
 
 The same Data Processing page includes a table editor for every managed CSV
 that currently exists. Users can filter the table, double-click individual
@@ -113,7 +119,7 @@ another import or editor session after it was opened.
 
 - `R/` holds the main application source, split by config, data helpers,
   modules, pages, reports, services, and integrations.
-- `Sports Science 2/vald_shiny_app/` holds the embedded Player Health source and
+- `Sports Science 2/vald_shiny_app/` holds the embedded Sports Science source and
   refresh pipeline. `Sports Science 2/data/` and the fall roster are deployment
   seeds; generated VALD caches and the local package library remain ignored.
 - `models/` stores local model artifacts used by scouting and report features.

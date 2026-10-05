@@ -7,7 +7,7 @@ source("R/integrations/player_health_workspace.R", local = FALSE)
 fail <- function(...) stop(paste0(...), call. = FALSE)
 
 landing_html <- paste(as.character(base_player_health_workspace_ui()), collapse = "")
-for (needle in c("Player Health", "VALD + ArmCare + PULSE + TrackMan", "base_player_health_app", "reload_data")) {
+for (needle in c("Sports Science", "VALD + ArmCare + PULSE + TrackMan", "base_player_health_app", "reload_data")) {
   if (!grepl(needle, landing_html, fixed = TRUE)) {
     fail("Player Health landing UI is missing: ", needle)
   }
@@ -34,6 +34,11 @@ missing_tabs <- expected_tabs[
 ]
 if (length(missing_tabs)) {
   fail("Embedded Player Health UI is missing tabs: ", paste(missing_tabs, collapse = ", "))
+}
+for (needle in c("Sports Science", "Sports Science data loaded at")) {
+  if (!grepl(needle, html, fixed = TRUE) && !grepl(needle, paste(readLines(BASE_PLAYER_HEALTH_FILE, warn = FALSE), collapse = "\n"), fixed = TRUE)) {
+    fail("Embedded Sports Science UI is missing: ", needle)
+  }
 }
 for (asset in c("base-player-health-assets/health.css", "base-player-health-assets/bobcat.png")) {
   if (!grepl(asset, html, fixed = TRUE)) fail("Embedded Player Health UI is missing asset: ", asset)

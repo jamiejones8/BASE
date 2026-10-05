@@ -348,7 +348,7 @@ base_player_health_workspace_ui <- function() {
         class = "base-workspace-heading",
         htmltools::tags$div(
           htmltools::tags$div(class = "base-eyebrow", "Sports science monitoring"),
-          htmltools::tags$h1("Player Health"),
+          htmltools::tags$h1("Sports Science"),
           htmltools::tags$p("Review VALD, ArmCare, PULSE, TrackMan, athlete trends, alerts, and force traces.")
         ),
         htmltools::tags$div(
@@ -370,7 +370,7 @@ base_player_health_workspace_ui <- function() {
         id = "base-player-health-loading",
         class = "base-workspace-loading",
         htmltools::tags$div(class = "base-loading-mark", "B"),
-        htmltools::tags$strong("Preparing Player Health"),
+        htmltools::tags$strong("Preparing Sports Science"),
         htmltools::tags$span("The monitoring workspace loads once, when first opened.")
       ),
       shiny::uiOutput("base_player_health_app")

@@ -95,7 +95,7 @@ health_ui <- function() list(
     ),uiOutput("hc_pulse_source")
   )),
   nav_panel("Combined Health",value="combined",tags$div(class="health-page",
-    health_header("Player Health", "Baseball performance + VALD + ArmCare + PULSE"),
+    health_header("Sports Science", "Baseball performance + VALD + ArmCare + PULSE"),
     fluidRow(column(5,selectInput("hc_combined_player","Player",choices=character())),
       column(4,dateRangeInput("hc_combined_dates","Trend dates",start=as.Date("2025-01-01"),end=Sys.Date())),
       column(3,downloadButton("hc_trackman_export","Export daily pitching KPIs"))),

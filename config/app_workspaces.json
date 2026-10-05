@@ -193,7 +193,7 @@
     {
       "id": "player_health",
       "order": 9,
-      "title": "Player Health",
+      "title": "Sports Science",
       "description": "Monitor VALD, ArmCare, PULSE, TrackMan, combined trends, KPI correlations, alerts, and force traces.",
       "implementation_policy": "Embed the Sports Science 2 dashboard inside the BASE shell as a distinct application version, preserve its source calculations and exports, and scope only the presentation layer to BASE styling.",
       "source_route": "player_health",

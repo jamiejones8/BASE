@@ -13,10 +13,14 @@ data_processing_html <- paste(as.character(data_processing_workspace_ui()), coll
 if (!grepl("dp_bp_file", data_processing_html, fixed = TRUE) ||
     !grepl("dp_bp_append", data_processing_html, fixed = TRUE) ||
     !grepl("dp_bp_status", data_processing_html, fixed = TRUE) ||
+    !grepl("dp_pulse_events_replace", data_processing_html, fixed = TRUE) ||
+    !grepl("dp_pulse_workload_replace", data_processing_html, fixed = TRUE) ||
+    !grepl("dp_arm_care_replace", data_processing_html, fixed = TRUE) ||
+    !grepl("Replace Arm Care and PULSE exports", data_processing_html, fixed = TRUE) ||
     !grepl("dp_csv_source", data_processing_html, fixed = TRUE) ||
     !grepl("dp_csv_editor", data_processing_html, fixed = TRUE) ||
     !grepl("dp_csv_save", data_processing_html, fixed = TRUE)) {
-  stop("Data Processing does not expose the bullpen import and CSV editor workflows.", call. = FALSE)
+  stop("Data Processing does not expose the replacement, bullpen, and CSV editor workflows.", call. = FALSE)
 }
 
 duplicate_percentiles <- tibble::tibble(

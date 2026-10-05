@@ -987,7 +987,7 @@ load_shared_data <- function() {
   if (!file.exists(paths$roster)) missing <- c(missing, "roster_baseball.rds")
   if (!file.exists(paths$summary)) missing <- c(missing, "force_sessions_summary_baseball.rds")
   shared_data$status <- if (length(missing) == 0) {
-    paste0("Player Health data loaded at ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+    paste0("Sports Science data loaded at ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
   } else {
     paste0("Missing required file(s): ", paste(missing, collapse = ", "), ". Set CMJ_SPRINT_SHARE_GOLD_DIR / CMJ_SPRINT_SHARE_LEGACY_DIR or copy files into ./data/gold or ./Data.")
   }
@@ -1124,7 +1124,7 @@ brand_lockup <- tags$div(class = "brand-lockup",
   tags$img(src=paste0(PLAYER_HEALTH_ASSET_PREFIX, "/ts-gold.png"), alt="Texas State Baseball", style="height:48px;width:48px;object-fit:contain"),
   tags$div(
     tags$div(class = "brand-text-primary", "Texas State Baseball"),
-    tags$div(class = "brand-text-secondary", "Player Health")
+    tags$div(class = "brand-text-secondary", "Sports Science")
   )
 )
 
