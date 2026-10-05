@@ -100,7 +100,9 @@ test_that("modified tests replace old metrics rather than retaining stale trials
   saveRDS(data.frame(testId="t1",trialId="obsolete",metricKey="JH",modifiedDateUtc="2026-09-21T12:00:00Z"),
     file.path(env$DATA_DIR,"force_metrics_long_all_history_baseball.rds"))
   payload <- '[{"id":"new-trial","recordedUTC":"2026-09-21T12:00:00Z","recordedOffset":0,"recordedTimezone":"UTC","startTime":0,"endTime":1,"limb":"Both","results":[{"definition":{"result":"JH","name":"Jump Height (Imp-Mom)","unit":"cm"},"value":42}]}]'
-  local_mocked_bindings(req_perform_parallel=function(...) list("mock"),resp_status=function(...) 200L,
+  # Match the older deployed httr2 signature exactly: no max_active argument.
+  # This catches accidental use of newer-only arguments before deployment.
+  local_mocked_bindings(req_perform_parallel=function(reqs,on_error,progress) list("mock"),resp_status=function(...) 200L,
     resp_body_string=function(...) payload,.package="httr2")
   sys.source("scripts/07_pull_forcedecks_metrics_all_history_baseball.R",envir=env)
   result <- readRDS(file.path(env$DATA_DIR,"force_metrics_long_all_history_baseball.rds"))

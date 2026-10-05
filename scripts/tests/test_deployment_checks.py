@@ -135,6 +135,8 @@ class DeploymentChecks(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("req_throttle(rate = 10)", source)
         self.assertNotIn("req_throttle(capacity", source)
+        self.assertIn('"max_active" %in% names(formals(httr2::req_perform_parallel))', source)
+        self.assertNotIn("req_perform_parallel(reqs, max_active", source)
 
 
 if __name__ == "__main__":

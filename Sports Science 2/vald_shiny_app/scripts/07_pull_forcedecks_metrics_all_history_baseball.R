@@ -125,6 +125,28 @@ build_trial_request <- function(test_id, token) {
     httr2::req_error(is_error = function(resp) FALSE)
 }
 
+perform_trial_requests <- function(reqs, max_active = PULL_MAX_ACTIVE) {
+  args <- list(
+    reqs = reqs,
+    on_error = "continue",
+    progress = FALSE
+  )
+  # max_active was added after the httr2 release currently installed in the
+  # production image. Keep bounded concurrency where supported and otherwise
+  # use that release's built-in parallelism instead of failing before the first
+  # request is sent.
+  if ("max_active" %in% names(formals(httr2::req_perform_parallel))) {
+    args$max_active <- max_active
+  }
+  do.call(httr2::req_perform_parallel, args)
+}
+
+cat(
+  "httr2", as.character(utils::packageVersion("httr2")),
+  "| configurable parallel limit:",
+  "max_active" %in% names(formals(httr2::req_perform_parallel)), "\n"
+)
+
 parse_trials_response <- function(resp, test_id) {
   if (inherits(resp, "error") || inherits(resp, "httr2_failure")) {
     message("FAILED testId=", test_id, " | ", conditionMessage(resp))
@@ -231,7 +253,7 @@ if (length(test_ids) == 0) {
     ids_batch <- test_ids[idx_batch]
 
     reqs <- lapply(ids_batch, build_trial_request, token = token)
-    resps <- httr2::req_perform_parallel(reqs, max_active = PULL_MAX_ACTIVE, on_error = "continue", progress = FALSE)
+    resps <- perform_trial_requests(reqs, max_active = PULL_MAX_ACTIVE)
 
     for (k in seq_along(idx_batch)) {
       i <- idx_batch[k]
