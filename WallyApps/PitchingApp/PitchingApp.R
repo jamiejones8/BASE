@@ -5069,6 +5069,28 @@ txst_game_ids <- nz_choices(txst_df$CustomGameID)
 if (is.null(txst_game_ids)) txst_game_ids <- nz_choices(df$CustomGameID)
 if (is.null(txst_game_ids)) txst_game_ids <- character(0)
 txst_game_ids <- order_game_ids_desc(txst_game_ids, game_dates)
+# Use the latest dated game across every season, then its earliest team pitch.
+# PitchNo takes precedence over file order so shuffled imports retain the starter.
+initial_pitching_selection <- function(d, pitchers, game_ids) {
+  fallback <- list(pitcher = pitchers[1], game = character(0), season = "F26")
+  d <- d[d$Pitcher %in% pitchers & !is.na(d$GameDate), , drop = FALSE]
+  games <- game_ids[game_ids %in% d$CustomGameID]
+  if (!nrow(d) || !length(games)) return(fallback)
+  latest <- d[d$CustomGameID == games[[1]], , drop = FALSE]
+  order_cols <- intersect(c("Inning", "PitchNo", "PAofInning", "PitchofPA", "row_in_file", "row_id"), names(latest))
+  if (length(order_cols)) {
+    keys <- lapply(latest[order_cols], function(x) suppressWarnings(as.numeric(as.character(x))))
+    latest <- latest[do.call(order, c(keys, list(na.last = TRUE))), , drop = FALSE]
+  }
+  season_col <- intersect(c("SeasonGroup", "SeasonTag"), names(latest))
+  season <- if (length(season_col)) as.character(latest[[season_col[[1]]]][[1]]) else "F26"
+  if (is.na(season) || !nzchar(season)) season <- "F26"
+  list(pitcher = as.character(latest$Pitcher[[1]]), game = games[[1]], season = season)
+}
+initial_pitching <- initial_pitching_selection(
+  txst_df, setdiff(txst_pitchers, EXCLUDE_PLAYERS), txst_game_ids
+)
+
 # Precompute game choices for the sidebar
 games_txst <- make_games_txst(txst_df)
 
@@ -6708,19 +6730,19 @@ ui <- base_pitching_page(
     title = "Select Pitcher/Game",
     selectInput("PitcherInput", "Select Pitcher",
                 choices  = as_pitcher_choices(setdiff(txst_pitchers, EXCLUDE_PLAYERS)),
-                selected = (setdiff(txst_pitchers, EXCLUDE_PLAYERS))[1],
+                selected = initial_pitching$pitcher,
                 selectize = TRUE
     )
     ,
     checkboxGroupInput(
       "season_groups", "Quick-select seasons",
       choices  = SEASON_CHOICES,
-      selected = "F26",
+      selected = initial_pitching$season,
       inline   = TRUE
     ),
     checkboxInput("Bullpens", "Bullpens", value = FALSE),
-    pickerInput("GameInput", HTML("Select Game<br>(Selects all by default)"),
-                choices = games_txst, selected = games_txst,
+    pickerInput("GameInput", HTML("Select Game"),
+                choices = games_txst, selected = initial_pitching$game,
                 options = list(`actions-box` = TRUE), multiple = TRUE),
     pickerInput("BatterHand", HTML("Select Batter Hand<br>(Selects both by default)"),
                 choices = bh_choices, selected = bh_choices,
@@ -7490,6 +7512,9 @@ server <- function(input, output, session){
     keep <- if (pitcher_changed) character(0) else cur[cur %in% ch]
     
     # if nothing is selected/kept, apply the season checkbox default behavior
+    if (is.null(last_pitcher()) && identical(input$PitcherInput, initial_pitching$pitcher)) {
+      keep <- intersect(initial_pitching$game, ch)
+    }
     if (!length(keep)) keep <- season_selected_game_ids()
     
     last_pitcher(input$PitcherInput)
@@ -14151,8 +14176,9 @@ function(el,x){
           type = "scatter", mode = "markers",
           name = paste0("D1 ", pitch_type, " (", row$BucketLabel[[1]], ")"),
           marker = list(
-            size = 22, opacity = 1, color = color_for(pitch_type),
-            line = list(color = "black", width = 3)
+            size = 22, opacity = 1, symbol = "circle-open",
+            color = if (pitch_type == "Fastball") "black" else "#808080",
+            line = list(width = 3)
           ),
           text = ~Label,
           hovertemplate = "%{text}<extra></extra>",

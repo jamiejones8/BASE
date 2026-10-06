@@ -2863,7 +2863,9 @@ server <- function(input, output, session) {
       return()
     }
     first_choice <- unname(ch[[1]])
-    updateSelectInput(session, "def_AARCatcher", choices = ch, selected = first_choice)
+    aar_choices <- ch[!(name_norm(unname(ch)) %in% c("austin munguia", "rashawn galloway"))]
+    updateSelectInput(session, "def_AARCatcher", choices = aar_choices,
+                      selected = if (length(aar_choices)) unname(aar_choices[[1]]) else character(0))
     updateSelectInput(session, "def_CR_catcher", choices = ch, selected = first_choice)
   }, ignoreInit = FALSE)
 
@@ -2966,6 +2968,7 @@ server <- function(input, output, session) {
   catch_aar_recent_reports <- reactive({
     d <- catcher_receiving_pool()
     if (!nrow(d)) return(tibble::tibble())
+    d <- d %>% dplyr::filter(!(name_norm(Catcher) %in% c("austin munguia", "rashawn galloway")))
     season_groups <- input$def_season_groups %||% character(0)
     if (length(season_groups) && "SeasonGroup" %in% names(d)) {
       d <- d %>% dplyr::filter(.data$SeasonGroup %in% season_groups)

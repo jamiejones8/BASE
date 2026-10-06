@@ -1710,14 +1710,16 @@ if (isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE)))
   base_hitting_page <- page_sidebar
 }
 
+aar_hitters <- hitters_txst[!(name_norm(hitters_txst) %in% c("austin munguia", "rashawn galloway"))]
+
 base_hitting_aar_builder_ui <- tagList(
   if (isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))) {
     div(
       class = "aar-card",
       style = "display:flex; gap:12px; align-items:end; flex-wrap:wrap;",
       selectInput(
-        "aar_hitter", "Hitter", choices = hitters_txst,
-        selected = if (length(hitters_txst)) hitters_txst[[1]] else NULL,
+        "aar_hitter", "Hitter", choices = aar_hitters,
+        selected = if (length(aar_hitters)) aar_hitters[[1]] else NULL,
         width = "280px"
       ),
       checkboxGroupInput(
@@ -8517,6 +8519,7 @@ server <- function(input, output, session){
   hit_aar_recent_reports <- reactive({
     d <- df
     if (is.null(d) || !nrow(d)) return(tibble::tibble())
+    d <- d %>% dplyr::filter(!(name_norm(Batter) %in% c("austin munguia", "rashawn galloway")))
     d <- d %>% dplyr::filter(!(is_bullpen %in% TRUE))
     season_groups <- aar_season_group_values()
     season_col <- if ("SeasonGroup" %in% names(d)) "SeasonGroup" else if ("SeasonTag" %in% names(d)) "SeasonTag" else NULL
