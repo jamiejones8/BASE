@@ -49,16 +49,21 @@ player-menu checkboxes map directly to those filenames. Optional cumulative
 `2026 Fall - cleaned.csv` and `2027 Season - cleaned.csv` sources are loaded
 from `BASE_TEAM_SEASON_IMPORT_DIR` as soon as they exist.
 
-Data Processing contains separate 2026 Fall, 2027 Season, and bullpen TrackMan
-importers. Each accepts one game or bullpen CSV, verifies Texas State
-participation (and the year for season sources), deduplicates pitches by stable
-TrackMan identity, and atomically appends new rows to the selected cumulative
-source. Season imports default to `/base-data/app_state/team-season-imports`;
+Data Processing contains separate 2026 Fall, 2027 Season, bullpen, and Player
+Positioning TrackMan importers. Each accepts one game, bullpen, or positioning
+CSV, verifies Texas State participation (and the year for season sources),
+deduplicates rows by stable TrackMan identity, and atomically appends new rows
+to the selected cumulative source. Season imports default to
+`/base-data/app_state/team-season-imports`;
 mount it as persistent writable storage. The bullpen importer writes to
 `BASE_BULLPEN_DATA_FILE`, which defaults to the existing
 `WallyApps/PitchingApp/data/Bullpens - cleaned.csv` source loaded by Pitching.
-If Pitching, Hitting, Postgame Reports, or HomeBASE was already open during an
-import, reload BASE to rebuild that workspace from the updated file.
+The Player Positioning importer writes to `BASE_PLAYER_POSITIONING_DATA_FILE`,
+which defaults to `WallyApps/DefenseApp/data/BobcatsDefense2026.csv` and is
+loaded as a Texas State supplement by Defensive Analytics.
+If Pitching, Hitting, Defensive Analytics, Postgame Reports, or HomeBASE was
+already open during an import, reload BASE to rebuild that workspace from the
+updated file.
 
 Data Processing also contains PULSE Events, PULSE Workload, and Arm Care
 replacement uploads. Each accepts a complete vendor CSV, validates the expected

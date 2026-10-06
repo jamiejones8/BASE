@@ -94,6 +94,20 @@ actual_d1_pitching <- unlist(workspace$D1_REF[names(expected_d1_pitching)])
 if (!isTRUE(all.equal(actual_d1_pitching, expected_d1_pitching, tolerance = 1e-12))) {
   fail("Pitching AAR is not using the parquet-derived D1 process benchmarks.")
 }
+expected_leaderboard_labels <- c(
+  `K%` = "Avg 19.3%", `BB%` = "Avg 11.3%", `Barrel%` = "Avg 17.4%",
+  `Whiff%` = "Avg 24.0%", `CSW%` = "Avg 27.5%", `Avg Velo` = "Avg 89.4 mph",
+  `Strike%` = "Avg 60.5%", `Zone%` = "Avg 45.6%", `Pre2k Zone%` = "Avg 46.0%",
+  `FPS%` = "Avg 57.5%", `E&A%` = "Avg 70.0%", `Put Away%` = "Avg 19.0%"
+)
+actual_leaderboard_labels <- vapply(
+  names(expected_leaderboard_labels),
+  workspace$pitching_leaderboard_benchmark_label,
+  character(1)
+)
+if (!identical(unname(actual_leaderboard_labels), unname(expected_leaderboard_labels))) {
+  fail("Pitching PDF leaderboard D1-average labels changed or are incomplete.")
+}
 empty_evla <- workspace$resolve_ev_la_strict(tibble::tibble(Angle = numeric()))
 if (length(empty_evla$ev) || length(empty_evla$la)) {
   fail("Empty EV/launch-angle input did not return empty vectors safely.")

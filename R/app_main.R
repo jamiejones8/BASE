@@ -4294,6 +4294,7 @@ data_processing_workspace_ui <- function() {
   import_card <- function(target_id, input_id, output_id) {
     target <- base_team_season_import_target(target_id)
     is_bullpen <- identical(target$id, "BP")
+    is_positioning <- identical(target$kind, "positioning")
     tags$section(
       class = "base-import-card",
       tags$div(
@@ -4301,17 +4302,25 @@ data_processing_workspace_ui <- function() {
         tags$div(
           tags$span(
             class = "base-tool-eyebrow",
-            if (is_bullpen) "Team bullpen source" else "Team season source"
+            if (is_positioning) {
+              "Team defense source"
+            } else if (is_bullpen) {
+              "Team bullpen source"
+            } else {
+              "Team season source"
+            }
           ),
           tags$h3(target$label)
         ),
         tags$span(
           class = "base-import-year",
-          if (is_bullpen) "Bullpen" else target$expected_year
+          if (is_positioning) "Defense" else if (is_bullpen) "Bullpen" else target$expected_year
         )
       ),
       tags$p(
-        if (is_bullpen) {
+        if (is_positioning) {
+          "Upload one raw TrackMan Player Positioning CSV. BASE validates the game, removes positioning rows already stored, and appends only new rows to the active defense source."
+        } else if (is_bullpen) {
           "Upload one raw TrackMan bullpen CSV. BASE validates the session, removes pitches already stored, and appends only new rows to the active bullpen source."
         } else {
           "Upload one raw TrackMan game CSV. BASE validates the game and season, removes pitches already stored, and appends only new rows."
@@ -4319,9 +4328,21 @@ data_processing_workspace_ui <- function() {
       ),
       shiny::fileInput(
         inputId = paste0(input_id, "_file"),
-        label = if (is_bullpen) "TrackMan bullpen CSV" else "TrackMan game CSV",
+        label = if (is_positioning) {
+          "TrackMan Player Positioning CSV"
+        } else if (is_bullpen) {
+          "TrackMan bullpen CSV"
+        } else {
+          "TrackMan game CSV"
+        },
         accept = c("text/csv", ".csv"),
-        buttonLabel = if (is_bullpen) "Choose bullpen" else "Choose game",
+        buttonLabel = if (is_positioning) {
+          "Choose positioning file"
+        } else if (is_bullpen) {
+          "Choose bullpen"
+        } else {
+          "Choose game"
+        },
         placeholder = "No file selected"
       ),
       shiny::actionButton(
@@ -4444,7 +4465,8 @@ data_processing_workspace_ui <- function() {
         class = "base-import-grid",
         import_card("F26", "dp_f26", "dp_f26_status"),
         import_card("S27", "dp_s27", "dp_s27_status"),
-        import_card("BP", "dp_bp", "dp_bp_status")
+        import_card("BP", "dp_bp", "dp_bp_status"),
+        import_card("PP", "dp_positioning", "dp_positioning_status")
       ),
       tags$section(
         class = "base-csv-editor",
@@ -4477,6 +4499,7 @@ data_processing_server <- function(input, output, session) {
     F26 = shiny::reactiveVal(NULL),
     S27 = shiny::reactiveVal(NULL),
     BP = shiny::reactiveVal(NULL),
+    PP = shiny::reactiveVal(NULL),
     PULSE_EVENTS = shiny::reactiveVal(NULL),
     PULSE_WORKLOAD = shiny::reactiveVal(NULL),
     ARM_CARE = shiny::reactiveVal(NULL)
@@ -4495,20 +4518,21 @@ data_processing_server <- function(input, output, session) {
     }
     if (!is.null(state) && identical(state$type, "success")) {
       result <- state$result
+      unit <- if (identical(target$kind, "positioning")) "positioning rows" else "pitches"
       summary <- if (result$inserted_rows > 0L) {
         paste0(
-          format(result$inserted_rows, big.mark = ","), " new pitches appended; ",
+          format(result$inserted_rows, big.mark = ","), " new ", unit, " appended; ",
           format(result$duplicate_rows, big.mark = ","), " duplicates skipped."
         )
       } else {
-        paste0("No new pitches were added; all ", result$duplicate_rows, " rows were already stored.")
+        paste0("No new ", unit, " were added; all ", result$duplicate_rows, " rows were already stored.")
       }
       return(tags$div(
         class = "base-import-status is-success",
         tags$strong(paste(target$label, "source updated")),
         summary,
         tags$br(),
-        paste0("Source total: ", format(result$total_rows, big.mark = ","), " pitches. Reload BASE if an analysis workspace was already open."),
+        paste0("Source total: ", format(result$total_rows, big.mark = ","), " ", unit, ". Reload BASE if an analysis workspace was already open."),
         tags$span(class = "base-import-path", result$destination)
       ))
     }
@@ -4516,7 +4540,15 @@ data_processing_server <- function(input, output, session) {
       class = "base-import-status",
       tags$strong(
         if (status$exists) {
-          if (identical(target$id, "BP")) "Bullpen source ready" else "Season source ready"
+          if (identical(target$kind, "positioning")) {
+            "Player Positioning source ready"
+          } else if (identical(target$id, "BP")) {
+            "Bullpen source ready"
+          } else {
+            "Season source ready"
+          }
+        } else if (identical(target$kind, "positioning")) {
+          "Waiting for the first Player Positioning file"
         } else if (identical(target$id, "BP")) {
           "Waiting for the first bullpen"
         } else {
@@ -4538,6 +4570,7 @@ data_processing_server <- function(input, output, session) {
   output$dp_f26_status <- shiny::renderUI(render_status("F26", states$F26()))
   output$dp_s27_status <- shiny::renderUI(render_status("S27", states$S27()))
   output$dp_bp_status <- shiny::renderUI(render_status("BP", states$BP()))
+  output$dp_positioning_status <- shiny::renderUI(render_status("PP", states$PP()))
 
   render_replacement_status <- function(target_id, state) {
     status <- base_sports_science_source_status(target_id)
@@ -4801,7 +4834,14 @@ data_processing_server <- function(input, output, session) {
     shiny::observeEvent(input[[paste0(input_prefix, "_append")]], {
       upload <- input[[paste0(input_prefix, "_file")]]
       if (is.null(upload) || !nzchar(upload$datapath)) {
-        kind <- if (identical(target_id, "BP")) "bullpen" else "game"
+        target <- base_team_season_import_target(target_id)
+        kind <- if (identical(target$kind, "positioning")) {
+          "Player Positioning"
+        } else if (identical(target_id, "BP")) {
+          "bullpen"
+        } else {
+          "game"
+        }
         state(list(type = "error", message = paste("Choose a TrackMan", kind, "CSV before importing.")))
         return()
       }
@@ -4832,8 +4872,13 @@ data_processing_server <- function(input, output, session) {
       state(list(type = "success", result = result))
       refresh_csv_choices(selected = result$target_id)
       if (identical(csv_loaded_id(), result$target_id)) request_csv_load(result$target_id)
+      saved_unit <- if (identical(base_team_season_import_target(target_id)$kind, "positioning")) {
+        "new positioning rows"
+      } else {
+        "new pitches"
+      }
       shiny::showNotification(
-        paste(result$target_label, "saved:", result$inserted_rows, "new pitches"),
+        paste(result$target_label, "saved:", result$inserted_rows, saved_unit),
         type = "message",
         duration = 6
       )
@@ -4843,6 +4888,7 @@ data_processing_server <- function(input, output, session) {
   register_import("F26", "dp_f26", states$F26)
   register_import("S27", "dp_s27", states$S27)
   register_import("BP", "dp_bp", states$BP)
+  register_import("PP", "dp_positioning", states$PP)
 
   register_replacement <- function(target_id, input_prefix, state) {
     shiny::observeEvent(input[[paste0(input_prefix, "_replace")]], {

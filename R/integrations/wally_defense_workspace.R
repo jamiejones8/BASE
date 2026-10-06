@@ -171,7 +171,14 @@ base_prepare_wally_defense_rows <- function() {
     tibble::tibble()
   })
 
+  positioning_path <- tryCatch(
+    TEAM_CONFIG$data$player_positioning_file,
+    error = function(e) base_defense_dev_file("BobcatsDefense2026.csv")
+  )
+  positioning_rows <- base_read_defense_csv(positioning_path)
+
   if (!nrow(rows)) {
+    if (nrow(positioning_rows)) return(positioning_rows)
     return(base_read_defense_csv(base_defense_dev_file("BobcatsDefense2026.csv")))
   }
 
@@ -191,6 +198,17 @@ base_prepare_wally_defense_rows <- function() {
   rows$row_in_file <- seq_len(nrow(rows))
   rows$SeasonGroup <- "S26"
   rows$DataSource <- "2026 NCAA Division I defense runtime"
+
+  if (nrow(positioning_rows)) {
+    runtime_keys <- base_trackman_event_key(rows)
+    positioning_keys <- base_trackman_event_key(positioning_rows)
+    keep <- !duplicated(positioning_keys) & !positioning_keys %in% runtime_keys
+    positioning_rows <- positioning_rows[keep, , drop = FALSE]
+    if (nrow(positioning_rows)) {
+      positioning_rows$DataSource <- paste0("Texas State internal — ", basename(positioning_path))
+      rows <- dplyr::bind_rows(rows, positioning_rows)
+    }
+  }
   rows
 }
 

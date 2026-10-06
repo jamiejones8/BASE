@@ -22,6 +22,12 @@ if (!identical(
 )) {
   fail("The bullpen importer and Pitching loader do not share the configured source file.")
 }
+if (!identical(
+  base_team_season_import_path("PP"),
+  normalizePath(TEAM_CONFIG$data$player_positioning_file, winslash = "/", mustWork = FALSE)
+)) {
+  fail("The Player Positioning importer and Defense loader do not share the configured source file.")
+}
 
 date_formats <- c("9/17/26", "09-18-26", "09/19/2026", "2026-09-20", "2026/9/21")
 expected_dates <- as.Date(c("2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21"))
@@ -90,6 +96,34 @@ if ("BP" %in% names(base_team_season_import_paths(root = scratch))) {
   fail("The bullpen source leaked into the season-source loader list.")
 }
 
+positioning <- tibble::tibble(
+  GameUID = "positioning-game-1",
+  PitchNo = as.character(1:3),
+  PitchUID = paste0("positioning-pitch-", 1:3),
+  PlayID = paste0("positioning-play-", 1:3),
+  Date = "2026-10-02",
+  PitcherTeam = TEAM_CONFIG$data_code,
+  BatterTeam = TEAM_CONFIG$data_code,
+  PitchCall = c("BallCalled", "FoulBallNotFieldable", "StrikeCalled"),
+  PlayResult = "Undefined",
+  DetectedShift = "NoShift"
+)
+for (position in c("1B", "2B", "3B", "SS", "LF", "CF", "RF")) {
+  positioning[[paste0(position, "_PositionAtReleaseX")]] <- c(90, 91, 92)
+  positioning[[paste0(position, "_PositionAtReleaseZ")]] <- c(60, 61, 62)
+  positioning[[paste0(position, "_Name")]] <- paste(position, "Fielder")
+  positioning[[paste0(position, "_Id")]] <- paste0(position, "-id")
+}
+positioning_path <- file.path(scratch, "positioning.csv")
+readr::write_csv(positioning, positioning_path)
+positioning_first <- base_import_trackman_game(positioning_path, "PP", root = scratch)
+positioning_second <- base_import_trackman_game(positioning_path, "PP", root = scratch)
+if (!identical(basename(positioning_first$destination), "BobcatsDefense2026.csv") ||
+    positioning_first$inserted_rows != 3L || positioning_first$total_rows != 3L ||
+    positioning_second$inserted_rows != 0L || positioning_second$duplicate_rows != 3L) {
+  fail("The Player Positioning drop did not append to and persist in its cumulative source.")
+}
+
 wrong_year <- game
 wrong_year$PitchUID <- paste0("wrong-", seq_len(nrow(wrong_year)))
 wrong_path <- file.path(scratch, "wrong-year.csv")
@@ -121,8 +155,8 @@ if (!isTRUE(status$exists) || status$size <= 0 || status$target$label != "2026 F
 }
 
 editable_sources <- base_editable_trackman_sources(root = scratch)
-if (!identical(editable_sources$id, c("F26", "S27", "BP")) ||
-    !all(editable_sources$exists[c(1, 3)]) || editable_sources$exists[[2]]) {
+if (!identical(editable_sources$id, c("F26", "S27", "BP", "PP")) ||
+    !all(editable_sources$exists[c(1, 3, 4)]) || editable_sources$exists[[2]]) {
   fail("The CSV editor did not expose exactly the managed TrackMan sources and their availability.")
 }
 
@@ -158,6 +192,7 @@ if (is.null(invalid_error) || !grepl("duplicate TrackMan pitch identity", condit
 }
 
 TEAM_CONFIG$data$team_season_import_dir <- scratch
+TEAM_CONFIG$data$player_positioning_file <- positioning_first$destination
 source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 source("R/integrations/wally_hitting_workspace.R", local = FALSE)
 source("R/integrations/wally_defense_workspace.R", local = FALSE)
@@ -166,6 +201,7 @@ future_hitting <- base_read_hitting_source(first$destination)
 future_hitting <- future_hitting[base_team_matches(future_hitting$BatterTeam), , drop = FALSE]
 future_catching <- base_read_catching_source(first$destination)
 future_catching <- future_catching[base_team_matches(future_catching$CatcherTeam), , drop = FALSE]
+future_positioning <- base_prepare_wally_defense_rows()
 if (nrow(future_pitching) != 3L || !all(future_pitching$SeasonGroup == "F26")) {
   fail("The Pitching loader did not select and label future Texas State pitching rows.")
 }
@@ -179,5 +215,9 @@ if (nrow(future_catching) != 3L || !all(future_catching$SeasonGroup == "F26") ||
     )) {
   fail("The Catcher AAR loader did not read and label 2026 Fall rows from the configured volume.")
 }
+if (nrow(future_positioning) != 3L ||
+    !all(future_positioning$PitchUID %in% positioning$PitchUID)) {
+  fail("The Defense loader did not read the cumulative Player Positioning source.")
+}
 
-cat("Team TrackMan import tests passed: season/catcher volume loading, bullpen append, safe CSV editing, deduplication, schema evolution, and validation.\n")
+cat("Team TrackMan import tests passed: season/catcher/positioning volume loading, bullpen append, safe CSV editing, deduplication, schema evolution, and validation.\n")

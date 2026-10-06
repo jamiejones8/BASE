@@ -1,9 +1,10 @@
-# Persistent TrackMan game and bullpen imports for Texas State team data.
+# Persistent TrackMan game, bullpen, and positioning imports for Texas State.
 #
 # Each target remains one append-only CSV, matching the existing Wally loading
 # model. Season files keep the complete game export; the Hitting and Pitching
 # adapters select the Texas State batting and pitching rows they need. Bullpen
-# imports update the active cumulative file used by the Pitching workspace.
+# and positioning imports update the active cumulative files used by the
+# Pitching and Defensive Analytics workspaces.
 
 BASE_TEAM_SEASON_IMPORT_TARGETS <- list(
   F26 = list(
@@ -25,12 +26,27 @@ BASE_TEAM_BULLPEN_IMPORT_TARGETS <- list(
     id = "BP",
     label = "Bullpens",
     filename = "Bullpens - cleaned.csv",
-    expected_year = NULL
+    expected_year = NULL,
+    kind = "pitch"
+  )
+)
+
+BASE_PLAYER_POSITIONING_IMPORT_TARGETS <- list(
+  PP = list(
+    id = "PP",
+    label = "Player Positioning",
+    filename = "BobcatsDefense2026.csv",
+    expected_year = NULL,
+    kind = "positioning"
   )
 )
 
 base_trackman_import_targets <- function() {
-  c(BASE_TEAM_SEASON_IMPORT_TARGETS, BASE_TEAM_BULLPEN_IMPORT_TARGETS)
+  season_targets <- lapply(BASE_TEAM_SEASON_IMPORT_TARGETS, function(target) {
+    target$kind <- "pitch"
+    target
+  })
+  c(season_targets, BASE_TEAM_BULLPEN_IMPORT_TARGETS, BASE_PLAYER_POSITIONING_IMPORT_TARGETS)
 }
 
 base_team_season_import_root <- function() {
@@ -60,6 +76,17 @@ base_team_season_import_path <- function(target_id, root = NULL) {
       }
       return(normalizePath(
         base_project_path("WallyApps", "PitchingApp", "data", target$filename),
+        winslash = "/",
+        mustWork = FALSE
+      ))
+    }
+    if (identical(target$id, "PP")) {
+      configured <- tryCatch(TEAM_CONFIG$data$player_positioning_file, error = function(e) NULL)
+      if (!is.null(configured) && length(configured) && nzchar(configured[[1]])) {
+        return(normalizePath(configured[[1]], winslash = "/", mustWork = FALSE))
+      }
+      return(normalizePath(
+        base_project_path("WallyApps", "DefenseApp", "data", target$filename),
         winslash = "/",
         mustWork = FALSE
       ))
@@ -167,9 +194,71 @@ base_trackman_game_id <- function(rows, dates) {
   unique(as.character(dates[!is.na(dates)]))
 }
 
+base_player_positioning_required_columns <- function() {
+  positions <- c("1B", "2B", "3B", "SS", "LF", "CF", "RF")
+  c(
+    "GameUID", "PitchNo", "PitchUID", "PlayID", "Date", "PitcherTeam",
+    "BatterTeam", "PitchCall", "PlayResult", "DetectedShift",
+    unlist(lapply(positions, function(position) {
+      paste0(position, c("_PositionAtReleaseX", "_PositionAtReleaseZ", "_Name", "_Id"))
+    }), use.names = FALSE)
+  )
+}
+
+base_validate_player_positioning_import <- function(rows, target) {
+  rows <- tibble::as_tibble(rows)
+  if (!nrow(rows)) stop("The selected TrackMan Player Positioning CSV has no data rows.", call. = FALSE)
+
+  missing <- setdiff(base_player_positioning_required_columns(), names(rows))
+  if (length(missing)) {
+    stop(
+      "The TrackMan Player Positioning CSV is missing required columns: ",
+      paste(missing, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  dates <- base_parse_trackman_dates(rows$Date)
+  if (any(is.na(dates))) {
+    stop("Every uploaded positioning row must have a recognizable TrackMan Date.", call. = FALSE)
+  }
+
+  game_ids <- base_trackman_game_id(rows, dates)
+  if (length(game_ids) != 1L) {
+    stop(
+      "Upload one Player Positioning game at a time. This file contains ",
+      length(game_ids), " game identifiers.",
+      call. = FALSE
+    )
+  }
+
+  if (!any(base_team_matches(rows$PitcherTeam))) {
+    stop("No Texas State fielding rows were found in this Player Positioning file.", call. = FALSE)
+  }
+
+  keys <- base_trackman_event_key(rows)
+  if (any(is.na(keys) | !nzchar(keys))) {
+    stop(
+      "Every positioning row needs PitchUID, PlayID, or TrackMan game/pitch identity fields for safe deduplication.",
+      call. = FALSE
+    )
+  }
+
+  list(
+    rows = rows,
+    dates = dates,
+    game_id = game_ids[[1]],
+    event_keys = keys,
+    target = target
+  )
+}
+
 base_validate_trackman_import <- function(rows, target_id) {
   target <- base_team_season_import_target(target_id)
   rows <- tibble::as_tibble(rows)
+  if (identical(target$kind, "positioning")) {
+    return(base_validate_player_positioning_import(rows, target))
+  }
   if (!nrow(rows)) stop("The selected TrackMan CSV has no data rows.", call. = FALSE)
 
   required <- c("Date", "PitcherTeam", "BatterTeam", "Pitcher", "Batter", "PitchCall")
@@ -289,7 +378,7 @@ base_import_trackman_game <- function(upload_path, target_id, root = NULL) {
   if (any(is.na(current_keys) | !nzchar(current_keys))) {
     stop(
       "The current ", target$label,
-      " source contains rows without stable pitch identity; no changes were written.",
+      " source contains rows without stable TrackMan identity; no changes were written.",
       call. = FALSE
     )
   }
@@ -367,7 +456,11 @@ base_validate_trackman_manual_edit <- function(rows, target_id, before = NULL) {
   target <- base_team_season_import_target(target_id)
   rows <- tibble::as_tibble(rows)
   if (!is.null(before)) before <- tibble::as_tibble(before)
-  required <- c("Date", "PitcherTeam", "BatterTeam", "Pitcher", "Batter", "PitchCall")
+  required <- if (identical(target$kind, "positioning")) {
+    base_player_positioning_required_columns()
+  } else {
+    c("Date", "PitcherTeam", "BatterTeam", "Pitcher", "Batter", "PitchCall")
+  }
   missing <- setdiff(required, names(rows))
   if (length(missing)) {
     stop(

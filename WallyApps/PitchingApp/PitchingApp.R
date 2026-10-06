@@ -6013,6 +6013,29 @@ D1_PCT_AVG <- list(
   `IZ Whiff%`   = 0.157
 )
 
+# Non-percentage D1 comparison points used in the pitching leaderboard PDF.
+# Heater velocity is pitch-weighted across the same D1 reference population
+# used by the in-app percentile displays.
+D1_PITCHING_LEADERBOARD_NON_PCT_AVG <- list(
+  `Avg Velo` = 89.4
+)
+
+pitching_leaderboard_benchmark_label <- function(metric) {
+  value <- if (metric %in% names(D1_PCT_AVG)) {
+    D1_PCT_AVG[[metric]]
+  } else {
+    D1_PITCHING_LEADERBOARD_NON_PCT_AVG[[metric]]
+  }
+  if (is.null(value) || !is.finite(value)) return("")
+  if (metric %in% names(D1_PCT_AVG)) {
+    sprintf("Avg %.1f%%", 100 * value)
+  } else if (identical(metric, "Avg Velo")) {
+    sprintf("Avg %.1f mph", value)
+  } else {
+    sprintf("Avg %.1f", value)
+  }
+}
+
 # ---- D1 averages by pitch type (fractions) ----
 D1_PCT_AVG_BY_PITCH <- list(
   `Whiff%` = c(
@@ -11698,7 +11721,10 @@ server <- function(input, output, session){
       
       title_g <- grid::grobTree(
         grid::rectGrob(gp = grid::gpar(fill = maroon, col = gold, lwd = 0.8)),
-        grid::textGrob(title, gp = grid::gpar(col = gold, fontsize = 11, fontface = "bold"))
+        grid::textGrob(
+          paste0(title, "  |  ", pitching_leaderboard_benchmark_label(title)),
+          gp = grid::gpar(col = gold, fontsize = 10, fontface = "bold")
+        )
       )
       tbl_g <- gridExtra::tableGrob(
         df,
