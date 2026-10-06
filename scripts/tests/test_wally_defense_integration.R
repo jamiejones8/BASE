@@ -94,7 +94,7 @@ if (!grepl("grid-template-columns:repeat(2,minmax(0,1fr))", style_html, fixed = 
 }
 expected_tabs <- c(
   "Leaderboard", "Opportunities", "OF OAA", "IF OAA", "OAA",
-  "Catcher Season"
+  "Catcher Season", "Player Range", "Best Defense"
 )
 missing_tabs <- expected_tabs[!vapply(expected_tabs, grepl, logical(1), x = html, fixed = TRUE)]
 if (length(missing_tabs)) {
@@ -218,6 +218,18 @@ shiny::testServer(workspace$server, {
   invisible(output$def_catcher_ball_to_strike_tbl)
   invisible(output$def_catcher_strike_to_ball_tbl)
   invisible(output$leaderboard_overall_table)
+  player_row <- workspace$defense_df[which(nzchar(workspace$defense_df$player))[1], ]
+  session$setInputs(projected_range_player = player_row$player[[1]],
+                    projected_range_position = player_row$position[[1]],
+                    projected_range_type = "Auto",
+                    opportunity_player = player_row$player[[1]],
+                    opportunity_position = player_row$position[[1]])
+  session$flushReact()
+  invisible(output$opportunity_spray)
+  invisible(output$projected_range_plot)
+  invisible(output$projected_range_table)
+  invisible(output$range_builder_plot)
+  invisible(output$range_builder_table)
 })
 
 cat(

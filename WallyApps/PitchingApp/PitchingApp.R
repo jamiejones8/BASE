@@ -5027,10 +5027,11 @@ as_pitcher_choices <- function(x) {
   stats::setNames(x, labels)
 }
 
-# For select/picker inputs: named choices where label == value
+# For game select/picker inputs: readable labels with stable ID values
 as_named_choices <- function(x) {
   x <- x[!is.na(x) & nzchar(trimws(as.character(x)))]
-  x <- sort(unique(as.character(x)))
+  x <- unique(as.character(x))
+  if (exists("base_game_choices", mode = "function")) return(base_game_choices(x, df))
   stats::setNames(x, x)
 }
 
@@ -5041,6 +5042,7 @@ make_games_txst <- function(d) {
     dplyr::filter(!is.na(CustomGameID), nzchar(CustomGameID)) %>%
     dplyr::distinct(CustomGameID, GameDate) %>%
     dplyr::arrange(dplyr::desc(GameDate))
+  if (exists("base_game_choices", mode = "function")) return(base_game_choices(out$CustomGameID, d))
   stats::setNames(out$CustomGameID, out$CustomGameID)
 }
 # Build fallback CustomGameID values when they are missing/empty
@@ -8308,7 +8310,7 @@ server <- function(input, output, session){
     
     updateSelectInput(
       session, "aar_game",
-      choices  = games,
+      choices  = as_named_choices(games),
       selected = if (length(games)) games[[1]] else character(0)
     )
   }, ignoreInit = TRUE)
@@ -8959,7 +8961,7 @@ server <- function(input, output, session){
     games <- order_game_ids_desc(games, game_dates)
     
     shinyWidgets::updatePickerInput(session, "aar_game",
-                                    choices  = games,
+                                    choices  = as_named_choices(games),
                                     selected = if (length(games)) games[[1]] else character(0)
     )
   }, ignoreInit = TRUE)
@@ -10014,7 +10016,7 @@ server <- function(input, output, session){
     games <- order_game_ids_desc(games, game_dates)
     updateSelectInput(
       session, "xrv_game_game",
-      choices = games,
+      choices = as_named_choices(games),
       selected = if (length(games)) games[[1]] else character(0)
     )
   }, ignoreInit = TRUE)
@@ -11949,7 +11951,7 @@ server <- function(input, output, session){
     games <- order_game_ids_desc(games, game_dates)
     
     shinyWidgets::updatePickerInput(session, "aar_game",
-                                    choices  = games,
+                                    choices  = as_named_choices(games),
                                     selected = if (length(games)) games[[1]] else character(0)
     )
   }, ignoreInit = TRUE)
@@ -15497,7 +15499,7 @@ function(el,x){
     selectInput(
       "pitch_decay_game",
       "Game:",
-      choices = stats::setNames(games$GameID, games$Label),
+      choices = as_named_choices(games$GameID),
       selected = selected
     )
   })
@@ -18307,7 +18309,11 @@ function(el,x){
     gd <- sort(unique(gd[!is.na(gd)]), decreasing = TRUE)
     if (!length(gd)) return(div("No game dates available."))
 
-    choices <- setNames(as.character(gd), format(gd, "%m/%d/%y"))
+    choices <- if (exists("base_game_choices", mode = "function")) {
+      meta <- team_trends_data()
+      meta$.display_date <- as.character(team_release_date_vec())
+      base_game_choices(as.character(gd), meta, ".display_date")
+    } else setNames(as.character(gd), format(gd, "%m/%d/%y"))
     selected <- input$team_release_game_date
     if (is.null(selected) || !length(selected) || !(selected[[1]] %in% choices)) selected <- choices[[1]]
 

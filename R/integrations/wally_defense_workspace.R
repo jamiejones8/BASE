@@ -7,7 +7,7 @@ if (!exists("base_team_season_import_paths", mode = "function")) {
 BASE_WALLY_DEFENSE_FILE <- base_project_path("WallyApps", "DefenseApp", "DefenseApp.R")
 BASE_WALLY_DEFENSE_REQUIRED_PACKAGES <- c(
   "bslib", "dplyr", "DT", "ggplot2", "gridExtra", "htmltools", "purrr", "readr",
-  "shiny", "shinycssloaders", "shinyWidgets", "stringr", "tibble", "tidyr"
+  "plotly", "shiny", "shinycssloaders", "shinyWidgets", "stringr", "tibble", "tidyr"
 )
 
 .base_wally_defense_state <- new.env(parent = emptyenv())
@@ -157,7 +157,11 @@ base_read_defense_csv <- function(path) {
     col_types = readr::cols(.default = readr::col_character()),
     show_col_types = FALSE
   ) %>%
-    dplyr::mutate(source_file = basename(path), row_in_file = dplyr::row_number()) %>%
+    dplyr::mutate(
+      source_file = basename(path), row_in_file = dplyr::row_number(),
+      manual_fielded_source = any(tolower(gsub("[^A-Za-z0-9]", "", names(.))) %in%
+        c("fieldedby", "fieldedpos", "fieldedposition"))
+    ) %>%
     readr::type_convert(col_types = readr::cols(.default = readr::col_guess()))
 }
 
@@ -176,10 +180,20 @@ base_prepare_wally_defense_rows <- function() {
     error = function(e) base_defense_dev_file("BobcatsDefense2026.csv")
   )
   positioning_rows <- base_read_defense_csv(positioning_path)
+  fall_rows <- base_read_defense_csv(base_defense_dev_file("2026 Fall Defense.csv"))
+  if (nrow(fall_rows)) fall_rows$SeasonGroup <- "F26"
+  append_fall <- function(rows) {
+    if (!nrow(fall_rows)) return(rows)
+    if (!nrow(rows)) return(fall_rows)
+    # Fall's manual fielding assignments supersede matching runtime events.
+    keys <- base_trackman_event_key(fall_rows)
+    rows <- rows[!base_trackman_event_key(rows) %in% keys, , drop = FALSE]
+    dplyr::bind_rows(rows, fall_rows)
+  }
 
   if (!nrow(rows)) {
-    if (nrow(positioning_rows)) return(positioning_rows)
-    return(base_read_defense_csv(base_defense_dev_file("BobcatsDefense2026.csv")))
+    if (nrow(positioning_rows)) return(append_fall(positioning_rows))
+    return(append_fall(base_read_defense_csv(base_defense_dev_file("BobcatsDefense2026.csv"))))
   }
 
   rows <- tibble::as_tibble(rows)
@@ -209,16 +223,19 @@ base_prepare_wally_defense_rows <- function() {
       rows <- dplyr::bind_rows(rows, positioning_rows)
     }
   }
-  rows
+  append_fall(rows)
 }
 
 base_prepare_wally_batted_rows <- function(defense_rows) {
   # The shared defense runtime is already joined to canonical pitch/contact
   # context. The standalone batted-ball companion is needed only in development.
   if (nrow(defense_rows) && any(grepl("shared runtime", defense_rows$source_file, fixed = TRUE))) {
-    return(tibble::tibble())
+    return(base_read_defense_csv(base_defense_dev_file("2026 Fall Batted Balls.csv")))
   }
-  base_read_defense_csv(base_defense_dev_file("BobcatsDefenseBattedBalls.csv"))
+  dplyr::bind_rows(
+    base_read_defense_csv(base_defense_dev_file("BobcatsDefenseBattedBalls.csv")),
+    base_read_defense_csv(base_defense_dev_file("2026 Fall Batted Balls.csv"))
+  )
 }
 
 base_prepare_wally_catching_rows <- function(startup_rows = NULL) {

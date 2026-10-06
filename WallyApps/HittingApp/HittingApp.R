@@ -809,6 +809,11 @@ keep_idx  <- keep_idx & !(grepl("\\brocco\\b", hitters_norm) &
 
 hitters_txst <- hitters_txst[keep_idx]
 
+game_display_choices <- function(ids, data = df, id_col = "CustomGameID") {
+  if (exists("base_game_choices", mode = "function")) return(base_game_choices(ids, data, id_col, team_col = "BatterTeam"))
+  stats::setNames(ids, ids)
+}
+
 # -------------------- AAR game choices (authoritative) --------------------
 make_aar_games <- function(d){
   if (is.null(d) || !nrow(d)) return(character(0))
@@ -818,7 +823,7 @@ make_aar_games <- function(d){
     dplyr::distinct(CustomGameID, GameDate) %>%
     dplyr::arrange(dplyr::desc(GameDate))
   
-  stats::setNames(out$CustomGameID, out$CustomGameID)
+  game_display_choices(out$CustomGameID, d)
 }
 
 
@@ -1105,6 +1110,9 @@ make_games_txst <- function(d){
     key
   }
   
+  if (exists("base_game_choices", mode = "function") && !is.na(game_col)) {
+    return(base_game_choices(unique(key), dd, game_col, team_col = "BatterTeam"))
+  }
   out <- tapply(label, key, function(x) x[1])
   out <- out[order(names(out), decreasing = TRUE)]
   out
@@ -7075,7 +7083,7 @@ server <- function(input, output, session){
       updatePickerInput(
         session,
         "Game",
-        choices  = ch,
+        choices  = game_display_choices(ch),
         selected = sel
       )
     },
@@ -7091,7 +7099,7 @@ server <- function(input, output, session){
     updatePickerInput(
       session,
       "Game",
-      choices  = ch,
+      choices  = game_display_choices(ch),
       selected = sel
     )
     
@@ -7109,7 +7117,7 @@ server <- function(input, output, session){
       updateSelectInput(
         session,
         "AARGame",
-        choices  = ch,
+        choices  = game_display_choices(ch),
         selected = ch[[1]]
       )
     },

@@ -114,9 +114,28 @@ safe_ratio <- function(a, b) {
 to_num     <- function(x) if (is.numeric(x)) x else suppressWarnings(readr::parse_number(as.character(x)))
 nz_chr     <- function(x) ifelse(is.na(x), "", as.character(x))
 pick_first <- function(cands, in_df) { cands <- cands[cands %in% names(in_df)]; if (length(cands)) cands[[1]] else NA_character_ }
-source_file_label <- function(x){
-  tools::file_path_sans_ext(basename(as.character(x)))
-}
+source_file_label <- local({
+  cache <- new.env(parent = emptyenv())
+  function(x) {
+    if (!exists("base_game_choices", mode = "function")) return(basename(as.character(x)))
+    meta <- lapply(as.character(x), function(file) {
+      path <- file.path(DATA_DIR, file)
+      stamp <- if (file.exists(path)) as.character(file.info(path)$mtime) else "missing"
+      key <- paste(path, stamp)
+      if (!exists(key, envir = cache, inherits = FALSE)) {
+        row <- if (file.exists(path)) tryCatch(
+          readr::read_csv(path, n_max = 1, col_types = readr::cols(.default = readr::col_character()), show_col_types = FALSE),
+          error = function(e) tibble::tibble()
+        ) else tibble::tibble()
+        if (!nrow(row)) row <- tibble::tibble(source_file = file)
+        row$source_file <- file
+        assign(key, row, envir = cache)
+      }
+      get(key, envir = cache, inherits = FALSE)
+    })
+    names(base_game_choices(x, dplyr::bind_rows(meta), "source_file"))
+  }
+})
 read_csv_files <- function(paths, source_labels = NULL){
   if (!length(paths)) return(tibble::tibble())
   if (is.null(source_labels)) source_labels <- basename(paths)
@@ -5247,7 +5266,7 @@ server <- function(input, output, session){
       return(helpText("No CSV files found in data/. Add a local CSV and refresh the app."))
     }
     selectizeInput("csv_files", "Choose game file(s) (data/):",
-                   choices = files, multiple = TRUE,
+                   choices = stats::setNames(files, source_file_label(files)), multiple = TRUE,
                    options = list(placeholder = "Select one or more CSVs"))
   })
   

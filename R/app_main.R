@@ -1836,7 +1836,7 @@ pitcher_card_server <- function(input, output, session) {
       mutate(d = as.Date(as.character(Date))) %>%
       pull(d) %>% unique() %>% sort(decreasing = TRUE)
     selectInput("pc_dates", "Select Date(s):",
-                choices  = as.character(dates),
+                choices  = base_game_choices(as.character(dates), dplyr::filter(master_data(), PitcherTeam == input$pc_team), "Date", input$pc_team),
                 selected = as.character(dates[1]),
                 multiple = TRUE, selectize = TRUE)
   })
@@ -5591,7 +5591,7 @@ server <- function(input, output, session) {
       mutate(d = as.Date(as.character(Date))) %>%
       pull(d) %>% unique() %>% sort(decreasing = TRUE)
     selectInput("catcher_date", "Select Game Date:",
-                choices = as.character(dates), selected = as.character(dates[1]))
+                choices = base_game_choices(as.character(dates), dplyr::filter(catcher_data(), CatcherTeam == input$catcher_team_select), "Date", input$catcher_team_select), selected = as.character(dates[1]))
   })
 
   output$catcher_select_ui <- renderUI({
@@ -5718,7 +5718,7 @@ server <- function(input, output, session) {
       mutate(d = as.Date(as.character(Date))) %>%
       pull(d) %>% unique() %>% sort(decreasing = TRUE)
     selectInput("hitter_dates", "Select Date(s):",
-                choices   = as.character(dates),
+                choices   = base_game_choices(as.character(dates), dplyr::filter(hitter_data(), BatterTeam == input$hitter_team_select), "Date", input$hitter_team_select),
                 selected  = as.character(dates[1]),
                 multiple  = TRUE,
                 selectize = TRUE)

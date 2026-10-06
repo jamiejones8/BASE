@@ -691,3 +691,6 @@ base_brand_css <- function(include_leaderboards = TRUE) {
   }
   css
 }
+
+# Shared labels and spelling corrections used by embedded workspaces.
+base_source("R/data/game_labels.R", local = FALSE)

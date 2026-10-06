@@ -20,6 +20,7 @@ base_exclude_walk_on_players <- function(data, player_columns = c(
   if (is.null(data) || !is.data.frame(data) || !nrow(data)) return(data)
   player_columns <- intersect(player_columns, names(data))
   if (!length(player_columns)) return(data)
+  for (column in player_columns) data[[column]] <- base_correct_player_names(data[[column]])
   excluded <- Reduce(`|`, lapply(player_columns, function(column) {
     base_is_walk_on_player_name(data[[column]])
   }))
