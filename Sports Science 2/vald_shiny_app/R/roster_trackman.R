@@ -47,7 +47,16 @@ roster_filter <- function(d, roster, name_col = "name") {
   for (nm in intersect(c("primaryGroup", "roleGroup", "role"), names(d))) d[[nm]] <- roles
   d
 }
-trackman_files <- function(root) sort(list.files(root, pattern = "trackman.*\\.csv$", full.names=TRUE, ignore.case=TRUE))
+trackman_season_files <- function() {
+  if (exists("BASE_PLAYER_HEALTH_TRACKMAN_FILES", mode = "function", inherits = TRUE)) {
+    return(BASE_PLAYER_HEALTH_TRACKMAN_FILES())
+  }
+  character()
+}
+trackman_files <- function(root) unique(c(
+  sort(list.files(root, pattern = "trackman.*\\.csv$", full.names=TRUE, ignore.case=TRUE)),
+  trackman_season_files()
+))
 trackman_metrics <- c(fb_velocity="Fastball/sinker velocity (mph)", fb_spin="Fastball/sinker spin rate (rpm)",
                      bb_velocity="Breaking-ball velocity (mph)", bb_spin="Breaking-ball spin rate (rpm)")
 trackman_daily <- function(pitches) {
@@ -66,14 +75,15 @@ trackman_daily <- function(pitches) {
 trackman_read <- function(root, roster) {
   out <- list(pitches=data.frame(), daily=trackman_daily(data.frame()), errors=character(), notes=character(), unmatched=character(), duplicate_count=0L, excluded_tags=character(), files=character())
   files <- trackman_files(root)
-  if (!length(files)) {out$errors <- "No TrackMan CSV found (filename must contain trackman)."; return(out)}
-  # Newer copies win when cumulative exports overlap or tags are corrected.
-  files <- files[order(file.info(files)$mtime, files)]
+  if (!length(files)) {out$errors <- "No TrackMan CSV found in the season files or health exports."; return(out)}
+  # Season sources supersede copied health exports; newer season copies win overlaps.
+  files <- files[order(files %in% trackman_season_files(), file.info(files)$mtime, files)]
   parts <- lapply(files, function(path) tryCatch({
     d <- read.csv(path, check.names=FALSE, stringsAsFactors=FALSE, fileEncoding="UTF-8-BOM", colClasses="character", na.strings=c("","NA","NaN"))
-    required <- c("PitchUID","Pitcher","PitcherId","Date","TaggedPitchType","RelSpeed","SpinRate")
+    required <- c("PitchUID","Pitcher","Date","TaggedPitchType","RelSpeed","SpinRate")
+    if (!"PitcherId" %in% names(d)) d$PitcherId <- rep(NA_character_, nrow(d))
     if(!all(required %in% names(d))) stop(paste("Missing columns:",paste(setdiff(required,names(d)),collapse=", ")))
-    d <- d[, required]; d$source_file <- basename(path); d
+    d <- d[, c(required,"PitcherId")]; d$source_file <- basename(path); d
   },error=function(e) {out$errors <<- c(out$errors,paste(basename(path),conditionMessage(e))); NULL}))
   d <- dplyr::bind_rows(parts)
   out$files <- basename(files)
@@ -93,7 +103,10 @@ trackman_read <- function(root, roster) {
   d <- roster_filter(d,roster)
   d$date <- as.Date(substr(d$Date,1,10),format="%Y-%m-%d")
   us_date <- is.na(d$date) & !is.na(d$Date)
-  d$date[us_date] <- as.Date(d$Date[us_date],format="%m/%d/%Y")
+  four_digit <- us_date & grepl("/[0-9]{4}$", d$Date)
+  two_digit <- us_date & grepl("/[0-9]{2}$", d$Date)
+  d$date[four_digit] <- as.Date(d$Date[four_digit],format="%m/%d/%Y")
+  d$date[two_digit] <- as.Date(d$Date[two_digit],format="%m/%d/%y")
   has_measurement <- is.finite(suppressWarnings(as.numeric(d$RelSpeed))) | is.finite(suppressWarnings(as.numeric(d$SpinRate)))
   if(any(is.na(d$date) & has_measurement)) out$errors <- c(out$errors,paste(sum(is.na(d$date) & has_measurement),"measured TrackMan rows excluded: invalid Date."))
   if(any(is.na(d$date) & !has_measurement)) out$notes <- c(out$notes,paste(sum(is.na(d$date) & !has_measurement),"rows without dates or velocity/spin measurements skipped."))

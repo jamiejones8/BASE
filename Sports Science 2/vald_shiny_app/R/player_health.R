@@ -125,10 +125,24 @@ health_server <- function(input,output,session,vald_roster,vald_summary,fall_ros
   trackman_raw <- reactivePoll(5000,session,
     checkFunc=function() file_signature(c(trackman_files(export_root()),fall_roster_path(),roster_alias_path())),
     valueFunc=function() trackman_read(export_root(),read_fall_roster()))
+  trackman_date_bounds <- NULL
   observeEvent(trackman_raw(), {
     dates <- trackman_raw()$daily$date
-    if(length(dates)) updateDateRangeInput(session,"hc_combined_dates",start=min(dates),end=max(c(Sys.Date(),dates)))
-  },once=TRUE)
+    dates <- dates[!is.na(dates)]
+    if (!length(dates)) return()
+    bounds <- range(c(Sys.Date(), dates))
+    selected <- isolate(input$hc_combined_dates)
+    # Follow expanding history at the default boundaries; retain custom zooms.
+    if (is.null(trackman_date_bounds) || length(selected) != 2L || anyNA(selected)) {
+      selected <- bounds
+    } else {
+      selected <- as.Date(selected)
+      if (selected[1] <= trackman_date_bounds[1]) selected[1] <- bounds[1]
+      if (selected[2] >= trackman_date_bounds[2]) selected[2] <- bounds[2]
+    }
+    trackman_date_bounds <<- bounds
+    updateDateRangeInput(session,"hc_combined_dates",start=selected[1],end=selected[2])
+  })
   observeEvent(raw_data(), {
     dates <- raw_data()$exams$date
     if(length(dates)) updateDateRangeInput(session,"hc_arm_dates",start=min(dates),end=max(c(Sys.Date(),dates)))

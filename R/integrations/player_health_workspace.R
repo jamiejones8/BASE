@@ -1,5 +1,18 @@
 # Adapter for the Sports Science 2 Player Health dashboard inside BASE.
 
+# Discover season files on every poll so newly added seasons need no restart.
+base_player_health_trackman_files <- function() {
+  roots <- c(
+    TEAM_CONFIG$data$team_season_import_dir,
+    base_project_path("WallyApps", "PitchingApp", "data")
+  )
+  imported <- list.files(roots[[1]], pattern = "\\.csv$", recursive = TRUE,
+                        full.names = TRUE, ignore.case = TRUE)
+  historical <- list.files(roots[[2]], pattern = "^[0-9]{4}.*\\.csv$",
+                           full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
+  sort(unique(c(historical, imported)))
+}
+
 BASE_PLAYER_HEALTH_ROOT <- base_project_path("Sports Science 2", "vald_shiny_app")
 BASE_PLAYER_HEALTH_FILE <- file.path(BASE_PLAYER_HEALTH_ROOT, "dashboard.R")
 base_source("R/config/player_health_deployment.R", local = FALSE)
@@ -327,6 +340,7 @@ base_player_health_environment <- function() {
   }
 
   workspace <- new.env(parent = globalenv())
+  workspace$BASE_PLAYER_HEALTH_TRACKMAN_FILES <- base_player_health_trackman_files
   workspace$BASE_PLAYER_HEALTH_EMBEDDED <- TRUE
   workspace$BASE_PLAYER_HEALTH_ASSET_PREFIX <- asset_prefix
   sys.source(BASE_PLAYER_HEALTH_FILE, envir = workspace, chdir = TRUE, keep.source = FALSE)
