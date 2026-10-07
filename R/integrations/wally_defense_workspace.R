@@ -165,6 +165,32 @@ base_read_defense_csv <- function(path) {
     readr::type_convert(col_types = readr::cols(.default = readr::col_guess()))
 }
 
+# Retain the runtime's contact join while applying uploaded player positions.
+base_merge_defense_positioning <- function(rows, positioning) {
+  if (!nrow(positioning)) return(rows)
+  keys <- base_trackman_event_key(positioning)
+  keep <- is.na(keys) | !duplicated(keys)
+  positioning <- positioning[keep, , drop = FALSE]
+  keys <- keys[keep]
+  if (!nrow(rows)) return(positioning)
+  index <- match(base_trackman_event_key(rows), keys)
+  index[is.na(base_trackman_event_key(rows))] <- NA_integer_
+  position_cols <- grep(
+    "^((P|C|1B|2B|3B|SS|LF|CF|RF)_|Fielded|ManualFielded|DetectedShift|manual_fielded_source$)",
+    names(positioning), value = TRUE
+  )
+  for (column in position_cols) {
+    incoming <- positioning[[column]][index]
+    if (!column %in% names(rows)) rows[[column]] <- incoming
+    else {
+      take <- !is.na(index) & !is.na(incoming) & nzchar(trimws(as.character(incoming)))
+      rows[[column]][take] <- incoming[take]
+    }
+  }
+  unmatched <- is.na(keys) | !keys %in% base_trackman_event_key(rows)
+  dplyr::bind_rows(rows, positioning[unmatched, , drop = FALSE])
+}
+
 base_prepare_wally_defense_rows <- function() {
   rows <- tryCatch({
     if (exists("base_load_defense_team", mode = "function", inherits = TRUE)) {
@@ -182,14 +208,7 @@ base_prepare_wally_defense_rows <- function() {
   positioning_rows <- base_read_defense_csv(positioning_path)
   fall_rows <- base_read_defense_csv(base_defense_dev_file("2026 Fall Defense.csv"))
   if (nrow(fall_rows)) fall_rows$SeasonGroup <- "F26"
-  append_fall <- function(rows) {
-    if (!nrow(fall_rows)) return(rows)
-    if (!nrow(rows)) return(fall_rows)
-    # Fall's manual fielding assignments supersede matching runtime events.
-    keys <- base_trackman_event_key(fall_rows)
-    rows <- rows[!base_trackman_event_key(rows) %in% keys, , drop = FALSE]
-    dplyr::bind_rows(rows, fall_rows)
-  }
+  append_fall <- function(rows) base_merge_defense_positioning(rows, fall_rows)
 
   if (!nrow(rows)) {
     if (nrow(positioning_rows)) return(append_fall(positioning_rows))
@@ -214,28 +233,49 @@ base_prepare_wally_defense_rows <- function() {
   rows$DataSource <- "2026 NCAA Division I defense runtime"
 
   if (nrow(positioning_rows)) {
-    runtime_keys <- base_trackman_event_key(rows)
-    positioning_keys <- base_trackman_event_key(positioning_rows)
-    keep <- !duplicated(positioning_keys) & !positioning_keys %in% runtime_keys
-    positioning_rows <- positioning_rows[keep, , drop = FALSE]
-    if (nrow(positioning_rows)) {
-      positioning_rows$DataSource <- paste0("Texas State internal — ", basename(positioning_path))
-      rows <- dplyr::bind_rows(rows, positioning_rows)
-    }
+    positioning_rows$DataSource <- paste0("Texas State internal — ", basename(positioning_path))
+    rows <- base_merge_defense_positioning(rows, positioning_rows)
   }
   append_fall(rows)
 }
 
+base_defense_contact_paths <- function() {
+  paths <- unique(c(
+    TEAM_CONFIG$data$season_file,
+    base_team_season_import_paths(existing_only = TRUE),
+    base_project_path("WallyApps", "PitchingApp", "data", "2026 Season - cleaned.csv"),
+    base_defense_dev_file("BobcatsDefenseBattedBalls.csv"),
+    base_defense_dev_file("2026 Fall Batted Balls.csv")
+  ))
+  paths[!is.na(paths) & file.exists(paths)]
+}
+
 base_prepare_wally_batted_rows <- function(defense_rows) {
-  # The shared defense runtime is already joined to canonical pitch/contact
-  # context. The standalone batted-ball companion is needed only in development.
-  if (nrow(defense_rows) && any(grepl("shared runtime", defense_rows$source_file, fixed = TRUE))) {
-    return(base_read_defense_csv(base_defense_dev_file("2026 Fall Batted Balls.csv")))
-  }
-  dplyr::bind_rows(
-    base_read_defense_csv(base_defense_dev_file("BobcatsDefenseBattedBalls.csv")),
-    base_read_defense_csv(base_defense_dev_file("2026 Fall Batted Balls.csv"))
-  )
+  if (!nrow(defense_rows)) return(tibble::tibble())
+  # Uploaded positioning needs the pitch/contact exports even when some other
+  # rows came from the prejoined runtime. Never skip the season's contact pool.
+  frames <- lapply(base_defense_contact_paths(), function(path) {
+    rows <- if (tolower(tools::file_ext(path)) == "parquet") {
+      dataset <- arrow::open_dataset(path)
+      ids <- unique(as.character(defense_rows$PitchUID))
+      ids <- ids[!is.na(ids) & nzchar(ids)]
+      games <- unique(as.character(defense_rows$GameUID))
+      games <- games[!is.na(games) & nzchar(games)]
+      if ("PitchUID" %in% names(dataset)) {
+        query <- if ("GameUID" %in% names(dataset) && length(games)) {
+          dplyr::filter(dataset, .data$PitchUID %in% ids | .data$GameUID %in% games)
+        } else dplyr::filter(dataset, .data$PitchUID %in% ids)
+        dplyr::collect(query)
+      } else tibble::tibble()
+    } else base_read_defense_csv(path)
+    if (!nrow(rows)) return(tibble::tibble())
+    rows$batted_ball_source_file <- basename(path)
+    # Import files and Parquet may represent Date/IDs differently. Normalize
+    # before combining; the app's standardizer converts metric columns back.
+    rows[] <- lapply(rows, as.character)
+    rows
+  })
+  dplyr::bind_rows(frames)
 }
 
 base_prepare_wally_catching_rows <- function(startup_rows = NULL) {

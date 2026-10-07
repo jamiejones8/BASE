@@ -1223,8 +1223,8 @@ leader_date_max <- if (length(leader_date_vec)) max(leader_date_vec) else NULL
   is_k   <- grepl("^k$|\\bso\\b|strikeout", kbl) | grepl("strikeout|\\bso\\b|\\bk\\b", prl)
   
   is_hr  <- grepl("home\\s*run|homerun|\\bhr\\b", prl)
-  is_3b  <- grepl("\\b3b\\b|triple", prl)
-  is_2b  <- grepl("\\b2b\\b|double", prl)
+  is_3b  <- grepl("\\b3b\\b|triple(?!\\s*play)", prl, perl = TRUE)
+  is_2b  <- grepl("\\b2b\\b|double(?!\\s*play)", prl, perl = TRUE)
   is_1b  <- grepl("\\b1b\\b|single", prl)
   
   dplyr::case_when(
@@ -1255,7 +1255,7 @@ leader_date_max <- if (length(leader_date_vec)) max(leader_date_vec) else NULL
 summarize_overall <- function(d){
   if (is.null(d) || !is.data.frame(d) || nrow(d) == 0) {
     return(tibble::tibble(
-      PA = 0,
+      PA = 0, K = 0L, BB = 0L, H = 0L, AVG = NA_real_,
       wOBA = NA_real_, wOBAcon = NA_real_, xwOBA = NA_real_, xwOBAcon = NA_real_,
       OBP = NA_real_, SLG = NA_real_, OPS = NA_real_,
       hRV = NA_real_,
@@ -1434,7 +1434,7 @@ summarize_overall <- function(d){
   # OBP / SLG / OPS (PA-level)
   bb_n  <- sum(ev_type %in% c("BB","IBB"), na.rm = TRUE)
   hbp_n <- sum(ev_type == "HBP", na.rm = TRUE)
-  sf_n  <- sum(grepl("(?i)sacrifice fly|\\bsf\\b", nz_chr(pr_last)), na.rm = TRUE)
+  sf_n  <- sum(grepl("(?i)sacrifice.?fly|\\bsf\\b", nz_chr(pr_last)), na.rm = TRUE)
   h_n   <- sum(ev_type %in% c("1B","2B","3B","HR"), na.rm = TRUE)
   
   ab_n <- PA - bb_n - hbp_n - sf_n
@@ -1497,7 +1497,8 @@ summarize_overall <- function(d){
   hRV  <- calc_hrv(d, total_pitches)
   
   tibble::tibble(
-    PA = PA,
+    PA = PA, K = sum(ev_type == "K", na.rm = TRUE), BB = bb_n, H = h_n,
+    AVG = safe_ratio(h_n, ab_n - sum(grepl("(?i)sacrifice.?bunt|sac.?bunt|^SH$|interference", nz_chr(pr_last)), na.rm = TRUE)),
     wOBA = wOBA,
     wOBAcon = wOBAcon,
     xwOBA = xwOBA,
@@ -1589,7 +1590,7 @@ performance_table_metrics <- c(
 )
 
 leaderboard_table_metrics <- c(
-  "PA", "wOBA", "wOBAcon", "xwOBA", "xwOBAcon", "OBP", "SLG", "OPS", "hRV",
+  "PA", "K", "BB", "H", "wOBA", "wOBAcon", "xwOBA", "xwOBAcon", "AVG", "OBP", "SLG", "OPS", "hRV",
   "K%", "BB%", "Barrel%",
   "Contact%", "Z-Contact%", "Whiff%", "IZ-Whiff%",
   "Swing%", "Chase%", "Pre2K Chase%", "2K Chase%", "Z-Swing%",
@@ -1998,7 +1999,8 @@ ui <- base_hitting_page(
       div(
         class = "mb-2 d-flex gap-2",
         downloadButton("leaderboard_pdf", "Download Leaderboard PDF", class = "btn btn-primary"),
-        downloadButton("leaderboard_stats_pdf", "Download Stat Sheet PDF", class = "btn btn-primary")
+        downloadButton("leaderboard_stats_pdf", "Download Stat Sheet PDF", class = "btn btn-primary"),
+        downloadButton("hit_trout_pdf", "Trout Stat Sheet", class = "btn btn-primary")
       ),
       withSpinner(DTOutput("hit_leaderboard_table"), type = 4, color = "#501214"),
       withSpinner(DTOutput("leaderboard_team_table"), type = 4, color = "#501214")
@@ -3705,6 +3707,7 @@ format_perf_table <- function(tbl){
       `LD+FB%`    = sprintf("%.1f%%", 100 * `LD+FB%`),
       `Airpull%`  = ifelse(is.na(`Airpull%`), NA, sprintf("%.1f%%", 100 * `Airpull%`))
     )
+  if ("AVG" %in% names(out)) out$AVG <- ifelse(is.finite(tbl$AVG), sprintf("%.3f", tbl$AVG), NA_character_)
   out[partition_cols] <- as.data.frame(partition_fmt, stringsAsFactors = FALSE)
   out
 }
@@ -3829,6 +3832,10 @@ apply_d1_shading <- function(tbl_num, tbl_fmt, palette = c("coach", "player")){
     out[[nm]] <- mapply(shade_cell, out[[nm]], bg, USE.NAMES = FALSE)
   }
   
+  if ("AVG" %in% names(tbl_num)) {
+    bg <- vapply((tbl_num$AVG - 0.260) / 0.040, fill_fun, FUN.VALUE = character(1))
+    out$AVG <- mapply(shade_cell, out$AVG, bg, USE.NAMES = FALSE)
+  }
   # non-% stats: wOBA/wOBAcon +/- .025; 90th EV +/- 2.5 (per CELL)
   if ("wOBA" %in% names(tbl_num) && "wOBA" %in% names(out)) {
     v <- tbl_num$wOBA; avg <- D1_NON[["wOBA"]]
@@ -5095,18 +5102,15 @@ server <- function(input, output, session){
         table(class = "display",
               thead(
                 tr(class = "group-header",
-                   th(colspan = 11, ""),                                 # name + PA + rate/quality
+                   th(colspan = match("Contact%", leaderboard_table_metrics), ""),                                 # name + PA + rate/quality
                    th(colspan = 4, class = "group-label", "HIT"),
                    th(colspan = 5, class = "group-label", "STRIKES"),
-                   th(colspan = 11, class = "group-label", "BATTED BALL")
+                   th(colspan = 11, class = "group-label", "BATTED BALL"),
+                   th(colspan = length(leaderboard_table_metrics), "")
                 ),
                 tr(
-                  th(first_col_label), th("PA"), th("wOBA"), th("wOBAcon"), th("OBP"), th("SLG"), th("OPS"), th("hRV"),
-                  th("K%"), th("BB%"), th("Barrel%"),
-                  th("Contact%"), th("Z-Contact%"), th("Whiff%"), th("IZ-Whiff%"),
-                  th("Swing%"), th("Chase%"), th("Pre2K Chase%"), th("2K Chase%"), th("IZ Swing%"),
-                  th("Max EV"), th("90th EV"), th("EV>95%"), th("10-35%"),
-                  th("GB%"), th("LD%"), th("FB%"), th("PU%"), th("Foul%"), th("LD+FB%"), th("Airpull%")
+                  th(first_col_label), lapply(leaderboard_table_metrics, th),
+                  lapply(paste0("..sort_", leaderboard_table_metrics), th)
                 )
               )
         )
@@ -5126,7 +5130,7 @@ server <- function(input, output, session){
         scrollX  = TRUE,
         columnDefs = c(
           list(list(targets = sort_idx0, visible = FALSE)),
-          list(list(className = "grp-start", targets = c(11,15,20))),
+          list(list(className = "grp-start", targets = match(c("Contact%", "Swing%", "MaxEV"), leaderboard_table_metrics))),
           order_defs
         )
       ),
@@ -5140,18 +5144,13 @@ server <- function(input, output, session){
         table(class = "display",
               thead(
                 tr(class = "group-header",
-                   th(colspan = 11, ""),                                 # name + PA + rate/quality
+                   th(colspan = match("Contact%", leaderboard_table_metrics), ""),                                 # name + PA + rate/quality
                    th(colspan = 4, class = "group-label", "HIT"),
                    th(colspan = 5, class = "group-label", "STRIKES"),
                    th(colspan = 11, class = "group-label", "BATTED BALL")
                 ),
                 tr(
-                  th(first_col_label), th("PA"), th("wOBA"), th("wOBAcon"), th("OBP"), th("SLG"), th("OPS"), th("hRV"),
-                  th("K%"), th("BB%"), th("Barrel%"),
-                  th("Contact%"), th("Z-Contact%"), th("Whiff%"), th("IZ-Whiff%"),
-                  th("Swing%"), th("Chase%"), th("Pre2K Chase%"), th("2K Chase%"), th("IZ Swing%"),
-                  th("Max EV"), th("90th EV"), th("EV>95%"), th("10-35%"),
-                  th("GB%"), th("LD%"), th("FB%"), th("PU%"), th("Foul%"), th("LD+FB%"), th("Airpull%")
+                  th(first_col_label), lapply(leaderboard_table_metrics, th)
                 )
               )
         )
@@ -5189,7 +5188,7 @@ server <- function(input, output, session){
         stripe   = TRUE,
         scrollX  = TRUE,
         columnDefs = c(
-          list(list(className = "grp-start", targets = c(11,15,20)))
+          list(list(className = "grp-start", targets = match(c("Contact%", "Swing%", "MaxEV"), leaderboard_table_metrics)))
         )
       ),
       class = "stripe"
@@ -5619,6 +5618,18 @@ server <- function(input, output, session){
     on.exit(grDevices::dev.off(), add = TRUE)
     gridExtra::grid.arrange(header_g, body_g, ncol = 1, heights = c(0.15, 0.85))
   }
+
+  output$hit_trout_pdf <- downloadHandler(
+    filename = function() paste0("Trout_Stat_Sheet_Hitting_", format(Sys.Date(), "%Y%m%d"), ".pdf"),
+    content = function(file) {
+      stats <- leaderboard_summary(leaderboard_data())
+      shiny::validate(shiny::need(nrow(stats) > 0, "No hitters match the leaderboard filters."))
+      stats <- stats[order(-stats$PA, stats$Hitter), c("Hitter", leaderboard_table_metrics)]
+      formatted <- format_perf_table(stats)[names(stats)]
+      shaded <- apply_leaderboard_shading(stats, formatted)[names(stats)]
+      base_write_trout_stat_sheet(file, formatted, shaded, "Hitting", "PA", input$hit_leader_seasons)
+    }
+  )
 
   output$leaderboard_pdf <- downloadHandler(
     filename = function() {

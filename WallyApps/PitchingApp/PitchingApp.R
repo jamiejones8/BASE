@@ -6020,6 +6020,7 @@ D1_PCT_AVG <- list(
   `K%`          = 0.193,
   `BB%`         = 0.113,
   `BB+HBP%`     = 0.130,
+  `K%-BB%`      = 0.193 - 0.113,
   `Barrel%`     = 0.174,
   `CSW%`        = 0.275,
   `GB%`         = 0.420,
@@ -7098,7 +7099,8 @@ ui <- base_pitching_page(
       div(
         class = "mb-2 d-flex gap-2",
         downloadButton("leader_results_pdf", "Download results pdf"),
-        downloadButton("leader_process_pdf", "Download Process pdf")
+        downloadButton("leader_process_pdf", "Download Process pdf"),
+        downloadButton("pitch_trout_pdf", "Trout Stat Sheet")
       ),
       withSpinner(DTOutput("leaderboard_table"), type = 4, color = "#501214"),
       div(
@@ -20044,28 +20046,24 @@ function(el,x){
     render_performance_overview()
   })
 
-  leaderboard_totals_cache <- reactiveVal(NULL)
 
   # ======== Leaderboard Table ========
-  output$leaderboard_table <- DT::renderDT({
+  leaderboard_tables <- reactive({
     d <- leaderboard_data()
     if (is.null(d) || !nrow(d)) {
-      return(DT::datatable(data.frame(Status = "No data"),
-                           rownames = FALSE, options = list(dom='t', paging=FALSE)))
+      return(NULL)
     }
 
     p <- prepare_aar_flags(d)
 
     if (!"Pitcher" %in% names(p)) {
-      return(DT::datatable(data.frame(Status = "Pitcher column not found"),
-                           rownames = FALSE, options = list(dom='t', paging=FALSE)))
+      return(NULL)
     }
 
     p$grp <- as.character(p$Pitcher)
     p <- p %>% dplyr::filter(!is.na(.data$grp) & nzchar(.data$grp))
     if (!nrow(p)) {
-      return(DT::datatable(data.frame(Status = "No data"),
-                           rownames = FALSE, options = list(dom='t', paging=FALSE)))
+      return(NULL)
     }
     if (!"PA_ID" %in% names(p)) p <- ensure_pa(p)
     if (!"PA_ID_LB" %in% names(p)) p$PA_ID_LB <- interaction(p$Pitcher, p$PA_ID, drop = TRUE)
@@ -20288,7 +20286,7 @@ function(el,x){
         outs_play <- ifelse(grepl("(?i)triple ?play", pr), 3L, outs_play)
         outs_play <- ifelse(grepl("(?i)double ?play", pr), 2L, outs_play)
         outs_play <- ifelse(grepl("(?i)\\bout\\b", pr) & !outc$K, pmax(outs_play, 1L), outs_play)
-        outs_total <- outs_play + as.integer(outc$K)
+        outs_total <- pmax(outs_play, as.integer(outc$K))
 
         tibble::tibble(
           PA_ID_LB = .$PA_ID_LB,
@@ -20366,6 +20364,8 @@ function(el,x){
       dplyr::mutate(
         Pitcher = grp,
         PA      = ifelse(is.finite(PA), as.integer(PA), NA_integer_),
+        IP = Outs / 3,
+        KBBp = Kp - BBp,
         BAA     = sdiv(H, AB),
         WHIP    = sdiv(BB + H, Outs / 3),
         K9      = sdiv(K * 9, Outs / 3),
@@ -20375,7 +20375,7 @@ function(el,x){
         pRV     = calc_prv(TB, BB, K, RBI, HR, Pitches)
       ) %>%
       dplyr::select(
-        Pitcher, PA, BAA, wOBA, wOBAcon, SLG, OPS, WHIP, K9, BB9, H9, pRV, Kp, BBp, BBHBPp, Barrel_pct, GB_pct, FIP,
+        Pitcher, PA, IP, K, BB, HBP, H, BAA, wOBA, wOBAcon, SLG, OPS, WHIP, K9, BB9, H9, pRV, Kp, BBp, KBBp, BBHBPp, Barrel_pct, GB_pct, FIP,
         MaxVelocity, FPS, EA, Strike_pct, Zone_pct, TwoKZone_pct, PutAway_pct, ShutDown_pct,
         Whiff_pct, CSW_pct, IZWhiff_pct, Chase_pct
       ) %>%
@@ -20383,6 +20383,7 @@ function(el,x){
     
     tab <- tab_base %>%
       dplyr::mutate(
+        IP = paste0(as.integer(round(IP * 3)) %/% 3, ".", as.integer(round(IP * 3)) %% 3),
         wOBA    = num_fmt_3(wOBA),
         wOBAcon = num_fmt_3(wOBAcon),
         BAA     = num_fmt_3(BAA),
@@ -20395,6 +20396,7 @@ function(el,x){
         pRV     = num_fmt_2(pRV),
         `K%`       = pct_fmt(Kp),
         `BB%`      = pct_fmt(BBp),
+        `K%-BB%`   = pct_fmt(KBBp),
         `BB+HBP%`  = pct_fmt(BBHBPp),
         `Barrel%`  = pct_fmt(Barrel_pct),
         `GB%`      = pct_fmt(GB_pct),
@@ -20413,12 +20415,12 @@ function(el,x){
         `Shut Down Inning%` = pct_fmt(ShutDown_pct)
       ) %>%
       dplyr::select(
-        Pitcher, PA, BAA, wOBA, wOBAcon, SLG, OPS, WHIP, `K/9`, `BB/9`, `H/9`, pRV, `K%`, `BB%`, `BB+HBP%`, `Barrel%`, `GB%`, `FIP`,
+        Pitcher, PA, IP, K, BB, HBP, H, BAA, wOBA, wOBAcon, SLG, OPS, WHIP, `K/9`, `BB/9`, `H/9`, pRV, `K%`, `BB%`, `K%-BB%`, `BB+HBP%`, `Barrel%`, `GB%`, `FIP`,
         `Max Velocity`, `FPS%`, `E&A%`, `Strike%`, `Zone%`, `2k Zone%`, `Put Away%`,
         `Shut Down Inning%`, `Whiff%`, `CSW%`, `IZWhiff%`, `Chase%`
       )
 
-    shade_cols <- c("BAA","wOBA","wOBAcon","SLG","OPS","WHIP","K/9","BB/9","H/9","K%","BB%","BB+HBP%","Barrel%","GB%","FIP",
+    shade_cols <- c("BAA","wOBA","wOBAcon","SLG","OPS","WHIP","K/9","BB/9","H/9","K%","BB%","K%-BB%","BB+HBP%","Barrel%","GB%","FIP",
                     "FPS%","E&A%","Strike%","Zone%","2k Zone%","Put Away%","Shut Down Inning%",
                     "Whiff%","CSW%","IZWhiff%","Chase%")
     tab_shaded <- shade_columns_txst(
@@ -20432,6 +20434,7 @@ function(el,x){
     sort_cols <- tab_base %>%
       dplyr::transmute(
         `..sort_PA` = PA,
+        `..sort_IP` = IP, `..sort_K` = K, `..sort_BB` = BB, `..sort_HBP` = HBP, `..sort_H` = H,
         `..sort_BAA` = BAA,
         `..sort_wOBA` = wOBA,
         `..sort_wOBAcon` = wOBAcon,
@@ -20444,6 +20447,7 @@ function(el,x){
         `..sort_pRV` = pRV,
         `..sort_K%` = Kp,
         `..sort_BB%` = BBp,
+        `..sort_K%-BB%` = KBBp,
         `..sort_BB+HBP%` = BBHBPp,
         `..sort_Barrel%` = Barrel_pct,
         `..sort_GB%` = GB_pct,
@@ -20504,7 +20508,7 @@ function(el,x){
       outs_play <- ifelse(grepl("(?i)triple ?play", pr), 3L, outs_play)
       outs_play <- ifelse(grepl("(?i)double ?play", pr), 2L, outs_play)
       outs_play <- ifelse(grepl("(?i)\\bout\\b", pr) & !outc$K, pmax(outs_play, 1L), outs_play)
-      outs_total <- sum(outs_play, na.rm = TRUE) + sum(as.integer(outc$K), na.rm = TRUE)
+      outs_total <- sum(pmax(outs_play, as.integer(outc$K)), na.rm = TRUE)
       
       fps_paT <- p_all %>%
         dplyr::group_by(PA_ID) %>%
@@ -20548,6 +20552,8 @@ function(el,x){
       tibble::tibble(
         Pitcher = "TOTAL",
         PA = pa_n_total,
+        IP = paste0(outs_total %/% 3, ".", outs_total %% 3),
+        K = pa_batT$K[1], BB = pa_batT$BB[1], HBP = pa_batT$HBP[1], H = pa_batT$H[1],
         BAA = ifelse(is.finite(sdiv(pa_batT$H[1], pa_batT$AB[1])), sprintf("%.3f", sdiv(pa_batT$H[1], pa_batT$AB[1])), "NA"),
         wOBA = ifelse(is.finite(woba_total), sprintf("%.3f", woba_total), "NA"),
         wOBAcon = ifelse(is.finite(wobacon_total), sprintf("%.3f", wobacon_total), "NA"),
@@ -20560,6 +20566,7 @@ function(el,x){
         pRV = ifelse(is.finite(prv_tot), sprintf("%.2f", prv_tot), "NA"),
         `K%` = sprintf("%.0f%%", 100*mean(outc$K, na.rm = TRUE)),
         `BB%` = sprintf("%.0f%%", 100*mean(bb_only, na.rm = TRUE)),
+        `K%-BB%` = pct_fmt(mean(outc$K, na.rm = TRUE) - mean(bb_only, na.rm = TRUE)),
         `BB+HBP%` = ifelse(is.finite(sdiv(pa_batT$BB[1] + pa_batT$HBP[1], pa_n_total)), sprintf("%.0f%%", 100*sdiv(pa_batT$BB[1] + pa_batT$HBP[1], pa_n_total)), "NA"),
         `Barrel%` = ifelse(is.finite(barrelp), sprintf("%.0f%%", 100*barrelp), "NA"),
         `GB%` = ifelse(is.finite(gbp), sprintf("%.0f%%", 100*gbp), "NA"),
@@ -20579,6 +20586,8 @@ function(el,x){
       )
     }
     
+    # Keep the totals columns aligned with the player table.
+    total_row <- total_row[, names(tab), drop = FALSE]
     # shade totals row consistently
     total_row_shaded <- shade_columns_txst(
       total_row,
@@ -20587,7 +20596,15 @@ function(el,x){
       palette = "player"
     )
 
-    leaderboard_totals_cache(total_row_shaded)
+    list(numeric = tab_base, formatted = tab, shaded = tab_shaded,
+         sort = sort_cols, totals = total_row_shaded)
+  })
+
+  output$leaderboard_table <- DT::renderDT({
+    tables <- leaderboard_tables()
+    if (is.null(tables)) return(DT::datatable(data.frame(Status = "No data"), rownames = FALSE))
+    tab_shaded <- tables$shaded
+    sort_cols <- tables$sort
 
     tab_out <- cbind(tab_shaded, sort_cols)
 
@@ -20628,7 +20645,7 @@ function(el,x){
   })
 
   output$leaderboard_totals_table <- DT::renderDT({
-    total_row_shaded <- leaderboard_totals_cache()
+    total_row_shaded <- leaderboard_tables()$totals
     if (is.null(total_row_shaded)) {
       return(DT::datatable(data.frame(Status = "No data"),
                            rownames = FALSE, options = list(dom='t', paging=FALSE)))
@@ -20649,6 +20666,17 @@ function(el,x){
     )
   })
   
+  output$pitch_trout_pdf <- downloadHandler(
+    filename = function() paste0("Trout_Stat_Sheet_Pitching_", format(Sys.Date(), "%Y%m%d"), ".pdf"),
+    content = function(file) {
+      tables <- leaderboard_tables()
+      shiny::validate(shiny::need(!is.null(tables), "No pitchers match the leaderboard filters."))
+      ord <- order(-tables$numeric$IP, tables$numeric$Pitcher)
+      base_write_trout_stat_sheet(file, tables$formatted[ord, ], tables$shaded[ord, ],
+                                 "Pitching", "IP", input$leader_seasons)
+    }
+  )
+
   output$leader_results_pdf <- downloadHandler(
     filename = function() {
       paste0("Staff_Leaderboard_Results_", format(Sys.Date(), "%Y%m%d"), ".pdf")

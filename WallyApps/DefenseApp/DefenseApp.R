@@ -269,21 +269,62 @@ load_batted_ball_data <- function() {
 
 attach_batted_ball_data <- function(defense_raw, batted_raw) {
   if (is.null(defense_raw) || !is.data.frame(defense_raw) || !nrow(defense_raw)) return(defense_raw)
-  if (is.null(batted_raw) || !is.data.frame(batted_raw) || !nrow(batted_raw)) return(defense_raw)
+  out <- defense_raw
+  # The BASE runtime has already joined these rows by pitch identity. Preserve
+  # that provenance even when no separate companion CSV is available.
+  matched <- if ("batted_ball_matched" %in% names(out)) out$batted_ball_matched %in% TRUE else rep(FALSE, nrow(out))
+  if ("JoinMethod" %in% names(out)) matched <- matched | out$JoinMethod %in% c("pitch_uid", "game_pitch_date")
+  out$batted_ball_matched <- matched
+  if (is.null(batted_raw) || !is.data.frame(batted_raw) || !nrow(batted_raw)) return(out)
 
-  possible_keys <- list(
-    "PitchUID",
-    "PlayID",
-    c("GameUID", "PitchNo"),
-    c("GameID", "PitchNo")
-  )
-  key_idx <- which(vapply(possible_keys, function(k) all(k %in% names(defense_raw)) && all(k %in% names(batted_raw)), logical(1)))
-  if (!length(key_idx)) return(defense_raw)
-  key <- possible_keys[[key_idx[[1]]]]
-
+  missing_value <- function(x) {
+    is.na(x) | tolower(trimws(as.character(x))) %in% c("", "na", "nan", "null", "undefined")
+  }
+  key_value <- function(d, columns) {
+    values <- lapply(columns, function(column) {
+      x <- tolower(trimws(as.character(d[[column]])))
+      x[missing_value(x)] <- NA_character_
+      x
+    })
+    valid <- Reduce(`&`, lapply(values, function(x) !is.na(x)))
+    key <- do.call(paste, c(values, sep = "\u001f"))
+    key[!valid] <- NA_character_
+    key
+  }
+  # Prefer the most complete copy of a repeated pitch export, without ever
+  # multiplying a positioning row into multiple defensive opportunities.
+  contact_cols <- intersect(c("Distance", "Bearing", "HangTime", "Angle", "ExitSpeed"), names(batted_raw))
+  if (length(contact_cols)) {
+    completeness <- Reduce(`+`, lapply(batted_raw[contact_cols], function(x) !missing_value(x)))
+    batted_raw <- batted_raw[order(-completeness), , drop = FALSE]
+  }
+  index <- rep(NA_integer_, nrow(out))
+  possible_keys <- list("PitchUID", "PlayID", c("GameUID", "PitchNo"), c("GameID", "PitchNo"))
+  for (key in possible_keys) {
+    if (!all(key %in% names(out)) || !all(key %in% names(batted_raw))) next
+    left <- key_value(out, key)
+    right <- key_value(batted_raw, key)
+    # A fallback game/pitch or PlayID key must not identify different pitches.
+    if (!identical(key, "PitchUID") && "PitchUID" %in% names(batted_raw)) {
+      uid <- key_value(batted_raw, "PitchUID")
+      groups <- split(uid, right)
+      ambiguous <- names(groups)[vapply(groups, function(x) length(unique(stats::na.omit(x))) > 1L, logical(1))]
+      right[right %in% ambiguous] <- NA_character_
+    }
+    candidate <- match(left, right)
+    candidate[is.na(left)] <- NA_integer_  # Missing IDs never match each other.
+    if (!identical(key, "PitchUID") && "PitchUID" %in% names(out) && "PitchUID" %in% names(batted_raw)) {
+      left_uid <- key_value(out, "PitchUID")
+      right_uid <- key_value(batted_raw, "PitchUID")[candidate]
+      conflict <- !is.na(left_uid) & !is.na(right_uid) & left_uid != right_uid
+      candidate[conflict] <- NA_integer_
+    }
+    take <- is.na(index) & !is.na(candidate)
+    index[take] <- candidate[take]
+  }
   enrich_cols <- intersect(
     c(
-      key,
+      "PitchUID", "PlayID", "GameUID", "PitchNo", "PitchCall", "PlayResult",
       "GameID", "GameId", "Game", "Date", "GameDate", "UTCDate", "LocalDateTime",
       "HomeTeam", "AwayTeam", "PitcherTeam", "BatterTeam", "Opponent", "OpponentTeam",
       "Inning", "Outs", "Batter", "BatterId", "Hitter", "HitterId", "OutsOnPlay",
@@ -301,14 +342,28 @@ attach_batted_ball_data <- function(defense_raw, batted_raw) {
     ),
     names(batted_raw)
   )
-  enrich_cols <- c(key, setdiff(enrich_cols, c(key, names(defense_raw))))
-  batted_enriched <- batted_raw %>%
-    dplyr::select(dplyr::all_of(enrich_cols)) %>%
-    dplyr::distinct(dplyr::across(dplyr::all_of(key)), .keep_all = TRUE) %>%
-    dplyr::mutate(batted_ball_matched = TRUE)
 
-  defense_raw %>%
-    dplyr::left_join(batted_enriched, by = key)
+  for (column in enrich_cols) {
+    incoming <- batted_raw[[column]][index]
+    if (!column %in% names(out) || all(missing_value(out[[column]]))) {
+      out[[column]] <- incoming
+    } else {
+      # bind_rows() creates NA contact columns on positioning-only imports;
+      # fill those cells, rather than skipping a column just because it exists.
+      current <- out[[column]]
+      if (inherits(current, "Date")) {
+        text <- as.character(incoming)
+        incoming <- as.Date(text, format = "%Y-%m-%d")
+        missing <- is.na(incoming)
+        incoming[missing] <- as.Date(text[missing], format = "%m/%d/%Y")
+      } else if (is.numeric(current)) incoming <- suppressWarnings(as.numeric(as.character(incoming)))
+      else if (is.character(current)) incoming <- as.character(incoming)
+      take <- missing_value(current) & !missing_value(incoming)
+      out[[column]][take] <- incoming[take]
+    }
+  }
+  out$batted_ball_matched <- matched | !is.na(index)
+  out
 }
 
 load_catching_data <- function() {

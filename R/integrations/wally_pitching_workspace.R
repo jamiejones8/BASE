@@ -1,3 +1,7 @@
+if (!exists("base_write_trout_stat_sheet", mode = "function")) {
+  base_source("R/reports/trout_stat_sheet.R", local = FALSE)
+}
+
 # Adapter for Wally's PitchingApp inside the unified BASE application.
 #
 # The original application remains the calculation authority. BASE supplies a
