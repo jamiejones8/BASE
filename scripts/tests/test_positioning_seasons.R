@@ -44,6 +44,9 @@ for (expr in parse('R/app_main.R')) {
      as.character(expr[[2]]) %in% c('BASE_NAV_TABS','data_processing_workspace_ui','workspace_tool_card','base_nav_click_js')) eval(expr)
 }
 html <- as.character(data_processing_workspace_ui())
-stopifnot(grepl('dp_positioning_season',html,fixed=TRUE),
-          grepl('2027 Pre Season',html,fixed=TRUE),grepl('dp_ps27_file',html,fixed=TRUE))
-cat('Positioning season selector and matching preseason TrackMan upload render passed.\n')
+stopifnot(!grepl('dp_positioning_season',html,fixed=TRUE),
+          grepl('2026 fall player positioning',html,fixed=TRUE),
+          grepl('2027 Scrimmages player positioning',html,fixed=TRUE),
+          grepl('dp_positioning_f26_file',html,fixed=TRUE),
+          grepl('dp_positioning_scrimmages_file',html,fixed=TRUE))
+cat('Both fixed positioning upload cards render without a season dropdown.\n')

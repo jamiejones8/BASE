@@ -4319,16 +4319,12 @@ data_processing_workspace_ui <- function() {
       ),
       tags$p(
         if (is_positioning) {
-          "Upload one raw TrackMan Player Positioning CSV. BASE validates the game, removes positioning rows already stored, and appends only new rows to the selected season. Pitch IDs are matched to that season’s TrackMan data, including games imported later."
+          "Upload one raw TrackMan Player Positioning CSV. BASE validates the game, removes positioning rows already stored, and appends only new rows to this season. Pitch IDs are matched to that season’s TrackMan data, including games imported later."
         } else if (is_bullpen) {
           "Upload one raw TrackMan bullpen CSV. BASE validates the session, removes pitches already stored, and appends only new rows to the active bullpen source."
         } else {
           "Upload one raw TrackMan game CSV. BASE validates the game and season, removes pitches already stored, and appends only new rows."
         }
-      ),
-      if (is_positioning) shiny::selectInput(
-        paste0(input_id, "_season"), "Season",
-        choices = BASE_POSITIONING_SEASONS, selected = "F26"
       ),
       shiny::fileInput(
         inputId = paste0(input_id, "_file"),
@@ -4471,7 +4467,8 @@ data_processing_workspace_ui <- function() {
         import_card("PS27", "dp_ps27", "dp_ps27_status"),
         import_card("S27", "dp_s27", "dp_s27_status"),
         import_card("BP", "dp_bp", "dp_bp_status"),
-        import_card("PP", "dp_positioning", "dp_positioning_status")
+        import_card("PP_F26", "dp_positioning_f26", "dp_positioning_f26_status"),
+        import_card("PP_PS27", "dp_positioning_scrimmages", "dp_positioning_scrimmages_status")
       ),
       tags$section(
         class = "base-csv-editor",
@@ -4505,7 +4502,8 @@ data_processing_server <- function(input, output, session) {
     PS27 = shiny::reactiveVal(NULL),
     S27 = shiny::reactiveVal(NULL),
     BP = shiny::reactiveVal(NULL),
-    PP = shiny::reactiveVal(NULL),
+    PP_F26 = shiny::reactiveVal(NULL),
+    PP_PS27 = shiny::reactiveVal(NULL),
     PULSE_EVENTS = shiny::reactiveVal(NULL),
     PULSE_WORKLOAD = shiny::reactiveVal(NULL),
     ARM_CARE = shiny::reactiveVal(NULL)
@@ -4577,12 +4575,8 @@ data_processing_server <- function(input, output, session) {
   output$dp_s27_status <- shiny::renderUI(render_status("S27", states$S27()))
   output$dp_bp_status <- shiny::renderUI(render_status("BP", states$BP()))
   output$dp_ps27_status <- shiny::renderUI(render_status("PS27", states$PS27()))
-  output$dp_positioning_status <- shiny::renderUI({
-    selected <- paste0("PP_", input$dp_positioning_season %||% "F26")
-    state <- states$PP()
-    if (!is.null(state$target_id) && !identical(state$target_id, selected)) state <- NULL
-    render_status(selected, state)
-  })
+  output$dp_positioning_f26_status <- shiny::renderUI(render_status("PP_F26", states$PP_F26()))
+  output$dp_positioning_scrimmages_status <- shiny::renderUI(render_status("PP_PS27", states$PP_PS27()))
 
   render_replacement_status <- function(target_id, state) {
     status <- base_sports_science_source_status(target_id)
@@ -4844,9 +4838,7 @@ data_processing_server <- function(input, output, session) {
 
   register_import <- function(target_id, input_prefix, state) {
     shiny::observeEvent(input[[paste0(input_prefix, "_append")]], {
-      resolved_id <- if (identical(target_id, "PP")) {
-        paste0("PP_", input[[paste0(input_prefix, "_season")]] %||% "F26")
-      } else target_id
+      resolved_id <- target_id
       upload <- input[[paste0(input_prefix, "_file")]]
       if (is.null(upload) || !nzchar(upload$datapath)) {
         target <- base_team_season_import_target(resolved_id)
@@ -4904,7 +4896,8 @@ data_processing_server <- function(input, output, session) {
   register_import("PS27", "dp_ps27", states$PS27)
   register_import("S27", "dp_s27", states$S27)
   register_import("BP", "dp_bp", states$BP)
-  register_import("PP", "dp_positioning", states$PP)
+  register_import("PP_F26", "dp_positioning_f26", states$PP_F26)
+  register_import("PP_PS27", "dp_positioning_scrimmages", states$PP_PS27)
 
   register_replacement <- function(target_id, input_prefix, state) {
     shiny::observeEvent(input[[paste0(input_prefix, "_replace")]], {

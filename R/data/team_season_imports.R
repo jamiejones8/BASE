@@ -45,20 +45,27 @@ BASE_PLAYER_POSITIONING_IMPORT_TARGETS <- list(
   )
 )
 
-BASE_POSITIONING_SEASONS <- c("2026 Fall" = "F26", "2027 Pre Season" = "PS27", "2027 Season" = "S27")
-for (season in unname(BASE_POSITIONING_SEASONS)) {
-  id <- paste0("PP_", season)
-  season_target <- BASE_TEAM_SEASON_IMPORT_TARGETS[[season]]
-  BASE_PLAYER_POSITIONING_IMPORT_TARGETS[[id]] <- list(
-    id = id, label = paste(season_target$label, "Player Positioning"),
-    filename = paste0(season_target$label, " Player Positioning.csv"),
-    expected_year = season_target$expected_year, kind = "positioning", season_id = season
-  )
-}
+# Fixed upload destinations. Keep existing filenames so deployed data remains available.
+BASE_PLAYER_POSITIONING_IMPORT_TARGETS$PP_F26 <- list(
+  id = "PP_F26", label = "2026 fall player positioning",
+  filename = "2026 Fall Player Positioning.csv", expected_year = 2026L,
+  kind = "positioning", season_id = "F26"
+)
+BASE_PLAYER_POSITIONING_IMPORT_TARGETS$PP_PS27 <- list(
+  id = "PP_PS27", label = "2027 Scrimmages player positioning",
+  filename = "2027 Pre Season Player Positioning.csv", expected_year = 2027L,
+  kind = "positioning", season_id = "PS27"
+)
+# Retain access to any regular-season data saved before the fixed upload cards.
+BASE_PLAYER_POSITIONING_IMPORT_TARGETS$PP_S27 <- list(
+  id = "PP_S27", label = "2027 Season Player Positioning",
+  filename = "2027 Season Player Positioning.csv", expected_year = 2027L,
+  kind = "positioning", season_id = "S27"
+)
 base_positioning_season_paths <- function(root = base_team_season_import_root()) {
-  stats::setNames(vapply(unname(BASE_POSITIONING_SEASONS), function(season) {
+  stats::setNames(vapply(c("F26", "PS27", "S27"), function(season) {
     base_team_season_import_path(paste0("PP_", season), root = root)
-  }, character(1)), unname(BASE_POSITIONING_SEASONS))
+  }, character(1)), c("F26", "PS27", "S27"))
 }
 
 base_trackman_import_targets <- function() {
