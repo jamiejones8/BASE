@@ -13,6 +13,10 @@ BASE_TEAM_SEASON_IMPORT_TARGETS <- list(
     filename = "2026 Fall - cleaned.csv",
     expected_year = 2026L
   ),
+  PS27 = list(
+    id = "PS27", label = "2027 Pre Season",
+    filename = "2027 Pre Season - cleaned.csv", expected_year = 2027L
+  ),
   S27 = list(
     id = "S27",
     label = "2027 Season",
@@ -40,6 +44,22 @@ BASE_PLAYER_POSITIONING_IMPORT_TARGETS <- list(
     kind = "positioning"
   )
 )
+
+BASE_POSITIONING_SEASONS <- c("2026 Fall" = "F26", "2027 Pre Season" = "PS27", "2027 Season" = "S27")
+for (season in unname(BASE_POSITIONING_SEASONS)) {
+  id <- paste0("PP_", season)
+  season_target <- BASE_TEAM_SEASON_IMPORT_TARGETS[[season]]
+  BASE_PLAYER_POSITIONING_IMPORT_TARGETS[[id]] <- list(
+    id = id, label = paste(season_target$label, "Player Positioning"),
+    filename = paste0(season_target$label, " Player Positioning.csv"),
+    expected_year = season_target$expected_year, kind = "positioning", season_id = season
+  )
+}
+base_positioning_season_paths <- function(root = base_team_season_import_root()) {
+  stats::setNames(vapply(unname(BASE_POSITIONING_SEASONS), function(season) {
+    base_team_season_import_path(paste0("PP_", season), root = root)
+  }, character(1)), unname(BASE_POSITIONING_SEASONS))
+}
 
 base_trackman_import_targets <- function() {
   season_targets <- lapply(BASE_TEAM_SEASON_IMPORT_TARGETS, function(target) {
@@ -221,6 +241,14 @@ base_validate_player_positioning_import <- function(rows, target) {
   dates <- base_parse_trackman_dates(rows$Date)
   if (any(is.na(dates))) {
     stop("Every uploaded positioning row must have a recognizable TrackMan Date.", call. = FALSE)
+  }
+
+  if (!is.null(target$season_id)) {
+    years <- unique(as.integer(format(dates, "%Y")))
+    if (!identical(years, target$expected_year)) {
+      stop(target$label, " only accepts ", target$expected_year, " game dates.", call. = FALSE)
+    }
+    rows$SeasonGroup <- target$season_id
   }
 
   game_ids <- base_trackman_game_id(rows, dates)

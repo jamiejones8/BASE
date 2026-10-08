@@ -54,6 +54,9 @@ data/D1 Defense File.parquet
 /WallyApps/DefenseApp/data/*
 !/WallyApps/DefenseApp/data/2026 Fall Defense.csv
 !/WallyApps/DefenseApp/data/2026 Fall Batted Balls.csv
+!/WallyApps/DefenseApp/data/2026 Fall Batted Balls - Oct 2.csv
+!/WallyApps/DefenseApp/data/2026 Fall Batted Balls - Oct 6.csv
+!/WallyApps/DefenseApp/data/README.md
 !/WallyApps/DefenseApp/data/d1_defense_play_probability_baseline.csv
 /WallyApps/ScoutingApp/data/
 /WallyApps/ScoutingApp/outputs/

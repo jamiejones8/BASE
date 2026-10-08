@@ -192,51 +192,32 @@ base_merge_defense_positioning <- function(rows, positioning) {
 }
 
 base_prepare_wally_defense_rows <- function() {
-  rows <- tryCatch({
-    if (exists("base_load_defense_team", mode = "function", inherits = TRUE)) {
-      base_load_defense_team(TEAM_CONFIG$data_code)
-    } else tibble::tibble()
-  }, error = function(e) {
-    message("Shared defense runtime unavailable: ", e$message)
-    tibble::tibble()
-  })
+  # The spring 2026 runtime uses incompatible fielding tags. Start with the
+  # desktop app's manually tagged fall positioning export instead.
+  rows <- base_read_defense_csv(base_defense_dev_file("2026 Fall Defense.csv"))
+  if (nrow(rows)) rows$SeasonGroup <- "F26"
 
-  positioning_path <- tryCatch(
-    TEAM_CONFIG$data$player_positioning_file,
-    error = function(e) base_defense_dev_file("BobcatsDefense2026.csv")
-  )
-  positioning_rows <- base_read_defense_csv(positioning_path)
-  fall_rows <- base_read_defense_csv(base_defense_dev_file("2026 Fall Defense.csv"))
-  if (nrow(fall_rows)) fall_rows$SeasonGroup <- "F26"
-  append_fall <- function(rows) base_merge_defense_positioning(rows, fall_rows)
-
-  if (!nrow(rows)) {
-    if (nrow(positioning_rows)) return(append_fall(positioning_rows))
-    return(append_fall(base_read_defense_csv(base_defense_dev_file("BobcatsDefense2026.csv"))))
+  # Keep supporting positioning uploads, but exclude the unusable spring data.
+  path <- TEAM_CONFIG$data$player_positioning_file
+  if (!is.null(path) && length(path) && file.exists(path)) {
+    uploaded <- base_read_defense_csv(path)
+    if (nrow(uploaded) && "Date" %in% names(uploaded)) {
+      dates <- base_parse_trackman_dates(uploaded$Date)
+      uploaded <- uploaded[!is.na(dates) & dates >= as.Date("2026-08-01") & dates < as.Date("2027-01-01"), , drop = FALSE]
+      uploaded$SeasonGroup <- rep("F26", nrow(uploaded))
+      rows <- base_merge_defense_positioning(rows, uploaded)
+    }
   }
-
-  rows <- tibble::as_tibble(rows)
-  if (!"PitcherTeam" %in% names(rows) && "FieldingTeam" %in% names(rows)) {
-    rows$PitcherTeam <- rows$FieldingTeam
+  for (season in names(base_positioning_season_paths())) {
+    uploaded <- base_read_defense_csv(base_positioning_season_paths()[[season]])
+    if (!nrow(uploaded)) next
+    uploaded$SeasonGroup <- season
+    existing <- if ("SeasonGroup" %in% names(rows)) rows$SeasonGroup == season else rep(FALSE, nrow(rows))
+    existing[is.na(existing)] <- FALSE
+    rows <- dplyr::bind_rows(rows[!existing, , drop = FALSE],
+                            base_merge_defense_positioning(rows[existing, , drop = FALSE], uploaded))
   }
-  for (position in c("1B", "2B", "3B", "SS", "LF", "CF", "RF")) {
-    depth <- paste0(position, "_Depth")
-    lateral <- paste0(position, "_Lateral")
-    release_x <- paste0(position, "_PositionAtReleaseX")
-    release_z <- paste0(position, "_PositionAtReleaseZ")
-    if (!release_x %in% names(rows) && depth %in% names(rows)) rows[[release_x]] <- rows[[depth]]
-    if (!release_z %in% names(rows) && lateral %in% names(rows)) rows[[release_z]] <- rows[[lateral]]
-  }
-  rows$source_file <- "2026 Defense - shared runtime.parquet"
-  rows$row_in_file <- seq_len(nrow(rows))
-  rows$SeasonGroup <- "S26"
-  rows$DataSource <- "2026 NCAA Division I defense runtime"
-
-  if (nrow(positioning_rows)) {
-    positioning_rows$DataSource <- paste0("Texas State internal — ", basename(positioning_path))
-    rows <- base_merge_defense_positioning(rows, positioning_rows)
-  }
-  append_fall(rows)
+  rows
 }
 
 base_defense_contact_paths <- function() {
@@ -245,7 +226,8 @@ base_defense_contact_paths <- function() {
     base_team_season_import_paths(existing_only = TRUE),
     base_project_path("WallyApps", "PitchingApp", "data", "2026 Season - cleaned.csv"),
     base_defense_dev_file("BobcatsDefenseBattedBalls.csv"),
-    base_defense_dev_file("2026 Fall Batted Balls.csv")
+    list.files(dirname(base_defense_dev_file("2026 Fall Batted Balls.csv")),
+               pattern = "^2026 Fall Batted Balls.*[.]csv$", full.names = TRUE)
   ))
   paths[!is.na(paths) & file.exists(paths)]
 }
@@ -269,6 +251,13 @@ base_prepare_wally_batted_rows <- function(defense_rows) {
       } else tibble::tibble()
     } else base_read_defense_csv(path)
     if (!nrow(rows)) return(tibble::tibble())
+    season_paths <- base_team_season_import_paths(existing_only = FALSE)
+    season <- names(season_paths)[match(path, unname(season_paths))]
+    rows$.base_contact_priority <- if (length(season) && !is.na(season)) 1L else 0L
+    if (!length(season) || is.na(season)) {
+      season <- if (grepl("2026 Fall Batted Balls", basename(path), fixed = TRUE)) "F26" else "S26"
+    }
+    rows$SeasonGroup <- season
     rows$batted_ball_source_file <- basename(path)
     # Import files and Parquet may represent Date/IDs differently. Normalize
     # before combining; the app's standardizer converts metric columns back.
@@ -386,7 +375,7 @@ base_team_defense_workspace_ui <- function() {
     tags$div(
       class = "base-workspace-heading",
       tags$div(tags$div(class = "base-eyebrow", "Run prevention"), tags$h1("Defensive Analytics"), tags$p("Opportunities, OAA, positioning, and interactive catcher receiving in one workspace.")),
-      tags$div(class = "base-source-chip", tags$span(class = "home-status-dot"), "Shared defense runtime + canonical catching source")
+      tags$div(class = "base-source-chip", tags$span(class = "home-status-dot"), "Fall positioning + pitch-matched batted balls")
     ),
     tags$div(id = "base-defense-loading", class = "base-workspace-loading", tags$div(class = "base-loading-mark", "B"), tags$strong("Preparing Defense"), tags$span("The workspace loads once, when first opened.")),
     shiny::uiOutput("base_team_defense_app")

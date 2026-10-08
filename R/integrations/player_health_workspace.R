@@ -8,6 +8,7 @@ base_player_health_trackman_files <- function() {
   )
   imported <- list.files(roots[[1]], pattern = "\\.csv$", recursive = TRUE,
                         full.names = TRUE, ignore.case = TRUE)
+  imported <- imported[!grepl("Player Positioning", basename(imported), ignore.case = TRUE)]
   historical <- list.files(roots[[2]], pattern = "^[0-9]{4}.*\\.csv$",
                            full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
   sort(unique(c(historical, imported)))

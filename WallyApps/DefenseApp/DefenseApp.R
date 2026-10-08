@@ -138,6 +138,8 @@ infer_season_group_from_file <- function(f) {
     grepl("f25|2025[_ -]?fall|fall[_ -]?2025", f) ~ "F25",
     grepl("sq26|2026[_ -]?squads|squads[_ -]?2026", f) ~ "SQ26",
     grepl("f26|2026[_ -]?fall|fall[_ -]?2026|2026[_ -]?fall[_ -]?defense", f) ~ "F26",
+    grepl("ps27|2027[_ -]?pre[_ -]?season", f) ~ "PS27",
+    grepl("s27|2027[_ -]?season", f) ~ "S27",
     grepl("s26|2026[_ -]?season|season[_ -]?2026|defense2026|2026", f) ~ "S26",
     TRUE ~ "UNK"
   )
@@ -148,6 +150,8 @@ season_label <- c(
   "F25" = "2025 Fall",
   "SQ26" = "2026 Squads",
   "F26" = "2026 Fall",
+  "PS27" = "2027 Pre Season",
+  "S27" = "2027 Season",
   "S26" = "2026 Season",
   "UNK" = "Unassigned"
 )
@@ -159,6 +163,8 @@ normalize_season <- function(x, source_file) {
     x %in% c("F25", "2025 FALL", "2025_FALL") ~ "F25",
     x %in% c("SQ26", "2026 SQUADS", "2026_SQUADS") ~ "SQ26",
     x %in% c("F26", "2026 FALL", "2026_FALL") ~ "F26",
+    x %in% c("PS27", "2027 PRE SEASON", "2027_PRE_SEASON") ~ "PS27",
+    x %in% c("S27", "2027 SEASON", "2027_SEASON") ~ "S27",
     x %in% c("S26", "2026 SEASON", "2026_SEASON") ~ "S26",
     TRUE ~ x
   )
@@ -296,14 +302,21 @@ attach_batted_ball_data <- function(defense_raw, batted_raw) {
   contact_cols <- intersect(c("Distance", "Bearing", "HangTime", "Angle", "ExitSpeed"), names(batted_raw))
   if (length(contact_cols)) {
     completeness <- Reduce(`+`, lapply(batted_raw[contact_cols], function(x) !missing_value(x)))
-    batted_raw <- batted_raw[order(-completeness), , drop = FALSE]
+    priority <- if (".base_contact_priority" %in% names(batted_raw)) {
+      suppressWarnings(as.numeric(batted_raw$.base_contact_priority))
+    } else rep(0, nrow(batted_raw))
+    priority[is.na(priority)] <- 0
+    batted_raw <- batted_raw[order(-priority, -completeness), , drop = FALSE]
   }
   index <- rep(NA_integer_, nrow(out))
   possible_keys <- list("PitchUID", "PlayID", c("GameUID", "PitchNo"), c("GameID", "PitchNo"))
   for (key in possible_keys) {
     if (!all(key %in% names(out)) || !all(key %in% names(batted_raw))) next
-    left <- key_value(out, key)
-    right <- key_value(batted_raw, key)
+    join_key <- if ("SeasonGroup" %in% names(out) && "SeasonGroup" %in% names(batted_raw)) {
+      c("SeasonGroup", key)
+    } else key
+    left <- key_value(out, join_key)
+    right <- key_value(batted_raw, join_key)
     # A fallback game/pitch or PlayID key must not identify different pitches.
     if (!identical(key, "PitchUID") && "PitchUID" %in% names(batted_raw)) {
       uid <- key_value(batted_raw, "PitchUID")

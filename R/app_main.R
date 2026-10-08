@@ -4319,12 +4319,16 @@ data_processing_workspace_ui <- function() {
       ),
       tags$p(
         if (is_positioning) {
-          "Upload one raw TrackMan Player Positioning CSV. BASE validates the game, removes positioning rows already stored, and appends only new rows to the active defense source."
+          "Upload one raw TrackMan Player Positioning CSV. BASE validates the game, removes positioning rows already stored, and appends only new rows to the selected season. Pitch IDs are matched to that season’s TrackMan data, including games imported later."
         } else if (is_bullpen) {
           "Upload one raw TrackMan bullpen CSV. BASE validates the session, removes pitches already stored, and appends only new rows to the active bullpen source."
         } else {
           "Upload one raw TrackMan game CSV. BASE validates the game and season, removes pitches already stored, and appends only new rows."
         }
+      ),
+      if (is_positioning) shiny::selectInput(
+        paste0(input_id, "_season"), "Season",
+        choices = BASE_POSITIONING_SEASONS, selected = "F26"
       ),
       shiny::fileInput(
         inputId = paste0(input_id, "_file"),
@@ -4347,7 +4351,7 @@ data_processing_workspace_ui <- function() {
       ),
       shiny::actionButton(
         inputId = paste0(input_id, "_append"),
-        label = paste("Validate and append to", target$label),
+        label = if (is_positioning) "Validate and append" else paste("Validate and append to", target$label),
         class = "btn-primary base-import-submit"
       ),
       shiny::uiOutput(output_id)
@@ -4464,6 +4468,7 @@ data_processing_workspace_ui <- function() {
       tags$div(
         class = "base-import-grid",
         import_card("F26", "dp_f26", "dp_f26_status"),
+        import_card("PS27", "dp_ps27", "dp_ps27_status"),
         import_card("S27", "dp_s27", "dp_s27_status"),
         import_card("BP", "dp_bp", "dp_bp_status"),
         import_card("PP", "dp_positioning", "dp_positioning_status")
@@ -4497,6 +4502,7 @@ data_processing_workspace_ui <- function() {
 data_processing_server <- function(input, output, session) {
   states <- list(
     F26 = shiny::reactiveVal(NULL),
+    PS27 = shiny::reactiveVal(NULL),
     S27 = shiny::reactiveVal(NULL),
     BP = shiny::reactiveVal(NULL),
     PP = shiny::reactiveVal(NULL),
@@ -4570,7 +4576,13 @@ data_processing_server <- function(input, output, session) {
   output$dp_f26_status <- shiny::renderUI(render_status("F26", states$F26()))
   output$dp_s27_status <- shiny::renderUI(render_status("S27", states$S27()))
   output$dp_bp_status <- shiny::renderUI(render_status("BP", states$BP()))
-  output$dp_positioning_status <- shiny::renderUI(render_status("PP", states$PP()))
+  output$dp_ps27_status <- shiny::renderUI(render_status("PS27", states$PS27()))
+  output$dp_positioning_status <- shiny::renderUI({
+    selected <- paste0("PP_", input$dp_positioning_season %||% "F26")
+    state <- states$PP()
+    if (!is.null(state$target_id) && !identical(state$target_id, selected)) state <- NULL
+    render_status(selected, state)
+  })
 
   render_replacement_status <- function(target_id, state) {
     status <- base_sports_science_source_status(target_id)
@@ -4832,9 +4844,12 @@ data_processing_server <- function(input, output, session) {
 
   register_import <- function(target_id, input_prefix, state) {
     shiny::observeEvent(input[[paste0(input_prefix, "_append")]], {
+      resolved_id <- if (identical(target_id, "PP")) {
+        paste0("PP_", input[[paste0(input_prefix, "_season")]] %||% "F26")
+      } else target_id
       upload <- input[[paste0(input_prefix, "_file")]]
       if (is.null(upload) || !nzchar(upload$datapath)) {
-        target <- base_team_season_import_target(target_id)
+        target <- base_team_season_import_target(resolved_id)
         kind <- if (identical(target$kind, "positioning")) {
           "Player Positioning"
         } else if (identical(target_id, "BP")) {
@@ -4842,15 +4857,15 @@ data_processing_server <- function(input, output, session) {
         } else {
           "game"
         }
-        state(list(type = "error", message = paste("Choose a TrackMan", kind, "CSV before importing.")))
+        state(list(type = "error", message = paste("Choose a TrackMan", kind, "CSV before importing."), target_id = resolved_id))
         return()
       }
       result <- tryCatch(
         shiny::withProgress(
-          message = paste("Updating", base_team_season_import_target(target_id)$label),
+          message = paste("Updating", base_team_season_import_target(resolved_id)$label),
           value = 0.35,
           {
-            imported <- base_import_trackman_game(upload$datapath, target_id)
+            imported <- base_import_trackman_game(upload$datapath, resolved_id)
             shiny::incProgress(0.65)
             imported
           }
@@ -4858,7 +4873,7 @@ data_processing_server <- function(input, output, session) {
         error = function(e) e
       )
       if (inherits(result, "error")) {
-        state(list(type = "error", message = conditionMessage(result)))
+        state(list(type = "error", message = conditionMessage(result), target_id = resolved_id))
         shiny::showNotification(conditionMessage(result), type = "error", duration = 8)
         return()
       }
@@ -4869,10 +4884,10 @@ data_processing_server <- function(input, output, session) {
       base_clear_wally_hitting_state()
       base_clear_wally_defense_state()
       homebase_clear_history_cache()
-      state(list(type = "success", result = result))
+      state(list(type = "success", result = result, target_id = resolved_id))
       refresh_csv_choices(selected = result$target_id)
       if (identical(csv_loaded_id(), result$target_id)) request_csv_load(result$target_id)
-      saved_unit <- if (identical(base_team_season_import_target(target_id)$kind, "positioning")) {
+      saved_unit <- if (identical(base_team_season_import_target(resolved_id)$kind, "positioning")) {
         "new positioning rows"
       } else {
         "new pitches"
@@ -4886,6 +4901,7 @@ data_processing_server <- function(input, output, session) {
   }
 
   register_import("F26", "dp_f26", states$F26)
+  register_import("PS27", "dp_ps27", states$PS27)
   register_import("S27", "dp_s27", states$S27)
   register_import("BP", "dp_bp", states$BP)
   register_import("PP", "dp_positioning", states$PP)

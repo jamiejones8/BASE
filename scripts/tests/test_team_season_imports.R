@@ -155,8 +155,9 @@ if (!isTRUE(status$exists) || status$size <= 0 || status$target$label != "2026 F
 }
 
 editable_sources <- base_editable_trackman_sources(root = scratch)
-if (!identical(editable_sources$id, c("F26", "S27", "BP", "PP")) ||
-    !all(editable_sources$exists[c(1, 3, 4)]) || editable_sources$exists[[2]]) {
+if (!identical(editable_sources$id, c("F26", "PS27", "S27", "BP", "PP", "PP_F26", "PP_PS27", "PP_S27")) ||
+    !all(editable_sources$exists[match(c("F26", "BP", "PP"), editable_sources$id)]) ||
+    any(editable_sources$exists[match(c("PS27", "S27", "PP_F26", "PP_PS27", "PP_S27"), editable_sources$id)])) {
   fail("The CSV editor did not expose exactly the managed TrackMan sources and their availability.")
 }
 
@@ -215,8 +216,8 @@ if (nrow(future_catching) != 3L || !all(future_catching$SeasonGroup == "F26") ||
     )) {
   fail("The Catcher AAR loader did not read and label 2026 Fall rows from the configured volume.")
 }
-if (nrow(future_positioning) != 3L ||
-    !all(future_positioning$PitchUID %in% positioning$PitchUID)) {
+if (!all(positioning$PitchUID %in% future_positioning$PitchUID) ||
+    anyDuplicated(future_positioning$PitchUID)) {
   fail("The Defense loader did not read the cumulative Player Positioning source.")
 }
 
