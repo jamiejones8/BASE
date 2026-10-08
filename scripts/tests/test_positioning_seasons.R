@@ -47,6 +47,8 @@ html <- as.character(data_processing_workspace_ui())
 stopifnot(!grepl('dp_positioning_season',html,fixed=TRUE),
           grepl('2026 fall player positioning',html,fixed=TRUE),
           grepl('2027 Scrimmages player positioning',html,fixed=TRUE),
+          grepl('dp_ps27_file',html,fixed=TRUE),
+          grepl('Validate and append to 2027 Scrimmages',html,fixed=TRUE),
           grepl('dp_positioning_f26_file',html,fixed=TRUE),
           grepl('dp_positioning_scrimmages_file',html,fixed=TRUE))
 cat('Both fixed positioning upload cards render without a season dropdown.\n')

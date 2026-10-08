@@ -236,6 +236,7 @@ SEASON_CHOICES <- c(
   "2026 Squads" = "SQ26",
   "2026 Season" = "S26",
   "2026 Fall"   = "F26",
+  "2027 Scrimmages" = "PS27",
   "2027 Season" = "S27"
 )
 
@@ -3193,6 +3194,7 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
       tag == "SQ26" ~ "2026 Squads",
       tag == "S26"  ~ "2026 Season",
       tag == "F26"  ~ "2026 Fall",
+      tag == "PS27" ~ "2027 Scrimmages",
       tag == "S27"  ~ "2027 Season",
       tag == "PORT" ~ "Portal",
       TRUE          ~ as.character(tag %||% "Season")
@@ -4663,6 +4665,7 @@ infer_season_group_from_file <- function(f) {
     grepl("sq26|2026[_ -]?squads|squads[_ -]?2026",   f) ~ "SQ26",
     grepl("s26|2026[_ -]?season|season[_ -]?2026",    f) ~ "S26",
     grepl("f26|2026[_ -]?fall|fall[_ -]?2026",        f) ~ "F26",
+    grepl("ps27|2027[_ -]?pre[_ -]?season|2027[_ -]?scrimmages", f) ~ "PS27",
     grepl("s27|2027[_ -]?season|season[_ -]?2027",    f) ~ "S27",
     grepl("portal", f)                                 ~ "PORT",
     TRUE ~ NA_character_
@@ -4692,6 +4695,7 @@ df$SeasonGroup <- dplyr::case_when(
   df$SeasonGroup %in% c("SQ26","2026 SQUADS","2026_SQUADS")~ "SQ26",
   df$SeasonGroup %in% c("S26","2026 SEASON","2026_SEASON") ~ "S26",
   df$SeasonGroup %in% c("F26","2026 FALL","2026_FALL")     ~ "F26",
+  df$SeasonGroup %in% c("PS27","2027 SCRIMMAGES","2027 PRE SEASON") ~ "PS27",
   df$SeasonGroup %in% c("S27","2027 SEASON","2027_SEASON") ~ "S27",
   df$SeasonGroup %in% c("PORT","PORTAL","PORTAL SEASON","PORTAL_SEASON") ~ "PORT",
   TRUE ~ df$SeasonGroup

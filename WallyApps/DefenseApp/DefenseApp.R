@@ -150,7 +150,7 @@ season_label <- c(
   "F25" = "2025 Fall",
   "SQ26" = "2026 Squads",
   "F26" = "2026 Fall",
-  "PS27" = "2027 Pre Season",
+  "PS27" = "2027 Scrimmages",
   "S27" = "2027 Season",
   "S26" = "2026 Season",
   "UNK" = "Unassigned"

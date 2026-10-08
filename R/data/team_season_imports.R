@@ -14,7 +14,7 @@ BASE_TEAM_SEASON_IMPORT_TARGETS <- list(
     expected_year = 2026L
   ),
   PS27 = list(
-    id = "PS27", label = "2027 Pre Season",
+    id = "PS27", label = "2027 Scrimmages",
     filename = "2027 Pre Season - cleaned.csv", expected_year = 2027L
   ),
   S27 = list(

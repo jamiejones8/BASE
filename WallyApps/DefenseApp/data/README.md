@@ -12,6 +12,6 @@ The BASE adapter excludes spring 2026 positioning because its fielding tags are 
 
 ## Season uploads
 
-In Data Processing, use either **2026 fall player positioning** or **2027 Scrimmages player positioning**, select a game CSV, then click Validate and append. Each card writes to its own cumulative positioning file. Fall positions match the 2026 Fall TrackMan source; 2027 scrimmage positions match the 2027 Pre Season TrackMan source. Existing stored filenames are preserved. Upload order does not matter: positions match when their companion TrackMan data arrives. Reload BASE after an import if Defense is already open.
+In Data Processing, use either **2026 fall player positioning** or **2027 Scrimmages player positioning**, select a game CSV, then click Validate and append. Each card writes to its own cumulative positioning file. Fall positions match the 2026 Fall TrackMan source; 2027 scrimmage positions match the 2027 Scrimmages TrackMan source. Existing stored filenames are preserved. Upload order does not matter: positions match when their companion TrackMan data arrives. Reload BASE after an import if Defense is already open.
 
 Managed season TrackMan exports take precedence over bundled contact copies. The legacy positioning source remains a fall-2026 fallback; new uploads use the selected season explicitly.

@@ -37,9 +37,9 @@ if (!identical(basename(base_hitting_supplement_paths()), expected_files)) {
 }
 if (!identical(
   names(base_hitting_supplement_candidates()),
-  c("S25", "F25", "SQ26", "S26", "F26", "S27")
+  c("S25", "F25", "SQ26", "S26", "F26", "PS27", "S27")
 )) {
-  fail("Hitting workspace is not prepared for optional 2026 Fall and 2027 Season sources.")
+  fail("Hitting workspace is not prepared for optional 2026 Fall, 2027 Scrimmages, and 2027 Season sources.")
 }
 
 # Folder rows still deduplicate repeated pitch IDs across selected season files.
