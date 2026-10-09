@@ -5090,7 +5090,7 @@ ui <- base_scouting_page(
                 rick_ui(),
                 tabPanel(
                   "Hitter Card",
-                  uiOutput("guard_msg"),
+                  uiOutput("hitter_guard_msg"),
                   div(class = "report-shell",
                       div(class = "report-toolbar",
                           uiOutput("player_ui"),
@@ -5124,7 +5124,7 @@ ui <- base_scouting_page(
                 ),
                 tabPanel(
                   "Pitcher Card",
-                  uiOutput("guard_msg"),
+                  uiOutput("pitcher_guard_msg"),
 	                  div(class = "report-shell",
 	                      div(class = "report-toolbar",
 	                          uiOutput("pitcher_card_pitcher_ui"),
@@ -5733,9 +5733,8 @@ server <- function(input, output, session){
     updateSelectizeInput(session, "hitter_order", choices = game_hitter_order(), selected = pa_hitter_order(), server = FALSE)
   }, ignoreInit = TRUE)
   
-  output$guard_msg <- renderUI({
+  report_guard_message <- function(role) {
     if (season_mode()) {
-      role <- if (identical(input$main_tab, "Pitcher Card")) "pitchers" else "hitters"
       if (!length(input[[paste0("scout_season_", role)]])) {
         return(helpText(paste("Choose a team and", role, "in the sidebar to begin.")))
       }
@@ -5745,6 +5744,17 @@ server <- function(input, output, session){
       div(style="margin:8px 0; padding:8px; background:#fff3cd; border:1px solid #ffeeba; border-radius:6px;",
           HTML("<b>Select one or more CSVs</b> from data/ to begin."))
     }
+  }
+
+  # These messages appear in separate tabs and therefore need separate output
+  # IDs. Reusing one ID leaves both browser bindings perpetually recalculating
+  # and can lock the embedded workspace after a team is selected.
+  output$hitter_guard_msg <- renderUI({
+    report_guard_message("hitters")
+  })
+
+  output$pitcher_guard_msg <- renderUI({
+    report_guard_message("pitchers")
   })
 
   output$matchup_guard_msg <- renderUI({

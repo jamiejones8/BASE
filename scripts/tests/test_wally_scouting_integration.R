@@ -55,6 +55,12 @@ if (grepl("<body", html, fixed = TRUE)) {
 if (!grepl("base-scouting-embedded-layout", html, fixed = TRUE)) {
   fail("Embedded Scouting UI is missing its scoped BASE layout wrapper.")
 }
+ui_ids <- stringr::str_match_all(html, "\\bid=\"([^\"]+)\"")[[1]][, 2]
+duplicate_ui_ids <- unique(ui_ids[duplicated(ui_ids)])
+if (length(duplicate_ui_ids)) {
+  fail("Embedded Scouting UI contains duplicate browser IDs: ",
+       paste(duplicate_ui_ids, collapse = ", "))
+}
 
 expected_tabs <- c(
   "Rick Advance Sheet", "Hitter Card", "Pitch Type Tables", "Heat Maps",
