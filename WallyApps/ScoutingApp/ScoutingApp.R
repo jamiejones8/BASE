@@ -5195,7 +5195,7 @@ server <- function(input, output, session){
     if (id == "season") return(SCOUTING_SEASON_SOURCE)
     if (id == "csv") return(NULL)
     paths <- base_team_season_import_paths()
-    validate(need(id %in% names(paths), "Choose a scouting data source."))
+    shiny::validate(shiny::need(id %in% names(paths), "Choose a scouting data source."))
     base_scouting_season_source(paths[[id]])
   })
   season_mode <- reactive(!is.null(SCOUTING_SEASON_SOURCE) &&
@@ -5209,7 +5209,7 @@ server <- function(input, output, session){
       withProgress(message = "Loading college team directory", value = 0.5, {
         selected_source()$teams("pitcher")
       }),
-      error = function(e) validate(need(FALSE, conditionMessage(e)))
+      error = function(e) shiny::validate(shiny::need(FALSE, conditionMessage(e)))
     )
   })
   output$scout_season_status <- renderUI({
@@ -5226,12 +5226,26 @@ server <- function(input, output, session){
                          choices = c("Choose a team" = "", team_choices),
                          selected = selected, server = TRUE)
   })
+  season_catalog <- function(role, team) {
+    tryCatch(selected_source()$catalog(role, team), error = function(e) {
+      if (inherits(e, "shiny.silent.error")) stop(e)
+      message("[Scouting directory] ", role, ": ", conditionMessage(e))
+      shiny::validate(shiny::need(FALSE, paste("Unable to load", role,
+        "directory:", conditionMessage(e))))
+    })
+  }
   for (role_value in c("hitter", "pitcher")) local({
     role <- role_value
     player_id <- paste0("scout_season_", role, "s")
     observeEvent(list(selected_season_team(), season_teams()), {
       team <- selected_season_team()
-      catalog <- selected_source()$catalog(role, team)
+      catalog <- tryCatch(season_catalog(role, team), shiny.silent.error = function(e) {
+        updateSelectizeInput(session, player_id, choices = character(),
+                             selected = character(), server = TRUE)
+        showNotification(conditionMessage(e), type = "error", duration = 10)
+        NULL
+      })
+      if (is.null(catalog)) return()
       choices <- catalog$Player[catalog$Team == team]
       updateSelectizeInput(session, player_id, choices = choices,
                            selected = intersect(input[[player_id]], choices), server = TRUE)
@@ -5241,17 +5255,17 @@ server <- function(input, output, session){
     req(season_mode())
     team <- selected_season_team()
     players <- input[[paste0("scout_season_", role, "s")]]
-    catalog <- selected_source()$catalog(role, team)
+    catalog <- season_catalog(role, team)
     players <- intersect(players, catalog$Player[catalog$Team == team])
-    validate(need(nzchar(team) && length(players) > 0,
+    shiny::validate(shiny::need(nzchar(team) && length(players) > 0,
                   paste("Choose a team and", paste0(role, "s"), "in the sidebar.")))
     rows <- tryCatch(
       withProgress(message = paste("Loading selected", paste0(role, "s")), value = 0.5, {
         selected_source()$load_players(role, team, players)
       }),
-      error = function(e) validate(need(FALSE, conditionMessage(e)))
+      error = function(e) shiny::validate(shiny::need(FALSE, conditionMessage(e)))
     )
-    validate(need(nrow(rows) > 0, "No season pitches found for the selected players."))
+    shiny::validate(shiny::need(nrow(rows) > 0, "No season pitches found for the selected players."))
     rows
   }
   season_hitter_rows <- reactive(season_rows("hitter"))
@@ -5474,9 +5488,9 @@ server <- function(input, output, session){
     req(input$csv_files)
     files <- input$csv_files
     paths <- file.path(DATA_DIR, files)
-    validate(need(all(file.exists(paths)), "One or more selected files are missing from data/."))
+    shiny::validate(shiny::need(all(file.exists(paths)), "One or more selected files are missing from data/."))
     out <- read_csv_files(paths, source_labels = files)
-    validate(need(is.data.frame(out), "Loaded file is not a data frame / tibble."))
+    shiny::validate(shiny::need(is.data.frame(out), "Loaded file is not a data frame / tibble."))
     out
   })
   
@@ -5484,7 +5498,7 @@ server <- function(input, output, session){
     d_raw <- if (season_mode()) season_hitter_rows() else df_all()
     tryCatch(std_cols(d_raw), error = function(e){
       message("[std_cols ERROR] ", conditionMessage(e))
-      validate(need(FALSE, paste("Column standardization error:", conditionMessage(e))))
+      shiny::validate(shiny::need(FALSE, paste("Column standardization error:", conditionMessage(e))))
     })
   })
   
@@ -5495,7 +5509,7 @@ server <- function(input, output, session){
         dplyr::filter(!pitcher_env$is_bad_pitch_type(PitchType)),
       error = function(e){
         message("[pitcher standardize_tm ERROR] ", conditionMessage(e))
-        validate(need(FALSE, paste("Pitcher column standardization error:", conditionMessage(e))))
+        shiny::validate(shiny::need(FALSE, paste("Pitcher column standardization error:", conditionMessage(e))))
       }
     )
   })
@@ -5506,7 +5520,7 @@ server <- function(input, output, session){
     if (season_mode()) return(season_pitcher_rows())
     req(input$matchup_pitchers_file)
     out <- read_csv_files(input$matchup_pitchers_file$datapath)
-    validate(need(is.data.frame(out) && nrow(out) > 0, "Pitcher CSV did not load any rows."))
+    shiny::validate(shiny::need(is.data.frame(out) && nrow(out) > 0, "Pitcher CSV did not load any rows."))
     out
   })
 
@@ -5514,7 +5528,7 @@ server <- function(input, output, session){
     if (season_mode()) return(season_hitter_rows())
     req(input$matchup_hitters_file)
     out <- read_csv_files(input$matchup_hitters_file$datapath)
-    validate(need(is.data.frame(out) && nrow(out) > 0, "Hitter CSV did not load any rows."))
+    shiny::validate(shiny::need(is.data.frame(out) && nrow(out) > 0, "Hitter CSV did not load any rows."))
     out
   })
 
@@ -5525,7 +5539,7 @@ server <- function(input, output, session){
         dplyr::filter(!pitcher_env$is_bad_pitch_type(PitchType)),
       error = function(e){
         message("[matchup pitcher standardize_tm ERROR] ", conditionMessage(e))
-        validate(need(FALSE, paste("Pitcher matchup file error:", conditionMessage(e))))
+        shiny::validate(shiny::need(FALSE, paste("Pitcher matchup file error:", conditionMessage(e))))
       }
     )
   })
@@ -5536,7 +5550,7 @@ server <- function(input, output, session){
       std_cols(d_raw),
       error = function(e){
         message("[matchup std_cols ERROR] ", conditionMessage(e))
-        validate(need(FALSE, paste("Hitter matchup file error:", conditionMessage(e))))
+        shiny::validate(shiny::need(FALSE, paste("Hitter matchup file error:", conditionMessage(e))))
       }
     )
   })
@@ -5544,7 +5558,7 @@ server <- function(input, output, session){
   matchup_pitcher_meta <- reactive({
     req(matchup_pitchers_std())
     d <- matchup_pitchers_std()
-    validate(need(nrow(d) > 0, "No pitcher rows found in the selected data."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No pitcher rows found in the selected data."))
     d %>%
       dplyr::mutate(PA_ID = make_pa_id(d)) %>%
       dplyr::filter(!is.na(PitcherName), nzchar(trimws(PitcherName))) %>%
@@ -5601,7 +5615,7 @@ server <- function(input, output, session){
   output$matchup_pitcher_order_ui <- renderUI({
     req(matchup_pitcher_choices())
     choices <- matchup_pitcher_choices()
-    validate(need(length(choices) > 0, "No pitchers found in the selected data."))
+    shiny::validate(shiny::need(length(choices) > 0, "No pitchers found in the selected data."))
     tagList(
       selectizeInput(
         "matchup_pitcher_order",
@@ -5623,7 +5637,7 @@ server <- function(input, output, session){
   output$matchup_hitter_order_ui <- renderUI({
     req(matchup_hitter_choices())
     choices <- matchup_hitter_choices()
-    validate(need(length(choices) > 0, "No hitters found in the selected data."))
+    shiny::validate(shiny::need(length(choices) > 0, "No hitters found in the selected data."))
     tagList(
       selectizeInput(
         "matchup_hitter_order",
@@ -5678,7 +5692,7 @@ server <- function(input, output, session){
   output$hitter_order_ui <- renderUI({
     req(std_all())
     hitters <- game_hitter_order()
-    validate(need(length(hitters) > 0, "No hitters found for ordering."))
+    shiny::validate(shiny::need(length(hitters) > 0, "No hitters found for ordering."))
     tagList(
       tags$h4("Hitter Order"),
       selectizeInput(
@@ -5763,7 +5777,7 @@ server <- function(input, output, session){
     view_mode <- input$matchup_view %||% "pitch_types"
     is_total_view <- identical(view_mode, "total")
     tbl <- if (is_total_view) bundle$total_wide else bundle$wide
-    validate(need(ncol(tbl) > 1, "Select at least one hitter and one pitcher to build the grid."))
+    shiny::validate(shiny::need(ncol(tbl) > 1, "Select at least one hitter and one pitcher to build the grid."))
     score_cols <- if (is_total_view) bundle$total_cols else bundle$score_cols
     pal <- grDevices::colorRampPalette(c("#B2182B", "#F7F7F7", "#1A9850"))(10)
     header_container <- if (is_total_view) {
@@ -5866,7 +5880,7 @@ server <- function(input, output, session){
     req(std_all())
     d <- std_all()
     bat_col <- pick_first(c("Batter","Hitter","batter_name","batter"), d)
-    validate(need(!is.na(bat_col), "No batter/hitter name column found."))
+    shiny::validate(shiny::need(!is.na(bat_col), "No batter/hitter name column found."))
     choices <- report_hitter_order()
     if (!length(choices)) return(helpText("Add hitters in the sidebar to enable the player card."))
     selectInput("player","Player", choices = choices)
@@ -5876,18 +5890,18 @@ server <- function(input, output, session){
     req(std_all(), input$player)
     d <- std_all()
     bat_col <- pick_first(c("Batter","Hitter","batter_name","batter"), d)
-    validate(need(!is.na(bat_col), "Missing batter name column after load."))
+    shiny::validate(shiny::need(!is.na(bat_col), "Missing batter name column after load."))
     d %>% filter(.data[[bat_col]] == input$player)
   })
   
   card_plot <- eventReactive(input$preview, {
     d <- df_player()
-    validate(need(nrow(d) > 0, "No rows for selected player."))
+    shiny::validate(shiny::need(nrow(d) > 0, "No rows for selected player."))
     player_disp <- paste0(input$player, batter_side_suffix(d))
     tryCatch(build_card(d, player_disp),
              error = function(e){
                message("[build_card ERROR] ", conditionMessage(e))
-               validate(need(FALSE, paste("Card build error:", conditionMessage(e))))
+               shiny::validate(shiny::need(FALSE, paste("Card build error:", conditionMessage(e))))
              })
   }, ignoreInit = TRUE)
   
@@ -5946,7 +5960,7 @@ server <- function(input, output, session){
       stats::na.omit() %>%
       unique() %>%
       sort()
-    validate(need(length(pitchers) > 0, "No pitcher names found in the selected file(s)."))
+    shiny::validate(shiny::need(length(pitchers) > 0, "No pitcher names found in the selected file(s)."))
     selectInput("pitcher_card_pitcher", "Pitcher", choices = pitchers, selected = pitchers[[1]])
   })
 
@@ -5977,7 +5991,7 @@ server <- function(input, output, session){
   output$pitcher_bust_order_ui <- renderUI({
     req(pitcher_bust_meta())
     choices <- pitcher_bust_choices()
-    validate(need(length(choices) > 0, "No pitchers found in the selected data."))
+    shiny::validate(shiny::need(length(choices) > 0, "No pitchers found in the selected data."))
     tagList(
       selectizeInput(
         "pitcher_bust_order",
@@ -6002,7 +6016,7 @@ server <- function(input, output, session){
   pitcher_bust_source_meta <- reactive({
     req(pitcher_std_all())
     d <- pitcher_std_all()
-    validate(need(".source_file" %in% names(d), "Source file tracking is unavailable for the selected pitcher data."))
+    shiny::validate(shiny::need(".source_file" %in% names(d), "Source file tracking is unavailable for the selected pitcher data."))
     d %>%
       dplyr::filter(!is.na(PitcherName), nzchar(trimws(PitcherName)), !is.na(.source_file), nzchar(trimws(.source_file))) %>%
       dplyr::distinct(PitcherName, .source_file) %>%
@@ -6082,7 +6096,7 @@ server <- function(input, output, session){
 	    req(pitcher_std_all(), input$pitcher_card_pitcher)
 	    d <- pitcher_std_all() %>%
 	      dplyr::filter(PitcherName == input$pitcher_card_pitcher)
-	    validate(need(nrow(d) > 0, "No rows for this pitcher in the selected file(s)."))
+	    shiny::validate(shiny::need(nrow(d) > 0, "No rows for this pitcher in the selected file(s)."))
 	    d
 	  })
 	  
