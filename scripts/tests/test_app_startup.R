@@ -10,20 +10,24 @@ if (!inherits(app, "shiny.appobj")) {
 }
 
 data_processing_html <- paste(as.character(data_processing_workspace_ui()), collapse = "")
-if (!grepl("dp_bp_file", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_bp_append", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_bp_status", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_positioning_file", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_positioning_append", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_positioning_status", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_pulse_events_replace", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_pulse_workload_replace", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_arm_care_replace", data_processing_html, fixed = TRUE) ||
-    !grepl("Replace Arm Care and PULSE exports", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_csv_source", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_csv_editor", data_processing_html, fixed = TRUE) ||
-    !grepl("dp_csv_save", data_processing_html, fixed = TRUE)) {
-  stop("Data Processing does not expose the replacement, bullpen, and CSV editor workflows.", call. = FALSE)
+required_data_processing_controls <- c(
+  unlist(lapply(
+    c("dp_f26", "dp_ps27", "dp_s27", "dp_bp", "dp_positioning_f26",
+      "dp_positioning_scrimmages", "dp_positioning_s27"),
+    function(prefix) paste0(prefix, c("_file", "_append", "_status"))
+  ), use.names = FALSE),
+  "dp_pulse_events_replace", "dp_pulse_workload_replace", "dp_arm_care_replace",
+  "Replace Arm Care and PULSE exports",
+  "dp_csv_source", "dp_csv_editor", "dp_csv_save",
+  "dp_scouting_file", "dp_scouting_save", "dp_scouting_status"
+)
+missing_data_processing_controls <- required_data_processing_controls[
+  !vapply(required_data_processing_controls, grepl, logical(1),
+          x = data_processing_html, fixed = TRUE)
+]
+if (length(missing_data_processing_controls)) {
+  stop("Data Processing is missing required workflows: ",
+       paste(missing_data_processing_controls, collapse = ", "), call. = FALSE)
 }
 
 duplicate_percentiles <- tibble::tibble(
