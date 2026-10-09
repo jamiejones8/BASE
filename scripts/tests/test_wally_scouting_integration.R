@@ -57,7 +57,7 @@ if (!grepl("base-scouting-embedded-layout", html, fixed = TRUE)) {
 }
 
 expected_tabs <- c(
-  "Hitter Card", "Pitch Type Tables", "Heat Maps",
+  "Rick Advance Sheet", "Hitter Card", "Pitch Type Tables", "Heat Maps",
   "Pitcher Card", "Stuff Sheet", "Matchup Grid"
 )
 missing_tabs <- expected_tabs[
@@ -173,7 +173,7 @@ base_wally_scouting_environment <- original_environment
 
 missing_source <- base_scouting_season_source(paste0(season_path, "-missing"))
 missing_message <- tryCatch({ missing_source$teams("hitter"); "" }, error = conditionMessage)
-if (!grepl("BASE_SCOUTING_SEASON_FILE", missing_message, fixed = TRUE)) fail("Missing season data has no actionable error.")
+if (!grepl("Upload its data in Data Processing", missing_message, fixed = TRUE)) fail("Missing season data has no actionable error.")
 bad_path <- tempfile(fileext = ".parquet")
 arrow::write_parquet(tibble::tibble(Unrelated = 1), bad_path)
 bad_message <- tryCatch({ base_scouting_season_source(bad_path)$teams("hitter"); "" }, error = conditionMessage)

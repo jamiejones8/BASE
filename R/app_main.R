@@ -4468,7 +4468,13 @@ data_processing_workspace_ui <- function() {
         import_card("S27", "dp_s27", "dp_s27_status"),
         import_card("BP", "dp_bp", "dp_bp_status"),
         import_card("PP_F26", "dp_positioning_f26", "dp_positioning_f26_status"),
-        import_card("PP_PS27", "dp_positioning_scrimmages", "dp_positioning_scrimmages_status")
+        import_card("PP_PS27", "dp_positioning_scrimmages", "dp_positioning_scrimmages_status"),
+        import_card("PP_S27", "dp_positioning_s27", "dp_positioning_s27_status"),
+        tags$section(class = "base-import-card", tags$h3("Opponent scouting data"),
+          tags$p("Upload a cleaned TrackMan CSV containing the opponent’s pitching and hitting data."),
+          shiny::fileInput("dp_scouting_file", "Cleaned scouting CSV", accept = ".csv"),
+          shiny::actionButton("dp_scouting_save", "Validate and save", class = "btn-primary"),
+          shiny::textOutput("dp_scouting_status"))
       ),
       tags$section(
         class = "base-csv-editor",
@@ -4504,6 +4510,7 @@ data_processing_server <- function(input, output, session) {
     BP = shiny::reactiveVal(NULL),
     PP_F26 = shiny::reactiveVal(NULL),
     PP_PS27 = shiny::reactiveVal(NULL),
+    PP_S27 = shiny::reactiveVal(NULL),
     PULSE_EVENTS = shiny::reactiveVal(NULL),
     PULSE_WORKLOAD = shiny::reactiveVal(NULL),
     ARM_CARE = shiny::reactiveVal(NULL)
@@ -4574,6 +4581,7 @@ data_processing_server <- function(input, output, session) {
   output$dp_f26_status <- shiny::renderUI(render_status("F26", states$F26()))
   output$dp_s27_status <- shiny::renderUI(render_status("S27", states$S27()))
   output$dp_bp_status <- shiny::renderUI(render_status("BP", states$BP()))
+  output$dp_positioning_s27_status <- shiny::renderUI(render_status("PP_S27", states$PP_S27()))
   output$dp_ps27_status <- shiny::renderUI(render_status("PS27", states$PS27()))
   output$dp_positioning_f26_status <- shiny::renderUI(render_status("PP_F26", states$PP_F26()))
   output$dp_positioning_scrimmages_status <- shiny::renderUI(render_status("PP_PS27", states$PP_PS27()))
@@ -4898,6 +4906,16 @@ data_processing_server <- function(input, output, session) {
   register_import("BP", "dp_bp", states$BP)
   register_import("PP_F26", "dp_positioning_f26", states$PP_F26)
   register_import("PP_PS27", "dp_positioning_scrimmages", states$PP_PS27)
+  register_import("PP_S27", "dp_positioning_s27", states$PP_S27)
+  scouting_status <- shiny::reactiveVal("")
+  output$dp_scouting_status <- shiny::renderText(scouting_status())
+  shiny::observeEvent(input$dp_scouting_save, {
+    upload <- input$dp_scouting_file
+    if (is.null(upload)) { scouting_status("Choose a cleaned scouting CSV first."); return() }
+    result <- tryCatch(base_import_scouting_file(upload$datapath, upload$name), error = identity)
+    scouting_status(if (inherits(result, "error")) conditionMessage(result) else
+      paste("Saved", result$rows, "pitches. Choose Uploaded scouting CSVs in Opponent Scouting."))
+  }, ignoreInit = TRUE)
 
   register_replacement <- function(target_id, input_prefix, state) {
     shiny::observeEvent(input[[paste0(input_prefix, "_replace")]], {

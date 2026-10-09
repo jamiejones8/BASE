@@ -52,6 +52,9 @@ WallyApps/DefenseApp/*
 !WallyApps/DefenseApp/www/
 WallyApps/ScoutingApp/*
 !WallyApps/ScoutingApp/ScoutingApp.R
+!WallyApps/ScoutingApp/RickAdvanceSheet.R
+!WallyApps/ScoutingApp/reference/
+!WallyApps/ScoutingApp/reference/*.csv
 !WallyApps/ScoutingApp/www/
 WallyApps/JucoStatsApp/*
 !WallyApps/JucoStatsApp/app.R

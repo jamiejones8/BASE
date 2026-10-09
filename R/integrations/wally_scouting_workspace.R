@@ -1,3 +1,5 @@
+if (!exists("base_team_season_import_paths", mode = "function")) base_source("R/data/team_season_imports.R", local = FALSE)
+
 # Adapter for Wally's ScoutingApp inside the unified BASE application.
 #
 # The original report calculations, controls, previews, matchup grid, and PDF
@@ -9,7 +11,7 @@ BASE_WALLY_SCOUTING_FILE <- base_project_path(
 )
 
 BASE_WALLY_SCOUTING_REQUIRED_PACKAGES <- c(
-  "bslib", "cowplot", "curl", "dplyr", "DT", "ggplot2", "ggplotify",
+  "bslib", "digest", "cowplot", "curl", "dplyr", "DT", "ggplot2", "ggplotify",
   "gridExtra", "gtable", "htmltools", "jpeg", "patchwork", "png",
   "purrr", "readr", "scales", "shiny", "stringr", "tibble", "tidyr"
 )
@@ -46,15 +48,18 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
   open <- function() {
     if (!is.null(dataset)) return(dataset)
     if (!file.exists(path)) {
-      stop("Season file unavailable: ", path,
-           ". Set BASE_SCOUTING_SEASON_FILE to the mounted college Parquet.")
+      stop("Selected scouting source is not available yet. Upload its data in Data Processing.")
     }
-    if (!requireNamespace("arrow", quietly = TRUE)) {
-      stop("Reading the college season requires the arrow package.")
+    if (tolower(tools::file_ext(path)) == "csv") {
+      candidate <- base_read_trackman_import(path)
+    } else {
+      if (!requireNamespace("arrow", quietly = TRUE)) {
+        stop("Reading the college season requires the arrow package.")
+      }
+      candidate <- arrow::open_dataset(path, format = "parquet")
     }
-    candidate <- arrow::open_dataset(path, format = "parquet")
     required <- c("Batter", "BatterTeam", "Pitcher", "PitcherTeam")
-    missing <- setdiff(required, names(candidate$schema))
+    missing <- setdiff(required, if (is.data.frame(candidate)) names(candidate) else names(candidate$schema))
     if (length(missing)) stop("Season file is missing columns: ", paste(missing, collapse = ", "))
     dataset <<- candidate
     dataset
@@ -161,7 +166,24 @@ base_scouting_data_dir <- function() {
   if (nzchar(configured)) {
     return(normalizePath(configured, winslash = "/", mustWork = FALSE))
   }
-  base_project_path("WallyApps", "ScoutingApp", "data")
+  file.path(base_team_season_import_root(), "scouting")
+}
+
+base_import_scouting_file <- function(path, name, root = base_scouting_data_dir()) {
+  rows <- base_read_trackman_import(path)
+  required <- c("PitchUID", "Date", "Pitcher", "PitcherTeam", "Batter", "BatterTeam", "PitchCall")
+  missing <- setdiff(required, names(rows))
+  if (!nrow(rows) || length(missing)) stop("Scouting CSV needs pitch rows and columns: ", paste(required, collapse = ", "))
+  if (anyNA(base_parse_trackman_dates(rows$Date))) stop("Scouting CSV contains invalid dates.")
+  ids <- trimws(rows$PitchUID)
+  if (anyNA(ids) || any(!nzchar(ids))) stop("Scouting CSV contains missing pitch IDs.")
+  rows <- rows[!duplicated(ids), , drop = FALSE]
+  # Content-keyed filenames prevent overwriting another team's uploaded report.
+  safe_name <- gsub("[^A-Za-z0-9._-]", "_", tools::file_path_sans_ext(basename(name)))
+  filename <- paste0(substr(safe_name,1,100), "-", substr(unname(tools::md5sum(path)),1,12), ".csv")
+  destination <- file.path(root, filename)
+  base_atomic_write_trackman_csv(rows, destination)
+  list(path = destination, filename = filename, rows = nrow(rows))
 }
 
 base_scouting_team_display_name <- function(team_codes) {
@@ -435,6 +457,9 @@ base_opponent_scouting_workspace_ui <- function() {
       ),
       tags$div(
         class = "base-scouting-launch-controls",
+        selectInput("base_scouting_source", "Scouting data", choices = c(
+          "College season (Parquet)" = "season", "2026 Fall" = "F26",
+          "2027 Scrimmages" = "PS27", "2027 Season" = "S27")),
         selectizeInput(
           "base_scouting_team", "Opponent team", choices = NULL,
           options = list(placeholder = "Search college teams", maxOptions = 100),
@@ -471,19 +496,24 @@ base_opponent_scouting_workspace_server <- function(
   workspace_started <- reactiveVal(FALSE)
 
   observe({
-    if (!is.null(available_teams())) return()
+    source_id <- input$base_scouting_source %||% "season"
+    source <- if (source_id == "season") season_source else {
+      paths <- base_team_season_import_paths()
+      req(source_id %in% names(paths))
+      base_scouting_season_source(paths[[source_id]])
+    }
     teams <- tryCatch(
       # The pitcher catalog is already mounted at BASE startup and contains
       # the complete team directory. Avoid touching the hitter catalog until
       # a team is explicitly selected because its fallback may need to build.
-      sort(unique(season_source$teams("pitcher"))),
+      sort(unique(source$teams("pitcher"))),
       error = function(e) structure(character(), error = conditionMessage(e))
     )
     available_teams(teams)
-    if (length(teams)) {
-      choices <- stats::setNames(teams, base_scouting_team_display_name(teams))
-      updateSelectizeInput(session, "base_scouting_team", choices = choices, server = TRUE)
-    }
+    choices <- stats::setNames(teams, base_scouting_team_display_name(teams))
+    current <- isolate(input$base_scouting_team) %||% ""
+    updateSelectizeInput(session, "base_scouting_team", choices = c("Choose a team" = "", choices),
+                         selected = if (current %in% teams) current else "", server = TRUE)
   })
 
   output$base_scouting_launch_status <- renderUI({
@@ -492,11 +522,11 @@ base_opponent_scouting_workspace_server <- function(
     error <- attr(teams, "error") %||% ""
     if (nzchar(error)) return(tags$p(
       class = "base-scouting-launch-status text-warning",
-      "College directory unavailable. You can still use game CSVs."
+      "Selected source unavailable. Upload its TrackMan data in Data Processing, or use scouting CSVs."
     ))
     tags$p(
       class = "base-scouting-launch-status",
-      paste(format(length(teams), big.mark = ","), "college teams available")
+      paste(format(length(teams), big.mark = ","), "teams available in this source")
     )
   })
 
@@ -522,7 +552,7 @@ base_opponent_scouting_workspace_server <- function(
         })
         workspace$server(input, output, session)
         session$onFlushed(function() {
-          updateRadioButtons(session, "scout_data_source", selected = mode)
+          updateRadioButtons(session, "scout_data_source", selected = if (mode == "season") input$base_scouting_source %||% "season" else "csv")
           shinyjs::hide("base-scouting-loading")
         }, once = TRUE)
       }, error = function(e) {

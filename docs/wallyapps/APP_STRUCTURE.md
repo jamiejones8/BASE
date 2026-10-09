@@ -72,6 +72,11 @@ their standalone application data directories.
 ## Opponent Scouting
 
 Opponent Scouting hosts Wally's complete ScoutingApp as one focused workspace.
+
+The workspace includes Rick Advance Sheet with pitcher/batter-side selection, D1 percentile tables, movement and location plots, count breakdowns, editable notes and approach/go-zone shapes, and a two-page RHH/LHH PDF. Annotations are saved under the configured persistent season-import root in `rick_annotations`.
+
+Scouting sources can be selected at launch and inside the workspace: college Parquet, 2026 Fall, 2027 Scrimmages, 2027 Season, or uploaded scouting CSVs. The season selections use the same cumulative files as hitting and pitching. Data Processing provides all three season uploads for both TrackMan and positioning, plus an opponent scouting CSV upload. Scouting CSVs may contain multiple games and opposing teams; they are validated and saved by content-keyed filename in `BASE_SCOUTING_DATA_DIR` or the persistent season-import root's `scouting` directory. They remain separate from team season imports and Sports Science. A second upload control is available within scouting's CSV mode.
+
 Its Hitter Card, Pitch Type Tables, Heat Maps, Pitcher Card, Stuff Sheet, and
 Matchup Grid replace the previous two-card landing page without changing their
 calculations, controls, preview behavior, report ordering, or PDF downloads.

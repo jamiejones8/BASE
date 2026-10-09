@@ -1,0 +1,26 @@
+# Loaded by scripts/tests/test_rick_scouting.R inside the BASE workspace.
+# Use a temporary store so tests never alter a coach's saved annotations.
+original_root <- APP_ROOT
+APP_ROOT <- tempfile('rick-test-');dir.create(APP_ROOT)
+dir.create(file.path(APP_ROOT,'reference'))
+file.copy(file.path(original_root,'reference','d1_heater_movement_reference.csv'),file.path(APP_ROOT,'reference'))
+pdf(tempfile(fileext='.pdf'))
+s <- list(id='test',zone='Pre2k',type='circle',color='red',x=0,z=2.5,w=1.416,h=1.416)
+stopifnot(length(rick_shapes(list(s)))==1,length(rick_shapes(list(list(type='bad'))))==0)
+doc <- list(notes='Hunt the heater.\nProtect away with two strikes.',shapes=list(s))
+rick_save_document('Test|R',doc)
+stopifnot(identical(rick_read_document('Test|R'),doc),length(rick_read_document('Test|L')$shapes)==0)
+d <- pitcher_env$standardize_tm(data.frame(Pitcher='Test',BatterSide='Right',TaggedPitchType='Fastball',RelSpeed=90,PlateLocSide=0,PlateLocHeight=2))
+shiny::testServer(function(input,output,session) rick_server(input,output,session,reactive(d)), {
+ session$setInputs(rick_pitcher='Test',rick_side='R')
+ session$setInputs(rick_editor_change=list(key='Test|R',notes='New notes',shapes=list(s)))
+ session$setInputs(rick_editor_save=list(key='Test|R',notes='New notes',shapes=list(s)))
+ stopifnot(rick_read_document('Test|R')$notes=='New notes',output$rick_save_status=='Notes and shapes saved.')
+ session$setInputs(rick_side='L')
+ session$setInputs(rick_editor_change=list(key='Test|R',notes='Stale event',shapes=list()))
+ stopifnot(rick_read_document('Test|R')$notes=='New notes')
+ session$setInputs(rick_editor_save=list(key='Test|L',notes='Left split',shapes=list()))
+ stopifnot(rick_read_document('Test|L')$notes=='Left split',length(rick_read_document('Test|L')$shapes)==0)
+})
+unlink(APP_ROOT,recursive=TRUE)
+cat('Annotation storage, split isolation, stale events and clearing passed.\n')

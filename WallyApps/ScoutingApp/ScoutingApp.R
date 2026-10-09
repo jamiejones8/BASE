@@ -5031,6 +5031,8 @@ if (SCOUTING_EMBEDDED_MODE) {
   }
 }
 
+source(file.path(APP_ROOT, "RickAdvanceSheet.R"), local = TRUE)
+
 ui <- base_scouting_page(
   theme = scouting_theme,
   scouting_head,
@@ -5039,14 +5041,14 @@ ui <- base_scouting_page(
   sidebarPanel(width = 3,
                if (!is.null(SCOUTING_SEASON_SOURCE)) tagList(
                  radioButtons("scout_data_source", "Scouting data",
-                              choices = c("College season" = "season", "Game CSVs" = "csv"),
+                              choices = c("College season (Parquet)" = "season", "2026 Fall" = "F26",
+                                          "2027 Scrimmages" = "PS27", "2027 Season" = "S27",
+                                          "Uploaded scouting CSVs" = "csv"),
                               selected = "season"),
                  conditionalPanel(
-                   "input.scout_data_source === 'season'",
+                   "input.scout_data_source !== 'csv'",
                    uiOutput("scout_season_status"),
-                   if (!SCOUTING_EMBEDDED_MODE) {
-                     selectizeInput("scout_team", "Opponent team", choices = NULL)
-                   },
+                   selectizeInput("scout_team", "Opponent team", choices = NULL),
                    selectizeInput("scout_season_hitters", "Hitters to load", choices = NULL,
                                   multiple = TRUE, options = list(plugins = list("remove_button"))),
                    selectizeInput("scout_season_pitchers", "Pitchers to load", choices = NULL,
@@ -5058,8 +5060,11 @@ ui <- base_scouting_page(
                conditionalPanel(
                  "input.main_tab !== 'matchup_grid'",
                  conditionalPanel(
-                 "input.scout_data_source !== 'season'",
-                 tags$h4("Report File"),
+                 "input.scout_data_source === 'csv' || input.scout_data_source == null",
+                 tags$h4("Scouting files"),
+                 fileInput("scouting_upload", "Cleaned opponent TrackMan CSV", accept = ".csv"),
+                 actionButton("scouting_upload_save", "Validate and save"),
+                 textOutput("scouting_upload_status"),
                  uiOutput("csv_files_ui"),
                  hr()),
                  conditionalPanel(
@@ -5070,7 +5075,7 @@ ui <- base_scouting_page(
                conditionalPanel(
                  "input.main_tab === 'matchup_grid'",
                  conditionalPanel(
-                 "input.scout_data_source !== 'season'",
+                 "input.scout_data_source === 'csv' || input.scout_data_source == null",
                  tags$h4("Matchup Files"),
                  fileInput("matchup_pitchers_file", "Pitchers CSV", accept = c(".csv", "text/csv")),
                  fileInput("matchup_hitters_file", "Hitters CSV", accept = c(".csv", "text/csv")),
@@ -5082,6 +5087,7 @@ ui <- base_scouting_page(
   ),
     mainPanel(width = 9,
               tabsetPanel(id = "main_tab",
+                rick_ui(),
                 tabPanel(
                   "Hitter Card",
                   uiOutput("guard_msg"),
@@ -5184,35 +5190,36 @@ ui <- base_scouting_page(
 # -------------------- Server --------------------
 server <- function(input, output, session){
 
-  season_mode <- reactive({
-    !is.null(SCOUTING_SEASON_SOURCE) &&
-      identical(input$scout_data_source %||% "season", "season")
+  selected_source <- reactive({
+    id <- input$scout_data_source %||% "season"
+    if (id == "season") return(SCOUTING_SEASON_SOURCE)
+    if (id == "csv") return(NULL)
+    paths <- base_team_season_import_paths()
+    validate(need(id %in% names(paths), "Choose a scouting data source."))
+    base_scouting_season_source(paths[[id]])
   })
+  season_mode <- reactive(!is.null(SCOUTING_SEASON_SOURCE) &&
+    !identical(input$scout_data_source %||% "season", "csv"))
   selected_season_team <- reactive({
-    if (SCOUTING_EMBEDDED_MODE) {
-      input$base_scouting_team %||% ""
-    } else {
-      input$scout_team %||% ""
-    }
+    input$scout_team %||% input$base_scouting_team %||% ""
   })
   season_teams <- reactive({
     req(season_mode())
     tryCatch(
       withProgress(message = "Loading college team directory", value = 0.5, {
-        SCOUTING_SEASON_SOURCE$teams("pitcher")
+        selected_source()$teams("pitcher")
       }),
       error = function(e) validate(need(FALSE, conditionMessage(e)))
     )
   })
   output$scout_season_status <- renderUI({
     teams <- season_teams()
-    helpText(sprintf("College season ready: %s teams. Select one to begin.",
+    helpText(sprintf("Selected source ready: %s teams. Select one to begin.",
                      format(length(teams), big.mark = ",")))
   })
   observeEvent(season_teams(), {
-    if (SCOUTING_EMBEDDED_MODE) return()
     teams <- season_teams()
-    selected <- input$scout_team %||% ""
+    selected <- input$scout_team %||% input$base_scouting_team %||% ""
     if (!selected %in% teams) selected <- ""
     team_choices <- stats::setNames(teams, scouting_team_display_name(teams))
     updateSelectizeInput(session, "scout_team",
@@ -5224,7 +5231,7 @@ server <- function(input, output, session){
     player_id <- paste0("scout_season_", role, "s")
     observeEvent(list(selected_season_team(), season_teams()), {
       team <- selected_season_team()
-      catalog <- SCOUTING_SEASON_SOURCE$catalog(role, team)
+      catalog <- selected_source()$catalog(role, team)
       choices <- catalog$Player[catalog$Team == team]
       updateSelectizeInput(session, player_id, choices = choices,
                            selected = intersect(input[[player_id]], choices), server = TRUE)
@@ -5234,13 +5241,13 @@ server <- function(input, output, session){
     req(season_mode())
     team <- selected_season_team()
     players <- input[[paste0("scout_season_", role, "s")]]
-    catalog <- SCOUTING_SEASON_SOURCE$catalog(role, team)
+    catalog <- selected_source()$catalog(role, team)
     players <- intersect(players, catalog$Player[catalog$Team == team])
     validate(need(nzchar(team) && length(players) > 0,
                   paste("Choose a team and", paste0(role, "s"), "in the sidebar.")))
     rows <- tryCatch(
       withProgress(message = paste("Loading selected", paste0(role, "s")), value = 0.5, {
-        SCOUTING_SEASON_SOURCE$load_players(role, team, players)
+        selected_source()$load_players(role, team, players)
       }),
       error = function(e) validate(need(FALSE, conditionMessage(e)))
     )
@@ -5251,15 +5258,28 @@ server <- function(input, output, session){
   season_pitcher_rows <- reactive(season_rows("pitcher"))
   
   files_refresh <- reactiveVal(0)
+  upload_status <- reactiveVal("")
+  output$scouting_upload_status <- renderText(upload_status())
+  observeEvent(input$scouting_upload_save, {
+    req(input$scouting_upload)
+    result <- tryCatch(base_import_scouting_file(input$scouting_upload$datapath,
+      input$scouting_upload$name, DATA_DIR), error = identity)
+    if (inherits(result, "error")) { upload_status(conditionMessage(result)); return() }
+    upload_status(paste("Saved", result$rows, "pitches. Select the file below."))
+    files_refresh(files_refresh()+1L)
+  }, ignoreInit = TRUE)
   ftp_log <- reactiveVal("")
   ftp_busy <- reactiveVal(FALSE)
   
-  data_files <- reactive({
-    files_refresh()
-    if (!dir.exists(DATA_DIR)) return(character(0))
-    list.files(DATA_DIR, pattern = "\\.(csv|CSV)$", full.names = FALSE)
-  })
-  
+  data_files <- reactivePoll(5000, session,
+    checkFunc = function() {
+      files_refresh()
+      paths <- list.files(DATA_DIR, pattern = "[.][cC][sS][vV]$", full.names = TRUE)
+      info <- file.info(paths)
+      paste(paths, info$size, as.numeric(info$mtime), collapse = "|")
+    },
+    valueFunc = function() list.files(DATA_DIR, pattern = "[.][cC][sS][vV]$", full.names = FALSE))
+
   output$csv_files_ui <- renderUI({
     files <- data_files()
     if (length(files) == 0) {
@@ -5267,6 +5287,7 @@ server <- function(input, output, session){
     }
     selectizeInput("csv_files", "Choose game file(s) (data/):",
                    choices = stats::setNames(files, source_file_label(files)), multiple = TRUE,
+                   selected = intersect(isolate(input$csv_files), files),
                    options = list(placeholder = "Select one or more CSVs"))
   })
   
@@ -5478,6 +5499,8 @@ server <- function(input, output, session){
       }
     )
   })
+  rick_server(input, output, session, pitcher_std_all)
+
 
   matchup_pitchers_raw <- reactive({
     if (season_mode()) return(season_pitcher_rows())
