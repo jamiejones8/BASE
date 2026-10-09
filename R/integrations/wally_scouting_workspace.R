@@ -533,6 +533,11 @@ base_opponent_scouting_workspace_server <- function(
   start_workspace <- function(mode = c("season", "csv")) {
     mode <- match.arg(mode)
     if (isTRUE(workspace_started())) return(invisible(FALSE))
+    selected_source <- if (identical(mode, "season")) {
+      isolate(input$base_scouting_source) %||% "season"
+    } else {
+      "csv"
+    }
     if (identical(mode, "season")) {
       team <- input$base_scouting_team %||% ""
       if (!nzchar(team)) {
@@ -552,7 +557,7 @@ base_opponent_scouting_workspace_server <- function(
         })
         workspace$server(input, output, session)
         session$onFlushed(function() {
-          updateRadioButtons(session, "scout_data_source", selected = if (mode == "season") input$base_scouting_source %||% "season" else "csv")
+          updateRadioButtons(session, "scout_data_source", selected = selected_source)
           shinyjs::hide("base-scouting-loading")
         }, once = TRUE)
       }, error = function(e) {

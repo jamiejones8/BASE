@@ -161,9 +161,17 @@ shiny::testServer(
     if (environment_calls != 0L || server_calls != 0L) {
       fail("Opponent Scouting initialized its full engine before a launch action.")
     }
-    session$setInputs(base_scouting_team = "OTHER_TEAM", base_scouting_open = 1)
+    session$setInputs(
+      base_scouting_source = "season",
+      base_scouting_team = "OTHER_TEAM",
+      base_scouting_open = 1
+    )
     session$flushReact()
     session$flushReact()
+    session$flushReact()
+    if (session$isClosed()) {
+      fail("Opponent Scouting closed its session while completing the deferred launch.")
+    }
     if (environment_calls != 1L || server_calls != 1L) {
       fail("Opponent Scouting did not initialize exactly once after opening a team.")
     }
