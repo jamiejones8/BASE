@@ -45,6 +45,12 @@ base_source("R/integrations/wally_defense_workspace.R", local = FALSE)
 base_source("R/data/defense_attribution.R", local = FALSE)
 base_source("R/data/pitch_retags.R", local = FALSE)
 
+BASE_SCOUTING_PRELOAD_STATUS <- if (base_env_bool("BASE_SCOUTING_PRELOAD", TRUE)) {
+  base_preload_wally_scouting()
+} else {
+  list(ok = FALSE, skipped = TRUE)
+}
+
 options(
   shiny.maxRequestSize = max(
     getOption("shiny.maxRequestSize", 5 * 1024^2),

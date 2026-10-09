@@ -8,6 +8,11 @@ app <- source(
 if (!inherits(app, "shiny.appobj")) {
   stop("app.R did not produce a Shiny application object.", call. = FALSE)
 }
+if (!is.list(BASE_SCOUTING_PRELOAD_STATUS) || !isTRUE(BASE_SCOUTING_PRELOAD_STATUS$ok) ||
+    !exists("environment", envir = .base_wally_scouting_state, inherits = FALSE) ||
+    !exists("season_source", envir = .base_wally_scouting_state, inherits = FALSE)) {
+  stop("Opponent Scouting was not preloaded before the app began serving sessions.", call. = FALSE)
+}
 
 data_processing_html <- paste(as.character(data_processing_workspace_ui()), collapse = "")
 required_data_processing_controls <- c(

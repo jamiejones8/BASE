@@ -16,7 +16,9 @@ BASE_WALLY_SCOUTING_REQUIRED_PACKAGES <- c(
   "purrr", "readr", "scales", "shiny", "stringr", "tibble", "tidyr"
 )
 
-.base_wally_scouting_state <- new.env(parent = emptyenv())
+if (!exists(".base_wally_scouting_state", inherits = FALSE)) {
+  .base_wally_scouting_state <- new.env(parent = emptyenv())
+}
 
 base_scouting_season_file <- function() {
   override <- base_env_path("BASE_SCOUTING_SEASON_FILE", "")
@@ -34,6 +36,7 @@ base_scouting_season_file <- function() {
 base_scouting_season_source <- function(path = base_scouting_season_file()) {
   dataset <- NULL
   team_cache <- list()
+  runtime_catalog_cache <- list()
   catalogs <- list()
   cache <- list()
   production_path <- normalizePath(
@@ -73,7 +76,10 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
   }
   runtime_catalog <- function(role) {
     role <- match.arg(role, c("hitter", "pitcher"))
-    if (role == "hitter") {
+    if (!is.null(runtime_catalog_cache[[role]])) {
+      return(runtime_catalog_cache[[role]])
+    }
+    rows <- if (role == "hitter") {
       base_get_hitter_catalog() %>%
         dplyr::transmute(
           Team = as.character(.data$BatterTeam),
@@ -88,6 +94,8 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
           Pitches = suppressWarnings(as.numeric(.data$PitchCount))
         )
     }
+    runtime_catalog_cache[[role]] <<- rows
+    rows
   }
   teams <- function(role) {
     role <- match.arg(role, c("hitter", "pitcher"))
@@ -422,7 +430,47 @@ base_wally_scouting_environment <- function(
   }
 
   assign("environment", workspace, envir = .base_wally_scouting_state)
+  assign("season_source", season_source, envir = .base_wally_scouting_state)
   workspace
+}
+
+base_wally_scouting_season_source <- function() {
+  if (exists("season_source", envir = .base_wally_scouting_state, inherits = FALSE)) {
+    return(base::get("season_source", envir = .base_wally_scouting_state, inherits = FALSE))
+  }
+  base_scouting_season_source()
+}
+
+# Warm the embedded engine and compact player directories before Shiny begins
+# accepting sessions. Lazy initialization used to make the first team launch
+# monopolize the single R event loop, temporarily stalling every open page.
+base_preload_wally_scouting <- function(
+  data_dir = base_scouting_data_dir(),
+  season_source = base_wally_scouting_season_source()
+) {
+  started <- proc.time()[["elapsed"]]
+  result <- tryCatch({
+    pitcher_teams <- season_source$teams("pitcher")
+    hitter_teams <- season_source$teams("hitter")
+    base_wally_scouting_environment(data_dir, season_source)
+    elapsed <- proc.time()[["elapsed"]] - started
+    message(
+      "Opponent Scouting preloaded: ", length(pitcher_teams), " pitcher teams, ",
+      length(hitter_teams), " hitter teams in ", sprintf("%.2f", elapsed), "s"
+    )
+    list(
+      ok = TRUE,
+      pitcher_teams = length(pitcher_teams),
+      hitter_teams = length(hitter_teams),
+      elapsed = elapsed
+    )
+  }, error = function(e) {
+    elapsed <- proc.time()[["elapsed"]] - started
+    message("Opponent Scouting preload deferred: ", conditionMessage(e))
+    list(ok = FALSE, error = conditionMessage(e), elapsed = elapsed)
+  })
+  assign("preload_status", result, envir = .base_wally_scouting_state)
+  result
 }
 
 base_opponent_scouting_workspace_ui <- function() {
@@ -490,7 +538,7 @@ base_opponent_scouting_workspace_server <- function(
   output,
   session,
   data_dir = base_scouting_data_dir(),
-  season_source = base_scouting_season_source()
+  season_source = base_wally_scouting_season_source()
 ) {
   available_teams <- reactiveVal(NULL)
   workspace_started <- reactiveVal(FALSE)
@@ -550,6 +598,7 @@ base_opponent_scouting_workspace_server <- function(
     shinyjs::show("base-scouting-loading")
 
     session$onFlushed(function() {
+      started <- proc.time()[["elapsed"]]
       tryCatch({
         workspace <- base_wally_scouting_environment(data_dir, season_source)
         output$base_opponent_scouting_app <- shiny::renderUI({
@@ -559,6 +608,10 @@ base_opponent_scouting_workspace_server <- function(
         session$onFlushed(function() {
           updateRadioButtons(session, "scout_data_source", selected = selected_source)
           shinyjs::hide("base-scouting-loading")
+          message(
+            "Opponent Scouting team workspace ready in ",
+            sprintf("%.2f", proc.time()[["elapsed"]] - started), "s"
+          )
         }, once = TRUE)
       }, error = function(e) {
         workspace_started(FALSE)
