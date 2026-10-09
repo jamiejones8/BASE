@@ -103,6 +103,17 @@ class DeploymentChecks(unittest.TestCase):
         self.assertIn('base_source("R/config/player_health_deployment.R"', integration)
         self.assertIn('"/base-data/app_state/player-health"', integration)
 
+    def test_scouting_runtime_sources_enter_upload_and_image(self):
+        required = (
+            "!WallyApps/ScoutingApp/RickAdvanceSheet.R",
+            "!WallyApps/ScoutingApp/reference/",
+            "!WallyApps/ScoutingApp/reference/*.csv",
+        )
+        for filename in (".railwayignore", ".dockerignore"):
+            ignore_rules = (ROOT / filename).read_text(encoding="utf-8")
+            for rule in required:
+                self.assertIn(rule, ignore_rules, filename)
+
     def test_player_health_checks_valdr_not_its_internal_keyring_import(self):
         integration = (
             ROOT / "R" / "integrations" / "player_health_workspace.R"
