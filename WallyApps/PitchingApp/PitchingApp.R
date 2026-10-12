@@ -7104,6 +7104,7 @@ ui <- base_pitching_page(
         class = "mb-2 d-flex gap-2",
         downloadButton("leader_results_pdf", "Download results pdf"),
         downloadButton("leader_process_pdf", "Download Process pdf"),
+        actionButton("pitch_exclude_open", "Exclude player"),
         downloadButton("pitch_trout_pdf", "Trout Stat Sheet")
       ),
       withSpinner(DTOutput("leaderboard_table"), type = 4, color = "#501214"),
@@ -11293,9 +11294,26 @@ server <- function(input, output, session){
   }
 
   # ---- Leaderboard (all TXST pitchers; independent of sidebar) ----
+  observeEvent(input$pitch_exclude_open, {
+    players <- sort(unique(as.character(txst_df$Pitcher)))
+    players <- players[!is.na(players) & nzchar(players)]
+    showModal(modalDialog(title = "Exclude players from leaderboard",
+      selectizeInput("pitch_excluded_players", "Type player names", choices = players,
+        selected = excluded_players(), multiple = TRUE,
+        options = list(plugins = list("remove_button"), placeholder = "Search players")),
+      footer = tagList(modalButton("Cancel"), actionButton("pitch_exclude_apply", "Apply exclusions")),
+      easyClose = TRUE))
+  })
+  excluded_players <- reactiveVal(character())
+  observeEvent(input$pitch_exclude_apply, {
+    excluded_players(input$pitch_excluded_players %||% character())
+    removeModal()
+  })
   leaderboard_data <- reactive({
     d <- txst_df
     if (is.null(d) || !nrow(d)) return(d)
+    d <- d[!as.character(d$Pitcher) %in% excluded_players(), , drop = FALSE]
+
 
     # Filter out "Bad data" pitch types (keep leaderboard + exports aligned)
     if ("PitchType" %in% names(d)) {

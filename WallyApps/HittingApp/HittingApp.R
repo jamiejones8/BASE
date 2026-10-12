@@ -2003,6 +2003,7 @@ ui <- base_hitting_page(
         class = "mb-2 d-flex gap-2",
         downloadButton("leaderboard_pdf", "Download Leaderboard PDF", class = "btn btn-primary"),
         downloadButton("leaderboard_stats_pdf", "Download Stat Sheet PDF", class = "btn btn-primary"),
+        actionButton("hit_exclude_open", "Exclude player"),
         downloadButton("hit_trout_pdf", "Trout Stat Sheet", class = "btn btn-primary")
       ),
       withSpinner(DTOutput("hit_leaderboard_table"), type = 4, color = "#501214"),
@@ -4895,9 +4896,26 @@ server <- function(input, output, session){
   }) |> bindCache(input$Hitter, input$hit_Bullpens, input$Game, input$PitcherHand)
 
   # ---- Leaderboard (all TXST hitters; independent of sidebar) ----
+  observeEvent(input$hit_exclude_open, {
+    players <- sort(unique(as.character(txst_df$Batter)))
+    players <- players[!is.na(players) & nzchar(players)]
+    showModal(modalDialog(title = "Exclude players from leaderboard",
+      selectizeInput("hit_excluded_players", "Type player names", choices = players,
+        selected = excluded_players(), multiple = TRUE,
+        options = list(plugins = list("remove_button"), placeholder = "Search players")),
+      footer = tagList(modalButton("Cancel"), actionButton("hit_exclude_apply", "Apply exclusions")),
+      easyClose = TRUE))
+  })
+  excluded_players <- reactiveVal(character())
+  observeEvent(input$hit_exclude_apply, {
+    excluded_players(input$hit_excluded_players %||% character())
+    removeModal()
+  })
   leaderboard_data <- reactive({
     d <- txst_df
     if (is.null(d) || !nrow(d)) return(d)
+    d <- d[!as.character(d$Batter) %in% excluded_players(), , drop = FALSE]
+
 
     # Season filter
     season_col <- if ("SeasonTag" %in% names(d)) "SeasonTag" else if ("SeasonGroup" %in% names(d)) "SeasonGroup" else NULL

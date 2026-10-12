@@ -22,6 +22,18 @@ shiny::testServer(workspace$server, {
   invisible(output$hit_leaderboard_table)
   invisible(output$leaderboard_team_table)
   base_write_trout_stat_sheet(file.path(output_dir, "trout-hitting.pdf"), formatted, shaded, "Hitting", "PA", "2026 Season")
+  players <- unique(as.character(leaderboard_data()$Batter))
+  session$setInputs(hit_excluded_players=players[1], hit_exclude_apply=1)
+  stopifnot(!players[1] %in% leaderboard_data()$Batter)
+  session$setInputs(hit_excluded_players=players, hit_exclude_apply=2)
+  stopifnot(nrow(leaderboard_data())==0L)
+  session$setInputs(hit_excluded_players=character(), hit_exclude_apply=3)
+  stopifnot(nrow(leaderboard_data())>0L)
+  many <- formatted[rep(seq_len(nrow(formatted)),length.out=28),]
+  colors <- shaded[rep(seq_len(nrow(shaded)),length.out=28),]
+  many[[1]] <- colors[[1]] <- sprintf("Hitter %02d, Longname",1:28)
+  base_write_trout_stat_sheet(file.path(output_dir,"trout-hitting-full.pdf"),many,colors,"Hitting","PA")
+
 })
 eval(parse("scripts/tests/test_wally_pitching_integration.R"), envir = .GlobalEnv)
 shiny::testServer(workspace$server, {
@@ -35,6 +47,18 @@ shiny::testServer(workspace$server, {
   invisible(output$leaderboard_totals_table)
   ord <- order(-tables$numeric$IP, tables$numeric$Pitcher)
   base_write_trout_stat_sheet(file.path(output_dir, "trout-pitching.pdf"), tables$formatted[ord, ], tables$shaded[ord, ], "Pitching", "IP", "2026 Season")
+  players <- unique(as.character(leaderboard_data()$Pitcher))
+  session$setInputs(pitch_excluded_players=players[1], pitch_exclude_apply=1)
+  stopifnot(!players[1] %in% leaderboard_data()$Pitcher)
+  session$setInputs(pitch_excluded_players=players, pitch_exclude_apply=2)
+  stopifnot(is.null(leaderboard_tables()))
+  session$setInputs(pitch_excluded_players=character(), pitch_exclude_apply=3)
+  stopifnot(nrow(leaderboard_tables()$formatted)>0L)
+  many <- tables$formatted[rep(ord,length.out=30),]
+  colors <- tables$shaded[rep(ord,length.out=30),]
+  many[[1]] <- colors[[1]] <- sprintf("Pitcher %02d, Longname",1:30)
+  base_write_trout_stat_sheet(file.path(output_dir,"trout-pitching-full.pdf"),many,colors,"Pitching","IP")
+
 })
 # A recorded strikeout out must not be counted twice. IP uses baseball thirds.
 saved_rows <- workspace$txst_df
