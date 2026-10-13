@@ -108,8 +108,7 @@ score_pitches <- function(df) {
     spin_axis = ifelse(arm == 1, numv(SpinAxis), (360 - numv(SpinAxis)) %% 360),
     plate_x = numv(PlateLocSide) * arm * HSIGN, plate_z = numv(PlateLocHeight),
     balls = numv(Balls), strikes = numv(Strikes),
-    out_of_zone = ifelse(!(abs(numv(PlateLocSide)) <= 0.83 &
-                           dplyr::between(numv(PlateLocHeight), 1.5, 3.5)), 1L, 0L),
+    out_of_zone = ifelse(!(base_pitch_in_zone(numv(PlateLocSide), numv(PlateLocHeight))), 1L, 0L),
     stand_same = ifelse((arm == 1 & BatterSide %in% c("Right","R")) |
                         (arm == -1 & BatterSide %in% c("Left","L")), 1L, 0L))
   fb <- g %>% filter(pt %in% c("FF","FC","SI")) %>% group_by(Pitcher) %>%
@@ -243,8 +242,7 @@ prep_pitches <- function(df) {
       WhiffP  = Swing & PitchCall == "StrikeSwinging",
       Contact = Swing & PitchCall %in% c("InPlay","FoulBall","FoulBallNotFieldable",
                                          "FoulBallFieldable","FoulTip"),
-      InZone  = dplyr::between(PlateLocSide, -0.83, 0.83) &
-                dplyr::between(PlateLocHeight, 1.5, 3.5),
+      InZone  = base_pitch_in_zone(PlateLocSide, PlateLocHeight),
       OutZone = !InZone,
       Chase   = OutZone & Swing,
       BBE     = PitchCall == "InPlay" & !is.na(ExitSpeed),
@@ -435,10 +433,11 @@ zone_heat <- function(d, mode = c("freq", "whiff", "damage", "xwoba", "xwobafull
   iz <- d %>% filter(InZone)
   if (nrow(iz) == 0) return(div("No in-zone pitches for this selection.",
                                 style = "color:#888;padding:10px;"))
-  col_idx <- cut(iz$PlateLocSide,   c(-0.83, -0.277, 0.277, 0.83),
-                 labels = FALSE, include.lowest = TRUE)
-  row_idx <- cut(iz$PlateLocHeight, c(1.5, 2.17, 2.83, 3.5),
-                 labels = FALSE, include.lowest = TRUE)
+  z <- base_pitch_zone()
+  col_idx <- cut(pmin(z$xmax,pmax(z$xmin,iz$PlateLocSide)),
+                 seq(z$xmin,z$xmax,length.out=4), labels=FALSE,include.lowest=TRUE)
+  row_idx <- cut(pmin(z$ymax,pmax(z$ymin,iz$PlateLocHeight)),
+                 seq(z$ymin,z$ymax,length.out=4), labels=FALSE,include.lowest=TRUE)
   val <- matrix(NA_real_, 3, 3)
   for (r in 1:3) for (cc in 1:3) {
     sel <- which(row_idx == r & col_idx == cc)

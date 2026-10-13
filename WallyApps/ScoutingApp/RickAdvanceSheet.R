@@ -120,7 +120,7 @@ rick_table <- function(d, formatted = TRUE) {
 }
 rick_zone <- function(approach = FALSE) {
   ggplot() +
-    annotate('rect', xmin = -.708, xmax = .708, ymin = 1.5, ymax = 3.5, fill = NA, colour = '#333333', linewidth = .4) +
+    annotate('rect', xmin = base_pitch_zone()$xmin, xmax = base_pitch_zone()$xmax, ymin = base_pitch_zone()$ymin, ymax = base_pitch_zone()$ymax, fill = NA, colour = '#333333', linewidth = .4) +
     geom_segment(data = pitcher_env$home_plate_segments, aes(x=x, y=y, xend=xend, yend=yend), inherit.aes=FALSE, linewidth=.35) +
     scale_x_reverse() +
     coord_fixed(xlim=if(approach) c(1.2,-1.2) else c(2,-2), ylim=if(approach) c(0,4) else c(0,5), expand=FALSE) + theme_void(base_size=8) +
@@ -281,7 +281,7 @@ rick_sheet <- function(d, pitcher, side, notes='', shapes=list(), pitcher_hand=N
         coord_fixed(ratio=1,xlim=c(2,-2),ylim=c(0,5),expand=FALSE) +
         theme_void(base_size=8) +
         theme(plot.margin=margin(2,4,2,4),plot.title=element_text(hjust=.5,face='bold',size=8)) +
-        geom_point(data=x,aes(PlateX,PlateZ,fill=PitchType),shape=21,size=1.3,alpha=.65,na.rm=TRUE) +
+        geom_pitch_location(data=x,aes(PlateX,PlateZ,fill=PitchType),shape=21,size=1.3,alpha=.65,na.rm=TRUE) +
         scale_fill_manual(values=pitcher_env$match_pitch_colors(unique(d$PitchType)),guide='none') + labs(title=f)
       rates <- data.frame(`Usage%`=safe_ratio(nrow(x),nrow(subset)),
         `IZ%`=safe_ratio(sum(x$in_zone),sum(x$has_zone)),check.names=FALSE)

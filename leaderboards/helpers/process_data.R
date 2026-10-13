@@ -85,11 +85,8 @@ process_data <- function(df) {
     h <- df$PlateLocHeight
     s <- df$PlateLocSide
     
-    if (any(!is.na(h)) && max(h, na.rm = TRUE) < 10) h <- h * 12
-    if (any(!is.na(s)) && max(abs(s), na.rm = TRUE) < 5) s <- s * 12
-    
     df$Zone <- ifelse(
-      h >= 18.29 & h <= 44.08 & s >= -9.97 & s <= 9.97,
+      base_pitch_in_zone(s, h),
       "InZone", "OutZone"
     )
   }

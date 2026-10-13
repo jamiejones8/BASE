@@ -675,7 +675,7 @@ pitcher_summary <- function(tmilb){
         #  "PSituation" = ifelse(Balls == Strikes,"Even",PSituation),
          "Strikeout" = ifelse(KorBB == "Strikeout",TRUE,FALSE),
          "Walk" = ifelse(KorBB == "Walk",TRUE,FALSE),
-         "Zone" = dplyr::case_when(dplyr::between(PlateLocSide,-.825,.825) & dplyr::between(PlateLocHeight,1.45,3.45) ~ TRUE, TRUE ~ FALSE),
+         "Zone" = dplyr::case_when(base_pitch_in_zone(PlateLocSide, PlateLocHeight) ~ TRUE, TRUE ~ FALSE),
          "AB" = Strikeout + BIP - Sac,
          "PA" = Strikeout + BIP + Walk + HBP,
          "Strike" = CallStrike + Contact + Whiff
@@ -1266,16 +1266,16 @@ mockup_plate_plot <- function(game, side) {
   p +
     # Ordinary pitches first, then plate + strike zone, then the whiff / hard-hit
     # markers on top so they sit in front of the zone and the other dots.
-    geom_point(data = ~ dplyr::filter(.x, outcome == "Other"),
+    geom_pitch_location(data = ~ dplyr::filter(.x, outcome == "Other"),
                aes(fill = TaggedPitchType, shape = outcome, size = outcome,
                    stroke = outcome),
                colour = "black", alpha = 0.9) +
     geom_polygon(data = home_plate, aes(x, y),
                  fill = NA, colour = "#5F5F6B", linewidth = 0.7,
                  inherit.aes = FALSE) +
-    annotate("rect", xmin = -0.71, xmax = 0.71, ymin = 1.5, ymax = 3.6,
+    annotate("rect", xmin = base_pitch_zone()$xmin, xmax = base_pitch_zone()$xmax, ymin = base_pitch_zone()$ymin, ymax = base_pitch_zone()$ymax,
              fill = NA, colour = "#36363F", linewidth = 0.8) +
-    geom_point(data = ~ dplyr::filter(.x, outcome %in% c("Whiff", "Hard Hit")),
+    geom_pitch_location(data = ~ dplyr::filter(.x, outcome %in% c("Whiff", "Hard Hit")),
                aes(fill = TaggedPitchType, shape = outcome, size = outcome,
                    stroke = outcome),
                colour = "black", alpha = 0.9) +
@@ -2926,7 +2926,7 @@ overallFramingInfo <- function(catcher, df) {
   df %>% filter(Catcher == catcher) %>%
     mutate(
       PhysicalZone = if_else(
-        between(PlateLocHeight, 1.5, 3.3775) & between(PlateLocSide, -0.83083, 0.83083), 1, 0)
+        base_pitch_in_zone(PlateLocSide, PlateLocHeight), 1, 0)
     ) %>%
     summarise(
       `Strikes Won`  = sum(PhysicalZone == 0 & PitchCall == "StrikeCalled", na.rm = TRUE),
@@ -2955,7 +2955,7 @@ gameFramingInfo <- function(catcher, df, game_date) {
            PitchCall %in% c("StrikeCalled","BallCalled")) %>%
     mutate(
       PhysicalZone = if_else(
-        between(PlateLocHeight, 1.5, 3.3775) & between(PlateLocSide, -0.83083, 0.83083), 1, 0),
+        base_pitch_in_zone(PlateLocSide, PlateLocHeight), 1, 0),
       `Strike Outcome` = case_when(
         PhysicalZone == 0 & PitchCall == "StrikeCalled" ~ "Won",
         PhysicalZone == 1 & PitchCall == "BallCalled"   ~ "Lost"
@@ -2976,7 +2976,7 @@ framingPlotData <- function(catcher, df, game_date = NULL) {
   out <- out %>%
     mutate(
       PhysicalZone     = if_else(
-        between(PlateLocHeight, 1.5, 3.3775) & between(PlateLocSide, -0.83083, 0.83083), 1, 0),
+        base_pitch_in_zone(PlateLocSide, PlateLocHeight), 1, 0),
       `Strike Outcome` = case_when(
         PhysicalZone == 0 & PitchCall == "StrikeCalled" ~ "Won",
         PhysicalZone == 1 & PitchCall == "BallCalled"   ~ "Lost"
@@ -3000,9 +3000,9 @@ plot_framing <- function(plot_df, outcome_filter, plot_title) {
     geom_polygon(data = data.frame(x = c(-0.708, 0.708, 0.708, 0, -0.708),
                                    y = c(0, 0, 0.25, 0.5, 0.25)),
                  aes(x = x, y = y), fill = "grey90", color = "black") +
-    annotate("rect", xmin = -0.83083, xmax = 0.83083, ymin = 1.5, ymax = 3.3775,
+    annotate("rect", xmin = base_pitch_zone()$xmin, xmax = base_pitch_zone()$xmax, ymin = base_pitch_zone()$ymin, ymax = base_pitch_zone()$ymax,
              fill = NA, color = "black", linewidth = 1) +
-    geom_point(data = df_filtered, aes(x = `Plate Side`, y = `Plate Height`),
+    geom_pitch_location(data = df_filtered, aes(x = `Plate Side`, y = `Plate Height`),
                color = pt_color, size = ifelse(has_numbers, 6, 3), alpha = 0.9)
 
   if (has_numbers) {
@@ -3547,8 +3547,8 @@ hitter_pitch_colors <- c(
 )
 
 hitter_strike_zone <- tibble(
-  PlateLocSide   = c(-0.8303, -0.8303, 0.8303, 0.8303, -0.8303),
-  PlateLocHeight = c(1.5, 3.3775, 3.3775, 1.5, 1.5)
+  PlateLocSide   = with(base_pitch_zone(), c(xmin,xmin,xmax,xmax,xmin)),
+  PlateLocHeight = with(base_pitch_zone(), c(ymin,ymax,ymax,ymin,ymin))
 )
 
 hitter_home_plate <- data.frame(
@@ -3623,8 +3623,8 @@ make_swdec_plot <- function(df, plot_title) {
   ggplot() +
     geom_polygon(data=hitter_home_plate, aes(x=x,y=y), fill="grey85", color="black", linewidth=0.8) +
     geom_path(data=hitter_strike_zone, aes(x=PlateLocSide,y=PlateLocHeight), color="black", linewidth=1.2) +
-    geom_point(data=df, aes(x=PlateLocSide,y=PlateLocHeight,shape=DecLabel), size=6.5, color="black", alpha=0.3) +
-    geom_point(data=df, aes(x=PlateLocSide,y=PlateLocHeight,color=DecLabel,shape=DecLabel), size=5.5, alpha=0.92) +
+    geom_pitch_location(data=df, aes(x=PlateLocSide,y=PlateLocHeight,shape=DecLabel), size=6.5, color="black", alpha=0.3) +
+    geom_pitch_location(data=df, aes(x=PlateLocSide,y=PlateLocHeight,color=DecLabel,shape=DecLabel), size=5.5, alpha=0.92) +
     scale_color_manual(values=dec_colors, name=NULL, guide=guide_legend(override.aes=list(size=3.5))) +
     scale_shape_manual(values=dec_shapes, name=NULL, guide=guide_legend(override.aes=list(size=3.5))) +
     xlim(-2.5,2.5) + ylim(0,5) + coord_fixed() +
@@ -3709,9 +3709,9 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       IsWhiff = PitchCall == "StrikeSwinging",
       IsSwing = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip","InPlay"),
       IsChase = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip") &
-        (abs(PlateLocSide) > 0.8303 | PlateLocHeight < 1.5 | PlateLocHeight > 3.3775),
+        (!base_pitch_in_zone(PlateLocSide, PlateLocHeight)),
       IsBall  = PitchCall == "BallCalled" &
-        (abs(PlateLocSide) > 0.8303 | PlateLocHeight < 1.5 | PlateLocHeight > 3.3775),
+        (!base_pitch_in_zone(PlateLocSide, PlateLocHeight)),
       IsLast  = PitchCall %in% c("InPlay","HitByPitch")
     ) %>%
     summarise(
@@ -3729,7 +3729,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 
   swing_decisions <- game_hitter %>%
     mutate(
-      InZone   = PlateLocHeight>=1.5 & PlateLocHeight<=3.3775 & abs(PlateLocSide)<=0.8303,
+      InZone   = base_pitch_in_zone(PlateLocSide, PlateLocHeight),
       DidSwing = PitchCall %in% c("StrikeSwinging","FoulBallNotFieldable","FoulBall","FoulTip","InPlay"),
       SwDec = case_when(
         InZone  & PitchCall %in% c("StrikeSwinging","FoulBallNotFieldable","FoulBall","InPlay") ~ 1,
@@ -3771,7 +3771,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
       TaggedPitchType_clean = clean_hitter_pitch_type(TaggedPitchType),
       IsSwing     = PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip","InPlay"),
       IsWhiff     = PitchCall == "StrikeSwinging",
-      InZone      = abs(PlateLocSide)<=0.8303 & PlateLocHeight>=1.5 & PlateLocHeight<=3.3775,
+      InZone      = base_pitch_in_zone(PlateLocSide, PlateLocHeight),
       IsZoneWhiff = IsWhiff & InZone, IsZoneSwing = IsSwing & InZone,
       IsChase     = IsSwing & !InZone, IsOutZone = !InZone,
       IsHardHit   = PitchCall=="InPlay" & !is.na(ExitSpeed) & ExitSpeed>=95
@@ -3807,7 +3807,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
   zone_plot <- ggplot() +
     geom_polygon(data=hitter_home_plate, aes(x=x,y=y), fill="white", color="black", linewidth=0.8) +
     geom_path(data=hitter_strike_zone, aes(x=PlateLocSide,y=PlateLocHeight), color="black", linewidth=1) +
-    geom_point(data=zone_hitter,
+    geom_pitch_location(data=zone_hitter,
                aes(x=PlateLocSide, y=PlateLocHeight, fill=TaggedPitchType_clean, shape=ContactType),
                size=5, alpha=0.90, color="black", stroke=0.8) +
     geom_text(data=zone_hitter,
@@ -3862,7 +3862,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
 
   season_swing_decisions <- season_hitter %>%
     mutate(
-      InZone   = PlateLocHeight>=1.5 & PlateLocHeight<=3.3775 & abs(PlateLocSide)<=0.8303,
+      InZone   = base_pitch_in_zone(PlateLocSide, PlateLocHeight),
       DidSwing = PitchCall %in% c("StrikeSwinging","FoulBallNotFieldable","FoulBall","FoulTip","InPlay"),
       SwDec=case_when(
         InZone  & PitchCall %in% c("StrikeSwinging","FoulBallNotFieldable","FoulBall","InPlay") ~ 1,
@@ -3912,10 +3912,10 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
         IsSwing=PitchCall %in% c("StrikeSwinging","FoulBall","FoulBallNotFieldable","FoulTip","InPlay"),
         IsContact=PitchCall %in% c("FoulBall","FoulBallNotFieldable","FoulTip","InPlay"),
         IsOutZone=!is.na(PlateLocSide)&!is.na(PlateLocHeight)&
-          (abs(PlateLocSide)>0.8303|PlateLocHeight<1.5|PlateLocHeight>3.3775),
+          (!base_pitch_in_zone(PlateLocSide, PlateLocHeight)),
         IsChase=IsSwing&IsOutZone,
         InZone=!is.na(PlateLocSide)&!is.na(PlateLocHeight)&
-          abs(PlateLocSide)<=0.8303&PlateLocHeight>=1.5&PlateLocHeight<=3.3775,
+          base_pitch_in_zone(PlateLocSide, PlateLocHeight),
         IsWhiff=PitchCall=="StrikeSwinging",
         IsZoneSwing=IsSwing&InZone, IsZoneWhiff=IsWhiff&InZone,
         IsHardHit=PitchCall=="InPlay"&!is.na(ExitSpeed)&ExitSpeed>=95,
@@ -3964,15 +3964,15 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
           stat_density_2d(aes(fill=after_stat(density)),geom="raster",contour=FALSE,interpolate=TRUE) +
           scale_fill_gradient(low="lightblue",high="red")
       } else {
-        p <- p + geom_point(color = "#501214", alpha = 0.45, size = 1.8)
+        p <- p + geom_pitch_location(color = "#501214", alpha = 0.45, size = 1.8)
       }
       p <- p +
         geom_path(data=hitter_strike_zone,aes(x=PlateLocSide,y=PlateLocHeight),color="black",linewidth=1,inherit.aes=FALSE) +
         geom_polygon(data=hitter_home_plate,aes(x=x,y=y),fill="white",color="black",linewidth=0.8,inherit.aes=FALSE)
       if (nrow(whiff_data)>0)
-        p <- p+geom_point(data=whiff_data,aes(x=PlateLocSide,y=PlateLocHeight),shape=4,size=2.5,color="black",stroke=1,inherit.aes=FALSE)
+        p <- p+geom_pitch_location(data=whiff_data,aes(x=PlateLocSide,y=PlateLocHeight),shape=4,size=2.5,color="black",stroke=1,inherit.aes=FALSE)
       if (nrow(hh_data)>0)
-        p <- p+geom_point(data=hh_data,aes(x=PlateLocSide,y=PlateLocHeight),shape=23,size=2.5,color="white",fill=NA,stroke=1,inherit.aes=FALSE)
+        p <- p+geom_pitch_location(data=hh_data,aes(x=PlateLocSide,y=PlateLocHeight),shape=23,size=2.5,color="white",fill=NA,stroke=1,inherit.aes=FALSE)
       p+xlim(-2.5,2.5)+ylim(0,5)+coord_fixed()+labs(title=grp)+theme_minimal()+
         theme(legend.position="none",plot.title=element_text(hjust=0.5,size=13,face="bold"),
               axis.text=element_blank(),axis.ticks=element_blank(),axis.title=element_blank(),panel.grid=element_blank())

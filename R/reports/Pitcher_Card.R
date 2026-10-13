@@ -204,7 +204,7 @@ pcard_pitch_hit_metrics <- function(pitcher_data) {
       IsStrike  = PitchCall %in% c("StrikeCalled","StrikeSwinging","FoulBall",
                                    "FoulBallNotFieldable","FoulBallFieldable","FoulTip","InPlay"),
       InZone    = !is.na(PlateLocSide) & !is.na(PlateLocHeight) &
-        abs(PlateLocSide) <= 0.83 & PlateLocHeight >= 1.5 & PlateLocHeight <= 3.5
+        base_pitch_in_zone(PlateLocSide, PlateLocHeight)
     )
 
   swing_summary <- d %>%
@@ -333,8 +333,8 @@ pcard_home_plate_shape <- data.frame(
 )
 
 pcard_strike_zone_box <- data.frame(
-  x = c(-0.83, -0.83, 0.83, 0.83, -0.83),
-  y = c(1.5, 3.5, 3.5, 1.5, 1.5)
+  x = with(base_pitch_zone(), c(xmin,xmin,xmax,xmax,xmin)),
+  y = with(base_pitch_zone(), c(ymin,ymax,ymax,ymin,ymin))
 )
 
 pcard_location_plot <- function(pitcher_data, side = c("Left", "Right")) {
@@ -368,14 +368,14 @@ pcard_location_plot <- function(pitcher_data, side = c("Left", "Right")) {
   }
 
   ggplot(d, aes(x = -PlateLocSide, y = PlateLocHeight, fill = TaggedPitchType_clean)) +
-    geom_point(data = ~ dplyr::filter(.x, outcome == "Other"),
+    geom_pitch_location(data = ~ dplyr::filter(.x, outcome == "Other"),
                aes(shape = outcome, size = outcome, stroke = outcome),
                colour = "black", alpha = 0.85) +
     geom_polygon(data = pcard_home_plate_shape, aes(x = x, y = y),
                  fill = NA, colour = "#5F5F6B", linewidth = 0.7, inherit.aes = FALSE) +
-    annotate("rect", xmin = -0.71, xmax = 0.71, ymin = 1.5, ymax = 3.6,
+    annotate("rect", xmin = base_pitch_zone()$xmin, xmax = base_pitch_zone()$xmax, ymin = base_pitch_zone()$ymin, ymax = base_pitch_zone()$ymax,
              fill = NA, colour = "#36363F", linewidth = 0.8) +
-    geom_point(data = ~ dplyr::filter(.x, outcome %in% c("Whiff", "Hard Hit")),
+    geom_pitch_location(data = ~ dplyr::filter(.x, outcome %in% c("Whiff", "Hard Hit")),
                aes(shape = outcome, size = outcome, stroke = outcome),
                colour = "black", alpha = 0.9) +
     scale_fill_manual(values = pcard_pitch_colors, na.value = "#888888") +

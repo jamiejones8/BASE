@@ -396,7 +396,7 @@ home_plate_segments <- data.frame(
   x=c(0,0.71,0.71,0,-0.71,-0.71), y=c(0.15,0.15,0.3,0.5,0.3,0.15),
   xend=c(0.71,0.71,0,-0.71,-0.71,0), yend=c(0.15,0.3,0.5,0.3,0.15,0.15)
 )
-strike_zone <- data.frame(xmin=-0.71, xmax=0.71, ymin=1.60, ymax=3.40)
+strike_zone <- base_pitch_zone()
 HEATMAP_ZONE_SCALE <- 1.75
 HEATMAP_HEART_INSET <- 0.25
 scale_heatmap_x <- function(x) x * HEATMAP_ZONE_SCALE
@@ -602,11 +602,11 @@ normalize_plate_coord <- function(vec, colname){
 derive_zone_inches <- function(d){
   h <- if ("PlateLocHeight" %in% names(d)) to_num(d$PlateLocHeight) else d$plate_z
   s <- if ("PlateLocSide"   %in% names(d)) to_num(d$PlateLocSide)   else d$plate_x
-  h <- ifelse(is.finite(h) & h < 10, h * 12, h)
-  s <- ifelse(is.finite(s) & abs(s) < 5, s * 12, s)
+  h <- h * 12
+  s <- s * 12
   dplyr::case_when(
     !is.finite(h) | !is.finite(s) ~ NA,
-    h >= 18.29 & h <= 44.08 & s >= -9.97 & s <= 9.97 ~ TRUE,
+    base_pitch_in_zone(s, h, "inches") ~ TRUE,
     TRUE ~ FALSE
   )
 }
@@ -662,8 +662,7 @@ swing_table <- function(d, balls_col, strikes_col){
       strikes_b4 = strikes_b4_raw,
       pre2k      = is.finite(strikes_b4) & strikes_b4 < 2,
       two_k      = is.finite(strikes_b4) & strikes_b4 >= 2,
-      in_zone    = if ("in_zone" %in% names(.)) as.logical(.data$in_zone)
-      else (dplyr::between(plate_z, 1.60, 3.40) & dplyr::between(plate_x, -0.71, 0.71))
+      in_zone    = base_pitch_in_zone(plate_x, plate_z)
     )
 }
 
@@ -3565,16 +3564,14 @@ local({
         `IZ-VAA`   = ifelse(
           sum(
             is.finite(PlateX) & is.finite(PlateZ) &
-              dplyr::between(PlateX, -0.708, 0.708) &
-              dplyr::between(PlateZ, 1.5, 3.5) &
+              base_pitch_in_zone(PlateX, PlateZ) &
               is.finite(VAA),
             na.rm = TRUE
           ) > 0,
           mean(
             VAA[
               is.finite(PlateX) & is.finite(PlateZ) &
-                dplyr::between(PlateX, -0.708, 0.708) &
-                dplyr::between(PlateZ, 1.5, 3.5)
+                base_pitch_in_zone(PlateX, PlateZ)
             ],
             na.rm = TRUE
           ),
@@ -3623,8 +3620,7 @@ local({
   }
   pitcher_zone_flag <- function(dfp) {
     is.finite(dfp$PlateX) & is.finite(dfp$PlateZ) &
-      dplyr::between(dfp$PlateX, -0.708, 0.708) &
-      dplyr::between(dfp$PlateZ, 1.5, 3.5)
+      base_pitch_in_zone(dfp$PlateX, dfp$PlateZ)
   }
   pitch_results_table_raw <- function(dfp) {
     dfp <- dfp %>%
@@ -4154,7 +4150,7 @@ local({
     }
     
     # Catcher's POV strike zone + plate (HittingApp style)
-    zone <- data.frame(xmin = -0.708, xmax = 0.708, ymin = 1.5, ymax = 3.5)
+    zone <- base_pitch_zone()
     
     nrows_facets <- if (isTRUE(compact)) 1 else if (length(all_levels) <= 5) 1 else 2
     facet_ncol <- if (isTRUE(compact)) length(all_levels) else NULL
@@ -4173,7 +4169,7 @@ local({
         n = 160,
         na.rm = TRUE
       ) +
-      geom_point(data = d_scatter,
+      geom_pitch_location(data = d_scatter,
                  aes(x = PlateX, y = PlateZ, color = PitchType),
                  size = point_size, alpha = 0.75, na.rm = TRUE) +
       facet_wrap(~ PitchType, nrow = nrows_facets,
@@ -4526,17 +4522,10 @@ pitcher_bust_zone_flag <- function(d){
     return(pitcher_env$pitcher_zone_flag(d))
   }
   is.finite(d$PlateX) & is.finite(d$PlateZ) &
-    dplyr::between(d$PlateX, -0.708, 0.708) &
-    dplyr::between(d$PlateZ, 1.5, 3.5)
+    base_pitch_in_zone(d$PlateX, d$PlateZ)
 }
 
 pitcher_bust_in_zone <- function(d){
-  if ("InZone" %in% names(d)) {
-    return(pitcher_bust_flag(d$InZone))
-  }
-  if ("inZone" %in% names(d)) {
-    return(pitcher_bust_flag(d$inZone))
-  }
   pitcher_bust_zone_flag(d)
 }
 
@@ -5188,10 +5177,10 @@ ui <- base_scouting_page(
 )
 
 # -------------------- Server --------------------
-server <- function(input, output, session){
+server <- function(input, output, session, initial_source = "season"){
 
   selected_source <- reactive({
-    id <- input$scout_data_source %||% "season"
+    id <- input$scout_data_source %||% initial_source
     if (id == "season") return(SCOUTING_SEASON_SOURCE)
     if (id == "csv") return(NULL)
     paths <- base_team_season_import_paths()
@@ -5199,7 +5188,7 @@ server <- function(input, output, session){
     base_scouting_season_source(paths[[id]])
   })
   season_mode <- reactive(!is.null(SCOUTING_SEASON_SOURCE) &&
-    !identical(input$scout_data_source %||% "season", "csv"))
+    !identical(input$scout_data_source %||% initial_source, "csv"))
   selected_season_team <- reactive({
     input$scout_team %||% input$base_scouting_team %||% ""
   })

@@ -694,3 +694,5 @@ base_brand_css <- function(include_leaderboards = TRUE) {
 
 # Shared labels and spelling corrections used by embedded workspaces.
 base_source("R/data/game_labels.R", local = FALSE)
+
+base_source("R/plots/pitch_geometry.R", local = FALSE)

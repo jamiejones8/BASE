@@ -133,24 +133,14 @@ is_walk_on_player_name <- function(x) {
 }
 
 # -------------------- Zone logic helpers (INCHES) --------------------
-zone_h_in <- function(h){
-  h <- to_num(h)
-  if (!length(h)) return(h)
-  q90 <- suppressWarnings(stats::quantile(h, 0.90, na.rm = TRUE))
-  if (is.finite(q90) && q90 < 10) h <- h * 12
-  h
+zone_h_in <- function(h) {
+  to_num(h) * 12
 }
-zone_s_in <- function(s){
-  s <- to_num(s)
-  if (!length(s)) return(s)
-  q90 <- suppressWarnings(stats::quantile(abs(s), 0.90, na.rm = TRUE))
-  if (is.finite(q90) && q90 < 5) s <- s * 12
-  s
+zone_s_in <- function(s) {
+  to_num(s) * 12
 }
 in_zone_inches <- function(s_in, h_in){
-  is.finite(s_in) & is.finite(h_in) &
-    dplyr::between(h_in, 18.29, 44.08) &
-    dplyr::between(s_in, -9.97, 9.97)
+  base_pitch_in_zone(s_in, h_in, "inches") %in% TRUE
 }
 
 # Ball-in-play detector (excludes BB/HBP/K/interference)
@@ -345,7 +335,6 @@ if (!("Zone" %in% names(df))) df$Zone <- NA_character_
 df <- df %>%
   dplyr::mutate(
     Zone = dplyr::case_when(
-      !is.na(.data$Zone) ~ as.character(.data$Zone),
       is.na(.data$plate_z_in) | is.na(.data$plate_x_in) ~ NA_character_,
       in_zone_inches(.data$plate_x_in, .data$plate_z_in) ~ "InZone",
       TRUE ~ "OutZone"
@@ -842,7 +831,7 @@ home_plate_segments <- data.frame(
   home_plate_segments$y    <- mid - home_plate_segments$y
   home_plate_segments$yend <- mid - home_plate_segments$yend
 }
-strike_zone <- data.frame(xmin=-0.71, xmax=0.71, ymin=1.60, ymax=3.40)
+strike_zone <- base_pitch_zone()
 
 # -------------------- Simple 9-bucket coloring (local rank) --------------------
 parse_num <- function(v) { if (is.numeric(v)) v else suppressWarnings(readr::parse_number(as.character(v))) }
@@ -1188,7 +1177,6 @@ leader_date_max <- if (length(leader_date_vec)) max(leader_date_vec) else NULL
 # --- compute in_zone (if not already present) ---
 .calc_in_zone_logical <- function(d){
   n <- nrow(d)
-  if ("in_zone" %in% names(d) && is.logical(d$in_zone)) return(d$in_zone)
   
   sx_in <- if ("plate_x_in" %in% names(d)) to_num(d$plate_x_in) else rep(NA_real_, n)
   hz_in <- if ("plate_z_in" %in% names(d)) to_num(d$plate_z_in) else rep(NA_real_, n)
@@ -3281,7 +3269,7 @@ aar_strike_zone_plot <- function(d){
   
   ggplot(dd, aes(plate_x, plate_z)) +
     base_zone +
-    geom_point(
+    geom_pitch_location(
       aes(fill = swing_take, shape = PitchTypePlot),
       colour = "black", size = 3, alpha = 0.95, stroke = 0.9, na.rm = TRUE
     ) +
@@ -3329,8 +3317,7 @@ framing_zone_type <- function(s_in, h_in){
   
   in_heart <- is.finite(abs_s) & is.finite(h_in) &
     (abs_s <= 6.7) & dplyr::between(h_in, 22, 38)
-  in_zone <- is.finite(abs_s) & is.finite(h_in) &
-    (abs_s <= 10.0) & dplyr::between(h_in, 18, 42) & !in_heart
+  in_zone <- (base_pitch_in_zone(s_in, h_in, "inches") %in% TRUE) & !in_heart
   
   in_shadow <- is.finite(abs_s) & is.finite(h_in) & (
     # side bands
@@ -3353,8 +3340,7 @@ framing_in_zone <- function(s_in, h_in){
   s_in <- to_num(s_in)
   h_in <- to_num(h_in)
   abs_s <- abs(s_in)
-  is.finite(abs_s) & is.finite(h_in) &
-    (abs_s <= 10.0) & dplyr::between(h_in, 18, 42)
+  (base_pitch_in_zone(s_in, h_in, "inches") %in% TRUE)
 }
 
 framing_zone_stats <- function(d, mode = c("ball_to_strike","strike_to_ball")){
@@ -3475,10 +3461,7 @@ catcher_framing_zone_plot <- function(d, title = NULL){
     xmin = -6.7/12, xmax = 6.7/12,
     ymin = 22/12, ymax = 38/12
   )
-  zone_box <- data.frame(
-    xmin = -10/12, xmax = 10/12,
-    ymin = 18/12, ymax = 42/12
-  )
+  zone_box <- base_pitch_zone()
   shadow_outline <- data.frame(
     xmin = -13.3/12, xmax = 13.3/12,
     ymin = 14/12, ymax = 46/12
@@ -3546,7 +3529,7 @@ catcher_framing_zone_plot <- function(d, title = NULL){
               inherit.aes = FALSE, fill = NA, colour = "#0B7A3B", linetype = "dashed", linewidth = 1.0) +
     geom_segment(data = home_plate_segments, aes(x = x, y = y, xend = xend, yend = yend),
                  inherit.aes = FALSE, colour = "black", linewidth = 0.9) +
-    geom_point(
+    geom_pitch_location(
       aes(fill = PitchType),
       shape = 21, size = 7.4, colour = "black", stroke = 0.9, alpha = 0.95, show.legend = TRUE
     ) +
@@ -4783,7 +4766,7 @@ plot_sd_zone_points <- function(d, title = NULL){
     geom_segment(data = home_plate_segments,
                  aes(x = x, y = y, xend = xend, yend = yend),
                  inherit.aes = FALSE, colour = "black", linewidth = 0.9) +
-    geom_point(size = 3.2, alpha = 0.85) +
+    geom_pitch_location(size = 3.2, alpha = 0.85) +
     coord_fixed(xlim = zone_limits$x, ylim = zone_limits$z, expand = FALSE) +
     scale_x_reverse() +
     scale_color_manual(
@@ -7422,7 +7405,7 @@ server <- function(input, output, session){
       geom_point(data = legend_dec,  mapping = aes(x = x, y = y, fill = Decision),
                  inherit.aes = FALSE, shape = 21, alpha = 0, show.legend = c(shape = FALSE, fill = TRUE)) +
       # points + numbers
-      geom_point(aes(shape = TypeGroup, fill = Decision),
+      geom_pitch_location(aes(shape = TypeGroup, fill = Decision),
                  size = 8, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
       geom_text(aes(label = PitchNum), size = 4.8, fontface = 700, color = "white") +
       scale_shape_manual(
@@ -7536,7 +7519,7 @@ server <- function(input, output, session){
                    inherit.aes = FALSE, fill = NA, color = "black", linewidth = 0.8) +
       geom_hline(yintercept = seq(10, 50, by = 10), linetype = "dashed",
                  color = "grey70", linewidth = 0.4) +
-      geom_point(aes(shape = TypeGroup, fill = Decision),
+      geom_pitch_location(units = "inches", aes(shape = TypeGroup, fill = Decision),
                  size = 5.2, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
       geom_text(aes(label = PitchNum), size = 3.2, fontface = 700, color = "white", show.legend = FALSE) +
       scale_shape_manual(values = c("HARD"=21, "BREAK"=24, "SOFT"=22), drop = FALSE) +
@@ -7982,7 +7965,7 @@ server <- function(input, output, session){
       }
       
       # ---------- STRIKE ZONE PLOT (bigger marks ~ +40%) ----------
-      strike_zone <- data.frame(xmin = -0.71, xmax = 0.71, ymin = 1.60, ymax = 3.40)
+      strike_zone <- base_pitch_zone()
       if (!exists("home_plate_segments", inherits = TRUE)) {
         home_plate_segments <- data.frame(
           x    = c(-0.85,-0.50, 0.50, 0.85, 0.50),
@@ -8009,7 +7992,7 @@ server <- function(input, output, session){
                      inherit.aes = FALSE, linetype="dashed", alpha=0.35) +
         geom_segment(data = thirds_h, aes(x=x, y=y, xend=xend, yend=yend),
                      inherit.aes = FALSE, linetype="dashed", alpha=0.35) +
-        geom_point(aes(shape = TypeGroup, fill = Decision),
+        geom_pitch_location(aes(shape = TypeGroup, fill = Decision),
                    size = 7.8, color = "black", stroke = 0.7, alpha = 0.95, show.legend = TRUE) +
         geom_text(aes(label = PitchNum), size = 5.3, fontface = 700, color = "white") +
         scale_shape_manual(
@@ -8231,7 +8214,7 @@ server <- function(input, output, session){
                        inherit.aes = FALSE, fill = NA, color = "black", linewidth = 0.8) +
           geom_hline(yintercept = seq(10, 50, by = 10), linetype = "dashed",
                      color = "grey70", linewidth = 0.4) +
-          geom_point(aes(shape = TypeGroup, fill = Decision),
+          geom_pitch_location(units = "inches", aes(shape = TypeGroup, fill = Decision),
                      size = 5.2, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
           geom_text(aes(label = PitchNum), size = 3.2, fontface = 700, color = "white", show.legend = FALSE) +
           scale_shape_manual(
@@ -8301,7 +8284,7 @@ server <- function(input, output, session){
           df %>%
             dplyr::mutate(
               is_swing = grepl("(?i)swing|foul|in\\s*play", nz_chr(PitchCall)),
-              in_zone  = !grepl("(?i)ball", nz_chr(PitchCall))  # coarse fallback
+              in_zone  = .calc_in_zone_logical(.)
             )
         }
       }
@@ -8698,7 +8681,7 @@ server <- function(input, output, session){
   # ===== TruMedia-style ZONE KDE heatmap (RASTER only; no points; no contours) =====
   # Defensive fallbacks if not already defined
   if (!exists("strike_zone", inherits = TRUE)) {
-    strike_zone <- data.frame(xmin = -0.71, xmax = 0.71, ymin = 1.60, ymax = 3.40)
+    strike_zone <- base_pitch_zone()
   }
   if (!exists("home_plate_segments", inherits = TRUE)) {
     home_plate_segments <- data.frame(
@@ -9010,7 +8993,7 @@ server <- function(input, output, session){
     
     ggplot(dd, aes(plate_x, plate_z)) +
       base_zone +
-      geom_point(
+      geom_pitch_location(
         aes(fill = panel),
         shape = 21, size = 2.6, alpha = 0.9,
         color = "black", stroke = 0.3, show.legend = FALSE
@@ -9877,7 +9860,7 @@ server <- function(input, output, session){
         yintercept = seq(10, 50, by = 10),
         linetype = "dashed", color = "grey70", linewidth = 0.4
       ) +
-      geom_point(size = 3.2, alpha = 0.9) +
+      geom_pitch_location(units = "inches", size = 3.2, alpha = 0.9) +
       scale_color_manual(values = cols, name = NULL) +
       coord_fixed(xlim = c(-20, 20), ylim = c(0, 50), expand = FALSE) +
       labs(title = title %||% "Contact Point", x = "Point of Contact Side (in)", y = "Point of Contact Depth (in)") +

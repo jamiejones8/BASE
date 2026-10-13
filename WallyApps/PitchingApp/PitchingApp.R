@@ -423,13 +423,13 @@ derive_zone_inches <- function(df) {
   h <- suppressWarnings(readr::parse_number(as.character(df$PlateLocHeight)))
   s <- suppressWarnings(readr::parse_number(as.character(df$PlateLocSide)))
   
-  # Convert per-row: values that look like feet → inches; leave inches as-is
-  h <- ifelse(is.finite(h) & h < 10, h * 12, h)
-  s <- ifelse(is.finite(s) & abs(s) < 5, s * 12, s)
+  # TrackMan PlateLoc coordinates are feet; do not guess units from a pitch value.
+  h <- h * 12
+  s <- s * 12
   
   dplyr::case_when(
     !is.finite(h) | !is.finite(s) ~ NA,
-    h >= 18.29 & h <= 44.08 & s >= -9.97 & s <= 9.97 ~ TRUE,
+    base_pitch_in_zone(s, h, "inches") ~ TRUE,
     TRUE ~ FALSE
   )
 }
@@ -2034,10 +2034,7 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
     xmin = -6.7/12, xmax = 6.7/12,
     ymin = 22/12, ymax = 38/12
   )
-  zone_box <- data.frame(
-    xmin = -10/12, xmax = 10/12,
-    ymin = 18/12, ymax = 42/12
-  )
+  zone_box <- base_pitch_zone()
   shadow_outline <- data.frame(
     xmin = -13.3/12, xmax = 13.3/12,
     ymin = 14/12, ymax = 46/12
@@ -2172,7 +2169,7 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
     ) +
       zone_layers +
       batter_layers +
-      geom_point(
+      geom_pitch_location(
         color = "black",
         size = point_size,
         stroke = 0.6,
@@ -2195,7 +2192,7 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
     ) +
       zone_layers +
       batter_layers +
-      geom_point(
+      geom_pitch_location(
         alpha = 0.9,
         size = point_size,
         stroke = 1,
@@ -4264,25 +4261,15 @@ pick_first <- function(cands, in_df) {
 }
 
 zone_h_in <- function(h) {
-  h <- to_num(h)
-  if (!length(h)) return(h)
-  q90 <- suppressWarnings(stats::quantile(h, 0.90, na.rm = TRUE))
-  if (is.finite(q90) && q90 < 10) h <- h * 12
-  h
+  to_num(h) * 12
 }
 
 zone_s_in <- function(s) {
-  s <- to_num(s)
-  if (!length(s)) return(s)
-  q90 <- suppressWarnings(stats::quantile(abs(s), 0.90, na.rm = TRUE))
-  if (is.finite(q90) && q90 < 5) s <- s * 12
-  s
+  to_num(s) * 12
 }
 
 in_zone_inches <- function(s_in, h_in) {
-  is.finite(s_in) & is.finite(h_in) &
-    dplyr::between(h_in, 18.29, 44.08) &
-    dplyr::between(s_in, -9.97, 9.97)
+  base_pitch_in_zone(s_in, h_in, "inches") %in% TRUE
 }
 
 canon_pitch_call <- function(x) {
@@ -5183,7 +5170,7 @@ home_plate_segments <- data.frame(
   x=c(0,0.71,0.71,0,-0.71,-0.71), y=c(0.15,0.15,0.3,0.5,0.3,0.15),
   xend=c(0.71,0.71,0,-0.71,-0.71,0), yend=c(0.15,0.3,0.5,0.3,0.15,0.15)
 )
-stroke_zone_tmp <- data.frame(xmin=-0.71, xmax=0.71, ymin=1.60, ymax=3.40)
+stroke_zone_tmp <- base_pitch_zone()
 # keep your original name
 strike_zone <- stroke_zone_tmp
 
@@ -5194,8 +5181,7 @@ framing_zone_type <- function(s_in, h_in) {
   
   in_heart <- is.finite(abs_s) & is.finite(h_in) &
     (abs_s <= 6.7) & dplyr::between(h_in, 22, 38)
-  in_zone <- is.finite(abs_s) & is.finite(h_in) &
-    (abs_s <= 10.0) & dplyr::between(h_in, 18, 42) & !in_heart
+  in_zone <- (base_pitch_in_zone(s_in, h_in, "inches") %in% TRUE) & !in_heart
   in_shadow <- is.finite(abs_s) & is.finite(h_in) & (
     (abs_s > 10.0 & abs_s <= 13.3 & dplyr::between(h_in, 18, 42)) |
       (abs_s <= 13.3 & dplyr::between(h_in, 42, 46)) |
@@ -5214,8 +5200,7 @@ framing_in_zone <- function(s_in, h_in) {
   s_in <- to_num(s_in)
   h_in <- to_num(h_in)
   abs_s <- abs(s_in)
-  is.finite(abs_s) & is.finite(h_in) &
-    (abs_s <= 10.0) & dplyr::between(h_in, 18, 42)
+  (base_pitch_in_zone(s_in, h_in, "inches") %in% TRUE)
 }
 
 framing_zone_stats <- function(d, mode = c("ball_to_strike", "strike_to_ball")) {
@@ -5319,7 +5304,7 @@ catcher_framing_zone_plot <- function(d, title = NULL) {
   ylim <- c(-0.5, 4.5)
   
   heart_box <- data.frame(xmin = -6.7 / 12, xmax = 6.7 / 12, ymin = 22 / 12, ymax = 38 / 12)
-  zone_box <- data.frame(xmin = -10 / 12, xmax = 10 / 12, ymin = 18 / 12, ymax = 42 / 12)
+  zone_box <- base_pitch_zone()
   shadow_outline <- data.frame(xmin = -13.3 / 12, xmax = 13.3 / 12, ymin = 14 / 12, ymax = 46 / 12)
   
   if (!nrow(d)) {
@@ -5382,7 +5367,7 @@ catcher_framing_zone_plot <- function(d, title = NULL) {
               inherit.aes = FALSE, fill = NA, colour = "#0B7A3B", linetype = "dashed", linewidth = 1.0) +
     geom_segment(data = home_plate_segments, aes(x = x, y = y, xend = xend, yend = yend),
                  inherit.aes = FALSE, colour = "black", linewidth = 0.9) +
-    geom_point(aes(fill = PitchType),
+    geom_pitch_location(aes(fill = PitchType),
                shape = 21, size = 7.4, colour = "black", stroke = 0.9, alpha = 0.95, show.legend = TRUE) +
     geom_text(aes(label = PitchNumSub), size = 4.4, fontface = "bold", color = "white") +
     coord_fixed(xlim = xlim, ylim = ylim, expand = FALSE) +
@@ -7804,8 +7789,8 @@ server <- function(input, output, session){
     d$ZoneFlag <- derive_zone_inches(d)
     h_in <- suppressWarnings(readr::parse_number(as.character(d$PlateLocHeight)))
     h_in <- ifelse(is.finite(h_in) & h_in < 10, h_in * 12, h_in)
-    z_min <- 18.29
-    z_max <- 44.08
+    z_min <- base_pitch_zone("inches")$ymin
+    z_max <- base_pitch_zone("inches")$ymax
     z_third <- (z_max - z_min) / 3
     d$TopThirdFlag <- is.finite(h_in) & h_in >= (z_min + 2 * z_third) & h_in <= z_max
     d$BottomThirdFlag <- is.finite(h_in) & h_in >= z_min & h_in <= (z_min + z_third)
@@ -7988,7 +7973,7 @@ server <- function(input, output, session){
       yend = c(-0.5, -0.25, 0.0, -0.25, -0.5)
     )
     ggplot(loc, aes(PlateLocSidePlot, PlateLocHeightPlot)) +
-      geom_point(aes(fill = PitchType_plot), shape = 21, size = 3.3, color = "black", stroke = 0.35) +
+      geom_pitch_location(aes(fill = PitchType_plot), shape = 21, size = 3.3, color = "black", stroke = 0.35) +
       geom_text(aes(label = BullpenPitchNumber, color = PitchLabelColor), size = 1.5, fontface = "bold", show.legend = FALSE) +
       scale_fill_manual(values = pitch_colors, limits = names(pitch_colors), drop = FALSE) +
       scale_color_identity() +
@@ -13388,7 +13373,7 @@ server <- function(input, output, session){
       )
     validate(need(nrow(d) > 0, "No data."))
     ggplot(d, aes(PlateLocSide, PlateLocHeight, color = PitchType)) +
-      geom_point(alpha = 0.9, size = 2) +
+      geom_pitch_location(alpha = 0.9, size = 2) +
       scale_color_manual(values = pitch_colors, drop = FALSE) +
       labs(title = "Strike Zone — vLHH", y = "Vertical", x = "Horizontal") +
       theme_minimal(base_size = 12) +
@@ -13411,7 +13396,7 @@ server <- function(input, output, session){
       )
     validate(need(nrow(d) > 0, "No data."))
     ggplot(d, aes(PlateLocSide, PlateLocHeight, color = PitchType)) +
-      geom_point(alpha = 0.9, size = 2) +
+      geom_pitch_location(alpha = 0.9, size = 2) +
       scale_color_manual(values = pitch_colors, drop = FALSE) +
       labs(title = "Strike Zone — vRHH", y = "Vertical", x = "Horizontal") +
       
@@ -14622,8 +14607,8 @@ function(el,x){
     d <- dataFilter()
     
     # --- Rulebook zone height thirds (inches); plate side ignored ---
-    z_min <- 18.29
-    z_max <- 44.08
+    z_min <- base_pitch_zone("inches")$ymin
+    z_max <- base_pitch_zone("inches")$ymax
     z_third <- (z_max - z_min) / 3
     h_in <- suppressWarnings(readr::parse_number(as.character(d$PlateLocHeight)))
     # Convert feet -> inches when values look like feet
@@ -15668,40 +15653,14 @@ function(el,x){
       ) %>%
       dplyr::filter(is.finite(PlateLocSide), is.finite(PlateLocHeight))
     
-    p <- plotly::plot_ly()
-    
-    if (nrow(d) > 0) {
-      p <- p %>%
-        add_trace(
-          data = d,
-          x = ~PlateLocSide, y = ~PlateLocHeight,
-          type = "scatter", mode = "markers",
-          color = ~PitchType_plot, colors = pitch_colors,
-          marker = list(size = 6, opacity = 0.35),
-          text = ~HoverText,
-          hovertemplate = "%{text}<extra></extra>",
-          showlegend = FALSE
-        )
-    }
-    
-    if (nrow(avg) > 0) {
-      for (i in seq_len(nrow(avg))) {
-        row <- avg[i, ]
-        p <- p %>%
-          add_trace(
-            data = row,
-            x = ~PlateLocSide, y = ~PlateLocHeight,
-            type = "scatter", mode = "markers",
-            color = ~PitchType_plot, colors = pitch_colors,
-            marker = list(size = 16, opacity = 1, line = list(color = "black", width = 0.6)),
-            text = ~paste0(PitchType_plot, " avg location"),
-            hoverinfo = "text",
-            showlegend = FALSE,
-            inherit = FALSE
-          )
-      }
-    }
-    
+    location <- ggplot(d, aes(PlateLocSide, PlateLocHeight, colour = PitchType_plot)) +
+      geom_pitch_location(alpha = .35) +
+      geom_pitch_location(data = avg, shape = 1, alpha = 1) +
+      scale_colour_manual(values = pitch_colors) +
+      coord_fixed(xlim = c(-1.07,1.07), ylim = c(.9,4.1), expand = FALSE) +
+      theme_void() + theme(legend.position = "none")
+    p <- plotly::ggplotly(location)
+
     zone_shapes <- list(
       list(type = "rect",
            x0 = strike_zone$xmin, x1 = strike_zone$xmax,

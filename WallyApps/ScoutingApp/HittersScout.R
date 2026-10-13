@@ -303,7 +303,7 @@ home_plate_segments <- data.frame(
   x=c(0,0.71,0.71,0,-0.71,-0.71), y=c(0.15,0.15,0.3,0.5,0.3,0.15),
   xend=c(0.71,0.71,0,-0.71,-0.71,0), yend=c(0.15,0.3,0.5,0.3,0.15,0.15)
 )
-strike_zone <- data.frame(xmin=-0.71, xmax=0.71, ymin=1.60, ymax=3.40)
+strike_zone <- base_pitch_zone()
 wblyrm_palette <- c("#ffffff", "#1e90ff", "#90ee90", "#ffff00", "#ff0000", "#ff00ff")
 
 zone_layers <- list(
@@ -465,11 +465,11 @@ normalize_plate_coord <- function(vec, colname){
 derive_zone_inches <- function(d){
   h <- if ("PlateLocHeight" %in% names(d)) to_num(d$PlateLocHeight) else d$plate_z
   s <- if ("PlateLocSide"   %in% names(d)) to_num(d$PlateLocSide)   else d$plate_x
-  h <- ifelse(is.finite(h) & h < 10, h * 12, h)
-  s <- ifelse(is.finite(s) & abs(s) < 5, s * 12, s)
+  h <- h * 12
+  s <- s * 12
   dplyr::case_when(
     !is.finite(h) | !is.finite(s) ~ NA,
-    h >= 18.29 & h <= 44.08 & s >= -9.97 & s <= 9.97 ~ TRUE,
+    base_pitch_in_zone(s, h, "inches") ~ TRUE,
     TRUE ~ FALSE
   )
 }
@@ -525,8 +525,7 @@ swing_table <- function(d, balls_col, strikes_col){
       strikes_b4 = strikes_b4_raw,
       pre2k      = is.finite(strikes_b4) & strikes_b4 < 2,
       two_k      = is.finite(strikes_b4) & strikes_b4 >= 2,
-      in_zone    = if ("in_zone" %in% names(.)) as.logical(.data$in_zone)
-      else (dplyr::between(plate_z, 1.60, 3.40) & dplyr::between(plate_x, -0.71, 0.71))
+      in_zone    = base_pitch_in_zone(plate_x, plate_z)
     )
 }
 

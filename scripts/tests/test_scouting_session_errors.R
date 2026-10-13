@@ -40,3 +40,47 @@ shiny::testServer(w$server, {
  stopifnot(inherits(err,'shiny.silent.error'),!session$isClosed())
 })
 cat('Scouting missing directories, missing seasons, masked validators, and same-session recovery passed.\n')
+# CSV launch must never touch the national directory before its radio input binds.
+national_reads <- 0L
+w$SCOUTING_SEASON_SOURCE$teams <- function(role) {
+  national_reads <<- national_reads+1L
+  stop('unexpected national directory access')
+}
+shiny::testServer(function(input,output,session) {
+  w$server(input,output,session,initial_source='csv')
+}, {
+  session$setInputs(csv_files=basename(file.path(fixture_dir,'2026 Season - cleaned.csv')))
+  session$flushReact()
+  stopifnot(!session$isClosed())
+})
+stopifnot(national_reads == 0L)
+# Production hitter metadata and rows stay team-filtered; never invoke the
+# global hitter catalog builder or a loader that indirectly builds it.
+path <- tempfile(fileext='.parquet')
+arrow::write_parquet(raw,path)
+Sys.setenv(BASE_SCOUTING_SEASON_FILE=path)
+base_pitcher_catalog <- data.frame(PitcherTeam=raw$PitcherTeam[1],Pitcher=raw$Pitcher[1],PitchCount=1)
+base_get_hitter_catalog <- function(...) stop('national catalog must remain lazy')
+base_load_hitter_rows <- function(...) stop('global hitter loader must remain lazy')
+base_load_pitcher_rows <- function(...)raw
+bounded <- base_scouting_season_source(path)
+stopifnot(length(bounded$teams('hitter'))>0,
+          nrow(bounded$catalog('hitter',raw$BatterTeam[1]))>0,
+          nrow(bounded$load_players('hitter',raw$BatterTeam[1],raw$Batter[1]))>0)
+unlink(path);Sys.unsetenv('BASE_SCOUTING_SEASON_FILE')
+cat('CSV launch isolation and team-filtered national hitter loading passed.\n')
+
+for (id in c('csv','F26','PS27','S27','season')) {
+  ui <- base_scouting_initial_ui(w$ui,id)
+  checked <- character()
+  visit <- function(node) {
+    if(inherits(node,'shiny.tag')) {
+      if(identical(node$name,'input') && identical(node$attribs$name,'scout_data_source') &&
+         !is.null(node$attribs$checked)) checked <<- c(checked,node$attribs$value)
+      lapply(node$children,visit)
+    } else if(is.list(node))lapply(node,visit)
+    invisible(NULL)
+  }
+  visit(ui);stopifnot(identical(checked,id))
+}
+cat('Initial source radio bindings match each launch mode.\n')

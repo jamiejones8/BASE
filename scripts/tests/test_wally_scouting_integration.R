@@ -151,7 +151,7 @@ base_wally_scouting_environment <- function(...) {
   environment_calls <<- environment_calls + 1L
   list(
     ui = htmltools::tags$div("Deferred scouting fixture"),
-    server = function(input, output, session) server_calls <<- server_calls + 1L
+    server = function(input, output, session, initial_source) server_calls <<- server_calls + 1L
   )
 }
 shiny::testServer(

@@ -4,6 +4,10 @@
 # card engine is loaded only when a user asks to generate a hitter or pitcher
 # card, preserving fast HomeBASE startup for the active roster.
 
+if (!exists("base_pitch_in_zone", mode = "function")) {
+  source(base_project_path("R", "plots", "pitch_geometry.R"), local = FALSE)
+}
+
 if (!exists("base_team_season_import_paths", mode = "function")) {
   source(base_project_path("R", "data", "team_season_imports.R"), local = FALSE)
 }
@@ -359,7 +363,7 @@ homebase_hitter_metrics <- function(data) {
   px <- homebase_number(homebase_first_column(data, c("PlateLocSide", "PlateX", "plate_x"), NA))
   pz <- homebase_number(homebase_first_column(data, c("PlateLocHeight", "PlateZ", "plate_z"), NA))
   zone_known <- is.finite(px) & is.finite(pz)
-  in_zone <- zone_known & abs(px) <= .83 & pz >= 1.5 & pz <= 3.5
+  in_zone <- zone_known & base_pitch_in_zone(px, pz)
   outside <- zone_known & !in_zone
   bip_angle <- pa$.hb_bip & is.finite(angle)
   barrel_ok <- pa$.hb_bip & is.finite(ev) & is.finite(angle)
@@ -469,7 +473,7 @@ homebase_pitcher_metrics <- function(data) {
   px <- homebase_number(homebase_first_column(data, c("PlateLocSide", "PlateX", "plate_x"), NA))
   pz <- homebase_number(homebase_first_column(data, c("PlateLocHeight", "PlateZ", "plate_z"), NA))
   zone_known <- is.finite(px) & is.finite(pz)
-  in_zone <- zone_known & abs(px) <= (9.97 / 12) & pz >= (18.29 / 12) & pz <= (44.08 / 12)
+  in_zone <- zone_known & base_pitch_in_zone(px, pz)
   outside <- zone_known & !in_zone
   ev <- homebase_number(homebase_first_column(data, c("ExitSpeed", "ExitVelocity", "ev"), NA))
   angle <- homebase_number(homebase_first_column(data, c("Angle", "LaunchAngle"), NA))

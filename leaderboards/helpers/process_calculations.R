@@ -53,12 +53,11 @@ calculate_pitching_process_stats <- function(df) {
     mutate(
       PlateLocHeight = suppressWarnings(as.numeric(PlateLocHeight)),
       PlateLocSide   = suppressWarnings(as.numeric(PlateLocSide)),
-      PlateLocHeight_in = ifelse(PlateLocHeight < 10, PlateLocHeight * 12, PlateLocHeight),
-      PlateLocSide_in   = ifelse(abs(PlateLocSide) < 5, PlateLocSide * 12, PlateLocSide),
+      PlateLocHeight_in = PlateLocHeight * 12,
+      PlateLocSide_in   = PlateLocSide * 12,
       valid_loc = !is.na(PlateLocHeight_in) & !is.na(PlateLocSide_in),
       InZoneFlag = valid_loc &
-        PlateLocHeight_in >= 18.29 & PlateLocHeight_in <= 44.08 &
-        PlateLocSide_in >= -9.97 & PlateLocSide_in <= 9.97
+        base_pitch_in_zone(PlateLocSide, PlateLocHeight)
     ) %>%
     filter(valid_loc) %>%  # Only pitches with real location data
     group_by(Pitcher) %>%

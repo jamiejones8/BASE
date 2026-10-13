@@ -100,7 +100,7 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
   teams <- function(role) {
     role <- match.arg(role, c("hitter", "pitcher"))
     if (!is.null(team_cache[[role]])) return(team_cache[[role]])
-    if (use_runtime_catalogs) {
+    if (use_runtime_catalogs && role == "pitcher") {
       values <- runtime_catalog(role)$Team
     } else {
       team_col <- columns(role)[[1]]
@@ -121,7 +121,7 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
     ))
     key <- paste(role, team, sep = "\u001f")
     if (!is.null(catalogs[[key]])) return(catalogs[[key]])
-    if (use_runtime_catalogs) {
+    if (use_runtime_catalogs && role == "pitcher") {
       rows <- runtime_catalog(role) %>% dplyr::filter(.data$Team == team)
       catalogs[[key]] <<- rows
       return(rows)
@@ -148,7 +148,7 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
     }
     key <- paste(c(role, team, players), collapse = "\u001f")
     if (!is.null(cache[[key]])) return(cache[[key]])
-    if (use_runtime_catalogs) {
+    if (use_runtime_catalogs && role == "pitcher") {
       loader <- if (role == "hitter") base_load_hitter_rows else base_load_pitcher_rows
       rows <- dplyr::bind_rows(lapply(players, function(player) loader(team, player)))
     } else {
@@ -533,6 +533,22 @@ base_opponent_scouting_workspace_ui <- function() {
   )
 }
 
+# Each session binds the source it launched with. Do not briefly bind the
+# national source while waiting for an updateRadioButtons round trip.
+base_scouting_initial_ui <- function(ui, source) {
+  visit <- function(node) {
+    if (inherits(node, "shiny.tag")) {
+      if (identical(node$name, "input") &&
+          identical(node$attribs$name, "scout_data_source")) {
+        node$attribs$checked <- if (identical(node$attribs$value, source)) "checked" else NULL
+      }
+      node$children <- lapply(node$children, visit)
+    } else if (is.list(node)) node[] <- lapply(node, visit)
+    node
+  }
+  visit(ui)
+}
+
 base_opponent_scouting_workspace_server <- function(
   input,
   output,
@@ -602,9 +618,10 @@ base_opponent_scouting_workspace_server <- function(
       tryCatch({
         workspace <- base_wally_scouting_environment(data_dir, season_source)
         output$base_opponent_scouting_app <- shiny::renderUI({
-          tags$div(class = "base-scouting-workspace", workspace$ui)
+          tags$div(class = "base-scouting-workspace",
+                    base_scouting_initial_ui(workspace$ui, selected_source))
         })
-        workspace$server(input, output, session)
+        workspace$server(input, output, session, initial_source = selected_source)
         session$onFlushed(function() {
           updateRadioButtons(session, "scout_data_source", selected = selected_source)
           shinyjs::hide("base-scouting-loading")

@@ -16,7 +16,7 @@ base_prepare_catcher_framing_baseline <- function() {
 workspace <- base_wally_defense_environment()
 positioning <- workspace$BASE_DEFENSE_DATA
 joined <- workspace$raw_df
-stopifnot(nrow(positioning)==1029L, nrow(joined)==nrow(positioning),
+stopifnot(nrow(positioning)==nrow(base_read_defense_csv(base_defense_dev_file("2026 Fall Defense.csv"))), nrow(joined)==nrow(positioning),
           !anyDuplicated(joined$PitchUID), all(joined$batted_ball_matched),
           all(positioning$SeasonGroup=='F26'),
           all(c('HangTime','Distance','Bearing','ExitSpeed','Angle') %in% names(joined)),
@@ -36,4 +36,11 @@ path <- TEAM_CONFIG$data$player_positioning_file
 write.csv(data.frame(PitchUID='spring-unusable',Date='2026-04-01'),path,row.names=FALSE)
 stopifnot(!'spring-unusable' %in% base_prepare_wally_defense_rows()$PitchUID)
 unlink(path)
-cat('Fall defense: all 1,029 pitches matched, contact metrics retained, fall-only opportunities and summaries passed.\n')
+cat('Fall defense: all bundled pitches matched, contact metrics retained, fall-only opportunities and summaries passed.\n')
+
+# Bundled data must be present in deployment, not merely on the developer Mac.
+context <- readLines('.dockerignore')
+stopifnot(all(c('!WallyApps/DefenseApp/data/',
+               '!WallyApps/DefenseApp/data/2026 Fall Defense.csv',
+               '!WallyApps/DefenseApp/data/2026 Fall Batted Balls*.csv',
+               '!WallyApps/DefenseApp/data/d1_defense_play_probability_baseline.csv') %in% context))

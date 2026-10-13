@@ -50,6 +50,11 @@ WallyApps/HittingApp/data/*
 WallyApps/DefenseApp/*
 !WallyApps/DefenseApp/DefenseApp.R
 !WallyApps/DefenseApp/www/
+!WallyApps/DefenseApp/data/
+WallyApps/DefenseApp/data/*
+!WallyApps/DefenseApp/data/2026 Fall Defense.csv
+!WallyApps/DefenseApp/data/2026 Fall Batted Balls*.csv
+!WallyApps/DefenseApp/data/d1_defense_play_probability_baseline.csv
 WallyApps/ScoutingApp/*
 !WallyApps/ScoutingApp/ScoutingApp.R
 !WallyApps/ScoutingApp/RickAdvanceSheet.R

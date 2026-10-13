@@ -45,8 +45,7 @@ prepare_pitch_type_breakdown_data <- function(df) {
     mutate(
       InZone = case_when(
         is.na(PlateLocHeight) | is.na(PlateLocSide) ~ NA,
-        PlateLocSide >= -0.83 & PlateLocSide <= 0.83 &
-          PlateLocHeight >= 1.6 & PlateLocHeight <= 3.5 ~ TRUE,
+        base_pitch_in_zone(PlateLocSide, PlateLocHeight) ~ TRUE,
         TRUE ~ FALSE
       )
     )

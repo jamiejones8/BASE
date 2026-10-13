@@ -1498,17 +1498,11 @@ canon_pitch_call <- function(x) {
 }
 
 zone_h_in <- function(h) {
-  h <- to_num(h)
-  q90 <- suppressWarnings(stats::quantile(abs(h), 0.90, na.rm = TRUE))
-  if (is.finite(q90) && q90 < 10) h <- h * 12
-  h
+  to_num(h) * 12
 }
 
 zone_s_in <- function(s) {
-  s <- to_num(s)
-  q90 <- suppressWarnings(stats::quantile(abs(s), 0.90, na.rm = TRUE))
-  if (is.finite(q90) && q90 < 5) s <- s * 12
-  s
+  to_num(s) * 12
 }
 
 pitch_colors <- c(
@@ -1559,7 +1553,7 @@ framing_zone_type <- function(s_in, h_in) {
   in_gloveside_buffer <- is.finite(s_in) & is.finite(h_in) & s_in > 6.7 & s_in <= 13.3 & dplyr::between(h_in, 22, 38)
   in_armside_buffer <- is.finite(s_in) & is.finite(h_in) & s_in >= -13.3 & s_in < -6.7 & dplyr::between(h_in, 22, 38)
   in_heart <- is.finite(abs_s) & is.finite(h_in) & abs_s <= 6.7 & dplyr::between(h_in, 22, 38)
-  in_zone <- is.finite(abs_s) & is.finite(h_in) & abs_s <= 10.0 & dplyr::between(h_in, 18, 42) & !in_heart
+  in_zone <- (base_pitch_in_zone(s_in, h_in, "inches") %in% TRUE) & !in_heart
   in_shadow <- is.finite(abs_s) & is.finite(h_in) & (
     (abs_s > 10.0 & abs_s <= 13.3 & dplyr::between(h_in, 18, 42)) |
       (abs_s <= 13.3 & dplyr::between(h_in, 42, 46)) |
@@ -1587,7 +1581,7 @@ framing_in_zone <- function(s_in, h_in) {
   s_in <- to_num(s_in)
   h_in <- to_num(h_in)
   abs_s <- abs(s_in)
-  is.finite(abs_s) & is.finite(h_in) & abs_s <= 10.0 & dplyr::between(h_in, 18, 42)
+  (base_pitch_in_zone(s_in, h_in, "inches") %in% TRUE)
 }
 
 build_custom_game_id <- function(d) {
@@ -3489,7 +3483,7 @@ catcher_framing_zone_plot <- function(d, title = NULL, show_pitch_numbers = TRUE
   xlim <- c(-2, 2)
   ylim <- c(-0.5, 4.5)
   heart_box <- data.frame(xmin = -6.7 / 12, xmax = 6.7 / 12, ymin = 22 / 12, ymax = 38 / 12)
-  zone_box <- data.frame(xmin = -10 / 12, xmax = 10 / 12, ymin = 18 / 12, ymax = 42 / 12)
+  zone_box <- base_pitch_zone()
   shadow_outline <- data.frame(xmin = -13.3 / 12, xmax = 13.3 / 12, ymin = 14 / 12, ymax = 46 / 12)
 
   base <- ggplot() +
@@ -3520,7 +3514,7 @@ catcher_framing_zone_plot <- function(d, title = NULL, show_pitch_numbers = TRUE
   if (!nrow(d)) return(base)
 
   out <- base %+% d +
-    geom_point(aes(x = -plot_x, y = plot_z, fill = PitchType),
+    geom_pitch_location(aes(x = -plot_x, y = plot_z, fill = PitchType),
                shape = 21, size = 7.4, colour = "black", stroke = 0.9, alpha = 0.95) +
     scale_fill_manual(values = pitch_colors, breaks = facet_levels, limits = facet_levels, drop = FALSE, name = "Pitch Type")
   if (show_pitch_numbers) {

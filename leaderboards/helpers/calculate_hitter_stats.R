@@ -108,12 +108,8 @@ calculate_hitter_stats <- function(df,
         
         TRUE ~ 0L
       ),
-      Zone = dplyr::case_when(
-        is.na(ZoneNum)          ~ NA_character_,
-        ZoneNum %in% 1:9        ~ "InZone",
-        ZoneNum %in% c(11:14,0) ~ "OutZone",
-        TRUE                    ~ "OutZone"
-      )
+      # Keep the xRV model's trained grid; physical-zone stats use ball overlap.
+      Zone = ifelse(base_pitch_in_zone(PlateLocSide, PlateLocHeight), "InZone", "OutZone")
     )
   
   # --------- 4) Build a single PA index ----------
