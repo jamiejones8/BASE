@@ -143,16 +143,32 @@ local({
   for (numbered in c(TRUE, FALSE)) {
     plot <- workspace$catcher_framing_zone_plot(framing_rows, show_pitch_numbers = numbered)
     built <- ggplot2::ggplot_build(plot)
-    points <- built$data[[5]]
-    if (nrow(points) != 2L ||
-        !isTRUE(all.equal(points$x, c(-0.4, 0.6))) ||
-        !isTRUE(all.equal(points$y, c(2.1, 2.7)))) {
-      fail("Catcher framing chart changed pitch locations or retained invalid coordinates.")
+    # Ball geometry has separate outline and symbol layers. Locate layers by
+    # their role rather than assuming the labels are always the sixth layer.
+    pitch_layers <- which(vapply(plot$layers, function(layer) {
+      inherits(layer$geom, "GeomPitchLocation")
+    }, logical(1)))
+    label_layers <- which(vapply(plot$layers, function(layer) {
+      inherits(layer$geom, "GeomText")
+    }, logical(1)))
+    if (!length(pitch_layers)) fail("Catcher framing chart lost pitch markers.")
+    for (index in pitch_layers) {
+      points <- built$data[[index]]
+      if (nrow(points) != 2L ||
+          !isTRUE(all.equal(points$x, c(-0.4, 0.6))) ||
+          !isTRUE(all.equal(points$y, c(2.1, 2.7)))) {
+        fail("Catcher framing chart changed pitch locations or retained invalid coordinates.")
+      }
     }
-    if (numbered && !identical(as.integer(built$data[[6]]$label), c(1L, 2L))) {
-      fail("Catcher framing chart lost pitch-number labels.")
-    }
-    if (!numbered && length(built$data) != 5L) fail("Season framing chart retained pitch labels.")
+    if (numbered) {
+      if (length(label_layers) != 1L) fail("Catcher framing chart lost pitch-number labels.")
+      labels <- built$data[[label_layers[[1]]]]
+      if (!identical(as.integer(labels$label), c(1L, 2L)) ||
+          !isTRUE(all.equal(labels$x, c(-0.4, 0.6))) ||
+          !isTRUE(all.equal(labels$y, c(2.1, 2.7)))) {
+        fail("Catcher framing chart lost or misplaced pitch-number labels.")
+      }
+    } else if (length(label_layers)) fail("Season framing chart retained pitch labels.")
     invisible(ggplot2::ggplotGrob(plot))
   }
   for (empty_rows in list(framing_rows[FALSE, ], framing_rows[3, , drop = FALSE])) {
