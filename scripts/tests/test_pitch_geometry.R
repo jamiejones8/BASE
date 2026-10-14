@@ -17,6 +17,16 @@ for (shape in c(0:6,8,15:25)) {
     stopifnot(max(sqrt(rowSums(v^2))) <= 1+1e-12)
   }
 }
+# A triangle border has only triangular vertices, with no enclosing circle.
+triangle <- base_pitch_vertices(24, FALSE)
+stopifnot(nrow(triangle) == 9L,
+          max(triangle[,1]) < 0.87,
+          min(triangle[,2]) >= -0.5-1e-12)
+# Hollow symbols stay hollow; filled symbols retain their mapped fill colour.
+glyphs <- data.frame(x=0,y=0,shape=c(0,1,2,5,6,21,24),colour='black',fill='red')
+inside <- base_pitch_polygon_data(glyphs,r/12,'symbol')
+stopifnot(all(inside$alpha[inside$shape %in% c(0,1,2,5,6)] == 0),
+          all(inside$fill[inside$shape %in% c(21,24)] == 'red'))
 d <- data.frame(x=c(0,1),y=c(2,3),s=c('A','B'))
 p <- ggplot(d,aes(x,y,shape=s,fill=s))+geom_pitch_location(size=100)+
   scale_shape_manual(values=c(21,24))+coord_fixed(xlim=c(-2,2),ylim=c(0,5))
@@ -24,8 +34,8 @@ b <- ggplot_build(p)$data[[1]]
 poly <- base_pitch_polygon_data(b,r/12)
 for (i in 1:2) {
   v <- poly[poly$group %in% c(i*2,i*2+1),]
-  stopifnot(abs(diff(range(v$x))*12-2.90)<1e-10,
-            abs(diff(range(v$y))*12-2.90)<1e-10)
+  stopifnot(diff(range(v$x))*12 <= 2.90+1e-10,
+            diff(range(v$y))*12 <= 2.90+1e-10)
 }
 # Both output engines must support the geometry; reversed scales retain size.
 stopifnot(inherits(ggplotGrob(p),'gtable'))
@@ -33,7 +43,7 @@ for (plot in list(p,p+scale_x_reverse())) {
   traces <- plotly::ggplotly(plot)$x$data
   stopifnot(length(traces)==4L,
             all(vapply(traces,function(t) diff(range(t$x,na.rm=TRUE))*12<=2.9+1e-10,logical(1))),
-            sum(vapply(traces,function(t) abs(diff(range(t$x,na.rm=TRUE))*12-2.9)<1e-10,logical(1)))==2L,
+            sum(vapply(traces,function(t) abs(diff(range(t$x,na.rm=TRUE))*12-2.9)<1e-10,logical(1)))==1L,
             all(vapply(traces,function(t) length(unique(t$fillcolor))==1L,logical(1))))
 }
 # The public discipline helpers must delegate to the same boundary rule.

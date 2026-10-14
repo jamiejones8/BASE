@@ -22,12 +22,10 @@ base_pitch_in_zone <- function(x, y, units = c("feet", "inches")) {
 
 # Polygon geometry is expressed in pitch-coordinate units, so both PDFs and
 # ggplotly keep the correct ball footprint regardless of panel size. Every
-# outcome symbol is inscribed inside the same circular ball outline.
+# outcome symbol fits inside the ball diameter without drawing a second glyph.
 base_pitch_vertices <- function(shape = 19, symbol = FALSE) {
   theta <- seq(0, 2*pi, length.out = 97)
   circle <- cbind(cos(theta), sin(theta))
-  ring <- rbind(circle, circle[nrow(circle):1, , drop = FALSE] * .90, circle[1, ])
-  if (!symbol) return(ring)
   shape <- suppressWarnings(as.integer(shape))
   if (is.na(shape)) shape <- 19L
   if (shape %in% c(0, 15, 22)) p <- rbind(c(-1,-1),c(1,-1),c(1,1),c(-1,1),c(-1,-1))/sqrt(2)
@@ -39,8 +37,9 @@ base_pitch_vertices <- function(shape = 19, symbol = FALSE) {
     p <- rbind(c(-.12,-1),c(.12,-1),c(.12,-.12),c(1,-.12),c(1,.12),c(.12,.12),c(.12,1),c(-.12,1),c(-.12,.12),c(-1,.12),c(-1,-.12),c(-.12,-.12),c(-.12,-1)) / sqrt(1.0144)
     if (shape %in% c(4,8)) p <- p %*% matrix(c(cos(pi/4),sin(pi/4),-sin(pi/4),cos(pi/4)),2)
   } else p <- circle
-  if (shape %in% c(0,1,2,5,6)) p <- rbind(p, p[nrow(p):1,,drop=FALSE]*.82,p[1,])
-  p * if (shape %in% c(16,19,20,21)) .90 else .85
+  # The border follows the selected shape, never an enclosing circle.
+  if (!symbol) return(rbind(p, p[nrow(p):1,,drop=FALSE]*.90,p[1,]))
+  p * .90
 }
 base_pitch_polygon_data <- function(data, radius, component = "both") {
   data <- data[is.finite(data$x) & is.finite(data$y), , drop=FALSE]
@@ -59,7 +58,7 @@ base_pitch_polygon_data <- function(data, radius, component = "both") {
       fill <- if ("fill" %in% names(row)) row$fill else colour
       out$fill <- if (symbol && shape %in% 21:25 && !is.na(fill)) fill else colour
       out$colour <- NA_character_; out$linewidth <- 0
-      if (symbol && shape == 1) out$alpha <- 0
+      out$alpha <- if (symbol && shape %in% c(0,1,2,5,6)) 0 else if ("alpha" %in% names(row)) row$alpha else NA_real_
       out
     }))
   }))
