@@ -5038,10 +5038,12 @@ ui <- base_scouting_page(
                    "input.scout_data_source !== 'csv'",
                    uiOutput("scout_season_status"),
                    selectizeInput("scout_team", "Opponent team", choices = NULL),
-                   selectizeInput("scout_season_hitters", "Hitters to load", choices = NULL,
-                                  multiple = TRUE, options = list(plugins = list("remove_button"))),
-                   selectizeInput("scout_season_pitchers", "Pitchers to load", choices = NULL,
-                                  multiple = TRUE, options = list(plugins = list("remove_button"))),
+                   conditionalPanel("input.main_tab === 'Hitter Card' || input.main_tab === 'Pitch Type Tables' || input.main_tab === 'Heat Maps' || input.main_tab === 'matchup_grid'",
+                     selectizeInput("scout_season_hitters", "Hitters to load", choices = NULL,
+                                    multiple = TRUE, options = list(plugins = list("remove_button")))),
+                   conditionalPanel("input.main_tab === 'rick_advance' || input.main_tab === 'Pitcher Card' || input.main_tab === 'Stuff Sheet' || input.main_tab === 'matchup_grid'",
+                     selectizeInput("scout_season_pitchers", "Pitchers to load", choices = NULL,
+                                    multiple = TRUE, options = list(plugins = list("remove_button")))),
                    helpText("Choose an opponent first. Only that team's player directory and selected players' pitches are loaded."),
                    hr()
                  )
@@ -5057,7 +5059,7 @@ ui <- base_scouting_page(
                  uiOutput("csv_files_ui"),
                  hr()),
                  conditionalPanel(
-                   "input.main_tab !== 'Pitcher Card' && input.main_tab !== 'Stuff Sheet'",
+                   "input.main_tab === 'Hitter Card' || input.main_tab === 'Pitch Type Tables' || input.main_tab === 'Heat Maps'",
                    uiOutput("hitter_order_ui")
                  )
                ),
@@ -5179,6 +5181,21 @@ ui <- base_scouting_page(
 # -------------------- Server --------------------
 server <- function(input, output, session, initial_source = "season"){
 
+  active_roles <- reactive({
+    tab <- input$main_tab %||% "rick_advance"
+    if (identical(tab, "matchup_grid")) return(c("hitter", "pitcher"))
+    if (tab %in% c("Hitter Card", "Pitch Type Tables", "Heat Maps")) "hitter" else "pitcher"
+  })
+  # A calculation consumed by an observer must produce a validation error,
+  # not an unhandled error that closes the entire BASE session.
+  scouting_compute <- function(expr) {
+    tryCatch(force(expr), error = function(e) {
+      if (inherits(e, "shiny.silent.error")) stop(e)
+      message("[Scouting calculation] ", conditionMessage(e))
+      shiny::validate(shiny::need(FALSE, paste("Unable to prepare scouting data:", conditionMessage(e))))
+    })
+  }
+
   selected_source <- reactive({
     id <- input$scout_data_source %||% initial_source
     if (id == "season") return(SCOUTING_SEASON_SOURCE)
@@ -5226,7 +5243,8 @@ server <- function(input, output, session, initial_source = "season"){
   for (role_value in c("hitter", "pitcher")) local({
     role <- role_value
     player_id <- paste0("scout_season_", role, "s")
-    observeEvent(list(selected_season_team(), season_teams()), {
+    observeEvent(list(selected_season_team(), season_teams(), active_roles()), {
+      if (!role %in% active_roles()) return()
       team <- selected_season_team()
       catalog <- tryCatch(season_catalog(role, team), shiny.silent.error = function(e) {
         updateSelectizeInput(session, player_id, choices = character(),
@@ -5545,24 +5563,30 @@ server <- function(input, output, session, initial_source = "season"){
   })
 
   matchup_pitcher_meta <- reactive({
-    req(matchup_pitchers_std())
-    d <- matchup_pitchers_std()
-    shiny::validate(shiny::need(nrow(d) > 0, "No pitcher rows found in the selected data."))
-    d %>%
-      dplyr::mutate(PA_ID = make_pa_id(d)) %>%
-      dplyr::filter(!is.na(PitcherName), nzchar(trimws(PitcherName))) %>%
-      dplyr::group_by(PitcherName) %>%
-      dplyr::summarise(
-        Throws = pitcher_bust_first(PitcherThrows),
-        PA = dplyr::n_distinct(PA_ID),
-        .groups = "drop"
-      ) %>%
-      dplyr::arrange(dplyr::desc(PA), PitcherName)
+    req(identical(input$main_tab, "matchup_grid"))
+    scouting_compute({
+      req(matchup_pitchers_std())
+      d <- matchup_pitchers_std()
+      shiny::validate(shiny::need(nrow(d) > 0, "No pitcher rows found in the selected data."))
+      d %>%
+        dplyr::mutate(PA_ID = make_pa_id(d)) %>%
+        dplyr::filter(!is.na(PitcherName), nzchar(trimws(PitcherName))) %>%
+        dplyr::group_by(PitcherName) %>%
+        dplyr::summarise(
+          Throws = pitcher_bust_first(PitcherThrows),
+          PA = dplyr::n_distinct(PA_ID),
+          .groups = "drop"
+        ) %>%
+        dplyr::arrange(dplyr::desc(PA), PitcherName)
+    })
   })
 
   matchup_hitter_meta <- reactive({
-    req(matchup_hitters_std())
-    hitter_report_meta(matchup_hitters_std(), "Total")
+    req(identical(input$main_tab, "matchup_grid"))
+    scouting_compute({
+      req(matchup_hitters_std())
+      hitter_report_meta(matchup_hitters_std(), "Total")
+    })
   })
 
   matchup_pitcher_choices <- reactive({
@@ -5602,6 +5626,7 @@ server <- function(input, output, session, initial_source = "season"){
   }, ignoreInit = TRUE)
 
   output$matchup_pitcher_order_ui <- renderUI({
+    req(identical(input$main_tab, "matchup_grid"))
     req(matchup_pitcher_choices())
     choices <- matchup_pitcher_choices()
     shiny::validate(shiny::need(length(choices) > 0, "No pitchers found in the selected data."))
@@ -5624,6 +5649,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
 
   output$matchup_hitter_order_ui <- renderUI({
+    req(identical(input$main_tab, "matchup_grid"))
     req(matchup_hitter_choices())
     choices <- matchup_hitter_choices()
     shiny::validate(shiny::need(length(choices) > 0, "No hitters found in the selected data."))
@@ -5679,6 +5705,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
   
   output$hitter_order_ui <- renderUI({
+    req(input$main_tab %in% c("Hitter Card", "Pitch Type Tables", "Heat Maps"))
     req(std_all())
     hitters <- game_hitter_order()
     shiny::validate(shiny::need(length(hitters) > 0, "No hitters found for ordering."))
@@ -5772,6 +5799,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
 
   output$matchup_grid <- DT::renderDT({
+    req(identical(input$main_tab, "matchup_grid"))
     bundle <- matchup_grid_bundle()
     view_mode <- input$matchup_view %||% "pitch_types"
     is_total_view <- identical(view_mode, "total")
@@ -5855,6 +5883,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
 
   output$matchup_score_note <- renderUI({
+    req(identical(input$main_tab, "matchup_grid"))
     bundle <- matchup_grid_bundle()
     long <- bundle$long
     if (!nrow(long)) return(NULL)
@@ -5876,6 +5905,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
   
   output$player_ui <- renderUI({
+    req(identical(input$main_tab, "Hitter Card"))
     req(std_all())
     d <- std_all()
     bat_col <- pick_first(c("Batter","Hitter","batter_name","batter"), d)
@@ -5905,6 +5935,7 @@ server <- function(input, output, session, initial_source = "season"){
   }, ignoreInit = TRUE)
   
   output$card <- renderPlot({
+    req(identical(input$main_tab, "Hitter Card"))
     req(card_plot())
     card_plot()
   }, res = preview_dpi)
@@ -5919,11 +5950,13 @@ server <- function(input, output, session, initial_source = "season"){
   })
   
   output$pitch_type_tables <- renderPlot({
+    req(identical(input$main_tab, "Pitch Type Tables"))
     req(pitch_type_page_plot())
     pitch_type_page_plot()
   }, res = preview_dpi)
   
   output$pitch_type_page_ui <- renderUI({
+    req(identical(input$main_tab, "Pitch Type Tables"))
     req(std_all(), input$pitch_type_hand, report_hitter_order())
     n_pages <- pitch_type_page_count(
       std_all(), input$pitch_type_hand, report_hitter_order(),
@@ -5934,6 +5967,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
   
   output$heat_maps_page_ui <- renderUI({
+    req(identical(input$main_tab, "Heat Maps"))
     req(std_all(), report_hitter_order())
     n_pages <- heat_map_page_count(std_all(), report_hitter_order())
     if (n_pages <= 1) return(NULL)
@@ -5947,11 +5981,13 @@ server <- function(input, output, session, initial_source = "season"){
   })
   
   output$heat_maps <- renderPlot({
+    req(identical(input$main_tab, "Heat Maps"))
     req(heat_maps_page_plot())
     heat_maps_page_plot()
   }, res = preview_dpi)
   
   output$pitcher_card_pitcher_ui <- renderUI({
+    req(identical(input$main_tab, "Pitcher Card"))
     req(pitcher_std_all())
     d <- pitcher_std_all()
     pitchers <- d$PitcherName %>%
@@ -5964,10 +6000,13 @@ server <- function(input, output, session, initial_source = "season"){
   })
 
   pitcher_bust_meta <- reactive({
-    req(pitcher_std_all(), input$pitcher_bust_hand)
-    pitcher_bust_table_numeric(pitcher_std_all(), input$pitcher_bust_hand %||% "Total") %>%
-      dplyr::distinct(PitcherName, Throws, PA) %>%
-      dplyr::arrange(dplyr::desc(PA), PitcherName)
+    req(identical(input$main_tab, "Stuff Sheet"))
+    scouting_compute({
+      req(pitcher_std_all(), input$pitcher_bust_hand)
+      pitcher_bust_table_numeric(pitcher_std_all(), input$pitcher_bust_hand %||% "Total") %>%
+        dplyr::distinct(PitcherName, Throws, PA) %>%
+        dplyr::arrange(dplyr::desc(PA), PitcherName)
+    })
   })
 
   pitcher_bust_choices <- reactive({
@@ -5988,6 +6027,7 @@ server <- function(input, output, session, initial_source = "season"){
   }, ignoreInit = TRUE)
 
   output$pitcher_bust_order_ui <- renderUI({
+    req(identical(input$main_tab, "Stuff Sheet"))
     req(pitcher_bust_meta())
     choices <- pitcher_bust_choices()
     shiny::validate(shiny::need(length(choices) > 0, "No pitchers found in the selected data."))
@@ -6029,6 +6069,7 @@ server <- function(input, output, session, initial_source = "season"){
   }, ignoreInit = TRUE)
 
   output$pitcher_bust_source_ui <- renderUI({
+    req(identical(input$main_tab, "Stuff Sheet"))
     req(pitcher_bust_source_meta())
     if (!isTRUE(pitcher_bust_source_panel_open())) return(NULL)
     pitchers <- pitcher_bust_order()
@@ -6081,6 +6122,7 @@ server <- function(input, output, session, initial_source = "season"){
 	  })
 	  
 	  output$pitcher_card_page_ui <- renderUI({
+	    req(identical(input$main_tab, "Pitcher Card"))
 	    specs <- pitcher_card_page_specs()
 	    if (nrow(specs) <= 1) return(NULL)
 	    selectInput(
@@ -6137,6 +6179,7 @@ server <- function(input, output, session, initial_source = "season"){
 	  }, ignoreInit = TRUE)
   
   output$pitcher_card <- renderPlot({
+    req(identical(input$main_tab, "Pitcher Card"))
     pages <- pitcher_card_pages()
     req(length(pages) > 0)
     page_num <- suppressWarnings(as.integer(input$pitcher_card_page_num %||% 1))
@@ -6146,6 +6189,7 @@ server <- function(input, output, session, initial_source = "season"){
   }, res = preview_dpi)
   
   output$pitcher_bust_page_ui <- renderUI({
+    req(identical(input$main_tab, "Stuff Sheet"))
     req(pitcher_std_all(), input$pitcher_bust_hand)
     if (!length(pitcher_bust_order())) return(NULL)
     n_pages <- pitcher_bust_page_count(
@@ -6171,6 +6215,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
   
   output$pitcher_bust_table <- renderPlot({
+    req(identical(input$main_tab, "Stuff Sheet"))
     req(pitcher_bust_page_plot())
     pitcher_bust_page_plot()
   }, res = preview_dpi)

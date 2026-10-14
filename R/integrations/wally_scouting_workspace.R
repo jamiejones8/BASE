@@ -441,27 +441,26 @@ base_wally_scouting_season_source <- function() {
   base_scouting_season_source()
 }
 
-# Warm the embedded engine and compact player directories before Shiny begins
-# accepting sessions. Lazy initialization used to make the first team launch
-# monopolize the single R event loop, temporarily stalling every open page.
+# Warm the engine and pitcher directory before Shiny accepts sessions. Hitter
+# metadata stays lazy: scanning it here delays startup, and a missing optional
+# source must not prevent the local-CSV engine from warming.
 base_preload_wally_scouting <- function(
   data_dir = base_scouting_data_dir(),
   season_source = base_wally_scouting_season_source()
 ) {
   started <- proc.time()[["elapsed"]]
   result <- tryCatch({
-    pitcher_teams <- season_source$teams("pitcher")
-    hitter_teams <- season_source$teams("hitter")
     base_wally_scouting_environment(data_dir, season_source)
+    pitcher_teams <- tryCatch(season_source$teams("pitcher"), error = function(e) character())
     elapsed <- proc.time()[["elapsed"]] - started
     message(
-      "Opponent Scouting preloaded: ", length(pitcher_teams), " pitcher teams, ",
-      length(hitter_teams), " hitter teams in ", sprintf("%.2f", elapsed), "s"
+      "Opponent Scouting preloaded: ", length(pitcher_teams),
+      " pitcher teams in ", sprintf("%.2f", elapsed), "s"
     )
     list(
       ok = TRUE,
       pitcher_teams = length(pitcher_teams),
-      hitter_teams = length(hitter_teams),
+      hitter_teams = NA_integer_,
       elapsed = elapsed
     )
   }, error = function(e) {

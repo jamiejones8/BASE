@@ -343,6 +343,7 @@ rick_ui <- function() tabPanel('Rick Advance Sheet',value='rick_advance',
     div(style='overflow-x:auto;',plotOutput('rick_sheet',width='1105px',height='1430px'))))
 rick_server <- function(input,output,session,pitcher_data) {
   output$rick_pitcher_ui <- renderUI({
+    req(identical(input$main_tab %||% "rick_advance", "rick_advance"))
     d <- pitcher_data(); choices <- sort(unique(na.omit(d$PitcherName)))
     selectInput('rick_pitcher','Pitcher',choices)
   })
@@ -376,7 +377,9 @@ rick_server <- function(input,output,session,pitcher_data) {
     doc <- documents[[key()]] %||% list(notes='',shapes=list())
     rick_sheet(d,input$rick_pitcher,input$rick_side,doc$notes,doc$shapes)
   })
-  output$rick_sheet <- renderPlot({grid.newpage();grid.draw(report())},res=130)
+  output$rick_sheet <- renderPlot({
+    req(identical(input$main_tab %||% "rick_advance", "rick_advance"))
+    grid.newpage();grid.draw(report())},res=130)
   export_pages <- reactive({
     req(input$rick_pitcher)
     d <- pitcher_data() %>% filter(PitcherName==input$rick_pitcher)
