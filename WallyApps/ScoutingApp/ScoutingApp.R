@@ -3545,7 +3545,9 @@ local({
     df$PitcherThrows[!df$PitcherThrows %in% c("LHP","RHP")] <- NA
     df$RelSide <- ifelse(df$PitcherThrows == "RHP" & is.finite(df$RelSide) & df$RelSide < 0, 0, df$RelSide)
     
-    df
+    # Exclude unusable tags before any pitcher report computes totals, usage,
+    # movement, locations or PDF output (including Rick and Matchup Grid).
+    df[!is_bad_pitch_type(df$PitchType), , drop = FALSE]
   }
   
   # ---- Tables ----

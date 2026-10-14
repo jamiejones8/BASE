@@ -78,6 +78,7 @@ rick_header_stats <- function(values) {
 
 rick_pct <- function(n, d) if (d > 0) sprintf('%.0f%%', 100 * n / d) else '-'
 rick_prepare <- function(d) {
+  d <- d[!pitcher_env$is_bad_pitch_type(d$PitchType), , drop = FALSE]
   if (!nrow(d)) {
     for (nm in c('pitch_call','play_result','family','PA_ID')) d[[nm]] <- character(0)
     for (nm in c('has_zone','in_zone','is_swing','is_whiff','is_bip','pre','two')) d[[nm]] <- logical(0)

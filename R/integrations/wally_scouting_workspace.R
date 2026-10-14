@@ -179,10 +179,12 @@ base_scouting_data_dir <- function() {
 
 base_import_scouting_file <- function(path, name, root = base_scouting_data_dir()) {
   rows <- base_read_trackman_import(path)
-  required <- c("PitchUID", "Date", "Pitcher", "PitcherTeam", "Batter", "BatterTeam", "PitchCall")
+  required <- c("PitchUID", "Pitcher", "PitcherTeam", "Batter", "BatterTeam", "PitchCall")
   missing <- setdiff(required, names(rows))
   if (!nrow(rows) || length(missing)) stop("Scouting CSV needs pitch rows and columns: ", paste(required, collapse = ", "))
-  if (anyNA(base_parse_trackman_dates(rows$Date))) stop("Scouting CSV contains invalid dates.")
+  # Opponent files can combine games, omit dates, or contain unknown formats.
+  # Preserve supplied dates without using them as a condition for accepting pitches.
+  if (!"Date" %in% names(rows)) rows$Date <- rep(NA_character_, nrow(rows))
   ids <- trimws(rows$PitchUID)
   if (anyNA(ids) || any(!nzchar(ids))) stop("Scouting CSV contains missing pitch IDs.")
   rows <- rows[!duplicated(ids), , drop = FALSE]
