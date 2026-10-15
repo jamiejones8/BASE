@@ -272,9 +272,12 @@ for (marker in c(
 }
 expected_tabs <- c(
   "Performance", "Lineup Builder", "Damage Heat Map", "Whiff Zones",
-  "Team Report", "Leaderboard", "Swing Decisions",
+  "Leaderboard", "Swing Decisions",
   "Ball Flight", "Contact Point"
 )
+team_html <- as.character(htmltools::renderTags(workspace$base_hitting_team_postgame_ui)$html)
+stopifnot(grepl("AAR Builder",team_html,fixed=TRUE),grepl("Recent AARs",team_html,fixed=TRUE),
+          !grepl('data-value="Team Report"',html,fixed=TRUE))
 missing_tabs <- expected_tabs[!vapply(expected_tabs, grepl, logical(1), x = html, fixed = TRUE)]
 if (length(missing_tabs)) {
   fail("Embedded Hitting UI is missing tabs: ", paste(missing_tabs, collapse = ", "))

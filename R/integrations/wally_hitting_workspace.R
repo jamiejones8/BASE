@@ -753,6 +753,10 @@ base_team_hitting_workspace_server <- function(input, output, session) {
       workspace$base_hitting_postgame_ui
     )
   })
+  output$base_postgame_hitting_team <- shiny::renderUI({
+    tags$div(class="base-hitting-workspace base-postgame-aar",
+      workspace$head_css, workspace$base_hitting_team_postgame_ui)
+  })
   workspace$server(input, output, session)
   shinyjs::hide("base-hitting-loading")
   invisible(workspace)

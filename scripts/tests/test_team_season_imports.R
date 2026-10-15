@@ -203,8 +203,8 @@ future_hitting <- future_hitting[base_team_matches(future_hitting$BatterTeam), ,
 future_catching <- base_read_catching_source(first$destination)
 future_catching <- future_catching[base_team_matches(future_catching$CatcherTeam), , drop = FALSE]
 future_positioning <- base_prepare_wally_defense_rows()
-if (nrow(future_pitching) != 3L || !all(future_pitching$SeasonGroup == "F26")) {
-  fail("The Pitching loader did not select and label future Texas State pitching rows.")
+if (nrow(future_pitching) != 5L || sum(base_team_matches(future_pitching$PitcherTeam)) != 3L || !all(future_pitching$SeasonGroup == "F26")) {
+  fail("The Pitching loader must preserve both halves of Texas State games for shutdown context.")
 }
 if (nrow(future_hitting) != 2L || !all(future_hitting$SeasonGroup == "F26")) {
   fail("The Hitting loader did not select and label future Texas State batting rows.")

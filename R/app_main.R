@@ -4278,7 +4278,10 @@ postgame_reports_workspace_ui <- function() {
         id = "base_postgame_report_tabs",
         bslib::nav_panel("Pitching AAR", shiny::uiOutput("base_postgame_pitching_aar")),
         bslib::nav_panel("Hitting AAR", shiny::uiOutput("base_postgame_hitting_aar")),
-        bslib::nav_panel("Catching AAR", shiny::uiOutput("base_postgame_catching_aar"))
+        bslib::nav_panel("Catching AAR", shiny::uiOutput("base_postgame_catching_aar")),
+        bslib::nav_panel("Team Reports", bslib::navset_tab(id="base_team_report_tabs",
+          bslib::nav_panel("Pitching", shiny::uiOutput("base_postgame_pitching_team")),
+          bslib::nav_panel("Hitting", shiny::uiOutput("base_postgame_hitting_team"))))
       )
     ),
     tags$div(class = "hub-footer", base_brand_footer())
@@ -4920,7 +4923,7 @@ data_processing_server <- function(input, output, session) {
     if (is.null(upload)) { scouting_status("Choose a cleaned scouting CSV first."); return() }
     result <- tryCatch(base_import_scouting_file(upload$datapath, upload$name), error = identity)
     scouting_status(if (inherits(result, "error")) conditionMessage(result) else
-      paste("Saved", result$rows, "pitches. Choose Uploaded scouting CSVs in Opponent Scouting."))
+      paste("Saved", result$rows, "pitches. Choose this file from Scouting Data in Opponent Scouting."))
   }, ignoreInit = TRUE)
 
   register_replacement <- function(target_id, input_prefix, state) {
@@ -5224,7 +5227,9 @@ server <- function(input, output, session) {
       identical(input$base_nav, "tab_team_pitching") ||
         (identical(input$base_nav, "tab_postgame_reports") &&
            (is.null(input$base_postgame_report_tabs) ||
-              identical(input$base_postgame_report_tabs, "Pitching AAR")))
+              identical(input$base_postgame_report_tabs, "Pitching AAR") ||
+              (identical(input$base_postgame_report_tabs,"Team Reports") &&
+                (is.null(input$base_team_report_tabs) || identical(input$base_team_report_tabs,"Pitching")))))
     }
   )
   base_lazy_workspace_server(
@@ -5238,7 +5243,8 @@ server <- function(input, output, session) {
     active_when = function() {
       identical(input$base_nav, "tab_team_hitting") ||
         (identical(input$base_nav, "tab_postgame_reports") &&
-           identical(input$base_postgame_report_tabs, "Hitting AAR"))
+           (identical(input$base_postgame_report_tabs, "Hitting AAR") ||
+            (identical(input$base_postgame_report_tabs,"Team Reports") && identical(input$base_team_report_tabs,"Hitting"))))
     }
   )
   base_lazy_workspace_server(

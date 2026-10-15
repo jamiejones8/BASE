@@ -460,6 +460,7 @@ def main() -> None:
         IZWhiffs=("IsWhiff", lambda x: int((x & df.loc[x.index, "InZone"]).sum())),
     )
     pitcher = pitcher.join(pitch_counts)
+    pitcher["MaxVelocity"] = df["RelSpeed"].where(df["RelSpeed"].between(40,110)).groupby(df["PitcherKey"]).max()
     heater = (
         df.loc[df["IsHeater"]]
         .groupby("PitcherKey")
@@ -583,6 +584,7 @@ def main() -> None:
     pitcher["PutAway_pct"] = pitcher["PutAway_num"] / pitcher["PutAway_den"].replace(0, np.nan)
 
     rows: list[dict] = []
+    add_metric(rows, "overall", "max_velocity", pitcher.loc[pitcher["Pitches"] >= 100, "MaxVelocity"], pd.Series(1, index=pitcher.index[pitcher["Pitches"] >= 100]))
     add_metric(rows, "overall", "heater_velocity", pitcher.loc[pitcher["HeaterPitches"] >= 25, "HeaterVelocity"], pitcher.loc[pitcher["HeaterPitches"] >= 25, "HeaterPitches"])
     add_metric(rows, "overall", "extension", pitcher.loc[pitcher["HeaterPitches"] >= 25, "HeaterExtension"], pitcher.loc[pitcher["HeaterPitches"] >= 25, "HeaterPitches"])
     add_metric(rows, "overall", "release_height", pitcher.loc[pitcher["Pitches"] >= 100, "RelHeight"], pitcher.loc[pitcher["Pitches"] >= 100, "Pitches"])

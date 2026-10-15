@@ -14,7 +14,9 @@ source <- list(
   load_players=function(...) raw
 )
 w <- base_wally_scouting_environment(fixture_dir,source)
-stopifnot(isTRUE(base_preload_wally_scouting(fixture_dir,source)$ok))
+lazy_source <- source
+lazy_source$teams <- function(...) stop('Preloading must not open national data')
+stopifnot(isTRUE(base_preload_wally_scouting(fixture_dir,lazy_source)$ok))
 stuff_calls <- 0L
 fail_stuff <- FALSE
 original <- w$pitcher_bust_table_numeric

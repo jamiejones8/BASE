@@ -29,6 +29,21 @@ stopifnot(identical(source$teams('pitcher'),'OPPONENT'),nrow(source$catalog('pit
 # Invalid uploads must leave the previously saved source intact.
 readr::write_csv(data.frame(Bad=1),upload)
 stopifnot(inherits(tryCatch(base_import_scouting_file(upload,'bad.csv'),error=identity),'error'),file.exists(saved$path))
+# Every uploaded file is individually selectable, newest first after TXST.
+Sys.setFileTime(saved$path, Sys.time()-60)
+raw$PitchUID <- paste0('new-',seq_len(nrow(raw)))
+readr::write_csv(raw,upload)
+new_saved <- base_import_scouting_file(upload,'New opponent.csv')
+catalog <- base_scouting_source_catalog()
+stopifnot(identical(catalog$id[1:4],c('S26','F26','PS27','S27')),
+  all(startsWith(catalog$label[1:4],'[TXST]')),
+  identical(catalog$path[5:6],c(new_saved$path,saved$path)))
+shiny::testServer(workspace$server, {
+  session$setInputs(scout_data_source=paste0('upload:',new_saved$filename),
+    scout_team='OPPONENT',scout_season_pitchers=raw$Pitcher[1])
+  loaded <- pitcher_std_all()
+  stopifnot(nrow(loaded)>0,all(startsWith(loaded$PitchUID,'new-')),!session$isClosed())
+})
 unlink(scratch,recursive=TRUE)
 cat('All season selectors, opponent upload validation, and CSV team/player queries passed.\n')
 

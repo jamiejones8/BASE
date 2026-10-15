@@ -1952,3 +1952,11 @@ table tbody td[style*="background-color"] {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* One table owns both header and cells; horizontal scrolling never splits them. */
+#leaderboard_table, #leaderboard_totals_table,
+#hit_leaderboard_table, #leaderboard_team_table { overflow-x: auto; max-width: 100%; }
+#leaderboard_table table, #leaderboard_totals_table table,
+#hit_leaderboard_table table, #leaderboard_team_table table {
+  width: max-content !important; min-width: 100%; table-layout: auto; white-space: nowrap;
+}

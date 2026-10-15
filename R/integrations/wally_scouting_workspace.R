@@ -33,7 +33,7 @@ base_scouting_season_file <- function() {
 
 # Open metadata lazily. Only grouped player menus and filtered player pitches
 # cross into R; the national pitch table is never collected in full.
-base_scouting_season_source <- function(path = base_scouting_season_file()) {
+base_scouting_season_source <- function(path = base_scouting_season_file(), team_code = NULL) {
   dataset <- NULL
   team_cache <- list()
   runtime_catalog_cache <- list()
@@ -43,7 +43,7 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
     base_scouting_season_file(), winslash = "/", mustWork = FALSE
   )
   requested_path <- normalizePath(path, winslash = "/", mustWork = FALSE)
-  use_runtime_catalogs <- identical(requested_path, production_path) &&
+  use_runtime_catalogs <- is.null(team_code) && identical(requested_path, production_path) &&
     exists("base_pitcher_catalog", inherits = TRUE) &&
     exists("base_get_hitter_catalog", mode = "function", inherits = TRUE) &&
     exists("base_load_pitcher_rows", mode = "function", inherits = TRUE) &&
@@ -64,6 +64,8 @@ base_scouting_season_source <- function(path = base_scouting_season_file()) {
     required <- c("Batter", "BatterTeam", "Pitcher", "PitcherTeam")
     missing <- setdiff(required, if (is.data.frame(candidate)) names(candidate) else names(candidate$schema))
     if (length(missing)) stop("Season file is missing columns: ", paste(missing, collapse = ", "))
+    if (!is.null(team_code)) candidate <- dplyr::filter(candidate,
+      .data$PitcherTeam == .env$team_code | .data$BatterTeam == .env$team_code)
     dataset <<- candidate
     dataset
   }
@@ -175,6 +177,34 @@ base_scouting_data_dir <- function() {
     return(normalizePath(configured, winslash = "/", mustWork = FALSE))
   }
   file.path(base_team_season_import_root(), "scouting")
+}
+
+# Only catalogued files can be selected; browser values are never paths.
+base_scouting_source_catalog <- function(root = base_scouting_data_dir()) {
+  paths <- c(S26 = TEAM_CONFIG$data$season_file, base_team_season_import_paths())
+  labels <- c(S26 = "2026 Season", F26 = "2026 Fall", PS27 = "2027 Scrimmages", S27 = "2027 Season")
+  local <- data.frame(id=names(paths), label=paste("[TXST]", labels[names(paths)]),
+                      path=unname(paths), stringsAsFactors=FALSE)
+  files <- list.files(root, pattern="\\.csv$", full.names=TRUE, ignore.case=TRUE)
+  files <- files[order(file.info(files)$mtime, decreasing=TRUE, na.last=TRUE)]
+  opponents <- data.frame(id=if(length(files)) paste0("upload:", basename(files)) else character(),
+    label=sub("-[a-f0-9]{12}$", "", tools::file_path_sans_ext(basename(files))),
+    path=files, stringsAsFactors=FALSE)
+  rbind(local, opponents, data.frame(id=c("season","csv"),
+    label=c("College season (Parquet)","All scouting CSVs"), path=c(base_scouting_season_file(),NA_character_)))
+}
+base_scouting_source_input <- function(id) {
+  catalog <- base_scouting_source_catalog()
+  shiny::selectizeInput(id, "Scouting Data", choices=stats::setNames(catalog$id,catalog$label),
+    selected="F26", options=list(render=I("{
+      option: function(item, escape) {return '<div style=\"color:' + (item.label.indexOf('[TXST]') === 0 ? '#501214;font-weight:700' : 'inherit') + '\">' + escape(item.label) + '</div>';},
+      item: function(item, escape) {return '<div style=\"color:' + (item.label.indexOf('[TXST]') === 0 ? '#501214;font-weight:700' : 'inherit') + '\">' + escape(item.label) + '</div>';}
+    }")))
+}
+base_scouting_catalog_reactive <- function(session, root=base_scouting_data_dir()) {
+  shiny::reactivePoll(2000, session,
+    checkFunc=function() { x<-base_scouting_source_catalog(root); paste(x$id, file.info(x$path)$mtime, collapse="|") },
+    valueFunc=function() base_scouting_source_catalog(root))
 }
 
 base_import_scouting_file <- function(path, name, root = base_scouting_data_dir()) {
@@ -443,9 +473,8 @@ base_wally_scouting_season_source <- function() {
   base_scouting_season_source()
 }
 
-# Warm the engine and pitcher directory before Shiny accepts sessions. Hitter
-# metadata stays lazy: scanning it here delays startup, and a missing optional
-# source must not prevent the local-CSV engine from warming.
+# Warm only the report engine. A directory is queried after its source is
+# selected, so opening a local file never requires the national parquet.
 base_preload_wally_scouting <- function(
   data_dir = base_scouting_data_dir(),
   season_source = base_wally_scouting_season_source()
@@ -453,15 +482,13 @@ base_preload_wally_scouting <- function(
   started <- proc.time()[["elapsed"]]
   result <- tryCatch({
     base_wally_scouting_environment(data_dir, season_source)
-    pitcher_teams <- tryCatch(season_source$teams("pitcher"), error = function(e) character())
     elapsed <- proc.time()[["elapsed"]] - started
     message(
-      "Opponent Scouting preloaded: ", length(pitcher_teams),
-      " pitcher teams in ", sprintf("%.2f", elapsed), "s"
+      "Opponent Scouting report engine preloaded in ", sprintf("%.2f", elapsed), "s"
     )
     list(
       ok = TRUE,
-      pitcher_teams = length(pitcher_teams),
+      pitcher_teams = NA_integer_,
       hitter_teams = NA_integer_,
       elapsed = elapsed
     )
@@ -506,9 +533,7 @@ base_opponent_scouting_workspace_ui <- function() {
       ),
       tags$div(
         class = "base-scouting-launch-controls",
-        selectInput("base_scouting_source", "Scouting data", choices = c(
-          "College season (Parquet)" = "season", "2026 Fall" = "F26",
-          "2027 Scrimmages" = "PS27", "2027 Season" = "S27")),
+        base_scouting_source_input("base_scouting_source"),
         selectizeInput(
           "base_scouting_team", "Opponent team", choices = NULL,
           options = list(placeholder = "Search college teams", maxOptions = 100),
@@ -543,6 +568,13 @@ base_scouting_initial_ui <- function(ui, source) {
           identical(node$attribs$name, "scout_data_source")) {
         node$attribs$checked <- if (identical(node$attribs$value, source)) "checked" else NULL
       }
+      if (identical(node$name, "select") && identical(node$attribs$id, "scout_data_source")) {
+        catalog <- base_scouting_source_catalog()
+        node$children <- lapply(seq_len(nrow(catalog)), function(i) {
+          htmltools::tags$option(value=catalog$id[i],
+            selected=if(identical(catalog$id[i],source)) "selected" else NULL,catalog$label[i])
+        })
+      }
       node$children <- lapply(node$children, visit)
     } else if (is.list(node)) node[] <- lapply(node, visit)
     node
@@ -560,12 +592,21 @@ base_opponent_scouting_workspace_server <- function(
   available_teams <- reactiveVal(NULL)
   workspace_started <- reactiveVal(FALSE)
 
+  source_catalog <- base_scouting_catalog_reactive(session, data_dir)
   observe({
-    source_id <- input$base_scouting_source %||% "season"
+    catalog <- source_catalog()
+    current <- isolate(input$base_scouting_source) %||% "F26"
+    updateSelectizeInput(session, "base_scouting_source", choices=stats::setNames(catalog$id,catalog$label),
+      selected=if(current %in% catalog$id) current else "F26")
+  })
+  observe({
+    source_id <- input$base_scouting_source %||% "F26"
+    req(source_id != "csv")
     source <- if (source_id == "season") season_source else {
-      paths <- base_team_season_import_paths()
-      req(source_id %in% names(paths))
-      base_scouting_season_source(paths[[source_id]])
+      catalog <- source_catalog()
+      req(source_id %in% catalog$id)
+      base_scouting_season_source(catalog$path[match(source_id,catalog$id)],
+        team_code=if(source_id=="S26") TEAM_CONFIG$data_code else NULL)
     }
     teams <- tryCatch(
       # The pitcher catalog is already mounted at BASE startup and contains
@@ -599,7 +640,7 @@ base_opponent_scouting_workspace_server <- function(
     mode <- match.arg(mode)
     if (isTRUE(workspace_started())) return(invisible(FALSE))
     selected_source <- if (identical(mode, "season")) {
-      isolate(input$base_scouting_source) %||% "season"
+      isolate(input$base_scouting_source) %||% "F26"
     } else {
       "csv"
     }
@@ -624,7 +665,7 @@ base_opponent_scouting_workspace_server <- function(
         })
         workspace$server(input, output, session, initial_source = selected_source)
         session$onFlushed(function() {
-          updateRadioButtons(session, "scout_data_source", selected = selected_source)
+          updateSelectizeInput(session, "scout_data_source", selected = selected_source)
           shinyjs::hide("base-scouting-loading")
           message(
             "Opponent Scouting team workspace ready in ",

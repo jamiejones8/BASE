@@ -6027,27 +6027,24 @@ D1_PCT_AVG <- list(
   `IZ Whiff%`   = 0.157
 )
 
-# Non-percentage D1 comparison points used in the pitching leaderboard PDF.
-# Heater velocity is pitch-weighted across the same D1 reference population
-# used by the in-app percentile displays.
-D1_PITCHING_LEADERBOARD_NON_PCT_AVG <- list(
-  `Avg Velo` = 89.4
-)
-
+# Leaderboard labels use the same parquet-derived population as cell percentiles.
+# Weight rates by their metric denominator, rather than averaging pitchers equally.
+pitching_leaderboard_benchmark_value <- function(column) {
+  if (column == "K%-BB%") return(pitching_leaderboard_benchmark_value("K%") - pitching_leaderboard_benchmark_value("BB%"))
+  config <- pitching_metric_config(column)
+  if (is.null(config)) return(NA_real_)
+  ref <- load_d1_pitch_metric_reference()
+  rows <- ref[ref$scope == "overall" & ref$metric == config$metric &
+                is.finite(ref$value) & is.finite(ref$sample_n) & ref$sample_n > 0, ]
+  if (!nrow(rows)) return(NA_real_)
+  stats::weighted.mean(rows$value, rows$sample_n)
+}
 pitching_leaderboard_benchmark_label <- function(metric) {
-  value <- if (metric %in% names(D1_PCT_AVG)) {
-    D1_PCT_AVG[[metric]]
-  } else {
-    D1_PITCHING_LEADERBOARD_NON_PCT_AVG[[metric]]
-  }
-  if (is.null(value) || !is.finite(value)) return("")
-  if (metric %in% names(D1_PCT_AVG)) {
-    sprintf("Avg %.1f%%", 100 * value)
-  } else if (identical(metric, "Avg Velo")) {
-    sprintf("Avg %.1f mph", value)
-  } else {
-    sprintf("Avg %.1f", value)
-  }
+  value <- pitching_leaderboard_benchmark_value(metric)
+  if (!is.finite(value)) return("")
+  if (grepl("%$",metric)) sprintf("Avg %.1f%%",100*value)
+  else if (metric %in% c("Avg Velo","Max Velocity")) sprintf("Avg %.1f mph",value)
+  else sprintf("Avg %.3f",value)
 }
 
 # ---- D1 averages by pitch type (fractions) ----
@@ -6304,8 +6301,12 @@ load_heater_movement_reference <- function() {
 }
 
 # The same D1 population used by the percentile cards also colors these cells.
-pitching_cell_percentiles <- function(values, column) {
-  config <- switch(column,
+pitching_metric_config <- function(column) {
+  column <- switch(column, `1-1 win%` = "1-1 Win%", `IZ Whiff%` = "IZWhiff%", column)
+  switch(column,
+    `Max Velocity` = list(metric = "max_velocity", lower_better = FALSE, percent = FALSE),
+    `Avg Velo` = list(metric = "heater_velocity", lower_better = FALSE, percent = FALSE),
+    `1-1 Win%` = list(metric = "performance_win11_pct", lower_better = FALSE, percent = TRUE),
     BAA = list(metric = "performance_baa", lower_better = TRUE, percent = FALSE),
     wOBA = list(metric = "performance_woba", lower_better = TRUE, percent = FALSE),
     wOBAcon = list(metric = "performance_wobacon", lower_better = TRUE, percent = FALSE),
@@ -6337,6 +6338,9 @@ pitching_cell_percentiles <- function(values, column) {
     `Chase%` = list(metric = "performance_chase_pct", lower_better = FALSE, percent = TRUE),
     NULL
   )
+}
+pitching_cell_percentiles <- function(values, column) {
+  config <- pitching_metric_config(column)
   out <- rep(NA_real_, length(values))
   if (is.null(config)) return(out)
   ref <- load_d1_pitch_metric_reference()
@@ -6353,6 +6357,13 @@ pitching_cell_percentiles <- function(values, column) {
   }, numeric(1))
   out
 }
+
+# Keep fallback comparison colors and other leaderboard consumers in sync
+# with the reference-derived labels whenever a population value is available.
+D1_PCT_AVG <- stats::setNames(lapply(names(D1_PCT_AVG), function(column) {
+  value <- pitching_leaderboard_benchmark_value(column)
+  if (is.finite(value)) value else D1_PCT_AVG[[column]]
+}), names(D1_PCT_AVG))
 
 shade_columns_txst <- function(out_df,
                                cols = NULL,
@@ -6490,6 +6501,8 @@ if (isTRUE(get0("BASE_PITCHING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))
 } else {
   base_pitching_page <- page_sidebar
 }
+
+base_pitching_team_postgame_ui <- base_team_report_ui("pitch_team", "team_game", games_txst, "team_report_preview", "team_report_dl")
 
 base_pitching_postgame_ui <- tagList(
   navset_tab(
@@ -7096,28 +7109,6 @@ ui <- base_pitching_page(
       div(
         class = "mt-2",
         withSpinner(DTOutput("leaderboard_totals_table"), type = 4, color = "#501214")
-      )
-    ),
-    nav_panel(
-      title = "Team Report",
-      div(
-        class = "base-report-builder",
-        div(
-          class = "base-report-controls base-report-controls-team",
-          selectInput(
-            "team_game",
-            "Game:",
-            choices = games_txst,
-            selected = if (length(games_txst)) games_txst[[1]] else NULL,
-            multiple = FALSE,
-            selectize = FALSE
-          ),
-          downloadButton("team_report_dl", "Download Team Report PDF")
-        ),
-        div(
-          class = "base-report-preview base-report-preview-landscape",
-          imageOutput("team_report_preview", height = "1000px")
-        )
       )
     ),
     nav_panel(
@@ -8786,6 +8777,8 @@ server <- function(input, output, session){
       make_error_png(conditionMessage(e))
     })
   }, deleteFile = TRUE)
+
+  base_team_report_recent_server(input, output, session, "pitch_team", "team_game", games_txst)
 
   # --- Team Report helpers ---
   team_season_info <- reactive({
@@ -18645,6 +18638,11 @@ function(el,x){
     }
     if (is.null(d_all) || !nrow(d_all)) d_all <- d_pitch
     d_all <- tibble::as_tibble(d_all)
+    # Re-imported pitches must not duplicate runs or outs.
+    if ("PitchUID" %in% names(d_all)) {
+      uid <- trimws(as.character(d_all$PitchUID))
+      d_all <- d_all[is.na(uid) | !nzchar(uid) | !duplicated(uid), ]
+    }
     
     topbot_cols <- c("Top/Bottom","TopBottom","InningTopBot","TopBot","Top_Bottom")
     topbot_all  <- intersect(topbot_cols, names(d_all))[1]
@@ -18744,6 +18742,18 @@ function(el,x){
     
     d_pitch2 <- d_pitch
     d_pitch2 <- prefer_team_or_portal(d_pitch2, "PitcherTeam", team_code)
+    # Filters select pitcher/half-inning appearances; evaluate each against all
+    # pitches in that appearance, including pitches hidden by a pitch-type filter.
+    if ("Pitcher" %in% names(d_all)) {
+      half_key <- function(d, topbot) paste(get_game_key(d, game_col), d$Inning,
+        norm_topbot(d[[topbot]]), as.character(d$Pitcher), sep="|")
+      selected_halves <- half_key(d_pitch2, topbot_pitch)
+      full <- d_all[half_key(d_all, topbot_all) %in% selected_halves, ]
+      if (nrow(full)) {
+        full[[topbot_pitch]] <- full[[topbot_all]]
+        d_pitch2 <- full
+      }
+    }
     game_key_pitch2 <- get_game_key(d_pitch2, game_col)
     pitcher_team_vals <- if ("PitcherTeam" %in% names(d_pitch2)) {
       as.character(d_pitch2$PitcherTeam)
@@ -18755,12 +18765,22 @@ function(el,x){
       pitcher_team_vals[is.na(pitcher_team_vals) | !nzchar(pitcher_team_vals)] <- norm_team(team_code)
     }
     
+    pitch_outs <- if ("OutsOnPlay" %in% names(d_pitch2)) suppressWarnings(as.numeric(d_pitch2$OutsOnPlay)) else rep(NA_real_,nrow(d_pitch2))
+    result <- tolower(as.character(if ("PlayResult" %in% names(d_pitch2)) d_pitch2$PlayResult else rep("",nrow(d_pitch2))))
+    korbb <- tolower(as.character(if ("KorBB" %in% names(d_pitch2)) d_pitch2$KorBB else rep("",nrow(d_pitch2))))
+    inferred <- ifelse(grepl("triple.?play",result),3,
+      ifelse(grepl("double.?play",result),2,
+        ifelse(grepl("^out$|sacrifice|sacfly|sacbunt",result) | grepl("strikeout|^k$",korbb),1,0)))
+    pitch_outs[!is.finite(pitch_outs)] <- inferred[!is.finite(pitch_outs)]
+    # TrackMan commonly exports OutsOnPlay=0 on a strikeout.
+    pitch_outs <- pmax(0,pmin(3,pmax(pitch_outs,inferred)))
     pitcher_half <- tibble::tibble(
       GameKey = game_key_pitch2,
       Inning = suppressWarnings(as.integer(readr::parse_number(as.character(d_pitch2$Inning)))),
       TopBot = norm_topbot(d_pitch2[[topbot_pitch]]),
       Pitcher = as.character(d_pitch2$Pitcher),
       TeamCode = pitcher_team_vals,
+      PitcherOuts = pitch_outs,
       PitcherRuns = if ("RunsScored" %in% names(d_pitch2)) suppressWarnings(as.numeric(d_pitch2$RunsScored)) else 0
     ) %>%
       dplyr::mutate(PitcherRuns = dplyr::coalesce(PitcherRuns, 0)) %>%
@@ -18768,7 +18788,8 @@ function(el,x){
                     !is.na(Pitcher) & nzchar(Pitcher),
                     !is.na(TeamCode) & nzchar(TeamCode)) %>%
       dplyr::group_by(GameKey, Inning, TopBot, Pitcher, TeamCode) %>%
-      dplyr::summarise(PitcherRuns = sum(PitcherRuns, na.rm = TRUE), .groups = "drop")
+      dplyr::summarise(PitcherRuns = sum(PitcherRuns, na.rm = TRUE),
+                       PitcherOuts = sum(PitcherOuts, na.rm = TRUE), .groups = "drop")
     
     if (!nrow(pitcher_half)) {
       return(tibble::tibble(Pitcher = pitchers_all, ShutDownOpp = 0L, ShutDown = 0L, ShutDown_pct = NA_real_))
@@ -18779,7 +18800,7 @@ function(el,x){
       dplyr::group_by(Pitcher) %>%
       dplyr::summarise(
         ShutDownOpp = dplyr::n(),
-        ShutDown    = sum(PitcherRuns == 0, na.rm = TRUE),
+        ShutDown    = sum(PitcherRuns == 0 & Runs == 0 & PitcherOuts >= 3, na.rm = TRUE),
         ShutDown_pct = sdiv(ShutDown, ShutDownOpp),
         .groups = "drop"
       )
@@ -20403,7 +20424,7 @@ function(el,x){
 
     shade_cols <- c("BAA","wOBA","wOBAcon","SLG","OPS","WHIP","K/9","BB/9","H/9","K%","BB%","K%-BB%","BB+HBP%","Barrel%","GB%","FIP",
                     "FPS%","E&A%","Strike%","Zone%","2k Zone%","Put Away%","Shut Down Inning%",
-                    "Whiff%","CSW%","IZWhiff%","Chase%")
+                    "Whiff%","CSW%","IZWhiff%","Chase%","Max Velocity")
     tab_shaded <- shade_columns_txst(
       tab,
       cols = intersect(shade_cols, names(tab)),
@@ -20615,7 +20636,8 @@ function(el,x){
         paging   = FALSE,
         ordering = TRUE,
         stripe   = TRUE,
-        scrollX  = TRUE,
+        scrollX  = FALSE,
+        autoWidth = TRUE,
         columnDefs = c(
           list(list(targets = sort_idx0, visible = FALSE)),
           order_defs
@@ -20641,7 +20663,8 @@ function(el,x){
         paging   = FALSE,
         ordering = FALSE,
         stripe   = TRUE,
-        scrollX  = TRUE
+        scrollX  = FALSE,
+        autoWidth = TRUE
       ),
       class = "stripe"
     )

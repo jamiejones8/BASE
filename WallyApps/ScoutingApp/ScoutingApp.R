@@ -5031,11 +5031,7 @@ ui <- base_scouting_page(
   base_scouting_layout(
   sidebarPanel(width = 3,
                if (!is.null(SCOUTING_SEASON_SOURCE)) tagList(
-                 radioButtons("scout_data_source", "Scouting data",
-                              choices = c("College season (Parquet)" = "season", "2026 Fall" = "F26",
-                                          "2027 Scrimmages" = "PS27", "2027 Season" = "S27",
-                                          "Uploaded scouting CSVs" = "csv"),
-                              selected = "season"),
+                 base_scouting_source_input("scout_data_source"),
                  conditionalPanel(
                    "input.scout_data_source !== 'csv'",
                    uiOutput("scout_season_status"),
@@ -5198,14 +5194,23 @@ server <- function(input, output, session, initial_source = "season"){
     })
   }
 
+  source_catalog <- base_scouting_catalog_reactive(session, DATA_DIR)
+  observe({
+    catalog <- source_catalog()
+    current <- isolate(input$scout_data_source) %||% initial_source
+    updateSelectizeInput(session, "scout_data_source", choices=stats::setNames(catalog$id,catalog$label),
+      selected=if(current %in% catalog$id) current else "F26")
+  })
   selected_source <- reactive({
     id <- input$scout_data_source %||% initial_source
     if (id == "season") return(SCOUTING_SEASON_SOURCE)
     if (id == "csv") return(NULL)
-    paths <- base_team_season_import_paths()
-    shiny::validate(shiny::need(id %in% names(paths), "Choose a scouting data source."))
-    base_scouting_season_source(paths[[id]])
+    catalog <- source_catalog()
+    shiny::validate(shiny::need(id %in% catalog$id, "Choose a scouting data source."))
+    base_scouting_season_source(catalog$path[match(id,catalog$id)],
+      team_code=if(id=="S26") TEAM_CONFIG$data_code else NULL)
   })
+
   season_mode <- reactive(!is.null(SCOUTING_SEASON_SOURCE) &&
     !identical(input$scout_data_source %||% initial_source, "csv"))
   selected_season_team <- reactive({

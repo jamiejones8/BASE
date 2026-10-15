@@ -88,7 +88,9 @@ base_read_pitching_source <- function(path) {
   rows$SeasonGroup <- if (identical(source_group, "BP")) NA_character_ else source_group
   if (!is.na(source_group) && source_group %in% names(BASE_TEAM_SEASON_IMPORT_TARGETS) &&
       "PitcherTeam" %in% names(rows)) {
-    rows <- rows[base_team_matches(rows$PitcherTeam), , drop = FALSE]
+    # Keep both halves of TXST games for shutdown opportunities after TXST scores.
+    batting_team <- if ("BatterTeam" %in% names(rows)) base_team_matches(rows$BatterTeam) else FALSE
+    rows <- rows[base_team_matches(rows$PitcherTeam) | batting_team, , drop = FALSE]
   }
   rows
 }
@@ -958,6 +960,10 @@ base_team_pitching_workspace_server <- function(input, output, session) {
       workspace$head_css,
       workspace$base_pitching_postgame_ui
     )
+  })
+  output$base_postgame_pitching_team <- shiny::renderUI({
+    tags$div(class="base-pitching-workspace base-postgame-aar",
+      workspace$head_css, workspace$base_pitching_team_postgame_ui)
   })
   workspace$server(input, output, session)
   shinyjs::hide("base-pitching-loading")

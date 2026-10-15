@@ -1783,6 +1783,8 @@ base_hitting_postgame_ui <- navset_tab(
   )
 )
 
+base_hitting_team_postgame_ui <- base_team_report_ui("hit_team", "team_report_game", team_report_games, "hit_team_report_preview", "hit_team_report_dl")
+
 # -------------------- UI --------------------
 ui <- base_hitting_page(
   theme = txst_theme,
@@ -1929,25 +1931,6 @@ ui <- base_hitting_page(
       )
     ),
     
-    nav_panel(
-      title = "Team Report",
-      sidebarLayout(
-        sidebarPanel(
-          selectInput(
-            "team_report_game",
-            "Game:",
-            choices = team_report_games,
-            selected = if (length(team_report_games)) team_report_games[[1]] else NULL,
-            multiple = FALSE,
-            selectize = FALSE
-          ),
-          downloadButton("hit_team_report_dl", "Download Team Report PDF")
-        ),
-        mainPanel(
-          imageOutput("hit_team_report_preview", height = "1000px")
-        )
-      )
-    ),
     if (!isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))) {
       nav_panel(title = "Game Reports (AAR)", base_hitting_postgame_ui)
     },
@@ -5131,7 +5114,8 @@ server <- function(input, output, session){
         paging   = FALSE,
         ordering = TRUE,
         stripe   = TRUE,
-        scrollX  = TRUE,
+        scrollX  = FALSE,
+        autoWidth = TRUE,
         columnDefs = c(
           list(list(targets = sort_idx0, visible = FALSE)),
           list(list(className = "grp-start", targets = match(c("Contact%", "Swing%", "MaxEV"), leaderboard_table_metrics))),
@@ -5190,7 +5174,8 @@ server <- function(input, output, session){
         paging   = FALSE,
         ordering = FALSE,
         stripe   = TRUE,
-        scrollX  = TRUE,
+        scrollX  = FALSE,
+        autoWidth = TRUE,
         columnDefs = c(
           list(list(className = "grp-start", targets = match(c("Contact%", "Swing%", "MaxEV"), leaderboard_table_metrics)))
         )
@@ -7407,7 +7392,7 @@ server <- function(input, output, session){
       # points + numbers
       geom_pitch_location(aes(shape = TypeGroup, fill = Decision),
                  size = 8, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
-      geom_text(aes(label = PitchNum), size = 4.8, fontface = 700, color = "white") +
+      geom_text(aes(label = PitchNum), size = 4.8, fontface = "bold", color = "white") +
       scale_shape_manual(
         name   = "Pitch type",
         values = c("HARD" = 21, "BREAK" = 24, "SOFT" = 22),
@@ -7521,7 +7506,7 @@ server <- function(input, output, session){
                  color = "grey70", linewidth = 0.4) +
       geom_pitch_location(units = "inches", aes(shape = TypeGroup, fill = Decision),
                  size = 5.2, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
-      geom_text(aes(label = PitchNum), size = 3.2, fontface = 700, color = "white", show.legend = FALSE) +
+      geom_text(aes(label = PitchNum), size = 3.2, fontface = "bold", color = "white", show.legend = FALSE) +
       scale_shape_manual(values = c("HARD"=21, "BREAK"=24, "SOFT"=22), drop = FALSE) +
       scale_fill_manual(values = c("SWING"="#B4975A","TAKE"="#501214"), drop = FALSE) +
       coord_fixed(xlim = c(-20, 20), ylim = c(0, 50), expand = FALSE) +
@@ -7994,7 +7979,7 @@ server <- function(input, output, session){
                      inherit.aes = FALSE, linetype="dashed", alpha=0.35) +
         geom_pitch_location(aes(shape = TypeGroup, fill = Decision),
                    size = 7.8, color = "black", stroke = 0.7, alpha = 0.95, show.legend = TRUE) +
-        geom_text(aes(label = PitchNum), size = 5.3, fontface = 700, color = "white") +
+        geom_text(aes(label = PitchNum), size = 5.3, fontface = "bold", color = "white") +
         scale_shape_manual(
           name   = "Pitch type",
           values = c("HARD"=21,"BREAK"=24,"SOFT"=22),
@@ -8216,7 +8201,7 @@ server <- function(input, output, session){
                      color = "grey70", linewidth = 0.4) +
           geom_pitch_location(units = "inches", aes(shape = TypeGroup, fill = Decision),
                      size = 5.2, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
-          geom_text(aes(label = PitchNum), size = 3.2, fontface = 700, color = "white", show.legend = FALSE) +
+          geom_text(aes(label = PitchNum), size = 3.2, fontface = "bold", color = "white", show.legend = FALSE) +
           scale_shape_manual(
             values = c("HARD"=21, "BREAK"=24, "SOFT"=22),
             breaks = c("HARD","BREAK","SOFT"),
@@ -9548,6 +9533,8 @@ server <- function(input, output, session){
       )
     )
   })
+
+  base_team_report_recent_server(input, output, session, "hit_team", "team_report_game", team_report_games)
 
   # -------------------- Team Report (Hitters) --------------------
   team_report_season_info <- reactive({

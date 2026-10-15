@@ -94,19 +94,19 @@ actual_d1_pitching <- unlist(workspace$D1_REF[names(expected_d1_pitching)])
 if (!isTRUE(all.equal(actual_d1_pitching, expected_d1_pitching, tolerance = 1e-12))) {
   fail("Pitching AAR is not using the parquet-derived D1 process benchmarks.")
 }
-expected_leaderboard_labels <- c(
-  `K%` = "Avg 19.3%", `BB%` = "Avg 11.3%", `Barrel%` = "Avg 17.4%",
-  `Whiff%` = "Avg 24.0%", `CSW%` = "Avg 27.5%", `Avg Velo` = "Avg 89.4 mph",
-  `Strike%` = "Avg 60.5%", `Zone%` = "Avg 45.6%", `Pre2k Zone%` = "Avg 46.0%",
-  `FPS%` = "Avg 57.5%", `E&A%` = "Avg 70.0%", `Put Away%` = "Avg 19.0%"
-)
-actual_leaderboard_labels <- vapply(
-  names(expected_leaderboard_labels),
-  workspace$pitching_leaderboard_benchmark_label,
-  character(1)
-)
-if (!identical(unname(actual_leaderboard_labels), unname(expected_leaderboard_labels))) {
-  fail("Pitching PDF leaderboard D1-average labels changed or are incomplete.")
+label_metrics <- c(`K%`="performance_k_pct",`BB%`="performance_bb_pct",
+  `Barrel%`="performance_barrel_pct",`Whiff%`="performance_whiff_pct",
+  `CSW%`="performance_csw_pct",`Avg Velo`="heater_velocity",`E&A%`="performance_ea_pct",
+  `Strike%`="performance_strike_pct",`Zone%`="performance_zone_pct",
+  `Pre2k Zone%`="performance_pre2k_zone_pct",`FPS%`="performance_fps_pct",`Put Away%`="performance_put_away_pct")
+reference <- workspace$load_d1_pitch_metric_reference()
+for (label in names(label_metrics)) {
+  rows <- reference[reference$scope=="overall" & reference$metric==label_metrics[[label]] &
+    is.finite(reference$value) & reference$sample_n>0, ]
+  average <- weighted.mean(rows$value,rows$sample_n)
+  expected <- if(label=="Avg Velo") sprintf("Avg %.1f mph",average) else sprintf("Avg %.1f%%",100*average)
+  stopifnot(identical(workspace$pitching_leaderboard_benchmark_label(label),expected))
+  if(label %in% names(workspace$D1_PCT_AVG)) stopifnot(abs(workspace$D1_PCT_AVG[[label]]-average)<1e-12)
 }
 empty_evla <- workspace$resolve_ev_la_strict(tibble::tibble(Angle = numeric()))
 if (length(empty_evla$ev) || length(empty_evla$la)) {
@@ -155,6 +155,13 @@ for (column in names(leaderboard_reference_metrics)) {
     fail("Pitching leaderboard is not using the empirical D1 percentile pool for ", column)
   }
 }
+for (column in c('Max Velocity','Avg Velo')) {
+  metric <- if(column=='Max Velocity') 'max_velocity' else 'heater_velocity'
+  pool <- leaderboard_reference$value[leaderboard_reference$scope=='overall' & leaderboard_reference$metric==metric]
+  stopifnot(length(pool)>100,
+    workspace$pitching_cell_percentiles(quantile(pool,.9),column)>80,
+    workspace$pitching_cell_percentiles(quantile(pool,.1),column)<20)
+}
 bb_pool <- leaderboard_reference$value[
   leaderboard_reference$scope == "overall" &
     leaderboard_reference$metric == "performance_bb_pct" &
@@ -200,8 +207,11 @@ if (!grepl("grid-template-columns: repeat(2, minmax(0, 1fr))", style_html, fixed
 expected_tabs <- c(
   "Performance", "Pitch Metrics", "Season Summary", "Pitch Decay",
   "Locations", "Whiffs / Chases / Called Strikes / Barrels", "Stuff+",
-  "Bullpens", "Leaderboard", "Team Report", "Team Trends"
+  "Bullpens", "Leaderboard", "Team Trends"
 )
+team_html <- as.character(htmltools::renderTags(workspace$base_pitching_team_postgame_ui)$html)
+stopifnot(grepl("AAR Builder",team_html,fixed=TRUE),grepl("Recent AARs",team_html,fixed=TRUE),
+          !grepl('data-value="Team Report"',html,fixed=TRUE))
 missing_tabs <- expected_tabs[!vapply(expected_tabs, grepl, logical(1), x = html, fixed = TRUE)]
 if (length(missing_tabs)) {
   fail("Embedded Pitching UI is missing tabs: ", paste(missing_tabs, collapse = ", "))

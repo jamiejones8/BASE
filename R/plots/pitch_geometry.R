@@ -38,8 +38,8 @@ base_pitch_vertices <- function(shape = 19, symbol = FALSE) {
     if (shape %in% c(4,8)) p <- p %*% matrix(c(cos(pi/4),sin(pi/4),-sin(pi/4),cos(pi/4)),2)
   } else p <- circle
   # The border follows the selected shape, never an enclosing circle.
-  if (!symbol) return(rbind(p, p[nrow(p):1,,drop=FALSE]*.90,p[1,]))
-  p * .90
+  if (!symbol) return(rbind(p, p[nrow(p):1,,drop=FALSE]*.80,p[1,]))
+  p * .80
 }
 base_pitch_polygon_data <- function(data, radius, component = "both") {
   data <- data[is.finite(data$x) & is.finite(data$y), , drop=FALSE]

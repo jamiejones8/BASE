@@ -75,12 +75,14 @@ for (id in c('csv','F26','PS27','S27','season')) {
   checked <- character()
   visit <- function(node) {
     if(inherits(node,'shiny.tag')) {
-      if(identical(node$name,'input') && identical(node$attribs$name,'scout_data_source') &&
-         !is.null(node$attribs$checked)) checked <<- c(checked,node$attribs$value)
+      if(identical(node$name,'select') && identical(node$attribs$id,'scout_data_source')) {
+        for(option in node$children) if(inherits(option,'shiny.tag') && !is.null(option$attribs$selected))
+          checked <<- c(checked,option$attribs$value)
+      }
       lapply(node$children,visit)
     } else if(is.list(node))lapply(node,visit)
     invisible(NULL)
   }
   visit(ui);stopifnot(identical(checked,id))
 }
-cat('Initial source radio bindings match each launch mode.\n')
+cat('Initial source dropdown bindings match each launch mode.\n')
