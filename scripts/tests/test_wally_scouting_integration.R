@@ -183,6 +183,15 @@ shiny::testServer(
     }
   }
 )
+# Individual files launch without an opponent-team input.
+shiny::testServer(function(input,output,session) {
+  base_opponent_scouting_workspace_server(input,output,session,data_dir=fixture_dir,season_source=season_source)
+}, {
+  session$flushReact()
+  session$setInputs(base_scouting_source='F26',base_scouting_open=1)
+  session$flushReact(); session$flushReact()
+  stopifnot(environment_calls==2L,server_calls==2L,!session$isClosed())
+})
 base_wally_scouting_environment <- original_environment
 
 missing_source <- base_scouting_season_source(paste0(season_path, "-missing"))

@@ -168,7 +168,12 @@ base_scouting_season_source <- function(path = base_scouting_season_file(), team
     }
     rows
   }
-  list(path = path, teams = teams, catalog = catalog, load_players = load_players)
+  load_all <- function() {
+    rows <- tibble::as_tibble(dplyr::collect(open()))
+    rows$.source_file <- rep(basename(path), nrow(rows))
+    rows
+  }
+  list(path = path, teams = teams, catalog = catalog, load_players = load_players, load_all = load_all)
 }
 
 base_scouting_data_dir <- function() {
@@ -526,22 +531,22 @@ base_opponent_scouting_workspace_ui <- function() {
       tags$div(
         class = "base-scouting-launch-copy",
         tags$div(class = "base-scouting-launch-mark", "B"),
-        tags$h2("Choose an opponent to begin"),
+        tags$h2("Choose scouting data to begin"),
         tags$p(
-          "Select one team to open its scouting workspace. BASE will load that team's player directory first, then only the players you choose."
+          "Individual files load all players. For the college Parquet source, select an opponent and then the players to load."
         )
       ),
       tags$div(
         class = "base-scouting-launch-controls",
         base_scouting_source_input("base_scouting_source"),
-        selectizeInput(
+        conditionalPanel("input.base_scouting_source === 'season'", selectizeInput(
           "base_scouting_team", "Opponent team", choices = NULL,
           options = list(placeholder = "Search college teams", maxOptions = 100),
           width = "100%"
-        ),
+        )),
         tags$div(
           class = "base-scouting-launch-actions",
-          actionButton("base_scouting_open", "Open team", class = "btn btn-primary"),
+          actionButton("base_scouting_open", "Open scouting", class = "btn btn-primary"),
           actionButton("base_scouting_open_csv", "Use game CSVs", class = "btn btn-outline-secondary")
         ),
         shiny::uiOutput("base_scouting_launch_status")
@@ -601,13 +606,8 @@ base_opponent_scouting_workspace_server <- function(
   })
   observe({
     source_id <- input$base_scouting_source %||% "F26"
-    req(source_id != "csv")
-    source <- if (source_id == "season") season_source else {
-      catalog <- source_catalog()
-      req(source_id %in% catalog$id)
-      base_scouting_season_source(catalog$path[match(source_id,catalog$id)],
-        team_code=if(source_id=="S26") TEAM_CONFIG$data_code else NULL)
-    }
+    if (source_id != "season") { available_teams(character()); return() }
+    source <- season_source
     teams <- tryCatch(
       # The pitcher catalog is already mounted at BASE startup and contains
       # the complete team directory. Avoid touching the hitter catalog until
@@ -623,6 +623,8 @@ base_opponent_scouting_workspace_server <- function(
   })
 
   output$base_scouting_launch_status <- renderUI({
+    if (!identical(input$base_scouting_source %||% "F26", "season"))
+      return(tags$p(class="base-scouting-launch-status", "All players in the selected file will be loaded."))
     teams <- available_teams()
     if (is.null(teams)) return(tags$p(class = "base-scouting-launch-status", "Loading team directory…"))
     error <- attr(teams, "error") %||% ""
@@ -644,7 +646,7 @@ base_opponent_scouting_workspace_server <- function(
     } else {
       "csv"
     }
-    if (identical(mode, "season")) {
+    if (identical(selected_source, "season")) {
       team <- input$base_scouting_team %||% ""
       if (!nzchar(team)) {
         showNotification("Choose an opponent team first.", type = "warning")

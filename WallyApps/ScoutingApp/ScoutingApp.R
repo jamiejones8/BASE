@@ -5033,7 +5033,7 @@ ui <- base_scouting_page(
                if (!is.null(SCOUTING_SEASON_SOURCE)) tagList(
                  base_scouting_source_input("scout_data_source"),
                  conditionalPanel(
-                   "input.scout_data_source !== 'csv'",
+                   "input.scout_data_source === 'season'",
                    uiOutput("scout_season_status"),
                    selectizeInput("scout_team", "Opponent team", choices = NULL),
                    conditionalPanel("input.main_tab === 'Hitter Card' || input.main_tab === 'Pitch Type Tables' || input.main_tab === 'Heat Maps' || input.main_tab === 'matchup_grid'",
@@ -5211,13 +5211,21 @@ server <- function(input, output, session, initial_source = "season"){
       team_code=if(id=="S26") TEAM_CONFIG$data_code else NULL)
   })
 
+  individual_file_mode <- reactive(!((input$scout_data_source %||% initial_source) %in% c("season", "csv")))
+  file_rows <- reactive({
+    req(individual_file_mode())
+    rows <- tryCatch(selected_source()$load_all(),
+      error=function(e) shiny::validate(shiny::need(FALSE, conditionMessage(e))))
+    shiny::validate(shiny::need(nrow(rows)>0, "No pitches found in this file."))
+    rows
+  })
   season_mode <- reactive(!is.null(SCOUTING_SEASON_SOURCE) &&
     !identical(input$scout_data_source %||% initial_source, "csv"))
   selected_season_team <- reactive({
     input$scout_team %||% input$base_scouting_team %||% ""
   })
   season_teams <- reactive({
-    req(season_mode())
+    req(season_mode(), !individual_file_mode())
     tryCatch(
       withProgress(message = "Loading college team directory", value = 0.5, {
         selected_source()$teams("pitcher")
@@ -5250,7 +5258,8 @@ server <- function(input, output, session, initial_source = "season"){
   for (role_value in c("hitter", "pitcher")) local({
     role <- role_value
     player_id <- paste0("scout_season_", role, "s")
-    observeEvent(list(selected_season_team(), season_teams(), active_roles()), {
+    observeEvent(list(selected_season_team(), if (!individual_file_mode()) season_teams(), active_roles()), {
+      if (individual_file_mode()) return()
       if (!role %in% active_roles()) return()
       team <- selected_season_team()
       catalog <- tryCatch(season_catalog(role, team), shiny.silent.error = function(e) {
@@ -5267,6 +5276,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
   season_rows <- function(role) {
     req(season_mode())
+    if (individual_file_mode()) return(file_rows())
     team <- selected_season_team()
     players <- input[[paste0("scout_season_", role, "s")]]
     catalog <- season_catalog(role, team)
