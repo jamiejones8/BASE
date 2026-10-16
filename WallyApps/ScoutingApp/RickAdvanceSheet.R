@@ -394,11 +394,7 @@ rick_server <- function(input,output,session,pitcher_data) {
       rick_sheet(split,input$rick_pitcher,side,doc$notes,doc$shapes,pitcher_hand=d$PitcherThrows)
     })
   })
-  output$rick_pdf <- downloadHandler(
+  output$rick_pdf <- scouting_pdf_download(
     filename=function() paste0('Rick Advance Sheet - ',filename_part(input$rick_pitcher),' - RHH and LHH.pdf'),
-    content=function(file){
-      pages <- export_pages()
-      pdf(file,width=8.5,height=11);on.exit(dev.off())
-      for(page in pages) {grid.newpage();grid.draw(page)}
-    })
+    pages=function() export_pages(),width_in=8.5,height_in=11)
 }

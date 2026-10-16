@@ -1093,12 +1093,11 @@ damage_by_group_plot <- function(d){
     ggplot() + zone_layers + coord_fixed(xlim=c(-3,3), ylim=c(0,5), expand=FALSE) +
       labs(title="Damage Heat Map") + theme_void()
   )
-  if (sd(dd$plate_x, na.rm=TRUE)==0) dd$plate_x <- dd$plate_x + rnorm(nrow(dd), 0, 1e-6)
-  if (sd(dd$plate_z, na.rm=TRUE)==0) dd$plate_z <- dd$plate_z + rnorm(nrow(dd), 0, 1e-6)
+  # Use the report heat-map bandwidth even for single-pitch/constant-location facets.
   
   ggplot(dd, aes(plate_x, plate_z)) +
     stat_density_2d(aes(fill = after_stat(ndensity)), geom = "raster",
-                    contour = FALSE, n = 160, na.rm = TRUE) +
+                    contour = FALSE, n = 160, h = c(1.28, 1.18), na.rm = TRUE) +
     scale_fill_gradientn(colors = wblyrm_palette, guide = "none") +
     facet_wrap(~ PitchGroup, ncol = 6, drop = FALSE) +
     zone_layers +
@@ -1125,12 +1124,11 @@ whiff_by_group_plot <- function(d){
     ggplot() + zone_layers + coord_fixed(xlim=c(-3,3), ylim=c(0,5), expand=FALSE) +
       labs(title="Whiff Heat Map") + theme_void()
   )
-  if (sd(dd$plate_x, na.rm=TRUE)==0) dd$plate_x <- dd$plate_x + rnorm(nrow(dd), 0, 1e-6)
-  if (sd(dd$plate_z, na.rm=TRUE)==0) dd$plate_z <- dd$plate_z + rnorm(nrow(dd), 0, 1e-6)
+  # Use the report heat-map bandwidth even for single-pitch/constant-location facets.
   
   ggplot(dd, aes(plate_x, plate_z)) +
     stat_density_2d(aes(fill = after_stat(ndensity)), geom = "raster",
-                    contour = FALSE, n = 160, na.rm = TRUE) +
+                    contour = FALSE, n = 160, h = c(1.28, 1.18), na.rm = TRUE) +
     scale_fill_gradientn(colors = wblyrm_palette, guide = "none") +
     facet_wrap(~ PitchGroup, ncol = 6, drop = FALSE) +
     zone_layers +
@@ -3024,80 +3022,50 @@ heat_maps_page <- function(d, hand_filter = "Total", page_num = 1, player_order 
   )
   as_inset_page_plot(page)
 }
-# --- Robust PDF helpers with detailed error messages ---
-write_error_pdf <- function(file, msg, width_in = LETTER_W, height_in = LETTER_H){
-  grDevices::pdf(file, width = width_in, height = height_in, onefile = FALSE, useDingbats = FALSE)
-  grid::grid.newpage()
-  grid::grid.text(
-    label = paste0("Export error:\n\n", msg),
-    x = 0.5, y = 0.6, gp = grid::gpar(cex = 0.95, col = "#501214", fontface = "bold")
-  )
-  grid::grid.text(
-    label = "(PDF was generated to avoid a browser error. See the message above.)",
-    x = 0.5, y = 0.10, gp = grid::gpar(cex = 0.7, col = "#444444")
-  )
-  grDevices::dev.off()
-}
-
-save_card_pdf <- function(file, plot, width_in, height_in){
-  errs <- character(0)
-  ok <- FALSE
-  
-  # Try cairo_pdf via ggsave
-  if (isTRUE(capabilities("cairo"))) {
-    tryCatch({
-      ggplot2::ggsave(
-        filename = file, plot = plot,
-        device   = grDevices::cairo_pdf,
-        width    = width_in, height = height_in, units = "in", dpi = 300,
-        dev.args = list(useDingbats = FALSE)
-      )
-      ok <- file.exists(file)
-    }, error = function(e){ errs <<- c(errs, paste("cairo_pdf:", conditionMessage(e))) })
-  }
-  
-  # Fallback: base pdf via ggsave
-  if (!ok) {
-    tryCatch({
-      ggplot2::ggsave(
-        filename = file, plot = plot,
-        device   = grDevices::pdf,
-        width    = width_in, height = height_in, units = "in", dpi = 300
-      )
-      ok <- file.exists(file)
-    }, error = function(e){ errs <<- c(errs, paste("pdf(ggsave):", conditionMessage(e))) })
-  }
-  
-  # Final fallback: manual device open/close
-  if (!ok) {
-    tryCatch({
-      grDevices::pdf(file, width = width_in, height = height_in, onefile = FALSE, useDingbats = FALSE)
-      print(plot)
-      grDevices::dev.off()
-      ok <- file.exists(file)
-    }, error = function(e){ errs <<- c(errs, paste("pdf(manual):", conditionMessage(e))) })
-  }
-  
-  list(ok = ok, err = if (length(errs)) paste(errs, collapse = "\n") else NULL)
-}
-
-save_multi_page_pdf <- function(file, plots, width_in, height_in){
-  errs <- character(0)
-  ok <- FALSE
+# Publish a report only after every page has rendered and the device is closed.
+# Both ggplots and grid grobs (Rick sheets) use the same export path.
+save_multi_page_pdf <- function(file, plots, width_in, height_in) {
+  staging <- tempfile("scouting-report-", tmpdir=dirname(file), fileext=".pdf")
+  device <- NULL
+  on.exit({
+    if (!is.null(device) && device %in% grDevices::dev.list()) grDevices::dev.off(device)
+    unlink(staging)
+  }, add=TRUE)
   tryCatch({
-    grDevices::pdf(file, width = width_in, height = height_in, onefile = TRUE, useDingbats = FALSE)
-    on.exit(grDevices::dev.off(), add = TRUE)
-    for (p in plots) print(p)
-    ok <- file.exists(file)
-  }, error = function(e){
-    errs <<- c(errs, conditionMessage(e))
-  })
-  list(ok = ok, err = if (length(errs)) paste(errs, collapse = "\n") else NULL)
+    if (!length(plots)) stop("No report pages are available for this selection.")
+    grDevices::pdf(staging, width=width_in, height=height_in, onefile=TRUE, useDingbats=FALSE)
+    device <- grDevices::dev.cur()
+    for (page in plots) {
+      if (grid::is.grob(page)) { grid::grid.newpage(); grid::grid.draw(page) }
+      else if (inherits(page, "ggplot")) print(page)
+      else stop("The report contains an invalid page.")
+    }
+    grDevices::dev.off(device)
+    device <- NULL
+    if (!file.exists(staging) || file.info(staging)$size <= 0) stop("No PDF was written.")
+    if (!file.copy(staging,file,overwrite=TRUE)) stop("Unable to save the PDF download.")
+    list(ok=TRUE,err=NULL)
+  }, error=function(e) list(ok=FALSE,err=conditionMessage(e)))
 }
-
-
-
-
+save_card_pdf <- function(file, plot, width_in, height_in) {
+  save_multi_page_pdf(file,list(plot),width_in,height_in)
+}
+scouting_pdf_download <- function(filename, pages, width_in, height_in, session=shiny::getDefaultReactiveDomain()) {
+  shiny::downloadHandler(filename=filename, contentType="application/pdf", content=function(file) {
+    tryCatch({
+      result <- save_multi_page_pdf(file,pages(),width_in,height_in)
+      if (!isTRUE(result$ok)) stop(result$err)
+    }, error=function(e) {
+      unlink(file)
+      detail <- conditionMessage(e)
+      if (!nzchar(detail)) detail <- "Select players with data before downloading."
+      message("[Scouting PDF] ",detail)
+      shiny::showNotification(paste("Report not downloaded:",detail),type="warning",session=session)
+      # Never substitute an error page or leave a partially rendered PDF.
+      shiny::req(FALSE)
+    })
+  })
+}
 
 # -------------------- Pitcher card helpers (from app.R) --------------------
 pitcher_env <- new.env(parent = globalenv())
@@ -4169,6 +4137,7 @@ local({
         geom = "raster",
         contour = FALSE,
         n = 160,
+        h = c(1.28, 1.18),
         na.rm = TRUE
       ) +
       geom_pitch_location(data = d_scatter,
@@ -5767,6 +5736,7 @@ server <- function(input, output, session, initial_source = "season"){
   }, ignoreInit = TRUE)
   
   report_guard_message <- function(role) {
+    if (individual_file_mode()) return(NULL)
     if (season_mode()) {
       if (!length(input[[paste0("scout_season_", role)]])) {
         return(helpText(paste("Choose a team and", role, "in the sidebar to begin.")))
@@ -5791,7 +5761,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
 
   output$matchup_guard_msg <- renderUI({
-    if (season_mode() && (!length(input$scout_season_hitters) || !length(input$scout_season_pitchers))) {
+    if (season_mode() && !individual_file_mode() && (!length(input$scout_season_hitters) || !length(input$scout_season_pitchers))) {
       return(helpText("Choose hitters and pitchers in the sidebar to build the matchup grid."))
     }
     if (!season_mode() && (is.null(input$matchup_pitchers_file) || is.null(input$matchup_hitters_file))) {
@@ -6247,207 +6217,60 @@ server <- function(input, output, session, initial_source = "season"){
     team_code_from_files(isolate(input$csv_files), default)
   }
   
-  output$dl_pitcher_card_pdf <- downloadHandler(
-    filename = function(){
-      pitcher <- isolate(input$pitcher_card_pitcher %||% "Pitcher")
-      paste0(pitcher_last_slug(pitcher), "_", pitcher_card_split_tag(isolate(input$pitcher_card_batter_side %||% "Total")), ".pdf")
-    },
-    contentType = "application/pdf",
-    content = function(file){
-      err_msg <- NULL
-      d_base <- tryCatch(df_pitcher_card(), error = function(e){ err_msg <<- conditionMessage(e); NULL })
-      if (is.null(d_base) || !nrow(d_base)) {
-        write_error_pdf(file, err_msg %||% "No rows for selected pitcher.")
-        return(invisible(NULL))
+  output$dl_pitcher_card_pdf <- scouting_pdf_download(
+    filename=function() paste0(pitcher_last_slug(input$pitcher_card_pitcher %||% "Pitcher"), "_",
+      pitcher_card_split_tag(input$pitcher_card_batter_side %||% "Total"), ".pdf"),
+    pages=function() {
+      d <- df_pitcher_card()
+      shiny::validate(shiny::need(nrow(d)>0,"No rows for selected pitcher."))
+      build_pitcher_card_pages(d,input$pitcher_card_batter_side %||% "Total")
+    }, width_in=LETTER_W,height_in=LETTER_H)
+
+  output$dl_pitcher_bust_pdf <- scouting_pdf_download(
+    filename=function() paste0(selected_team_code()," Pitch Type Splits.pdf"),
+    pages=function() {
+      std <- pitcher_std_all()
+      hand <- input$pitcher_bust_hand %||% "Total"
+      order <- pitcher_bust_order()
+      shiny::validate(shiny::need(length(order)>0,"Select at least one pitcher."))
+      source_map <- pitcher_bust_source_map()
+      n <- pitcher_bust_page_count(std,hand,order,source_map=source_map)
+      lapply(seq_len(n),function(pg) pitcher_bust_tables_page(std,hand,pg,order,source_map=source_map))
+    },width_in=PORTRAIT_W,height_in=PORTRAIT_H)
+
+  output$dl_pdf <- scouting_pdf_download(
+    filename=function() paste0(gsub("\\s+","_",input$player %||% "card"),"_hitting_card.pdf"),
+    pages=function() {
+      d <- df_player()
+      shiny::validate(shiny::need(nrow(d)>0,"No rows for selected hitter."))
+      list(build_card(d,paste0(input$player,batter_side_suffix(d))))
+    },width_in=LETTER_W,height_in=LETTER_H)
+
+  output$dl_pitch_type_pdf <- scouting_pdf_download(
+    filename=function() paste0(selected_team_code(),"_Pitch_Types.pdf"),
+    pages=function() {
+      std <- std_all()
+      order <- report_hitter_order()
+      shiny::validate(shiny::need(length(order)>0,"Select at least one hitter."))
+      combine <- isTRUE(input$pitch_type_combine_sl_sw)
+      pages <- list()
+      for (hand in c("RHP","LHP")) {
+        n <- pitch_type_page_count(std,hand,order,combine_sl_sw=combine)
+        pages <- c(pages,lapply(seq_len(n),function(pg)
+          pitch_type_tables_page(std,hand,pg,order,combine_sl_sw=combine)))
       }
-      pages <- tryCatch(
-        build_pitcher_card_pages(d_base, isolate(input$pitcher_card_batter_side %||% "Total")),
-        error = function(e){ err_msg <<- paste("compose_report():", conditionMessage(e)); NULL }
-      )
-      if (is.null(pages) || !length(pages)) {
-        write_error_pdf(file, err_msg %||% "Could not assemble pitcher card.")
-        return(invisible(NULL))
-      }
-      res <- save_multi_page_pdf(file, pages, width_in = LETTER_W, height_in = LETTER_H)
-      if (!isTRUE(res$ok)) {
-        write_error_pdf(file, res$err %||% "Unknown error while generating the report.")
-      }
-    }
-  )
-  
-  output$dl_pitcher_bust_pdf <- downloadHandler(
-    filename = function(){
-      paste0(selected_team_code(), " Pitch Type Splits.pdf")
-    },
-    contentType = "application/pdf",
-    content = function(file){
-      err_msg <- NULL
-      std <- tryCatch(pitcher_std_all(), error = function(e){ err_msg <<- conditionMessage(e); NULL })
-      if (is.null(std)) {
-        write_error_pdf(file, err_msg %||% "Failed while standardizing pitcher columns.", PORTRAIT_W, PORTRAIT_H)
-        return(invisible(NULL))
-      }
-      pages <- tryCatch(
-        {
-          hand <- isolate(input$pitcher_bust_hand %||% "Total")
-          order <- isolate(pitcher_bust_order())
-          source_map <- isolate(pitcher_bust_source_map())
-          if (!length(order)) {
-            write_error_pdf(file, "Select at least one pitcher to export the bust table.", PORTRAIT_W, PORTRAIT_H)
-            return(invisible(NULL))
-          }
-          n_pages <- pitcher_bust_page_count(std, hand, order, source_map = source_map)
-          lapply(seq_len(n_pages), function(pg) {
-            pitcher_bust_tables_page(std, hand, pg, order, source_map = source_map)
-          })
-        },
-        error = function(e){ err_msg <<- paste("pitcher_bust_tables_page():", conditionMessage(e)); NULL }
-      )
-      if (is.null(pages)) {
-        write_error_pdf(file, err_msg %||% "Could not assemble pitcher bust table.", PORTRAIT_W, PORTRAIT_H)
-        return(invisible(NULL))
-      }
-      res <- save_multi_page_pdf(file, pages, width_in = PORTRAIT_W, height_in = PORTRAIT_H)
-      if (!isTRUE(res$ok)) {
-        write_error_pdf(file, res$err %||% "Unknown error while generating the report.", PORTRAIT_W, PORTRAIT_H)
-      }
-    }
-  )
-  
-  output$dl_pdf <- downloadHandler(
-    filename = function(){
-      d <- tryCatch(df_player(), error = function(e) NULL)
-      nm <- (input$player %||% "card")
-      if (!is.null(d)) nm <- paste0(nm, batter_side_suffix(d))
-      paste0(gsub("\\s+","_", nm), "_hitting_card.pdf")
-    },
-    contentType = "application/pdf",
-    content = function(file){
-      # Build data WITHOUT calling df_player() (avoids validate/need inside reactive)
-      err_msg <- NULL
-      player_name <- isolate(input$player %||% "")
-      raw <- tryCatch(df_all(), error = function(e){ err_msg <<- paste("df_all():", conditionMessage(e)); NULL })
-      if (is.null(raw)) {
-        write_error_pdf(file, err_msg %||% "Failed to load data.")
-        return(invisible(NULL))
-      }
-      
-      std <- tryCatch(std_cols(raw), error = function(e){ err_msg <<- paste("std_cols():", conditionMessage(e)); NULL })
-      if (is.null(std)) {
-        write_error_pdf(file, err_msg %||% "Failed while standardizing columns.")
-        return(invisible(NULL))
-      }
-      
-      bat_col <- pick_first(c("Batter","Hitter","batter_name","batter"), std)
-      d <- tryCatch({
-        if (is.na(bat_col) || !nzchar(player_name)) std[0, ] else dplyr::filter(std, .data[[bat_col]] == player_name)
-      }, error = function(e){ err_msg <<- paste("filter(player):", conditionMessage(e)); NULL })
-      
-      if (is.null(d) || !nrow(d)) {
-        write_error_pdf(file, err_msg %||% "No rows for selected player.")
-        return(invisible(NULL))
-      }
-      
-      player_disp <- paste0(player_name, batter_side_suffix(d))
-      card <- tryCatch(
-        build_card(d, player_disp),
-        error = function(e){ err_msg <<- paste("build_card():", conditionMessage(e)); NULL }
-      )
-      
-      if (is.null(card)) {
-        write_error_pdf(file, err_msg %||% "Could not assemble the plotting layout.")
-        return(invisible(NULL))
-      }
-      
-      res <- save_card_pdf(file, card, width_in = LETTER_W, height_in = LETTER_H)
-      if (!isTRUE(res$ok)) {
-        write_error_pdf(file, res$err %||% "Unknown error while generating the report.")
-      }
-    }
-  )
-  
-  output$dl_pitch_type_pdf <- downloadHandler(
-    filename = function(){
-      paste0(selected_team_code(), "_Pitch_Types.pdf")
-    },
-    contentType = "application/pdf",
-    content = function(file){
-      err_msg <- NULL
-      raw <- tryCatch(df_all(), error = function(e){ err_msg <<- paste("df_all():", conditionMessage(e)); NULL })
-      if (is.null(raw)) {
-        write_error_pdf(file, err_msg %||% "Failed to load data.", PORTRAIT_W, PORTRAIT_H)
-        return(invisible(NULL))
-      }
-      std <- tryCatch(std_cols(raw), error = function(e){ err_msg <<- paste("std_cols():", conditionMessage(e)); NULL })
-      if (is.null(std)) {
-        write_error_pdf(file, err_msg %||% "Failed while standardizing columns.", PORTRAIT_W, PORTRAIT_H)
-        return(invisible(NULL))
-      }
-      pages <- tryCatch(
-        {
-          selected <- isolate(input$hitter_order)
-          if (is.null(selected)) selected <- character(0)
-          order <- apply_player_order(hitter_order_from_data(std, "game"), selected)
-          export_hands <- c("RHP", "LHP")
-          combine_sl_sw <- isTRUE(isolate(input$pitch_type_combine_sl_sw))
-          lapply(export_hands, function(hand) {
-            pitch_type_tables_page(std, hand, page_num = 1, player_order = order, combine_sl_sw = combine_sl_sw)
-          })
-        },
-        error = function(e){ err_msg <<- paste("pitch_type_tables_page():", conditionMessage(e)); NULL }
-      )
-      if (is.null(pages)) {
-        write_error_pdf(file, err_msg %||% "Could not assemble pitch type tables.", PORTRAIT_W, PORTRAIT_H)
-        return(invisible(NULL))
-      }
-      res <- save_multi_page_pdf(file, pages, width_in = PORTRAIT_W, height_in = PORTRAIT_H)
-      if (!isTRUE(res$ok)) {
-        write_error_pdf(file, res$err %||% "Unknown error while generating the report.", PORTRAIT_W, PORTRAIT_H)
-      }
-    }
-  )
-  
-  output$dl_heat_maps_pdf <- downloadHandler(
-    filename = function(){
-      paste0(selected_team_code(), "_HeatMaps.pdf")
-    },
-    contentType = "application/pdf",
-    content = function(file){
-      err_msg <- NULL
-      raw <- tryCatch(df_all(), error = function(e){ err_msg <<- paste("df_all():", conditionMessage(e)); NULL })
-      if (is.null(raw)) {
-        write_error_pdf(file, err_msg %||% "Failed to load data.", PORTRAIT_W, PORTRAIT_H)
-        return(invisible(NULL))
-      }
-      std <- tryCatch(std_cols(raw), error = function(e){ err_msg <<- paste("std_cols():", conditionMessage(e)); NULL })
-      if (is.null(std)) {
-        write_error_pdf(file, err_msg %||% "Failed while standardizing columns.", PORTRAIT_W, PORTRAIT_H)
-        return(invisible(NULL))
-      }
-      page <- tryCatch(
-        {
-          selected <- isolate(input$hitter_order)
-          if (is.null(selected)) selected <- character(0)
-          order <- apply_player_order(hitter_order_from_data(std, "game"), selected)
-          n_pages <- heat_map_page_count(std, order)
-          lapply(seq_len(n_pages), function(pg) {
-            heat_maps_page(std, isolate(input$heat_maps_hand %||% "Total"), pg, order)
-          })
-        },
-        error = function(e){ err_msg <<- paste("heat_maps_page():", conditionMessage(e)); NULL }
-      )
-      if (is.null(page)) {
-        write_error_pdf(file, err_msg %||% "Could not assemble heat maps.", PORTRAIT_W, PORTRAIT_H)
-        return(invisible(NULL))
-      }
-      res <- save_multi_page_pdf(file, page, width_in = PORTRAIT_W, height_in = PORTRAIT_H)
-      if (!isTRUE(res$ok)) {
-        write_error_pdf(file, res$err %||% "Unknown error while generating the report.", PORTRAIT_W, PORTRAIT_H)
-      }
-    }
-  )
-  
-  
+      pages
+    },width_in=PORTRAIT_W,height_in=PORTRAIT_H)
+
+  output$dl_heat_maps_pdf <- scouting_pdf_download(
+    filename=function() paste0(selected_team_code(),"_HeatMaps.pdf"),
+    pages=function() {
+      std <- std_all()
+      order <- report_hitter_order()
+      shiny::validate(shiny::need(length(order)>0,"Select at least one hitter."))
+      lapply(seq_len(heat_map_page_count(std,order)),function(pg)
+        heat_maps_page(std,input$heat_maps_hand %||% "Total",pg,order))
+    },width_in=PORTRAIT_W,height_in=PORTRAIT_H)
 }
 
 shinyApp(ui, server)
