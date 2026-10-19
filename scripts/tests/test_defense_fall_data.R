@@ -39,8 +39,10 @@ unlink(path)
 cat('Fall defense: all bundled pitches matched, contact metrics retained, fall-only opportunities and summaries passed.\n')
 
 # Bundled data must be present in deployment, not merely on the developer Mac.
-context <- readLines('.dockerignore')
+for (ignore_file in c('.dockerignore', '.railwayignore')) {
+context <- readLines(ignore_file)
 stopifnot(all(c('!WallyApps/DefenseApp/data/',
                '!WallyApps/DefenseApp/data/2026 Fall Defense.csv',
                '!WallyApps/DefenseApp/data/2026 Fall Batted Balls*.csv',
                '!WallyApps/DefenseApp/data/d1_defense_play_probability_baseline.csv') %in% context))
+}
