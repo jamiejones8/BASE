@@ -8614,6 +8614,7 @@ server <- function(input, output, session){
   aar_recent_reports <- reactive({
     d <- rv$df
     if (is.null(d) || !nrow(d)) return(tibble::tibble())
+    d <- filter_team_or_portal(d, "PitcherTeam")
     if ("is_bullpen" %in% names(d)) d <- d %>% dplyr::filter(!(is_bullpen %in% TRUE))
     if ("PitchType" %in% names(d)) d <- d %>% dplyr::filter(!(as.character(PitchType) %in% "Bad data"))
     sg <- aar_season_group_values()

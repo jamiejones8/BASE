@@ -358,6 +358,19 @@ shiny::testServer(workspace$server, {
   if (!nrow(decay$pitches)) fail("Pitch Decay returned no fixture pitches.")
   recent_aars <- aar_recent_reports()
   if (!nrow(recent_aars)) fail("Moved Pitching AAR archive returned no fixture rows.")
+  original_rows <- rv$df
+  opponent_row <- original_rows[1, , drop = FALSE]
+  opponent_row$Pitcher <- "Opponent, TCU"
+  opponent_row$PitcherTeam <- "TCU_HFG"
+  rv$df <- dplyr::bind_rows(original_rows, opponent_row)
+  if ("Opponent, TCU" %in% aar_recent_reports()$Pitcher) {
+    fail("Pitching Recent AARs includes an opposing pitcher.")
+  }
+  rv$df <- opponent_row
+  if (nrow(aar_recent_reports())) {
+    fail("Pitching Recent AARs falls back to opposing pitchers when no team rows exist.")
+  }
+  rv$df <- original_rows
   gp <- aar_game_data()
   sp <- aar_season_data()
   aar_date <- as.Date("2026-03-15")
