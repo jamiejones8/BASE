@@ -148,7 +148,8 @@ base_validate_sports_science_import <- function(rows, target_id) {
   list(rows = rows, target = target, dates = parsed)
 }
 
-base_replace_sports_science_import <- function(upload_path, target_id, root = NULL) {
+base_replace_sports_science_import <- function(upload_path, target_id, root = NULL,
+                                              expected_fingerprint = NULL, check_fingerprint = FALSE) {
   target <- base_sports_science_import_target(target_id)
   directory <- base_sports_science_import_root(root)
   destination <- base_sports_science_import_path(target$id, root = directory)
@@ -166,6 +167,13 @@ base_replace_sports_science_import <- function(upload_path, target_id, root = NU
   }
   on.exit(unlink(lock, recursive = TRUE, force = TRUE), add = TRUE)
 
+  if (isTRUE(check_fingerprint)) {
+    current <- base_sports_science_source_status(target$id, root = directory)$path
+    if (!identical(base_trackman_csv_fingerprint(current), expected_fingerprint)) {
+      stop("This source changed while the replacement was being reviewed. Select the replacement again.", call. = FALSE)
+    }
+  }
+
   incoming <- tryCatch(
     base_read_sports_science_import(upload_path),
     error = function(e) stop(target$label, " could not be read: ", conditionMessage(e), call. = FALSE)
@@ -179,6 +187,7 @@ base_replace_sports_science_import <- function(upload_path, target_id, root = NU
   }
 
   prior_files <- base_sports_science_import_files(target$id, root = directory)
+  if (isTRUE(check_fingerprint)) invisible(lapply(prior_files, base_backup_source_csv))
   backup_dir <- tempfile(pattern = paste0(".base-", tolower(target$id), "-previous-"), tmpdir = directory)
   if (!dir.create(backup_dir, showWarnings = FALSE)) {
     stop("Could not prepare the atomic ", target$label, " replacement.", call. = FALSE)

@@ -483,8 +483,45 @@ base_trackman_csv_fingerprint <- function(path) {
   list(
     path = normalizePath(path, winslash = "/", mustWork = TRUE),
     size = unname(info$size[[1]]),
-    modified = as.numeric(unname(info$mtime[[1]]))
+    modified = as.numeric(unname(info$mtime[[1]])),
+    md5 = unname(tools::md5sum(path))
   )
+}
+
+# Full-file replacements allow multiple games and changes to the row count.
+base_replace_trackman_csv <- function(upload_path, target_id, fingerprint, root = NULL) {
+  target <- base_team_season_import_target(target_id)
+  path <- base_team_season_import_path(target$id, root = root)
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  lock <- file.path(dirname(path), paste0(".", target$id, "-write.lock"))
+  if (!dir.create(lock, showWarnings = FALSE)) stop("This source is already being updated. Try again shortly.", call. = FALSE)
+  on.exit(unlink(lock, recursive = TRUE), add = TRUE)
+  if (!identical(base_trackman_csv_fingerprint(path), fingerprint)) {
+    stop("This source changed while the replacement was being reviewed. Select the replacement again.", call. = FALSE)
+  }
+  rows <- base_read_trackman_import(upload_path)
+  if (!nrow(rows)) stop("The replacement CSV has no data rows.", call. = FALSE)
+  if (nrow(readr::problems(rows))) stop("The replacement CSV has malformed rows.", call. = FALSE)
+  base_validate_trackman_manual_edit(rows, target$id)
+  keys <- base_trackman_event_key(rows)
+  if (anyNA(keys) || any(!nzchar(keys)) || anyDuplicated(keys)) {
+    stop("Every row must have a unique TrackMan pitch identity.", call. = FALSE)
+  }
+  team_rows <- base_team_matches(rows$PitcherTeam) | base_team_matches(rows$BatterTeam)
+  if (!any(team_rows)) stop("No Texas State rows were found in the replacement CSV.", call. = FALSE)
+  if (identical(target$kind, "positioning") && !is.null(target$season_id)) rows$SeasonGroup <- target$season_id
+  backup <- base_backup_source_csv(path)
+  base_atomic_write_trackman_csv(rows, path)
+  list(target_id = target$id, destination = path, total_rows = nrow(rows), backup = backup)
+}
+
+base_backup_source_csv <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  directory <- file.path(dirname(path), "backups")
+  dir.create(directory, recursive = TRUE, showWarnings = FALSE)
+  backup <- tempfile(pattern = paste0(basename(path), "-"), tmpdir = directory, fileext = ".bak")
+  if (!file.copy(path, backup)) stop("Could not back up the current source. No replacement was saved.", call. = FALSE)
+  backup
 }
 
 base_validate_trackman_manual_edit <- function(rows, target_id, before = NULL) {

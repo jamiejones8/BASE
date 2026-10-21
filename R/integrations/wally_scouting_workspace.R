@@ -231,6 +231,29 @@ base_import_scouting_file <- function(path, name, root = base_scouting_data_dir(
   list(path = destination, filename = filename, rows = nrow(rows))
 }
 
+base_replace_scouting_csv <- function(upload_path, source_id, fingerprint, root = base_scouting_data_dir()) {
+  catalog <- base_scouting_source_catalog(root)
+  selected <- catalog[catalog$id == source_id & startsWith(catalog$id, "upload:"), , drop = FALSE]
+  if (nrow(selected) != 1L) stop("Choose a stored opponent scouting CSV.", call. = FALSE)
+  path <- selected$path[[1]]
+  lock <- paste0(path, ".replace.lock")
+  if (!dir.create(lock, showWarnings = FALSE)) stop("This scouting file is already being replaced.", call. = FALSE)
+  on.exit(unlink(lock, recursive = TRUE), add = TRUE)
+  if (!identical(base_trackman_csv_fingerprint(path), fingerprint)) {
+    stop("This scouting file changed. Select the replacement again.", call. = FALSE)
+  }
+  rows <- base_read_trackman_import(upload_path)
+  required <- c("PitchUID", "Pitcher", "PitcherTeam", "Batter", "BatterTeam", "PitchCall")
+  if (!nrow(rows) || length(setdiff(required, names(rows))) || nrow(readr::problems(rows))) {
+    stop("Scouting replacement needs valid pitch rows and columns: ", paste(required, collapse = ", "), call. = FALSE)
+  }
+  ids <- trimws(rows$PitchUID)
+  if (anyNA(ids) || any(!nzchar(ids)) || anyDuplicated(ids)) stop("Scouting replacement needs unique, nonempty pitch IDs.", call. = FALSE)
+  backup <- base_backup_source_csv(path)
+  base_atomic_write_trackman_csv(rows, path)
+  list(destination = path, total_rows = nrow(rows), backup = backup)
+}
+
 base_scouting_team_display_name <- function(team_codes) {
   if (exists("base_team_display_name", mode = "function", inherits = TRUE)) {
     return(base_team_display_name(team_codes))

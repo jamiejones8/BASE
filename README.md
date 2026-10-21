@@ -71,6 +71,15 @@ schema and dates, and atomically replaces the prior source used by Sports
 Science. These imports never append rows, and a rejected upload leaves the
 current source unchanged.
 
+Every upload card also provides **Download entire CSV** and **Upload full file
+to replace**. Download the stored source, edit it in Excel, save it as CSV, then
+upload it through the replacement control and confirm. This replaces all rows
+instead of appending a game, so include everything that should remain in the
+source. Opponent scouting includes a selector for the stored file to edit.
+Replacements validate the CSV, reject a source changed during confirmation,
+and preserve the previous file in a sibling `backups/` directory before saving.
+Reload BASE afterward to refresh any analysis workspaces already open.
+
 The same Data Processing page includes a table editor for every managed CSV
 that currently exists. Users can filter the table, double-click individual
 cells, and explicitly confirm a save. Saves are atomic, revalidate dates and

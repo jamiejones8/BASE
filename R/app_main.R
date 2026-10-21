@@ -4293,6 +4293,17 @@ opponent_scouting_workspace_ui <- function() {
 }
 
 data_processing_workspace_ui <- function() {
+  full_file_controls <- function(prefix) {
+    tags$div(class = "base-full-file-controls",
+      tags$hr(),
+      tags$p("Edit the complete CSV in Excel, then upload it here to replace the stored file."),
+      shiny::downloadButton(paste0(prefix, "_download_full"), "Download entire CSV"),
+      shiny::fileInput(paste0(prefix, "_full_file"), "Replace the entire stored CSV",
+        accept = c("text/csv", ".csv"), buttonLabel = "Upload full file to replace",
+        placeholder = "Choose your edited CSV"),
+      shiny::textOutput(paste0(prefix, "_full_status"))
+    )
+  }
   open_retagger <- paste0(
     base_nav_click_js("pitcher_player"),
     "window.setTimeout(function(){",
@@ -4359,7 +4370,8 @@ data_processing_workspace_ui <- function() {
         label = if (is_positioning) "Validate and append" else paste("Validate and append to", target$label),
         class = "btn-primary base-import-submit"
       ),
-      shiny::uiOutput(output_id)
+      shiny::uiOutput(output_id),
+      full_file_controls(input_id)
     )
   }
   replacement_card <- function(target_id, input_id, output_id) {
@@ -4389,7 +4401,8 @@ data_processing_workspace_ui <- function() {
         label = paste("Validate and replace", target$label),
         class = "btn-primary base-import-submit"
       ),
-      shiny::uiOutput(output_id)
+      shiny::uiOutput(output_id),
+      full_file_controls(input_id)
     )
   }
 
@@ -4483,7 +4496,9 @@ data_processing_workspace_ui <- function() {
           tags$p("Upload a cleaned TrackMan CSV containing the opponent’s pitching and hitting data."),
           shiny::fileInput("dp_scouting_file", "Cleaned scouting CSV", accept = ".csv"),
           shiny::actionButton("dp_scouting_save", "Validate and save", class = "btn-primary"),
-          shiny::textOutput("dp_scouting_status"))
+          shiny::textOutput("dp_scouting_status"),
+          shiny::selectInput("dp_scouting_full_source", "Stored scouting CSV", choices = character()),
+          full_file_controls("dp_scouting"))
       ),
       tags$section(
         class = "base-csv-editor",
@@ -4963,6 +4978,102 @@ data_processing_server <- function(input, output, session) {
   register_replacement("PULSE_EVENTS", "dp_pulse_events", states$PULSE_EVENTS)
   register_replacement("PULSE_WORKLOAD", "dp_pulse_workload", states$PULSE_WORKLOAD)
   register_replacement("ARM_CARE", "dp_arm_care", states$ARM_CARE)
+
+  # Full-source replacement is separate from the single-game append workflow.
+  pending_full_file <- shiny::reactiveVal(NULL)
+  scouting_catalog <- base_scouting_catalog_reactive(session)
+  shiny::observe({
+    catalog <- scouting_catalog()
+    catalog <- catalog[startsWith(catalog$id, "upload:"), , drop = FALSE]
+    selected <- shiny::isolate(input$dp_scouting_full_source)
+    if (!length(selected) || !selected %in% catalog$id) selected <- if (nrow(catalog)) catalog$id[[1]] else character()
+    shiny::updateSelectInput(session, "dp_scouting_full_source",
+      choices = stats::setNames(catalog$id, catalog$label), selected = selected)
+  })
+
+  register_full_file <- function(target_id, prefix, kind = "trackman") {
+    force(target_id)
+    force(prefix)
+    force(kind)
+    status <- shiny::reactiveVal("")
+    output[[paste0(prefix, "_full_status")]] <- shiny::renderText(status())
+    source_path <- function() {
+      if (kind == "health") return(base_sports_science_source_status(target_id)$path)
+      if (kind == "trackman") return(base_team_season_import_path(target_id))
+      catalog <- scouting_catalog()
+      selected <- catalog[catalog$id %in% input$dp_scouting_full_source & startsWith(catalog$id, "upload:"), , drop = FALSE]
+      shiny::req(nrow(selected) == 1L)
+      selected$path[[1]]
+    }
+    output[[paste0(prefix, "_download_full")]] <- shiny::downloadHandler(
+      filename = function() basename(source_path()),
+      contentType = "text/csv",
+      content = function(file) {
+        path <- source_path()
+        shiny::validate(shiny::need(file.exists(path), "No stored CSV is available yet."))
+        if (!file.copy(path, file, overwrite = TRUE)) stop("The complete CSV could not be downloaded.")
+      }
+    )
+    shiny::observeEvent(input[[paste0(prefix, "_full_file")]], {
+      upload <- input[[paste0(prefix, "_full_file")]]
+      shiny::req(upload$datapath)
+      path <- source_path()
+      pending_full_file(list(target_id = target_id, kind = kind, upload = upload,
+        path = path, source_id = input$dp_scouting_full_source,
+        fingerprint = base_trackman_csv_fingerprint(path), status = status))
+      shiny::showModal(shiny::modalDialog(
+        title = "Replace the entire stored CSV?",
+        tags$p(paste("Replace", basename(path), "with", upload$name, "?")),
+        tags$p("All rows in the stored file will be replaced. Include every game and row you want to keep. BASE will validate the CSV and back up the current file before saving."),
+        easyClose = FALSE,
+        footer = shiny::tagList(shiny::modalButton("Cancel"),
+          shiny::actionButton("dp_confirm_full_replace", "Replace entire file", class = "btn-danger"))
+      ))
+    }, ignoreInit = TRUE)
+  }
+  for (entry in list(c("F26", "dp_f26"), c("PS27", "dp_ps27"), c("S27", "dp_s27"),
+                     c("BP", "dp_bp"), c("PP_F26", "dp_positioning_f26"),
+                     c("PP_PS27", "dp_positioning_scrimmages"), c("PP_S27", "dp_positioning_s27"))) {
+    register_full_file(entry[[1]], entry[[2]])
+  }
+  register_full_file("PULSE_EVENTS", "dp_pulse_events", "health")
+  register_full_file("PULSE_WORKLOAD", "dp_pulse_workload", "health")
+  register_full_file("ARM_CARE", "dp_arm_care", "health")
+  register_full_file(NULL, "dp_scouting", "scouting")
+
+  shiny::observeEvent(input$dp_confirm_full_replace, {
+    pending <- pending_full_file()
+    shiny::req(pending)
+    pending_full_file(NULL)
+    shiny::removeModal()
+    result <- tryCatch(shiny::withProgress(message = "Validating and replacing complete CSV", value = 0.3, {
+      switch(pending$kind,
+        trackman = base_replace_trackman_csv(pending$upload$datapath, pending$target_id, pending$fingerprint),
+        health = base_replace_sports_science_import(pending$upload$datapath, pending$target_id,
+          expected_fingerprint = pending$fingerprint, check_fingerprint = TRUE),
+        scouting = base_replace_scouting_csv(pending$upload$datapath, pending$source_id, pending$fingerprint))
+    }), error = identity)
+    if (inherits(result, "error")) {
+      pending$status(paste("Replacement not saved:", conditionMessage(result)))
+      shiny::showNotification(conditionMessage(result), type = "error", duration = 10)
+      return()
+    }
+    count <- if (!is.null(result$total_rows)) result$total_rows else result$received_rows
+    pending$status(paste(format(count, big.mark = ","), "rows saved. The entire file was replaced. Reload BASE to refresh open analysis workspaces."))
+    base_clear_team_pitching_cache()
+    base_clear_team_hitting_cache()
+    base_clear_wally_pitching_state()
+    base_clear_wally_hitting_state()
+    base_clear_wally_defense_state()
+    homebase_clear_history_cache()
+    if (pending$kind == "trackman") {
+      states[[pending$target_id]](list(type = "refreshed", at = Sys.time()))
+      refresh_csv_choices(selected = pending$target_id)
+      if (identical(csv_loaded_id(), pending$target_id)) request_csv_load(pending$target_id)
+    }
+    if (pending$kind == "health") states[[pending$target_id]](list(type = "refreshed", at = Sys.time()))
+    shiny::showNotification("Complete CSV replaced successfully.", type = "message", duration = 6)
+  }, ignoreInit = TRUE)
   invisible(states)
 }
 
