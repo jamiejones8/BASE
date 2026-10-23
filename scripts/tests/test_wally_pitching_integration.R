@@ -75,6 +75,18 @@ if (any(base_is_walk_on_player_name(prepared$Pitcher)) ||
   fail("Walk On pitchers are not excluded at the shared data boundary.")
 }
 
+# Opponent identities must never remove a pitcher's PA, even without IDs.
+unknown_batters <- fixture[1:3, , drop = FALSE]
+unknown_batters$Batter <- c("Walk On Hitter", NA_character_, "")
+unknown_batters$BatterId <- NA_character_
+unknown_batters$PitchUID <- NA_character_
+unknown_batters$PlayID <- NA_character_
+unknown_batters$PAofInning <- 1:3
+unknown_batters$PitchofPA <- 1L
+unknown_batters$Catcher <- "Walk On Catcher"
+kept_unknown <- base_prepare_team_pitching_data(unknown_batters)
+stopifnot(nrow(kept_unknown) == 3L)
+
 workspace_rows <- dplyr::bind_rows(
   prepared,
   dplyr::mutate(prepared[1, , drop = FALSE], Pitcher = "Walk On Workspace", PitchUID = "workspace-walk-on-pitcher")
@@ -370,6 +382,49 @@ shiny::testServer(workspace$server, {
       fail("Pitching percentile cells do not shade favorable, unfavorable, and missing values correctly.")
     }
   }
+  # Rolling plots include initial outings instead of discarding four dates.
+  stopifnot(isTRUE(all.equal(roll_mean(1:6, 5), c(1, 1.5, 2, 2.5, 3, 4))))
+  dates <- tibble::tibble(GameIndex = 1:6, GameLabel = paste0("10/", 1:6, "/26"),
+                          wOBA = seq(.2, .7, .1))
+  trend <- build_perf_ts_plot_gg(dates, tibble::tibble(), "wOBA", list(), roll = TRUE)
+  stopifnot(identical(trend$data$GameIndex, 1:6))
+
+  # Align heaters by their sequence within each outing, not overall pitch number.
+  heaters <- tibble::tibble(CustomGameID = c(rep("a",4),rep("b",3)),
+    .game_pitch_order = c(1:4,1:3), OutingInning = c(1,1,2,2,1,1,1),
+    PitchType = c("Fastball","Slider","Fastball","Sinker","Slider","Fastball","Fastball"),
+    RelSpeed = c(90,80,88,86,80,94,92))
+  per_pitch <- pitch_decay_velocity_data(list(pitches=heaters), "pitch")
+  stopifnot(identical(per_pitch$Velo, c(92,90,86)), identical(per_pitch$Pitches,c(2L,2L,1L)))
+  per_game <- pitch_decay_velocity_data(list(pitches=heaters[1:4,]), "pitch")
+  stopifnot(identical(per_game$Velo,c(90,88,86)))
+  per_inning <- pitch_decay_velocity_data(list(pitches=heaters), "inning")
+  stopifnot(identical(per_inning$Velo,c(92,87)))
+  blank_bp <- plotly::plotly_build(build_bullpen_accum_movement_plotly(data.frame(), "Test"))
+  stopifnot(identical(blank_bp$x$layout$annotations[[1]]$text,"No Bullpen data for this pitcher"))
+  outcome <- plotly::plotly_build(make_location_plotly(tibble::tibble(
+    PitchType_plot="Fastball", PlateLocSide=0, PlateLocHeight=2.5), "Test"))
+  shapes <- outcome$x$layout$shapes
+  stopifnot(sum(vapply(shapes,function(s) identical(s$type,"rect"),logical(1)))==1L,
+            sum(vapply(shapes,function(s) identical(s$type,"line"),logical(1)))==nrow(workspace$home_plate_segments),
+            identical(shapes[[1]]$type,"circle"), identical(shapes[[1]]$fillcolor,"#FF0000"),
+            abs(shapes[[1]]$x1-shapes[[1]]$x0-2.90/12)<1e-9,
+            outcome$x$layout$yaxis$range[[1]]==0)
+  # Unknown batters remain distinct throughout AAR grouping and rendering.
+  unknown <- dataFilter()[rep(1L,3L),]
+  unknown$Batter <- c("Walk On Hitter",NA_character_,"")
+  unknown$BatterId <- NA_character_
+  unknown$BatterSide <- NA_character_
+  unknown$PAofInning <- 1:3
+  unknown$PitchofPA <- 1L
+  unknown$PitchCall <- "InPlay"
+  unknown$PlayResult <- "Out"
+  unknown$PitchUID <- paste0("unknown-",1:3)
+  unknown$pitch_uid <- unknown$PitchUID
+  unknown <- dplyr::select(unknown,-dplyr::any_of(c("PA_ID","PitchNum")))
+  stopifnot(dplyr::n_distinct(workspace$prepare_aar_flags(unknown)$PA_ID)==3L,
+            dplyr::n_distinct(workspace$pitching_pa_key(unknown))==3L)
+  invisible(ggplot2::ggplotGrob(workspace$compose_AAR_pa_grid_plot(unknown)))
   decay <- pitch_decay_base()
   if (!is.list(decay) || !all(c("pitches", "pa_last") %in% names(decay))) {
     fail("Pitch Decay did not return its preserved Wally payload.")
@@ -396,6 +451,9 @@ shiny::testServer(workspace$server, {
   aar_render_payload <<- list(game = gp, season = sp, date = aar_date)
   invisible(output$pitch_decay_table)
   invisible(output$pitch_decay_velocity)
+  session$setInputs(pitch_decay_season_mode="pitch", pitch_decay_single_mode="pitch")
+  invisible(output$pitch_decay_velocity)
+  invisible(output$pitch_decay_single_velocity)
 
   leaderboard_rows <- leaderboard_summary(leaderboard_data())
   if (!nrow(leaderboard_rows)) fail("Pitching leaderboard returned no fixture rows.")

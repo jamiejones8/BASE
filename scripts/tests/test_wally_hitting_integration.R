@@ -348,6 +348,24 @@ if (!identical(find("validate")[[1]], "package:jsonlite")) {
 }
 
 shiny::testServer(workspace$server, {
+  # One located event must produce heat rather than a minimum-sample error.
+  for (count in c(0L,1L,2L,7L)) {
+    sparse <- tibble::tibble(plate_x=rep(0,count),plate_z=rep(2.5,count))
+    heat <- plot_zone_density_trumedia(sparse)
+    stopifnot(nrow(heat$data)>0, all(is.finite(heat$data$nd)))
+    if(count>0) stopifnot(max(heat$data$nd)>0)
+    invisible(ggplot2::ggplot_build(heat))
+  }
+  grouped_data <- workspace$df[rep(1L,8L),]
+  grouped_data$PitchType <- c("Fastball","Sinker","Cutter","Slider","Curveball","Sweeper","Changeup","Splitter")
+  grouped <- workspace$summarize_by_pitchtype(grouped_data)
+  stopifnot(identical(tail(grouped$PitchType,3), c("HARD","BREAKING","SOFT")))
+  for (label in c("HARD","BREAKING","SOFT")) {
+    pitches <- switch(label,HARD=c("Fastball","Sinker"),BREAKING=c("Cutter","Slider","Curveball","Sweeper"),SOFT=c("Changeup","Splitter"))
+    expected <- workspace$summarize_overall(grouped_data[grouped_data$PitchType %in% pitches,])
+    stopifnot(isTRUE(all.equal(grouped[grouped$PitchType==label,names(expected)],expected,check.attributes=FALSE)))
+  }
+
   # The embedded server starts before its dynamically inserted UI has sent any
   # input values. Startup must remain quiet until the first hitter arrives.
   session$flushReact()

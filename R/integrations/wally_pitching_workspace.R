@@ -151,7 +151,9 @@ base_pitching_supplement_rows <- function() {
 base_pitching_event_key <- function(rows) {
   n <- nrow(rows)
   value <- function(name) {
-    if (name %in% names(rows)) trimws(as.character(rows[[name]])) else rep("", n)
+    out <- if (name %in% names(rows)) trimws(as.character(rows[[name]])) else rep("", n)
+    out[is.na(out)] <- ""
+    out
   }
   pitch_uid <- value("PitchUID")
   play_id <- value("PlayID")
@@ -186,7 +188,11 @@ base_prepare_team_pitching_data <- function(source_rows = NULL) {
     frame
   })
   rows <- dplyr::bind_rows(sources)
-  rows <- base_exclude_walk_on_players(rows)
+  for (column in intersect(c("Batter", "Catcher", "Player", "Name", "player_name"), names(rows))) {
+    rows[[column]] <- base_correct_player_names(rows[[column]])
+  }
+  # Keep every opponent PA, including walk-on/unnamed batters and catchers.
+  rows <- base_exclude_walk_on_players(rows, player_columns = "Pitcher")
   rows$.base_source_priority <- suppressWarnings(as.integer(rows$.base_source_priority))
   rows <- rows %>%
     dplyr::arrange(.data$.base_source_priority) %>%

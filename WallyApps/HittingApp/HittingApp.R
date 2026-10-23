@@ -1561,7 +1561,16 @@ summarize_by_pitchtype <- function(d){
   
   totals <- summarize_overall(d) %>% dplyr::mutate(PitchType = "Totals", .before = 1)
   
-dplyr::bind_rows(out, totals)
+  groups <- list(
+    HARD = c("Fastball", "Sinker"),
+    BREAKING = c("Cutter", "Slider", "Curveball", "Sweeper"),
+    SOFT = c("Changeup", "Splitter")
+  )
+  grouped <- dplyr::bind_rows(lapply(names(groups), function(label) {
+    dd <- d[d$.__pt %in% groups[[label]], , drop = FALSE]
+    summarize_overall(dd) %>% dplyr::mutate(PitchType = label, .before = 1)
+  }))
+  dplyr::bind_rows(out, totals, grouped)
 }
 
 performance_timeseries_choices <- c(
@@ -8671,8 +8680,8 @@ server <- function(input, output, session){
     ok <- is.finite(x) & is.finite(z)
     x <- x[ok]; z <- z[ok]
     
-    # If too few points, return a white zone (nd=0 everywhere)
-    if (length(x) < 2) {
+    # If there are no located events, return a white zone (nd=0 everywhere)
+    if (!length(x)) {
       gx <- seq(lims[1], lims[2], length.out = n)
       gz <- seq(lims[3], lims[4], length.out = n)
       g  <- expand.grid(plate_x = gx, plate_z = gz)
@@ -8751,8 +8760,6 @@ server <- function(input, output, session){
                                          xlim = c(-2, 2), ylim = c(0, 5),
                                          bw = c(0.55, 0.65), ngrid = 320) {
     
-    shiny::validate(shiny::need(nrow(d) > 0, "No rows in current filter."))
-    
     # Robust feet conversion (handles inches inputs)
     x <- to_num(d$plate_x); if (suppressWarnings(max(abs(x), na.rm = TRUE)) > 5)  x <- x/12
     z <- to_num(d$plate_z); if (suppressWarnings(max(z,     na.rm = TRUE)) > 10) z <- z/12
@@ -8763,20 +8770,12 @@ server <- function(input, output, session){
                     px >= xlim[1], px <= xlim[2],
                     pz >= ylim[1], pz <= ylim[2])
     
-    shiny::validate(shiny::need(nrow(dd) >= 8, "Not enough pitches with locations for a density heatmap."))
-    
-    # clamp helper (avoids needing scales::squish)
-    squish01 <- function(v) pmin(pmax(v, 0), 1)
-    
-    ggplot(dd, aes(px, pz)) +
-      stat_density_2d(
-        aes(fill = squish01(after_stat(ndensity))),
-        geom = "raster",
-        contour = FALSE,          # <- KEY: eliminates the “rings”
-        n = ngrid,
-        h = bw,
-        na.rm = TRUE
-      ) +
+    # A fixed bandwidth supports even a single event or repeated locations.
+    # Compute the grid directly: stat_density_2d drops groups with one point.
+    grid <- kde_zone_grid(dd$px, dd$pz, n = ngrid, h = bw,
+                          lims = c(xlim, ylim))
+    ggplot(grid, aes(plate_x, plate_z)) +
+      geom_raster(aes(fill = nd), interpolate = TRUE) +
       scale_fill_gradientn(colors = wblyrm_palette, guide = "none", na.value = "#FFFFFF") +
       # Zone + plate on top
       geom_rect(

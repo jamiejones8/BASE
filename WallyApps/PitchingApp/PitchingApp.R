@@ -369,6 +369,22 @@ resolve_pitching_aar_d1_benchmarks <- function(values = get0(
 }
 D1_REF <- resolve_pitching_aar_d1_benchmarks()
 
+# Structural PA identity does not depend on a batter name or roster ID.
+pitching_pa_key <- function(d) {
+  n <- nrow(d)
+  value <- function(name) {
+    x <- if (name %in% names(d)) as.character(d[[name]]) else rep("", n)
+    x[is.na(x)] <- ""
+    x
+  }
+  game <- rep("", n)
+  for (name in c("CustomGameID", "GameUID", "GameID", "Date")) {
+    missing <- !nzchar(game)
+    game[missing] <- value(name)[missing]
+  }
+  paste(game, value("Top/Bottom"), value("Inning"), value("PAofInning"), sep = "|")
+}
+
 # Ensure PA_ID, PitchNum, StrikesPre/BallsPre exist; returns updated df
 ensure_counts <- function(d) {
   d <- tibble::as_tibble(d)
@@ -379,8 +395,8 @@ ensure_counts <- function(d) {
       pn <- suppressWarnings(as.integer(readr::parse_number(as.character(d$PitchofPA))))
       d$PitchNum <- pn
       d$PA_ID <- cumsum(dplyr::coalesce(pn == 1L, FALSE))
-    } else if (all(c("PAofInning","Inning","Date","Batter") %in% names(d))) {
-      d$PA_ID <- interaction(d$Date, d$Inning, d$PAofInning, d$Batter, drop = TRUE)
+    } else if (all(c("PAofInning","Inning","Date") %in% names(d))) {
+      d$PA_ID <- pitching_pa_key(d)
       d <- d %>% dplyr::group_by(PA_ID) %>% dplyr::mutate(PitchNum = dplyr::row_number()) %>% dplyr::ungroup()
     } else {
       # Fallback heuristic when explicit PA fields are missing
@@ -3133,13 +3149,9 @@ compute_pa_count <- function(df) {
     }
   }
   
-  # Combine inning + PAofInning (+ Batter if present)
+  # Count structural PAs even when batter identity is absent.
   if (all(c("Inning","PAofInning") %in% names(df))) {
-    if ("Batter" %in% names(df)) {
-      return(as.integer(dplyr::n_distinct(interaction(df$Inning, df$PAofInning, df$Batter, drop = TRUE))))
-    } else {
-      return(as.integer(dplyr::n_distinct(interaction(df$Inning, df$PAofInning, drop = TRUE))))
-    }
+    return(as.integer(dplyr::n_distinct(pitching_pa_key(df))))
   }
   
   # Fallback: count terminal pitches
@@ -3579,11 +3591,9 @@ compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {
     if (all(is.na(pa_grid_id)) || !length(pa_grid_id)) pa_grid_id <- NULL
   }
   if (is.null(pa_grid_id) && all(c("Inning","PAofInning") %in% names(d))) {
-    if ("Batter" %in% names(d)) {
-      pa_grid_id <- interaction(d$Inning, d$PAofInning, d$Batter, drop = TRUE)
-    } else {
-      pa_grid_id <- interaction(d$Inning, d$PAofInning, drop = TRUE)
-    }
+    # PA identity is independent of the batter's name or roster ID.
+    half <- if ("Top/Bottom" %in% names(d)) nz_chr(d[["Top/Bottom"]]) else ""
+    pa_grid_id <- paste(d$Inning, half, d$PAofInning, sep = "|")
   }
   if (!is.null(pa_grid_id)) {
     if (all(is.na(pa_grid_id)) || !length(pa_grid_id)) pa_grid_id <- NULL
@@ -3648,7 +3658,7 @@ compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {
   }
   format_batter_name <- function(name_raw) {
     name_raw <- trimws(as.character(name_raw))
-    if (!nzchar(name_raw)) return(NA_character_)
+    if (is.na(name_raw) || !nzchar(name_raw)) return(NA_character_)
     if (grepl(",", name_raw)) {
       parts <- strsplit(name_raw, ",", fixed = TRUE)[[1]]
       last  <- trimws(parts[1])
@@ -3664,7 +3674,7 @@ compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {
   }
   format_inning <- function(inn_raw) {
     inn_raw <- trimws(as.character(inn_raw))
-    if (!nzchar(inn_raw)) return(NA_character_)
+    if (is.na(inn_raw) || !nzchar(inn_raw)) return(NA_character_)
     inn_num <- suppressWarnings(readr::parse_number(inn_raw))
     if (is.finite(inn_num)) as.character(as.integer(inn_num)) else inn_raw
   }
@@ -3843,10 +3853,7 @@ compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {
   }
   
   max_plots <- max_cols * max_rows
-  if (nrow(pa_meta) > max_plots) {
-    warning("[AAR page2] ", nrow(pa_meta), " PAs; showing first ", max_plots, ".")
-    pa_meta <- pa_meta[seq_len(max_plots), , drop = FALSE]
-  }
+  if (nrow(pa_meta) > max_plots) max_rows <- ceiling(nrow(pa_meta) / max_cols)
   preferred_cols <- if (nrow(pa_meta) <= 2L * max_rows) 2L else max_cols
   grid_cols <- min(preferred_cols, max_cols, max(1L, nrow(pa_meta)))
   grid_rows <- min(max_rows, max(1L, ceiling(nrow(pa_meta) / grid_cols)))
@@ -6760,7 +6767,7 @@ ui <- base_pitching_page(
     ),
     checkboxInput("Bullpens", "Bullpens", value = FALSE),
     pickerInput("GameInput", HTML("Select Game"),
-                choices = games_txst, selected = initial_pitching$game,
+                choices = games_txst, selected = games_by_season(initial_pitching$season),
                 options = list(`actions-box` = TRUE), multiple = TRUE),
     pickerInput("BatterHand", HTML("Select Batter Hand<br>(Selects both by default)"),
                 choices = bh_choices, selected = bh_choices,
@@ -6895,24 +6902,31 @@ ui <- base_pitching_page(
           div(class = "table-title mb-1", "Split Summary"),
           withSpinner(DTOutput("season_summary_split_table"), type = 4, color = "#501214")
         ),
-        div(
-          class = "base-season-summary-section",
-          div(class = "table-title mb-1", "Pitch Movement"),
-          withSpinner(plotOutput("season_summary_movement", height="500px", width="100%"), type=4, color="#501214")
+        fluidRow(
+          column(6,
+            div(class = "table-title mb-1", "Pitch Movement"),
+            withSpinner(plotOutput("season_summary_movement", height="400px", width="100%"), type=4, color="#501214")
+          ),
+          column(3,
+            div(class = "table-title mb-1", "Usage vs. LHH"),
+            withSpinner(plotOutput("season_summary_usage_lhh", height="400px", width="100%"), type=4, color="#501214")
+          ),
+          column(3,
+            div(class = "table-title mb-1", "Usage vs. RHH"),
+            withSpinner(plotOutput("season_summary_usage_rhh", height="400px", width="100%"), type=4, color="#501214")
+          )
         ),
         div(
           class = "base-season-summary-hands",
           div(
             class = "base-season-summary-hand-panel",
             div(class = "table-title mb-1", "vs. Left-Handed Hitters"),
-            withSpinner(plotOutput("season_summary_usage_lhh", height = "230px", width = "100%"), type = 4, color = "#501214"),
             div(class = "base-season-summary-table-label", "Pitch Type Performance"),
             withSpinner(DTOutput("season_summary_hand_perf_lhh"), type = 4, color = "#501214")
           ),
           div(
             class = "base-season-summary-hand-panel",
             div(class = "table-title mb-1", "vs. Right-Handed Hitters"),
-            withSpinner(plotOutput("season_summary_usage_rhh", height = "230px", width = "100%"), type = 4, color = "#501214"),
             div(class = "base-season-summary-table-label", "Pitch Type Performance"),
             withSpinner(DTOutput("season_summary_hand_perf_rhh"), type = 4, color = "#501214")
           )
@@ -6929,6 +6943,11 @@ ui <- base_pitching_page(
       navset_tab(
         nav_panel(
           title = "Season",
+          shinyWidgets::radioGroupButtons(
+            "pitch_decay_season_mode", NULL,
+            choices = c("Per Inning" = "inning", "Per Pitch" = "pitch"),
+            selected = "inning", size = "sm"
+          ),
           div(class = "table-title mb-1", "Heater Velocity"),
           withSpinner(plotlyOutput("pitch_decay_velocity", height = "360px", width = "100%"), type = 4, color = "#501214"),
           div(class = "table-title mt-3 mb-1", "Times Through the Order"),
@@ -6936,6 +6955,11 @@ ui <- base_pitching_page(
         ),
         nav_panel(
           title = "Single Game",
+          shinyWidgets::radioGroupButtons(
+            "pitch_decay_single_mode", NULL,
+            choices = c("Per Inning" = "inning", "Per Pitch" = "pitch"),
+            selected = "inning", size = "sm"
+          ),
           uiOutput("pitch_decay_game_picker"),
           div(class = "table-title mb-1", "Heater Velocity"),
           withSpinner(plotlyOutput("pitch_decay_single_velocity", height = "360px", width = "100%"), type = 4, color = "#501214"),
@@ -7515,9 +7539,6 @@ server <- function(input, output, session){
     keep <- if (pitcher_changed) character(0) else cur[cur %in% ch]
     
     # if nothing is selected/kept, apply the season checkbox default behavior
-    if (is.null(last_pitcher()) && identical(input$PitcherInput, initial_pitching$pitcher)) {
-      keep <- intersect(initial_pitching$game, ch)
-    }
     if (!length(keep)) keep <- season_selected_game_ids()
     
     last_pitcher(input$PitcherInput)
@@ -7851,7 +7872,7 @@ server <- function(input, output, session){
 
   format_bullpen_summary <- function(d, include_total = FALSE, report = FALSE) {
     raw <- bullpen_metric_summary_raw(d, include_total = include_total)
-    if (!nrow(raw)) return(data.frame(Status = "No bullpen data", stringsAsFactors = FALSE))
+    if (!nrow(raw)) return(data.frame(Status = "No Bullpen data for this pitcher", stringsAsFactors = FALSE))
     fmt_num <- function(x, digits = 1) ifelse(is.finite(x), formatC(x, digits = digits, format = "f"), "--")
     fmt_pct <- function(x) ifelse(is.finite(x), paste0(round(100 * x), "%"), "--")
     fmt_avg_max <- function(avg, mx, digits = 1) {
@@ -7887,7 +7908,7 @@ server <- function(input, output, session){
 
   format_bullpen_pitch_log <- function(d) {
     d <- prepare_bullpen_report_data(d)
-    if (!nrow(d)) return(data.frame(Status = "No bullpen data", stringsAsFactors = FALSE))
+    if (!nrow(d)) return(data.frame(Status = "No Bullpen data for this pitcher", stringsAsFactors = FALSE))
     fmt_num <- function(x, digits = 1) ifelse(is.finite(x), formatC(x, digits = digits, format = "f"), "--")
     d %>%
       dplyr::transmute(
@@ -7906,6 +7927,14 @@ server <- function(input, output, session){
   }
 
   build_bullpen_accum_movement_plotly <- function(d, title_text) {
+    if (is.null(d) || !nrow(d)) {
+      return(plotly::plot_ly() %>% plotly::layout(
+        xaxis = list(visible = FALSE), yaxis = list(visible = FALSE),
+        annotations = list(list(text = "No Bullpen data for this pitcher",
+                                x = 0.5, y = 0.5, xref = "paper", yref = "paper",
+                                showarrow = FALSE, font = list(color = "#666666", size = 16)))
+      ))
+    }
     d <- prepare_bullpen_report_data(d)
     mv <- d %>% dplyr::filter(is.finite(HB), is.finite(IVB))
     validate(need(nrow(mv) > 0, "No bullpen movement data for the selected pitcher/sessions."))
@@ -8164,6 +8193,9 @@ server <- function(input, output, session){
   })
 
   output$bullpen_report_preview_ui <- renderUI({
+    if (!length(bullpen_sessions_for_pitcher())) {
+      return(div(class = "text-muted", "No Bullpen data for this pitcher"))
+    }
     do.call(tagList, lapply(seq_len(bullpen_report_page_count()), function(i) {
       imageOutput(paste0("bullpen_report_preview_", i), height = "1320px")
     }))
@@ -9176,7 +9208,7 @@ server <- function(input, output, session){
             TRUE ~ as.character(BatterSide)
           )
         ) %>%
-        dplyr::filter(BatterSideStd %in% sel_hands)
+        dplyr::filter(all(c("L", "R") %in% sel_hands) | BatterSideStd %in% sel_hands)
       
       d <- prefer_team_or_portal(d, "PitcherTeam")
     }
@@ -10464,7 +10496,7 @@ server <- function(input, output, session){
       )
   }
 
-  build_pitch_usage_panel_gg <- function(d, hand, title_text, compact = FALSE) {
+  build_pitch_usage_panel_gg <- function(d, hand, title_text, compact = FALSE, legend_below = FALSE) {
     dd <- d %>% dplyr::filter(BatterSideStd %in% hand)
     if (!nrow(dd)) return(ggplot() + theme_void() + labs(title = paste0(title_text, " (no data)")))
     usage <- dd %>%
@@ -10486,6 +10518,16 @@ server <- function(input, output, session){
         panel.background = element_rect(fill = "grey92", color = NA),
         plot.background = element_rect(fill = "grey92", color = NA)
       )
+
+    if (isTRUE(legend_below)) {
+      return(pie +
+        scale_fill_manual(values = pitch_colors, breaks = as.character(usage$PitchType_plot),
+                          labels = paste0(usage$PitchType_plot, " ", sprintf("%.0f%%", 100 * usage$pct))) +
+        guides(fill = guide_legend(ncol = 1)) +
+        theme(legend.position = "bottom", legend.title = element_blank(),
+              legend.text = element_text(size = 10, face = "bold"),
+              legend.key.size = grid::unit(0.35, "cm")))
+    }
 
     legend_df <- usage %>%
       dplyr::mutate(label = paste0(PitchType_plot, " ", sprintf("%.0f%%", 100 * pct)), y = rev(seq_len(dplyr::n())))
@@ -10617,11 +10659,11 @@ server <- function(input, output, session){
   })
 
   output$season_summary_usage_lhh <- renderPlot({
-    build_pitch_usage_panel_gg(season_summary_plot_data(), "L", "v LHH Usage")
+    build_pitch_usage_panel_gg(season_summary_plot_data(), "L", "v LHH Usage", legend_below = TRUE)
   })
 
   output$season_summary_usage_rhh <- renderPlot({
-    build_pitch_usage_panel_gg(season_summary_plot_data(), "R", "v RHH Usage")
+    build_pitch_usage_panel_gg(season_summary_plot_data(), "R", "v RHH Usage", legend_below = TRUE)
   })
 
   output$season_summary_hand_perf_lhh <- DT::renderDT({
@@ -12699,8 +12741,8 @@ server <- function(input, output, session){
     d$inZone <- as.integer(derive_zone_inches(d))
     
     # PA grouping
-    if (all(c("PAofInning","Inning","Batter") %in% names(d))) {
-      d$PA_ID <- interaction(d$Date, d$Inning, d$PAofInning, d$Batter, drop = TRUE)
+    if (all(c("PAofInning","Inning") %in% names(d))) {
+      d$PA_ID <- pitching_pa_key(d)
     } else if ("PitchofPA" %in% names(d)) {
       d <- d %>% dplyr::arrange(PitchofPA)
       d$PA_ID <- cumsum(d$PitchofPA == 1)
@@ -14734,7 +14776,7 @@ function(el,x){
     
     # per-PA last pitch
     if (has_col("PAofInning") && has_col("Inning") && has_col("Batter")) {
-      d$PA_ID <- interaction(d$Date, d$Inning, d$PAofInning, d$Batter, drop = TRUE)
+      d$PA_ID <- pitching_pa_key(d)
     } else if (has_col("PitchofPA")) {
       d$PA_ID <- cumsum(d$PitchofPA == 1)
     } else {
@@ -14842,7 +14884,7 @@ function(el,x){
     
     # per-PA last pitch
     if (has_col("PAofInning") && has_col("Inning") && has_col("Batter")) {
-      d$PA_ID <- interaction(d$Date, d$Inning, d$PAofInning, d$Batter, drop = TRUE)
+      d$PA_ID <- pitching_pa_key(d)
     } else if (has_col("PitchofPA")) {
       d$PA_ID <- cumsum(d$PitchofPA == 1)
     } else {
@@ -15360,7 +15402,6 @@ function(el,x){
       dplyr::filter(!is.na(TimeThrough))
 
     d <- d %>% dplyr::left_join(pa_index, by = c("CustomGameID","PA_ID"))
-    d <- d %>% dplyr::filter(!is.na(TimeThrough))
     pa_last <- d %>% dplyr::group_by(CustomGameID, PA_ID) %>% dplyr::slice_tail(n = 1) %>% dplyr::ungroup()
     list(pitches = d, pa_last = pa_last)
   }
@@ -15369,11 +15410,9 @@ function(el,x){
     build_pitch_decay_base(dataFilter_allhands())
   })
 
-  render_pitch_decay_velocity <- function(base_reactive) {
-    plotly::renderPlotly({
-    base <- base_reactive()
+  pitch_decay_velocity_data <- function(base, mode = "inning") {
     d <- base$pitches
-    validate(need(!is.null(d) && nrow(d) > 0, "No data for current filters."))
+    if (is.null(d) || !nrow(d)) return(tibble::tibble())
     d <- d %>%
       dplyr::mutate(
         RelSpeedNum = suppressWarnings(as.numeric(RelSpeed)),
@@ -15382,27 +15421,36 @@ function(el,x){
           "sinker","two-seam","two seam","twoseam","2-seam","2 seam"
         )
       ) %>%
-      dplyr::filter(IsHeater, is.finite(OutingInning), is.finite(RelSpeedNum)) %>%
-      dplyr::group_by(OutingInning) %>%
-      dplyr::summarise(Velo = mean(RelSpeedNum, na.rm = TRUE), Pitches = dplyr::n(), .groups = "drop") %>%
-      dplyr::arrange(OutingInning)
-    validate(need(nrow(d) > 0, "No fastball/sinker velocity data for current filters."))
-    plotly::plot_ly(
-      d,
-      x = ~OutingInning,
-      y = ~Velo,
-      type = "scatter",
-      mode = "lines+markers",
-      line = list(color = "#501214"),
-      marker = list(color = "#B4975A"),
-      text = ~paste0("Heater<br>Outing Inning: ", OutingInning, "<br>Avg Velo: ", sprintf("%.1f", Velo), "<br>Pitches: ", Pitches),
-      hovertemplate = "%{text}<extra></extra>"
-    ) %>%
-      plotly::layout(
+      dplyr::filter(IsHeater) %>%
+      dplyr::arrange(CustomGameID, .game_pitch_order) %>%
+      dplyr::group_by(CustomGameID) %>%
+      dplyr::mutate(HeaterNumber = dplyr::row_number()) %>%
+      dplyr::ungroup() %>%
+      dplyr::mutate(Position = if (identical(mode, "pitch")) HeaterNumber else OutingInning) %>%
+      dplyr::filter(is.finite(Position), is.finite(RelSpeedNum)) %>%
+      dplyr::group_by(Position) %>%
+      dplyr::summarise(Velo = mean(RelSpeedNum), Pitches = dplyr::n(), .groups = "drop") %>%
+      dplyr::arrange(Position)
+    d
+  }
+
+  render_pitch_decay_velocity <- function(base_reactive, mode_input) {
+    plotly::renderPlotly({
+      mode <- input[[mode_input]] %||% "inning"
+      d <- pitch_decay_velocity_data(base_reactive(), mode)
+      validate(need(nrow(d) > 0, "No fastball/sinker velocity data for current filters."))
+      x_label <- if (identical(mode, "pitch")) "Heater # in Outing" else "Outing Inning"
+      plotly::plot_ly(
+        d, x = ~Position, y = ~Velo, type = "scatter", mode = "lines+markers",
+        line = list(color = "#501214"), marker = list(color = "#B4975A"),
+        text = ~paste0("Heater<br>", x_label, ": ", Position, "<br>Velocity: ",
+                       sprintf("%.1f", Velo), "<br>Pitches: ", Pitches),
+        hovertemplate = "%{text}<extra></extra>"
+      ) %>% plotly::layout(
         title = list(text = "Heater Velocity", x = 0.5),
-        xaxis = list(title = "Outing Inning", dtick = 1, tickformat = ".0f"),
-        yaxis = list(title = "Average Velocity"),
-        legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.18)
+        xaxis = list(title = x_label, tickformat = ".0f",
+                     dtick = if (identical(mode, "inning") || max(d$Position) <= 10) 1 else NULL),
+        yaxis = list(title = "Velocity (mph)")
       )
     })
   }
@@ -15575,9 +15623,9 @@ function(el,x){
     )
   })
 
-  output$pitch_decay_velocity <- render_pitch_decay_velocity(pitch_decay_base)
+  output$pitch_decay_velocity <- render_pitch_decay_velocity(pitch_decay_base, "pitch_decay_season_mode")
   output$pitch_decay_table <- render_pitch_decay_table(pitch_decay_base)
-  output$pitch_decay_single_velocity <- render_pitch_decay_velocity(pitch_decay_single_base)
+  output$pitch_decay_single_velocity <- render_pitch_decay_velocity(pitch_decay_single_base, "pitch_decay_single_mode")
   output$pitch_decay_single_table <- render_pitch_decay_table(pitch_decay_single_base)
   
   # --- Locations heatmap ---
@@ -15690,63 +15738,45 @@ function(el,x){
   })
   
   make_location_plotly <- function(d, title) {
-    avg <- d %>%
-      dplyr::group_by(PitchType_plot) %>%
-      dplyr::summarise(
-        PlateLocSide   = mean(PlateLocSide, na.rm = TRUE),
-        PlateLocHeight = mean(PlateLocHeight, na.rm = TRUE),
-        .groups = "drop"
-      ) %>%
-      dplyr::filter(is.finite(PlateLocSide), is.finite(PlateLocHeight))
-    
-    location <- ggplot(d, aes(PlateLocSide, PlateLocHeight, colour = PitchType_plot)) +
-      geom_pitch_location(alpha = .35) +
-      geom_pitch_location(data = avg, shape = 1, alpha = 1) +
-      scale_colour_manual(values = pitch_colors) +
-      coord_fixed(xlim = c(-1.07,1.07), ylim = c(.9,4.1), expand = FALSE) +
-      theme_void() + theme(legend.position = "none")
-    p <- plotly::ggplotly(location)
-
-    zone_shapes <- list(
-      list(type = "rect",
-           x0 = strike_zone$xmin, x1 = strike_zone$xmax,
-           y0 = strike_zone$ymin, y1 = strike_zone$ymax,
-           xref = "x", yref = "y",
-           line = list(color = "black", width = 1),
-           fillcolor = "rgba(0,0,0,0)")
-    )
-    for (i in seq_len(nrow(home_plate_segments))) {
-      zone_shapes <- c(zone_shapes, list(
-        list(type = "line",
-             x0 = home_plate_segments$x[i], y0 = home_plate_segments$y[i],
-             x1 = home_plate_segments$xend[i], y1 = home_plate_segments$yend[i],
-             xref = "x", yref = "y",
-             line = list(color = "black", width = 1))
-      ))
-    }
-    
-    loc_xlim <- c(-1.07, 1.07)
-    loc_ylim <- c(0.9, 4.1)
-    
-    p <- p %>%
-      layout(
+    d <- d %>% dplyr::filter(is.finite(PlateLocSide), is.finite(PlateLocHeight))
+    radius <- BASE_BALL_RADIUS_IN / 12
+    pitch_shapes <- lapply(seq_len(nrow(d)), function(i) {
+      color <- unname(pitch_colors[as.character(d$PitchType_plot[i])])
+      if (is.na(color)) color <- "#808080"
+      list(type = "circle", xref = "x", yref = "y",
+           x0 = d$PlateLocSide[i] - radius, x1 = d$PlateLocSide[i] + radius,
+           y0 = d$PlateLocHeight[i] - radius, y1 = d$PlateLocHeight[i] + radius,
+           line = list(color = color, width = 1), fillcolor = color, opacity = 0.6)
+    })
+    zone_shapes <- c(list(list(
+      type = "rect", xref = "x", yref = "y",
+      x0 = strike_zone$xmin[[1]], x1 = strike_zone$xmax[[1]],
+      y0 = strike_zone$ymin[[1]], y1 = strike_zone$ymax[[1]],
+      line = list(color = "black", width = 1), fillcolor = "rgba(0,0,0,0)"
+    )), lapply(seq_len(nrow(home_plate_segments)), function(i) {
+      list(type = "line", xref = "x", yref = "y",
+           x0 = home_plate_segments$x[i], y0 = home_plate_segments$y[i],
+           x1 = home_plate_segments$xend[i], y1 = home_plate_segments$yend[i],
+           line = list(color = "black", width = 1))
+    }))
+    plotly::plot_ly(d, x = ~PlateLocSide, y = ~PlateLocHeight,
+                    type = "scatter", mode = "markers",
+                    marker = list(opacity = 0), showlegend = FALSE,
+                    text = ~paste0(PitchType_plot, "<br>Side: ", round(PlateLocSide, 2),
+                                   " ft<br>Height: ", round(PlateLocHeight, 2), " ft"),
+                    hovertemplate = "%{text}<extra></extra>") %>%
+      plotly::layout(
         title = list(text = title, x = 0.5),
         margin = list(t = 50, r = 10, b = 20, l = 10),
-        xaxis = list(
-          range = loc_xlim, fixedrange = TRUE,
-          showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE, title = list(text = "")
-        ),
-        yaxis = list(
-          range = loc_ylim, fixedrange = TRUE,
-          showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE, title = list(text = ""),
-          scaleanchor = "x", scaleratio = 1
-        ),
-        shapes = zone_shapes
+        xaxis = list(range = c(-1.07, 1.07), fixedrange = TRUE,
+                     showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE, title = ""),
+        yaxis = list(range = c(0, 4.1), fixedrange = TRUE,
+                     showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE, title = "",
+                     scaleanchor = "x", scaleratio = 1),
+        shapes = c(pitch_shapes, zone_shapes)
       )
-    
-    p
   }
-  
+
   build_outcome_plot <- function(outcome, pitch_type) {
     d <- location_outcome_data()
     if (!nrow(d)) {
@@ -15812,8 +15842,6 @@ function(el,x){
       d <- d[is_barrel %in% TRUE, , drop = FALSE]
       empty_msg <- "No barrels for current filters."
     }
-    
-    validate(need(nrow(d) > 0, empty_msg))
     
     make_location_plotly(
       d,
@@ -16669,8 +16697,8 @@ function(el,x){
     out <- rep(NA_real_, length(x_num))
     if (!length(x_num) || !is.finite(n) || n <= 1) return(x_num)
     for (i in seq_along(x_num)) {
-      if (i < n) next
-      window <- x_num[(i - n + 1):i]
+      # Use the available outings until the full rolling window is reached.
+      window <- x_num[max(1L, i - n + 1L):i]
       if (all(!is.finite(window))) {
         out[i] <- NA_real_
       } else {
@@ -16699,18 +16727,10 @@ function(el,x){
     }
     p$GameID <- ifelse(is.na(p$GameID) | !nzchar(p$GameID), "Game", p$GameID)
 
-    # GameDate (fallbacks)
-    gd <- if ("GameDate" %in% names(p)) {
-      parse_date_any(p$GameDate)
-    } else if ("Date" %in% names(p)) {
-      parse_date_any(p$Date)
-    } else if ("PitchDate" %in% names(p)) {
-      parse_date_any(p$PitchDate)
-    } else {
-      as.Date(NA)
-    }
-    if (all(is.na(gd)) && "CustomGameID" %in% names(p)) {
-      gd <- parse_gameid_date(p$CustomGameID)
+    # Resolve dates row by row so one populated source cannot hide other outings.
+    gd <- rep(as.Date(NA), nrow(p))
+    for (name in intersect(c("GameDate", "Date", "PitchDate", "CustomGameID"), names(p))) {
+      gd <- dplyr::coalesce(gd, parse_date_any(p[[name]]))
     }
     p$GameDate <- gd
 
@@ -16977,18 +16997,10 @@ function(el,x){
     }
     p$GameID <- ifelse(is.na(p$GameID) | !nzchar(p$GameID), "Game", p$GameID)
 
-    # GameDate (fallbacks)
-    gd <- if ("GameDate" %in% names(p)) {
-      parse_date_any(p$GameDate)
-    } else if ("Date" %in% names(p)) {
-      parse_date_any(p$Date)
-    } else if ("PitchDate" %in% names(p)) {
-      parse_date_any(p$PitchDate)
-    } else {
-      as.Date(NA)
-    }
-    if (all(is.na(gd)) && "CustomGameID" %in% names(p)) {
-      gd <- parse_gameid_date(p$CustomGameID)
+    # Resolve dates row by row so one populated source cannot hide other outings.
+    gd <- rep(as.Date(NA), nrow(p))
+    for (name in intersect(c("GameDate", "Date", "PitchDate", "CustomGameID"), names(p))) {
+      gd <- dplyr::coalesce(gd, parse_date_any(p[[name]]))
     }
     p$GameDate <- gd
 
@@ -17328,18 +17340,10 @@ function(el,x){
     }
     p$GameID <- ifelse(is.na(p$GameID) | !nzchar(p$GameID), "Game", p$GameID)
 
-    # GameDate (fallbacks)
-    gd <- if ("GameDate" %in% names(p)) {
-      parse_date_any(p$GameDate)
-    } else if ("Date" %in% names(p)) {
-      parse_date_any(p$Date)
-    } else if ("PitchDate" %in% names(p)) {
-      parse_date_any(p$PitchDate)
-    } else {
-      as.Date(NA)
-    }
-    if (all(is.na(gd)) && "CustomGameID" %in% names(p)) {
-      gd <- parse_gameid_date(p$CustomGameID)
+    # Resolve dates row by row so one populated source cannot hide other outings.
+    gd <- rep(as.Date(NA), nrow(p))
+    for (name in intersect(c("GameDate", "Date", "PitchDate", "CustomGameID"), names(p))) {
+      gd <- dplyr::coalesce(gd, parse_date_any(p[[name]]))
     }
     p$GameDate <- gd
 
@@ -17606,18 +17610,10 @@ function(el,x){
     }
     p$GameID <- ifelse(is.na(p$GameID) | !nzchar(p$GameID), "Game", p$GameID)
 
-    # GameDate (fallbacks)
-    gd <- if ("GameDate" %in% names(p)) {
-      parse_date_any(p$GameDate)
-    } else if ("Date" %in% names(p)) {
-      parse_date_any(p$Date)
-    } else if ("PitchDate" %in% names(p)) {
-      parse_date_any(p$PitchDate)
-    } else {
-      as.Date(NA)
-    }
-    if (all(is.na(gd)) && "CustomGameID" %in% names(p)) {
-      gd <- parse_gameid_date(p$CustomGameID)
+    # Resolve dates row by row so one populated source cannot hide other outings.
+    gd <- rep(as.Date(NA), nrow(p))
+    for (name in intersect(c("GameDate", "Date", "PitchDate", "CustomGameID"), names(p))) {
+      gd <- dplyr::coalesce(gd, parse_date_any(p[[name]]))
     }
     p$GameDate <- gd
 
@@ -18094,6 +18090,7 @@ function(el,x){
       scale_x_continuous(
         breaks = all_labels$GameIndex,
         labels = all_labels$GameLabel,
+        limits = range(all_labels$GameIndex),
         expand = expansion(mult = c(0.02, 0.12))
       ) +
       labs(x = NULL, y = NULL) +
