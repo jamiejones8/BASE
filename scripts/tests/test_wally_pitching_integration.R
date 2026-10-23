@@ -334,6 +334,19 @@ shiny::testServer(workspace$server, {
   if (!identical(splits$Split, c("Total", "v LHH", "v RHH"))) {
     fail("Season Summary handedness table is not Total, left, right.")
   }
+  stopifnot(grepl('season_summary_movement',as.character(workspace$ui),fixed=TRUE))
+  invisible(output$season_summary_movement)
+  for (display in list(season_summary_split_display(dataFilter()),
+                       season_summary_pitch_display(dataFilter()),
+                       season_summary_hand_pitch_perf_display(dataFilter(),"R"))) {
+    fills <- attr(display$shaded,"cell_fills")
+    stopifnot(any(!is.na(fills)))
+    pdf_plot <- build_season_summary_pdf_table(display$fmt,"Test",display$shaded)
+    # The PDF uses exactly the same per-cell colors as the HTML tables.
+    index <- cbind(pdf_plot$data$row,pdf_plot$data$col)
+    expected <- fills[index]
+    stopifnot(all(pdf_plot$data$fill[!is.na(expected)]==expected[!is.na(expected)]))
+  }
   # Exercise the real download: an error-only PDF is only a few KB.
   summary_pdf <- output$season_summary_pdf
   stopifnot(file.exists(summary_pdf),file.info(summary_pdf)$size > 50000)

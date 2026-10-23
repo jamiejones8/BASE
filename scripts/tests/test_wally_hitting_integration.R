@@ -101,8 +101,8 @@ if (nrow(workspace$dedupe_hitting_events(fallback_rows)) != 2L) {
 expected_barrels <- c(TRUE, FALSE, TRUE, FALSE, TRUE, FALSE, TRUE, FALSE, TRUE, FALSE)
 actual_barrels <- workspace$is_barrel_txst(
   rep("InPlay", 10), rep("HomeRun", 10),
-  c(95,94.9,99.9,99.9,100,100,104.9,104.9,105,105),
-  c(5,20,25,25.1,28,28.1,28,28.1,40,40.1)
+  c(95,94.9,99.9999,99.9999,100,100,104.9999,104.9999,105,105),
+  c(8,20,25,25.1,32,32.1,32,32.1,40,40.1)
 )
 if (!identical(actual_barrels, expected_barrels)) {
   fail("Hitting barrel boundaries do not follow the 95/100/105 mph sliding scale.")
@@ -119,6 +119,13 @@ proc <- workspace$build_hitter_process_table(zone_fixture,zone_fixture)
 stopifnot(identical(proc$Metric,c("IZ Swing%","Chase%","Whiff%","IZ Whiff%","Barrel%")),
           proc$Game[proc$Metric=="IZ Whiff%"]=="50.0%")
 
+# Real season labels must survive the table renderer and both game/season IZ Whiff cells.
+for (season_label in c("2026 Fall","2027 Scrimmages","2027 Season")) {
+  named_proc <- workspace$build_hitter_process_table(zone_fixture,zone_fixture,season_label)
+  stopifnot(named_proc[[season_label]][named_proc$Metric=="IZ Whiff%"]=="50.0%")
+  invisible(ggplot2::ggplotGrob(workspace$txst_process_table(named_proc)))
+  invisible(ggplot2::ggplotGrob(workspace$txst_process_table(named_proc,season_label)))
+}
 barrel_fixture <- tibble::tibble(
   PA_ID = c("measured", "unmeasured"),
   PitchCall = c("InPlay", "InPlay"),
@@ -212,7 +219,7 @@ leaderboard_d1_pct <- c(
   `Z-Contact%` = 0.843,
   `Chase%` = 0.242,
   `Z-Swing%` = 0.680,
-  `Barrel%` = 0.174
+  `Barrel%` = base_d1_aar_benchmarks()$hitting[["barrel"]]
 )
 if (!isTRUE(all.equal(
   unname(workspace$D1_PCT[names(leaderboard_d1_pct)]),

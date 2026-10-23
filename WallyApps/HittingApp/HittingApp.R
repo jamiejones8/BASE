@@ -26,7 +26,7 @@ suppressPackageStartupMessages({
   library(grid)     
 })
 
-HITTING_AAR_D1_DEFAULTS <- c(whiff = 0.23, chase = 0.24, barrel = 0.17)
+HITTING_AAR_D1_DEFAULTS <- c(whiff = 0.23, chase = 0.24, barrel = 0.1633019291161956)
 resolve_hitting_aar_d1_benchmarks <- function(values = get0(
   "BASE_HITTING_D1_BENCHMARKS",
   inherits = TRUE,
@@ -162,12 +162,12 @@ is_bip_txst <- function(pc, pr){
   (pc_bip | hit | outs_in_play | inplay_other) & !non_bip
 }
 
-# Barrel launch-angle ceiling rises with exit velocity: 25 / 28 / 40 degrees.
+# Barrel launch-angle ceiling rises with exit velocity: 25 / 32 / 40 degrees.
 is_barrel_txst <- function(pc, pr, ev, la){
   bip <- is_bip_txst(pc, pr)
   ev <- to_num(ev)
   la <- to_num(la)
-  bip & is.finite(ev) & is.finite(la) & ev >= 95.0 & la >= 5 & la <= ifelse(ev < 100, 25, ifelse(ev < 105, 28, 40))
+  bip & is.finite(ev) & is.finite(la) & base_barrel_evla(ev, la)
 }
 
 # Build one stable identity for a pitch before any leaderboard/report summary.
@@ -1381,7 +1381,7 @@ summarize_overall <- function(d){
   barrel_flag <- if (exists("is_barrel_txst", inherits = TRUE)) {
     is_barrel_txst(pc_last, pr_last, ev_pa, la_pa)
   } else {
-    (bip_pa %in% TRUE) & is.finite(ev_pa) & is.finite(la_pa) & ev_pa >= 95.0 & la_pa >= 5 & la_pa <= ifelse(ev_pa < 100, 25, ifelse(ev_pa < 105, 28, 40))
+    (bip_pa %in% TRUE) & is.finite(ev_pa) & is.finite(la_pa) & base_barrel_evla(ev_pa, la_pa)
   }
   barrel_den <- sum((bip_pa %in% TRUE) & is.finite(ev_pa) & is.finite(la_pa), na.rm = TRUE)
   barrel_pct <- safe_ratio(sum(barrel_flag %in% TRUE, na.rm = TRUE), barrel_den)
@@ -2354,7 +2354,10 @@ txst_process_table <- function(df, season_col_label = "Season") {
   if (is.null(df) || !nrow(df) || !all(c("Metric","Game","D1") %in% names(df))) {
     return(as_txst_table(data.frame(Status="Process metrics unavailable")))
   }
-  season_col <- if("Season" %in% names(df)) "Season" else season_col_label
+  # The builder labels this column with the selected season, e.g. 2026 Fall.
+  season_col <- intersect(c("Season",season_col_label),names(df))[1]
+  if (is.na(season_col)) season_col <- setdiff(names(df),c("Metric","Game","D1"))[1]
+  if (is.na(season_col)) return(as_txst_table(data.frame(Status="Season metrics unavailable")))
   df <- df[,c("Metric","Game",season_col,"D1"),drop=FALSE]
   names(df) <- c("Metric","Game",season_col_label,"D1")
   to_frac <- function(x) suppressWarnings(readr::parse_number(as.character(x)))/100
@@ -3104,7 +3107,7 @@ compose_team_hit_report_plot <- function(game_p, season_p, game_id = NULL, seaso
     error = function(e) data.frame(Status = paste("Unavailable:", conditionMessage(e)))
   )
   
-  row2_left  <- safe_tbl_plot(proc_df, "Process Metrics")
+  row2_left  <- safe_tbl_plot(proc_df, "Process Metrics", season_col_label = season_col_label)
   row2_right <- safe_tbl_plot(pt_df, "Pitch Type Performance")
   row2 <- (row2_left | row2_right) + patchwork::plot_layout(widths = c(0.32, 0.68))
   
@@ -3652,6 +3655,7 @@ D1_PCT <- c(
   `Z-Swing%`=0.680, `IZ-Swing%`=0.680,
   `LD+FB%`=0.477
 )
+D1_PCT[["Barrel%"]] <- base_d1_aar_benchmarks()$hitting[["barrel"]]
 D1_PCT_PTYPE <- list(
   FASTBALL = list(whiff = 0.18, chase = 0.19),
   SPIN     = list(whiff = 0.32, chase = 0.25),
@@ -8254,7 +8258,7 @@ server <- function(input, output, session){
       is_barrel_tx <- function(pc, pr, ev, la){
         if (exists("is_barrel_txst", inherits=TRUE))
           is_barrel_txst(pc, pr, ev, la)
-        else ifelse(is.finite(ev) & is.finite(la) & ev >= 95 & la >= 5 & la <= ifelse(ev < 100, 25, ifelse(ev < 105, 28, 40)), TRUE, FALSE)
+        else ifelse(is.finite(ev) & is.finite(la) & base_barrel_evla(ev, la), TRUE, FALSE)
       }
       safe_ratio <- function(num, den) ifelse(den > 0, num/den, NA_real_)
       

@@ -54,13 +54,13 @@ base_weighted_d1_aar_metric <- function(reference, metric) {
 base_d1_aar_benchmarks <- function(path = base_d1_aar_reference_path()) {
   reference <- base_read_d1_aar_reference(path)
 
-  hitting_defaults <- c(whiff = 0.23, chase = 0.24, barrel = 0.17)
+  hitting_defaults <- c(whiff = 0.23, chase = 0.24, barrel = 0.1633019291161956)
   pitching_defaults <- c(
     strike_pct = 0.65,
     zone_pct = 0.50,
     fps_pct = 0.63,
     pre2k_zone = 0.50,
-    ea_pct = 0.70,
+    ea_pct = 0.6442200390376133,
     put_away_pct = 0.19
   )
 

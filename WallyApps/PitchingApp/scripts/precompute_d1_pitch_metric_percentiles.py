@@ -27,7 +27,7 @@ OUTFILE = ROOT / "data" / "d1_pitch_metric_percentile_reference.csv"
 MIN_PITCH_TYPE_PITCHES = 50
 FIP_CONST = 3.214
 BARREL_EV_MIN = 95
-BARREL_LA_MIN = 5
+BARREL_LA_MIN = 8
 BARREL_LA_MAX = 40
 
 WOBA = {
@@ -38,6 +38,11 @@ WOBA = {
     "X3B": 1.578,
     "HR": 2.031,
 }
+
+
+def barrel_evla(ev: pd.Series, la: pd.Series) -> pd.Series:
+    ceiling = np.where(ev < 100, 25, np.where(ev < 105, 32, 40))
+    return np.isfinite(ev) & np.isfinite(la) & ev.ge(95) & la.ge(8) & la.le(ceiling)
 
 
 def canon_pitch_type(s: pd.Series) -> pd.Series:
@@ -403,7 +408,7 @@ def main() -> None:
         | safe_bool_contains(df["KorBB"], r"\bhbp\b")
         | pc_compact.isin(["hitbypitch", "hbp"])
     )
-    df["IsBarrel"] = df["IsBIP"] & df["ExitSpeed"].ge(BARREL_EV_MIN) & df["Angle"].between(BARREL_LA_MIN, BARREL_LA_MAX)
+    df["IsBarrel"] = df["IsBIP"] & barrel_evla(df["ExitSpeed"], df["Angle"])
     df["IsGB"] = df["IsBIP"] & df["Angle"].lt(5)
     df["BIP_EVLA"] = df["IsBIP"] & np.isfinite(df["ExitSpeed"]) & np.isfinite(df["Angle"])
     df["BIP_LA"] = df["IsBIP"] & np.isfinite(df["Angle"])
@@ -643,4 +648,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, default=INFILE)
+    parser.add_argument("--output", type=Path, default=OUTFILE)
+    args = parser.parse_args()
+    INFILE, OUTFILE = args.source, args.output
     main()

@@ -1,0 +1,19 @@
+{
+  "updated": "2026-10-23",
+  "source": "D1 Pitching:Hitting File.parquet",
+  "source_sha256": "80705bf5a1355972384956a9d518e9af73784deeee56389900ccd1bdad8179f4",
+  "source_rows": 2051176,
+  "definition": "BIP; 95 <= EV < 100: 8 <= LA <= 25; 100 <= EV < 105: 8 <= LA <= 32; EV >= 105: 8 <= LA <= 40",
+  "metrics": {
+    "performance_barrel_pct": {
+      "players": 3949,
+      "denominator": 323205,
+      "weighted_average": 0.1633019291161956
+    },
+    "performance_ea_pct": {
+      "players": 3442,
+      "denominator": 492858,
+      "weighted_average": 0.6442200390376133
+    }
+  }
+}

@@ -696,5 +696,7 @@ base_brand_css <- function(include_leaderboards = TRUE) {
 base_source("R/data/game_labels.R", local = FALSE)
 
 base_source("R/plots/pitch_geometry.R", local = FALSE)
+base_source("R/data/barrel_rules.R", local = FALSE)
+base_source("R/data/d1_aar_benchmarks.R", local = FALSE)
 
 base_source("R/reports/team_report_workspace.R", local = FALSE)

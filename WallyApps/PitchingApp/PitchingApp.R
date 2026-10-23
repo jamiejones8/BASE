@@ -480,7 +480,7 @@ prepare_flags <- function(d) {
 # BARREL UTILITIES (GLOBAL)
 # ---- thresholds
 BARREL_EV_MIN <- 95
-BARREL_LA_MIN <- 5
+BARREL_LA_MIN <- 8
 BARREL_LA_MAX <- 40
 
 # ---- BIP (for rates/denominators): include all in-play variants
@@ -522,7 +522,7 @@ is_barrel_strict <- function(pc, ev, la) {
   evn <- .to_num(ev); lan <- .to_num(la)
   bip <- is_bip_for_barrel(pc)
   out <- bip & is.finite(evn) & is.finite(lan) &
-    evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+    base_barrel_evla(evn, lan)
   out[is.na(out)] <- FALSE
   out
 }
@@ -532,7 +532,7 @@ compute_barrel_flag_evla_only <- function(d) {
   evla <- resolve_ev_la_strict(d)
   evn <- .to_num(evla$ev); lan <- .to_num(evla$la)
   out <- is.finite(evn) & is.finite(lan) &
-    evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+    base_barrel_evla(evn, lan)
   out[is.na(out)] <- FALSE
   out
 }
@@ -566,7 +566,7 @@ compute_barrel_flag_leaderboard <- function(d) {
   bip <- safe_is_bip(pc, pr)
   
   out <- bip & is.finite(ev) & is.finite(la) &
-    ev >= BARREL_EV_MIN & la >= BARREL_LA_MIN & la <= BARREL_LA_MAX
+    base_barrel_evla(ev, la)
   out[is.na(out)] <- FALSE
   out
 }
@@ -575,7 +575,7 @@ compute_barrel_flag_leaderboard <- function(d) {
 compute_barrel_flag <- function(d) {
   evla <- resolve_ev_la_strict(d)
   base <- is_barrel_strict(d$PitchCall, evla$ev, evla$la)
-  .calibrate_fall25(d, base, evla$ev, evla$la)
+  base # Apply the same measured barrel rule in every season.
 }
 
 # (kept for your preview pipeline)
@@ -792,8 +792,7 @@ if (!exists("is_barrel_from_row", mode = "function")) {
     bip <- is_bip_from(pc, pr)
     out <- bip &
       is.finite(evn) & is.finite(lan) &
-      (evn >= BARREL_EV_MIN) &
-      (lan >= BARREL_LA_MIN) & (lan <= BARREL_LA_MAX)
+      base_barrel_evla(evn, lan)
     
     out[is.na(out)] <- FALSE
     out
@@ -6011,7 +6010,7 @@ D1_PCT_AVG <- list(
   `BB%`         = 0.113,
   `BB+HBP%`     = 0.130,
   `K%-BB%`      = 0.193 - 0.113,
-  `Barrel%`     = 0.174,
+  `Barrel%`     = 0.1633019291161956,
   `CSW%`        = 0.275,
   `GB%`         = 0.420,
   `Strike%`     = 0.605,
@@ -6020,7 +6019,7 @@ D1_PCT_AVG <- list(
   `Pre2k Zone%` = 0.460,
   `Pre2K Zone%` = 0.460,
   `Zone%`       = 0.456,
-  `E&A%`        = 0.700,
+  `E&A%`        = 0.6442200390376133,
   `Put Away%`   = 0.190,
   `Chase%`      = 0.210,
   `Whiff%`      = 0.240,
@@ -6366,6 +6365,12 @@ D1_PCT_AVG <- stats::setNames(lapply(names(D1_PCT_AVG), function(column) {
   if (is.finite(value)) value else D1_PCT_AVG[[column]]
 }), names(D1_PCT_AVG))
 
+pitching_pdf_color <- function(fill) {
+  if (is.na(fill) || !startsWith(fill,"rgba(")) return(fill)
+  parts <- as.numeric(strsplit(sub("\\)$","",sub("^rgba\\(","",fill)),",",fixed=TRUE)[[1]])
+  grDevices::rgb(parts[1]/255,parts[2]/255,parts[3]/255,alpha=parts[4])
+}
+
 shade_columns_txst <- function(out_df,
                                cols = NULL,
                                cols_to_color = NULL,
@@ -6395,6 +6400,9 @@ shade_columns_txst <- function(out_df,
   out <- out_df
   if (is.null(out) || !nrow(out)) return(out)
   
+  cell_fills <- matrix(NA_character_,nrow(out),ncol(out),dimnames=list(NULL,names(out)))
+  cell_text <- cell_fills
+
   # detect pitch type column for RPM logic
   pt_col <- intersect(names(out), c("PitchType","Pitch Type","Pitch"))[1]
   if (is.na(pt_col) || !nzchar(pt_col)) pt_col <- NA_character_
@@ -6449,6 +6457,8 @@ shade_columns_txst <- function(out_df,
     order_attr <- ifelse(is.finite(order_val), as.character(order_val), "")
     
     text_colors <- .severity_text(fills)
+    cell_fills[,nm] <- vapply(fills,pitching_pdf_color,character(1))
+    cell_text[,nm] <- text_colors
     out[[nm]] <- ifelse(
       is.na(fills),
       sprintf("<span class='cf-cell' data-order='%s'>%s</span>", order_attr, txt),
@@ -6456,6 +6466,8 @@ shade_columns_txst <- function(out_df,
     )
   }
   
+  attr(out,"cell_fills") <- cell_fills
+  attr(out,"cell_text") <- cell_text
   out
 }
 
@@ -6884,6 +6896,11 @@ ui <- base_pitching_page(
           withSpinner(DTOutput("season_summary_split_table"), type = 4, color = "#501214")
         ),
         div(
+          class = "base-season-summary-section",
+          div(class = "table-title mb-1", "Pitch Movement"),
+          withSpinner(plotOutput("season_summary_movement", height="500px", width="100%"), type=4, color="#501214")
+        ),
+        div(
           class = "base-season-summary-hands",
           div(
             class = "base-season-summary-hand-panel",
@@ -7197,7 +7214,7 @@ ui <- base_pitching_page(
 # BARREL UTILITIES (GLOBAL)
 # ---- thresholds
 BARREL_EV_MIN <- 95
-BARREL_LA_MIN <- 5
+BARREL_LA_MIN <- 8
 BARREL_LA_MAX <- 40
 
 # ---- BIP (for rates/denominators): include all in-play variants
@@ -7239,7 +7256,7 @@ is_barrel_strict <- function(pc, ev, la) {
   evn <- .to_num(ev); lan <- .to_num(la)
   bip <- is_bip_for_barrel(pc)
   out <- bip & is.finite(evn) & is.finite(lan) &
-    evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+    base_barrel_evla(evn, lan)
   out[is.na(out)] <- FALSE
   out
 }
@@ -7392,7 +7409,7 @@ calibrate_fall25_barrels <- function(d, EV = NULL, LA = NULL, BIP_exact = NULL, 
 compute_barrel_flag <- function(d) {
   evla <- resolve_ev_la_strict(d)
   base <- is_barrel_strict(d$PitchCall, evla$ev, evla$la)
-  .calibrate_fall25(d, base, evla$ev, evla$la)
+  base # Apply the same measured barrel rule in every season.
 }
 
 # -------------------- Server --------------------
@@ -9338,7 +9355,7 @@ server <- function(input, output, session){
     pc_vec     <- as.character(p$PitchCall %||% "")
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     is_k_pitch_vec <- calc_is_k_pitch(p)
 
     p_flags <- p %>%
@@ -10143,7 +10160,7 @@ server <- function(input, output, session){
         .bip_la = .bip & .la_ok,
         .barrel_ok = barrel_date_ok(p),
         .barrel = .bip & is.finite(evn) & is.finite(lan) &
-          evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX,
+          base_barrel_evla(evn, lan),
         .gb = .bip & is.finite(lan) & lan < 5,
         .zone = if ("InZone" %in% names(.)) as.logical(InZone) else NA,
         .swing = if ("IsSwing" %in% names(.)) as.logical(IsSwing) else .is_swing_event(.pc),
@@ -10487,7 +10504,7 @@ server <- function(input, output, session){
     cowplot::plot_grid(pie,legend_plot,nrow=1,rel_widths=c(.55,.45))
   }
 
-  build_season_summary_pdf_table <- function(df, title) {
+  build_season_summary_pdf_table <- function(df, title, shaded = NULL) {
     if (is.null(df) || !nrow(df)) df <- data.frame(Status="No data")
     df <- as.data.frame(df,stringsAsFactors=FALSE)
     n <- nrow(df); k <- ncol(df)
@@ -10499,9 +10516,18 @@ server <- function(input, output, session){
     cells$x <- centers[cells$col]; cells$y <- n-cells$row+1
     cells$xmin <- edges[cells$col]; cells$xmax <- edges[cells$col+1]
     cells$fill <- ifelse(cells$row%%2==0,"#F8F3EA","white")
+    cells$text_colour <- "black"; cells$font <- "plain"
+    fills <- attr(shaded,"cell_fills"); text <- attr(shaded,"cell_text")
+    if (!is.null(fills) && identical(dim(fills),dim(df))) {
+      index <- cbind(cells$row,cells$col)
+      selected <- !is.na(fills[index]) & nzchar(fills[index])
+      cells$fill[selected] <- fills[index][selected]
+      cells$text_colour[selected] <- text[index][selected]
+      cells$font[selected] <- "bold"
+    }
     ggplot(cells,aes(x,y)) +
       geom_rect(aes(xmin=xmin,xmax=xmax,ymin=y-.48,ymax=y+.48,fill=I(fill)),colour="#DDDDDD",linewidth=.25) +
-      geom_text(aes(label=label),size=2.6) +
+      geom_text(aes(label=label,colour=I(text_colour),fontface=font),size=2.6) +
       annotate("text",x=centers,y=n+1,label=names(df),size=2.6,fontface="bold") +
       annotate("rect",xmin=0,xmax=1,ymin=n+1.6,ymax=n+2.5,fill="#501214") +
       annotate("text",x=.5,y=n+2.05,label=title,size=3.2,fontface="bold",colour="#B4975A") +
@@ -10546,10 +10572,10 @@ server <- function(input, output, session){
       xlim(0, 1) + ylim(0, 1) + theme_void() +
       theme(plot.margin = margin(2, 6, 2, 6))
 
-    split_tbl <- build_season_summary_pdf_table(split_disp$fmt, "Split Summary")
-    pitch_tbl <- build_season_summary_pdf_table(pitch_disp$fmt, "Pitch Type Summary")
-    hand_l_tbl <- build_season_summary_pdf_table(hand_l_disp$fmt, "v LHH Pitch Type Performance")
-    hand_r_tbl <- build_season_summary_pdf_table(hand_r_disp$fmt, "v RHH Pitch Type Performance")
+    split_tbl <- build_season_summary_pdf_table(split_disp$fmt, "Split Summary", split_disp$shaded)
+    pitch_tbl <- build_season_summary_pdf_table(pitch_disp$fmt, "Pitch Type Summary", pitch_disp$shaded)
+    hand_l_tbl <- build_season_summary_pdf_table(hand_l_disp$fmt, "v LHH Pitch Type Performance", hand_l_disp$shaded)
+    hand_r_tbl <- build_season_summary_pdf_table(hand_r_disp$fmt, "v RHH Pitch Type Performance", hand_r_disp$shaded)
     mv_plot <- build_pitch_metrics_movement_gg(d_plot, paste0(pitcher_name, ": Pitch Movement"), compact = TRUE)
     pie_l <- build_pitch_usage_panel_gg(d_plot, "L", "v LHH Usage", compact = TRUE)
     pie_r <- build_pitch_usage_panel_gg(d_plot, "R", "v RHH Usage", compact = TRUE)
@@ -10920,7 +10946,7 @@ server <- function(input, output, session){
     d$ev_ok <- is.finite(d$EV_seq)
     d$la_ok <- is.finite(d$LA_seq)
     d$barrel_seq <- d$BIP_seq & d$ev_ok & d$la_ok &
-      d$EV_seq >= BARREL_EV_MIN & d$LA_seq >= BARREL_LA_MIN & d$LA_seq <= BARREL_LA_MAX
+      base_barrel_evla(d$EV_seq, d$LA_seq)
     d$gb_seq <- d$BIP_seq & d$la_ok & d$LA_seq < 5
     d$bip_evla <- d$BIP_seq & d$ev_ok & d$la_ok
     d$bip_la   <- d$BIP_seq & d$la_ok
@@ -11432,7 +11458,7 @@ server <- function(input, output, session){
     pc_vec     <- as.character(p$PitchCall %||% "")
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     
     # PA-ending K pitch flag (vector, length = nrow(p))
     is_k_pitch_vec <- calc_is_k_pitch(p, "PA_ID_LB", "PitchNum")
@@ -15930,7 +15956,7 @@ function(el,x){
     pc_vec     <- as.character(p$PitchCall %||% "")
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     
     p_flags <- p %>%
       dplyr::mutate(
@@ -16406,7 +16432,7 @@ function(el,x){
     pc_vec     <- as.character(p$PitchCall %||% "")
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     is_k_pitch_vec <- calc_is_k_pitch(p)
 
     p_flags <- p %>%
@@ -16598,7 +16624,7 @@ function(el,x){
     pc_vec  <- as.character(p_use$PitchCall %||% "")
     bip_vec <- safe_is_bip(pc_vec, p_use$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
 
     p_flags <- p_use %>%
       dplyr::mutate(
@@ -16716,7 +16742,7 @@ function(el,x){
     pc_vec     <- as.character(p$PitchCall %||% "")
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     is_k_pitch_vec <- calc_is_k_pitch(p)
 
     p_flags <- p %>%
@@ -16994,7 +17020,7 @@ function(el,x){
     pc_vec     <- as.character(p$PitchCall %||% "")
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     is_k_pitch_vec <- calc_is_k_pitch(p)
 
     p_flags <- p %>%
@@ -17345,7 +17371,7 @@ function(el,x){
     pc_vec     <- as.character(p$PitchCall %||% "")
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     is_k_pitch_vec <- calc_is_k_pitch(p)
 
     p_flags <- p %>%
@@ -17623,7 +17649,7 @@ function(el,x){
     pc_vec     <- as.character(p$PitchCall %||% "")
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     is_k_pitch_vec <- calc_is_k_pitch(p)
 
     p_flags <- p %>%
@@ -19037,7 +19063,7 @@ function(el,x){
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     # Performance-table barrel definition (match global barrel rules)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     
     # PA-ending K pitch flag (vector, length = nrow(p))
     is_k_pitch_vec <- calc_is_k_pitch(p)
@@ -19746,7 +19772,7 @@ function(el,x){
     pc_vec <- as.character(p$PitchCall %||% "")
     bip_vec <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
     is_k_pitch_vec <- calc_is_k_pitch(p, "PA_ID_STAFF", "PitchNum")
 
     p_flags <- p %>%
@@ -20216,7 +20242,7 @@ function(el,x){
     pc_vec     <- as.character(p$PitchCall %||% "")
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
-      evn >= BARREL_EV_MIN & lan >= BARREL_LA_MIN & lan <= BARREL_LA_MAX
+      base_barrel_evla(evn, lan)
 
     is_k_pitch_vec <- calc_is_k_pitch(p)
 

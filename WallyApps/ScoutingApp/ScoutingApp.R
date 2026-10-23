@@ -563,7 +563,7 @@ is_bip_for_barrel <- function(pc) {
 is_barrel_strict <- function(pc, ev, la) {
   evn <- to_num(ev); lan <- to_num(la)
   bip <- is_bip_for_barrel(pc)
-  out <- bip & is.finite(evn) & is.finite(lan) & evn >= 95 & lan >= 5 & lan <= 40
+  out <- bip & is.finite(evn) & is.finite(lan) & base_barrel_evla(evn, lan)
   out[is.na(out)] <- FALSE
   out
 }
@@ -572,7 +572,7 @@ pitcher_bust_barrel_flag <- function(pc, ev, la) {
   evn <- to_num(ev)
   lan <- to_num(la)
   bip <- is_bip_for_barrel(pc)
-  out <- bip & is.finite(evn) & is.finite(lan) & evn >= 95 & lan >= 5 & lan <= 35
+  out <- bip & is.finite(evn) & is.finite(lan) & base_barrel_evla(evn, lan)
   out[is.na(out)] <- FALSE
   out
 }
@@ -913,6 +913,7 @@ D1_PCT <- c(
   `Chase%`=0.242, `Pre2K Chase%`=0.192, `2K Chase%`=0.363,
   `LD+FB%`=0.477
 )
+D1_PCT[["Barrel%"]] <- base_d1_aar_benchmarks()$hitting[["barrel"]]
 lower_better <- c("BB%","SLUG","HH%","Barrel%","Contact%","Z-Contact%","LD+FB%")
 metric_map <- c("Pre2kC%" = "Pre2K Chase%", "2kC%" = "2K Chase%")
 
@@ -4569,7 +4570,7 @@ pitcher_bust_barrel_flag <- function(pc, pr, ev, la) {
   evn <- to_num(ev)
   lan <- to_num(la)
   bip <- safe_is_bip(pc, pr)
-  out <- bip & is.finite(evn) & is.finite(lan) & evn >= 95 & lan >= 5 & lan <= 40
+  out <- bip & is.finite(evn) & is.finite(lan) & base_barrel_evla(evn, lan)
   out[is.na(out)] <- FALSE
   out
 }
@@ -4707,7 +4708,7 @@ PITCHER_BUST_D1 <- tibble::tribble(
   "BA",       0.260,  0.120, TRUE,
   "SLG",      0.400,  0.220, TRUE,
   "GB%",      0.420,  0.120, FALSE,
-  "Barrel%",  0.174,  0.100, TRUE
+  "Barrel%",  base_d1_aar_benchmarks()$hitting[["barrel"]],  0.100, TRUE
 )
 
 d1_pitch_bucket <- function(pitch_type) {

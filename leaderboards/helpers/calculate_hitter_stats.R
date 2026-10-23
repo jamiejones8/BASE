@@ -144,7 +144,7 @@ calculate_hitter_stats <- function(df,
       OOSwing  = OOPitch & Swing,
       BBE      = PitchCall %in% c("InPlay", "InPlayOut", "InPlayNoOut"),
       BarrelFlag = BBE & is.finite(ExitSpeed) & is.finite(Angle) &
-        ExitSpeed >= 95 & Angle >= 5 & Angle <= 35,
+        base_barrel_evla(ExitSpeed, Angle),
       HardHit  = BBE & is.finite(ExitSpeed) & ExitSpeed >= 95,
       AirBall  = BBE & (TaggedHitType %in% c("LineDrive", "FlyBall", "Popup"))
     )

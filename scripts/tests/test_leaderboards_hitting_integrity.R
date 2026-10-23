@@ -26,10 +26,10 @@ if (isTRUE(fall_spec$shared_source) ||
 }
 
 if (!identical(
-  is_barrel(c(95, 94.9, 100, 100), c(5, 20, 35, 35.1)),
+  is_barrel(c(95, 94.9, 100, 100), c(8, 20, 32, 32.1)),
   c(TRUE, FALSE, TRUE, FALSE)
 )) {
-  fail("Leaderboard barrel boundaries are not consistently 95+ mph and 5-35 degrees.")
+  fail("Leaderboard barrel boundaries are not consistently the corrected sliding EV/LA bands.")
 }
 
 fixture <- tibble::tibble(

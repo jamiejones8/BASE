@@ -29,6 +29,7 @@ checks <- list(
   c("Rscript", "scripts/tests/test_scouting_lazy_reports.R"),
   c("Rscript", "scripts/tests/test_scouting_pdf_exports.R"),
   c("Rscript", "scripts/tests/test_pitch_geometry.R"),
+  c("Rscript", "scripts/tests/test_barrel_rules.R"),
   c("Rscript", "scripts/tests/test_shutdown_innings.R"),
   c("Rscript", "scripts/tests/test_team_reports_workspace.R"),
   c("Rscript", "scripts/tests/test_defense_fall_data.R"),

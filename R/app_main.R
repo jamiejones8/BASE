@@ -3919,7 +3919,7 @@ generate_hitter_pdf <- function(game_data, season_data, selected_hitter, output_
         IsWhiff=PitchCall=="StrikeSwinging",
         IsZoneSwing=IsSwing&InZone, IsZoneWhiff=IsWhiff&InZone,
         IsHardHit=PitchCall=="InPlay"&!is.na(ExitSpeed)&ExitSpeed>=95,
-        IsBarrel=PitchCall=="InPlay"&!is.na(ExitSpeed)&!is.na(Angle)&ExitSpeed>=95&Angle>=10&Angle<=35,
+        IsBarrel=PitchCall=="InPlay"&!is.na(ExitSpeed)&!is.na(Angle)&base_barrel_evla(ExitSpeed,Angle),
         IsBIP=PitchCall=="InPlay"&!is.na(ExitSpeed)
       ) %>%
       filter(!is.na(PitchGroup)) %>%

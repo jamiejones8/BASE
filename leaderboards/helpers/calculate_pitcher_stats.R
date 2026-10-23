@@ -65,14 +65,12 @@ calculate_pitching_stats <- function(df) {
     )
   
   # ---- Barrels (fixed logic, numeric safe) ----
-  # ---- Barrels (ExitSpeed ≥ 95 mph and Launch Angle 5–40°) ----
+  # ---- Barrels (shared EV-dependent launch-angle bands) ----
   barrel_df <- df %>%
     filter(
       !is.na(ExitSpeed),
       !is.na(Angle),
-      ExitSpeed >= 95,
-      Angle >= 5,
-      Angle <= 40
+      base_barrel_evla(ExitSpeed, Angle)
     ) %>%
     count(Pitcher, name = "Barrels")
   
