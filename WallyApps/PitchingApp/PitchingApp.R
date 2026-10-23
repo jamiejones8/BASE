@@ -2005,7 +2005,7 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
                              panel_fill = "grey92", label_pitch_num = FALSE,
                              label_size = 2.6, label_color = "black",
                              show_batter = FALSE, batter_side = NULL,
-                             style = c("default","page2")) {
+                             style = c("default","page2"), team_report = FALSE) {
   p_sub <- tibble::as_tibble(p_sub)
   style <- match.arg(style)
   
@@ -2045,6 +2045,7 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
   line_heart  <- if (style == "page2") 0.45 else 0.7
   line_plate  <- if (style == "page2") 0.45 else 0.6
   
+  if (team_report) { line_zone <- 0.35; line_heart <- 0.35; line_shadow <- 0.35 }
   zone_layers <- list(
     geom_rect(
       data = shadow_outline,
@@ -2115,7 +2116,7 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
       axis.ticks = element_blank()
     )
   
-  zone_coord <- coord_fixed(xlim = c(-3.5, 3.5), ylim = c(0.1, 4.6), expand = FALSE)
+  zone_coord <- coord_fixed(xlim = if(team_report)c(-2,2) else c(-3.5, 3.5), ylim = c(0.1, 4.6), expand = FALSE)
   
   if (!nrow(p_sub)) {
     return(
@@ -2172,7 +2173,7 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
       geom_pitch_location(
         color = "black",
         size = point_size,
-        stroke = 0.6,
+        stroke = if(team_report)1.5 else 0.6,
         na.rm = TRUE
       ) +
       scale_shape_manual(values = outcome_shapes, drop = FALSE) +
@@ -2195,7 +2196,7 @@ strike_zone_plot <- function(p_sub, title = "Locations - vs RHH", allow_barrel_a
       geom_pitch_location(
         alpha = 0.9,
         size = point_size,
-        stroke = 1,
+        stroke = if(team_report)1.5 else 1,
         na.rm = TRUE
       ) +
       scale_shape_manual(values = outcome_shapes, drop = FALSE) +
@@ -4031,19 +4032,19 @@ compose_team_report_plot <- function(game_p, season_p, game_id = NULL, season_co
   )
   
   # LHH
-  p_l_2k <- strike_zone_plot(d_2k  %>% dplyr::filter(BatterSideStd == "L"), "2K v LHH", allow_barrel_any = TRUE) +
+  p_l_2k <- strike_zone_plot(d_2k  %>% dplyr::filter(BatterSideStd == "L"), "2K v LHH", allow_barrel_any = TRUE, team_report = TRUE) +
     theme(plot.margin = margin(0,0,0,0), legend.position = "none")
-  p_l_h  <- strike_zone_plot(d_hits %>% dplyr::filter(BatterSideStd == "L"), "Hits v LHH", allow_barrel_any = TRUE) +
+  p_l_h  <- strike_zone_plot(d_hits %>% dplyr::filter(BatterSideStd == "L"), "Hits v LHH", allow_barrel_any = TRUE, team_report = TRUE) +
     theme(plot.margin = margin(0,0,0,0), legend.position = "none")
-  p_l_b  <- strike_zone_plot(d_barrel %>% dplyr::filter(BatterSideStd == "L"), "Barrel v LHH", allow_barrel_any = TRUE) +
+  p_l_b  <- strike_zone_plot(d_barrel %>% dplyr::filter(BatterSideStd == "L"), "Barrel v LHH", allow_barrel_any = TRUE, team_report = TRUE) +
     theme(plot.margin = margin(0,0,0,0), legend.position = "none")
   
   # RHH
-  p_r_2k <- strike_zone_plot(d_2k  %>% dplyr::filter(BatterSideStd == "R"), "2K v RHH", allow_barrel_any = TRUE) +
+  p_r_2k <- strike_zone_plot(d_2k  %>% dplyr::filter(BatterSideStd == "R"), "2K v RHH", allow_barrel_any = TRUE, team_report = TRUE) +
     theme(plot.margin = margin(0,0,0,0), legend.position = "none")
-  p_r_h  <- strike_zone_plot(d_hits %>% dplyr::filter(BatterSideStd == "R"), "Hits v RHH", allow_barrel_any = TRUE) +
+  p_r_h  <- strike_zone_plot(d_hits %>% dplyr::filter(BatterSideStd == "R"), "Hits v RHH", allow_barrel_any = TRUE, team_report = TRUE) +
     theme(plot.margin = margin(0,0,0,0), legend.position = "none")
-  p_r_b  <- strike_zone_plot(d_barrel %>% dplyr::filter(BatterSideStd == "R"), "Barrel v RHH", allow_barrel_any = TRUE) +
+  p_r_b  <- strike_zone_plot(d_barrel %>% dplyr::filter(BatterSideStd == "R"), "Barrel v RHH", allow_barrel_any = TRUE, team_report = TRUE) +
     theme(plot.margin = margin(0,0,0,0), legend.position = "none")
   
   # Legend (single, above all 6 plots)
@@ -9715,6 +9716,7 @@ server <- function(input, output, session){
 
   build_xrv_usage_pie <- function(d, hand = "L", title_text = "") {
     if (is.null(d) || !nrow(d)) return(plotly::plot_ly())
+    if (is.null(d) || !nrow(d)) return(ggplot() + theme_void() + labs(title=paste0(title_text," (no data)")))
     dd <- d %>% dplyr::filter(BatterSideStd %in% hand)
     if (!nrow(dd)) return(plotly::plot_ly())
     usage <- dd %>%
@@ -10482,29 +10484,52 @@ server <- function(input, output, session){
         panel.background = element_rect(fill = "grey92", color = NA),
         plot.background = element_rect(fill = "grey92", color = NA)
       )
-    pie | legend_plot
+    cowplot::plot_grid(pie,legend_plot,nrow=1,rel_widths=c(.55,.45))
   }
 
   build_season_summary_pdf_table <- function(df, title) {
-    if (is.null(df) || !nrow(df)) df <- data.frame(Status = "No data")
-    safe_tbl_plot(as.data.frame(df, stringsAsFactors = FALSE), title = title)
+    if (is.null(df) || !nrow(df)) df <- data.frame(Status="No data")
+    df <- as.data.frame(df,stringsAsFactors=FALSE)
+    n <- nrow(df); k <- ncol(df)
+    widths <- vapply(seq_len(k),function(j) max(5,nchar(names(df)[j]),
+      max(nchar(as.character(df[[j]])),na.rm=TRUE)),numeric(1))
+    edges <- c(0,cumsum(widths)/sum(widths)); centers <- (head(edges,-1)+tail(edges,-1))/2
+    cells <- expand.grid(row=seq_len(n),col=seq_len(k))
+    cells$label <- unlist(lapply(df,as.character),use.names=FALSE)
+    cells$x <- centers[cells$col]; cells$y <- n-cells$row+1
+    cells$xmin <- edges[cells$col]; cells$xmax <- edges[cells$col+1]
+    cells$fill <- ifelse(cells$row%%2==0,"#F8F3EA","white")
+    ggplot(cells,aes(x,y)) +
+      geom_rect(aes(xmin=xmin,xmax=xmax,ymin=y-.48,ymax=y+.48,fill=I(fill)),colour="#DDDDDD",linewidth=.25) +
+      geom_text(aes(label=label),size=2.6) +
+      annotate("text",x=centers,y=n+1,label=names(df),size=2.6,fontface="bold") +
+      annotate("rect",xmin=0,xmax=1,ymin=n+1.6,ymax=n+2.5,fill="#501214") +
+      annotate("text",x=.5,y=n+2.05,label=title,size=3.2,fontface="bold",colour="#B4975A") +
+      coord_cartesian(xlim=c(0,1),ylim=c(.35,n+2.55),expand=FALSE) +
+      theme_void() + theme(plot.margin=margin(3,4,3,4))
   }
 
   render_plot_to_pdf_via_png <- function(plot_obj, outfile, width = 14, height = 11, dpi = 300) {
     tmp_png <- tempfile(fileext = ".png")
-    on.exit(unlink(tmp_png), add = TRUE)
-    if (requireNamespace("ragg", quietly = TRUE)) {
-      ragg::agg_png(tmp_png, width = width, height = height, units = "in", res = dpi, background = "white")
-    } else {
-      grDevices::png(tmp_png, width = width * dpi, height = height * dpi, res = dpi, bg = "white")
-    }
+    tmp_pdf <- tempfile(tmpdir=dirname(outfile),fileext=".pdf")
+    device <- NULL
+    on.exit({
+      if (!is.null(device) && device %in% grDevices::dev.list()) grDevices::dev.off(device)
+      unlink(c(tmp_png,tmp_pdf))
+    }, add=TRUE)
+    if (requireNamespace("ragg", quietly=TRUE)) {
+      ragg::agg_png(tmp_png,width=width,height=height,units="in",res=dpi,background="white")
+    } else grDevices::png(tmp_png,width=width*dpi,height=height*dpi,res=dpi,bg="white")
+    device <- grDevices::dev.cur()
     print(plot_obj)
-    grDevices::dev.off()
+    grDevices::dev.off(device); device <- NULL
     img <- png::readPNG(tmp_png)
-    grDevices::pdf(outfile, width = width, height = height, useDingbats = FALSE)
-    on.exit(grDevices::dev.off(), add = TRUE)
+    grDevices::pdf(tmp_pdf,width=width,height=height,useDingbats=FALSE)
+    device <- grDevices::dev.cur()
     grid::grid.newpage()
-    grid::grid.raster(img, x = 0.5, y = 0.5, width = unit(1, "npc"), height = unit(1, "npc"), interpolate = TRUE)
+    grid::grid.raster(img,width=grid::unit(1,"npc"),height=grid::unit(1,"npc"),interpolate=TRUE)
+    grDevices::dev.off(device); device <- NULL
+    if (!file.copy(tmp_pdf,outfile,overwrite=TRUE)) stop("Unable to save season summary PDF.")
   }
 
   compose_season_summary_plot <- function(d, pitcher_name, season_label_text = "Season") {
@@ -10526,21 +10551,23 @@ server <- function(input, output, session){
     hand_l_tbl <- build_season_summary_pdf_table(hand_l_disp$fmt, "v LHH Pitch Type Performance")
     hand_r_tbl <- build_season_summary_pdf_table(hand_r_disp$fmt, "v RHH Pitch Type Performance")
     mv_plot <- build_pitch_metrics_movement_gg(d_plot, paste0(pitcher_name, ": Pitch Movement"), compact = TRUE)
-    pie_l <- patchwork::wrap_elements(full = cowplot::as_grob(build_pitch_usage_panel_gg(d_plot, "L", "v LHH Usage", compact = TRUE)))
-    pie_r <- patchwork::wrap_elements(full = cowplot::as_grob(build_pitch_usage_panel_gg(d_plot, "R", "v RHH Usage", compact = TRUE)))
+    pie_l <- build_pitch_usage_panel_gg(d_plot, "L", "v LHH Usage", compact = TRUE)
+    pie_r <- build_pitch_usage_panel_gg(d_plot, "R", "v RHH Usage", compact = TRUE)
 
-    top_row <- (split_tbl | (pie_l | pie_r)) + patchwork::plot_layout(widths = c(0.43, 0.57))
-    hand_tbls <- (hand_l_tbl / hand_r_tbl) + patchwork::plot_layout(heights = c(0.50, 0.50))
-    plots_row <- (mv_plot | hand_tbls) + patchwork::plot_layout(widths = c(0.42, 0.58))
-    bottom_row <- (pitch_tbl | patchwork::plot_spacer()) + patchwork::plot_layout(widths = c(0.84, 0.16))
-
-    final <- header_plot / top_row / plots_row / bottom_row +
-      patchwork::plot_layout(heights = c(0.07, 0.24, 0.45, 0.24))
+    # Keep nested report tables as independent panels; patchwork's | and /
+    # operators can flatten their internal title/body layouts into extra panels.
+    top_row <- cowplot::plot_grid(split_tbl, cowplot::plot_grid(pie_l,pie_r,nrow=1),
+                                  nrow=1,rel_widths=c(.43,.57))
+    hand_tbls <- cowplot::plot_grid(hand_l_tbl,hand_r_tbl,ncol=1)
+    plots_row <- cowplot::plot_grid(mv_plot,hand_tbls,nrow=1,rel_widths=c(.42,.58))
+    bottom_row <- cowplot::plot_grid(pitch_tbl,NULL,nrow=1,rel_widths=c(.84,.16))
+    final <- cowplot::plot_grid(header_plot,top_row,plots_row,bottom_row,
+                                ncol=1,rel_heights=c(.07,.23,.40,.30))
 
     logo <- if (exists("bullpen_report_logo_bundle", mode = "function")) bullpen_report_logo_bundle() else list(grob = NULL, aspect = 1)
     cowplot::ggdraw() +
       cowplot::draw_plot(final, x = 0, y = 0, width = 1, height = 1) +
-      { if (!is.null(logo$grob)) cowplot::draw_grob(logo$grob, x = 0.985, y = 0.03, width = min(0.16 * logo$aspect, 0.19), height = 0.16, hjust = 1, vjust = 0) }
+      { if (!is.null(logo$grob)) cowplot::draw_grob(logo$grob, x = 0.985, y = 0.03, width = min(0.11 * logo$aspect, 0.13), height = 0.11, hjust = 1, vjust = 0) }
   }
 
   # ---- Pitching Season Summary outputs ----
@@ -10604,11 +10631,10 @@ server <- function(input, output, session){
         render_plot_to_pdf_via_png(final, file, width = 14, height = 11, dpi = 320)
       }, error = function(e) {
         msg <- conditionMessage(e)
-        warning("[Season Summary PDF] ", msg)
-        grDevices::pdf(file, width = 11, height = 8.5, useDingbats = FALSE)
-        on.exit(grDevices::dev.off(), add = TRUE)
-        plot.new()
-        text(0.5, 0.5, paste("SEASON SUMMARY PDF ERROR:\n\n", msg), cex = 1.0)
+        message("[Season Summary PDF] ", msg)
+        unlink(file)
+        showNotification(paste("Season summary not downloaded:",msg),type="warning")
+        req(FALSE)
       })
     }
   )

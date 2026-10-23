@@ -62,3 +62,20 @@ for (file in c('WallyApps/PitchingApp/PitchingApp.R','WallyApps/HittingApp/Hitti
   }
 }
 cat('Ball boundary, corners, missing coordinates, every shape, PDF grobs and Plotly geometry passed.\n')
+
+# Draw-time text fitting holds for multiple digits and small/large PDF panels.
+label_file <- tempfile(fileext=".pdf")
+for (panel_inches in c(2,6)) {
+  grDevices::pdf(label_file,width=panel_inches,height=panel_inches)
+  grid::pushViewport(grid::viewport())
+  for(label in c("1","12","123")) {
+    fitted <- makeContent.base_pitch_label(grid::gTree(x=.5,y=.5,label=label,
+      colour="white",box_width=.03,box_height=.024,cl="base_pitch_label"))
+    text <- fitted$children[[1]]
+    stopifnot(grid::convertWidth(grid::grobWidth(text),"npc",valueOnly=TRUE)<=.03001,
+              grid::convertHeight(grid::grobHeight(text),"npc",valueOnly=TRUE)<=.02401)
+  }
+  grid::popViewport(); grDevices::dev.off()
+}
+unlink(label_file)
+cat("Pitch labels fit inside their shape bounds at different panel sizes.\n")

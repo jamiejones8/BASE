@@ -334,6 +334,12 @@ shiny::testServer(workspace$server, {
   if (!identical(splits$Split, c("Total", "v LHH", "v RHH"))) {
     fail("Season Summary handedness table is not Total, left, right.")
   }
+  # Exercise the real download: an error-only PDF is only a few KB.
+  summary_pdf <- output$season_summary_pdf
+  stopifnot(file.exists(summary_pdf),file.info(summary_pdf)$size > 50000)
+  con <- file(summary_pdf,"rb")
+  stopifnot(identical(readChar(con,5,useBytes=TRUE),"%PDF-"))
+  close(con)
   staff <- build_self_staff_table(dataFilter())
   if (!identical(as.character(staff$Split), c("Total", "vLHH", "vRHH"))) {
     fail("Staff handedness table is not Total, left, right.")

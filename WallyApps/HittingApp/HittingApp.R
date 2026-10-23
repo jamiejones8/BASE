@@ -162,12 +162,12 @@ is_bip_txst <- function(pc, pr){
   (pc_bip | hit | outs_in_play | inplay_other) & !non_bip
 }
 
-# Barrel if (BIP) AND EV >= 95.0 AND 5 <= LA <= 35.
+# Barrel launch-angle ceiling rises with exit velocity: 25 / 28 / 40 degrees.
 is_barrel_txst <- function(pc, pr, ev, la){
   bip <- is_bip_txst(pc, pr)
   ev <- to_num(ev)
   la <- to_num(la)
-  bip & is.finite(ev) & is.finite(la) & ev >= 95.0 & la >= 5 & la <= 35
+  bip & is.finite(ev) & is.finite(la) & ev >= 95.0 & la >= 5 & la <= ifelse(ev < 100, 25, ifelse(ev < 105, 28, 40))
 }
 
 # Build one stable identity for a pitch before any leaderboard/report summary.
@@ -1381,7 +1381,7 @@ summarize_overall <- function(d){
   barrel_flag <- if (exists("is_barrel_txst", inherits = TRUE)) {
     is_barrel_txst(pc_last, pr_last, ev_pa, la_pa)
   } else {
-    (bip_pa %in% TRUE) & is.finite(ev_pa) & is.finite(la_pa) & ev_pa >= 95.0 & la_pa >= 5 & la_pa <= 35
+    (bip_pa %in% TRUE) & is.finite(ev_pa) & is.finite(la_pa) & ev_pa >= 95.0 & la_pa >= 5 & la_pa <= ifelse(ev_pa < 100, 25, ifelse(ev_pa < 105, 28, 40))
   }
   barrel_den <- sum((bip_pa %in% TRUE) & is.finite(ev_pa) & is.finite(la_pa), na.rm = TRUE)
   barrel_pct <- safe_ratio(sum(barrel_flag %in% TRUE, na.rm = TRUE), barrel_den)
@@ -2351,76 +2351,32 @@ as_txst_table <- function(df) {
 }
 
 txst_process_table <- function(df, season_col_label = "Season") {
-  if (is.null(df) || !inherits(df, c("data.frame","tbl_df","tbl")) || !nrow(df)) {
-    df <- data.frame(Metric = "Process metrics unavailable", Game = NA, Season = NA, D1 = NA, stringsAsFactors = FALSE)
-  } else {
-    if (!inherits(df, "data.frame")) df <- as.data.frame(df)
-    nms <- names(df)
-    nms[tolower(nms) == "metric"] <- "Metric"
-    nms[tolower(nms) == "game"]   <- "Game"
-    nms[tolower(nms) == "season"] <- "Season"
-    nms[tolower(nms) == "d1"]     <- "D1"
-    if (!("Season" %in% nms) && nzchar(season_col_label) && season_col_label %in% nms) {
-      nms[nms == season_col_label] <- "Season"
-    }
-    if (!("Season" %in% nms)) {
-      season_idx <- which(!(nms %in% c("Metric","Game","D1")))[1]
-      if (is.finite(season_idx)) nms[season_idx] <- "Season"
-    }
-    names(df) <- nms
+  if (is.null(df) || !nrow(df) || !all(c("Metric","Game","D1") %in% names(df))) {
+    return(as_txst_table(data.frame(Status="Process metrics unavailable")))
   }
-  
-  df_render <- df
-  if ("Season" %in% names(df_render) && nzchar(season_col_label)) {
-    names(df_render)[names(df_render) == "Season"] <- season_col_label
+  season_col <- if("Season" %in% names(df)) "Season" else season_col_label
+  df <- df[,c("Metric","Game",season_col,"D1"),drop=FALSE]
+  names(df) <- c("Metric","Game",season_col_label,"D1")
+  to_frac <- function(x) suppressWarnings(readr::parse_number(as.character(x)))/100
+  n <- nrow(df)
+  edges <- c(0,1.55,2.55,3.55,4.55)
+  cells <- expand.grid(row=seq_len(n),col=seq_len(4))
+  cells$label <- unlist(lapply(df,as.character),use.names=FALSE)
+  cells$xmin <- edges[cells$col]; cells$xmax <- edges[cells$col+1]
+  cells$x <- (cells$xmin+cells$xmax)/2; cells$y <- n-cells$row+1
+  cells$fill <- ifelse(cells$row%%2==0,"#F8F3EA","white")
+  for(col in 2:3) for(row in seq_len(n)) {
+    fill <- d1_shade_fill(to_frac(df[row,col]),to_frac(df[row,4]),
+                         df$Metric[row] %in% c("Chase%","Whiff%","IZ Whiff%"))
+    if(nzchar(fill))cells$fill[cells$row==row & cells$col==col] <- fill
   }
-  
-  tbl <- ggpubr::ggtexttable(df_render, rows = NULL, theme = ggpubr::ttheme("blank"))
-  tbl <- txst_table_header_style(tbl, ncol(df_render))
-  tbl <- txst_table_polish(tbl, df_render)
-  
-  to_frac <- function(x) {
-    v <- suppressWarnings(as.numeric(readr::parse_number(as.character(x))))
-    if (!length(v)) return(v)
-    if (all(is.na(v))) return(v)
-    if (suppressWarnings(max(v, na.rm = TRUE)) > 1) v <- v / 100
-    v
-  }
-  
-  col_game <- which(names(df_render) == "Game")[1]
-  col_seas <- which(names(df_render) == season_col_label)[1]
-  col_d1   <- which(names(df_render) == "D1")[1]
-  # Force fixed positions for Process Metrics (Metric | Game | Season | D1)
-  if (ncol(df_render) >= 4) {
-    col_game <- 2L
-    col_seas <- 3L
-    col_d1   <- 4L
-  } else {
-    if (!is.finite(col_game) && ncol(df_render) >= 2) col_game <- 2L
-    if (!is.finite(col_seas) && ncol(df_render) >= 3) col_seas <- 3L
-    if (!is.finite(col_d1)   && ncol(df_render) >= 4) col_d1   <- 4L
-  }
-  if (!is.finite(col_game) || !is.finite(col_seas) || !is.finite(col_d1)) return(tbl)
-  
-  v_game <- to_frac(df$Game)
-  v_seas <- to_frac(df$Season)
-  v_d1   <- to_frac(df$D1)
-  
-  for (i in seq_len(nrow(df))) {
-    metric <- as.character(df$Metric[i])
-    lower_better <- metric %in% c("Chase%","Whiff%")
-    fill_g <- d1_shade_fill(v_game[i], v_d1[i], lower_better)
-    fill_s <- d1_shade_fill(v_seas[i], v_d1[i], lower_better)
-    if (nzchar(fill_g)) tbl <- .tbl_bg(tbl, row = i + 1, column = col_game, fill = fill_g, color = "#BEBEBE", linewidth = 0.6)
-    if (nzchar(fill_s)) tbl <- .tbl_bg(tbl, row = i + 1, column = col_seas, fill = fill_s, color = "#BEBEBE", linewidth = 0.6)
-    
-    # Explicitly shade Season column in case of header/column mismatch
-    if (nzchar(fill_s) && ncol(df_render) >= 3) {
-      tbl <- .tbl_bg(tbl, row = i + 1, column = 3L, fill = fill_s, color = "#BEBEBE", linewidth = 0.6)
-    }
-  }
-  
-  tbl
+  ggplot(cells,aes(x,y)) +
+    geom_rect(aes(xmin=xmin,xmax=xmax,ymin=y-.5,ymax=y+.5,fill=I(fill)),
+              colour="#D0D0D0",linewidth=.3) +
+    geom_text(aes(label=label),size=3.2) +
+    annotate("text",x=(head(edges,-1)+tail(edges,-1))/2,y=n+1,label=names(df),size=3.2) +
+    coord_cartesian(xlim=c(0,4.55),ylim=c(.5,n+1.5),expand=FALSE) +
+    theme_void() + theme(plot.margin=margin(0,8,0,0))
 }
 
 txst_count_breakdown_table <- function(df) {
@@ -2481,7 +2437,7 @@ txst_ptperf_table <- function(df) {
   if ("Status" %in% names(df)) return(as_txst_table(df))
   if (!("Pitch Type" %in% names(df))) return(as_txst_table(df))
   
-  metric_cols <- c("Rate%","IZ Swing%","Chase%","Whiff%","Barrel%")
+  metric_cols <- c("Rate%","IZ Swing%","Chase%","Whiff%","IZ Whiff%","Barrel%")
   if (!all(metric_cols %in% names(df))) return(as_txst_table(df))
   
   to_frac <- function(x) {
@@ -2508,6 +2464,7 @@ txst_ptperf_table <- function(df) {
     `IZ Swing%` = if ("Z-Swing%" %in% names(D1_PCT)) D1_PCT[["Z-Swing%"]] else NA_real_,
     `Chase%`    = D1_PCT[["Chase%"]]  %||% NA_real_,
     `Whiff%`    = D1_PCT[["Whiff%"]]  %||% NA_real_,
+    `IZ Whiff%` = D1_PCT[["IZ-Whiff%"]] %||% NA_real_,
     `Barrel%`   = D1_PCT[["Barrel%"]] %||% NA_real_
   )
 
@@ -2558,7 +2515,7 @@ txst_ptperf_table <- function(df) {
   
   for (j in seq_along(metric_cols)) {
     mc <- metric_cols[j]
-    lower_better <- mc %in% c("Chase%","Whiff%")
+    lower_better <- mc %in% c("Chase%","Whiff%","IZ Whiff%")
     vals <- metric_vals[[mc]]
     
     g_vals <- vals$game
@@ -2671,7 +2628,7 @@ wrap_plot_with_title <- function(title, p, title_h = 0.09) {
 
 calc_hitter_metrics <- function(d) {
   d <- tibble::as_tibble(d)
-  if (!nrow(d)) return(list(iz_swing = NA_real_, chase = NA_real_, whiff = NA_real_, barrel = NA_real_))
+  if (!nrow(d)) return(list(iz_swing = NA_real_, chase = NA_real_, whiff = NA_real_, iz_whiff = NA_real_, barrel = NA_real_))
   
   # Match hitting AAR/leaderboard logic: swings in zone / pitches in zone
   pitch_call <- dplyr::coalesce(
@@ -2692,7 +2649,7 @@ calc_hitter_metrics <- function(d) {
   whiff <- base$`Whiff%`
   barrel <- base$`Barrel%`
   
-  list(iz_swing = iz_swing, chase = chase, whiff = whiff, barrel = barrel)
+  list(iz_swing = iz_swing, chase = chase, whiff = whiff, iz_whiff = base$`IZ-Whiff%`, barrel = barrel)
 }
 
 team_hit_statline_bits <- function(d) {
@@ -2754,16 +2711,17 @@ build_hitter_process_table <- function(game_p, season_p, season_header = "Season
     iz_swing = if ("Z-Swing%" %in% names(D1_PCT)) D1_PCT[["Z-Swing%"]] else NA_real_,
     chase    = D1_PCT[["Chase%"]]  %||% NA_real_,
     whiff    = D1_PCT[["Whiff%"]]  %||% NA_real_,
+    iz_whiff = D1_PCT[["IZ-Whiff%"]] %||% NA_real_,
     barrel   = D1_PCT[["Barrel%"]] %||% NA_real_
   )
   
   fmt_pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100 * x), "-")
   
   raw <- tibble::tibble(
-    Metric = c("IZ Swing%","Chase%","Whiff%","Barrel%"),
-    Game   = c(G$iz_swing, G$chase, G$whiff, G$barrel),
-    Season = c(S$iz_swing, S$chase, S$whiff, S$barrel),
-    D1     = c(d1$iz_swing, d1$chase, d1$whiff, d1$barrel)
+    Metric = c("IZ Swing%","Chase%","Whiff%","IZ Whiff%","Barrel%"),
+    Game   = c(G$iz_swing, G$chase, G$whiff, G$iz_whiff, G$barrel),
+    Season = c(S$iz_swing, S$chase, S$whiff, S$iz_whiff, S$barrel),
+    D1     = c(d1$iz_swing, d1$chase, d1$whiff, d1$iz_whiff, d1$barrel)
   )
   
   out <- raw %>%
@@ -2783,7 +2741,7 @@ build_hitter_process_table <- function(game_p, season_p, season_header = "Season
   for (i in seq_len(nrow(out))) {
     metric <- raw$Metric[i]
     d1_val <- raw$D1[i]
-    lower_better <- metric %in% c("Chase%","Whiff%")
+    lower_better <- metric %in% c("Chase%","Whiff%","IZ Whiff%")
     if (length(col_game)) {
       fills[i, col_game] <- d1_shade_fill(raw$Game[i], d1_val, lower_better)
     }
@@ -2855,6 +2813,7 @@ build_hitter_pitchtype_table <- function(game_p, season_p = NULL) {
       `IZ Swing%`  = fmt_dual(g_m$iz_swing, s_m$iz_swing),
       `Chase%`     = fmt_dual(g_m$chase,    s_m$chase),
       `Whiff%`     = fmt_dual(g_m$whiff,    s_m$whiff),
+      `IZ Whiff%`  = fmt_dual(g_m$iz_whiff, s_m$iz_whiff),
       `Barrel%`    = fmt_dual(g_m$barrel,   s_m$barrel)
       ),
       season_raw = c(
@@ -2862,6 +2821,7 @@ build_hitter_pitchtype_table <- function(game_p, season_p = NULL) {
         `IZ Swing%` = s_m$iz_swing,
         `Chase%`    = s_m$chase,
         `Whiff%`    = s_m$whiff,
+        `IZ Whiff%` = s_m$iz_whiff,
         `Barrel%`   = s_m$barrel
       )
     )
@@ -2876,6 +2836,7 @@ build_hitter_pitchtype_table <- function(game_p, season_p = NULL) {
     `IZ Swing%` = if ("Z-Swing%" %in% names(D1_PCT)) D1_PCT[["Z-Swing%"]] else NA_real_,
     `Chase%`    = D1_PCT[["Chase%"]]  %||% NA_real_,
     `Whiff%`    = D1_PCT[["Whiff%"]]  %||% NA_real_,
+    `IZ Whiff%` = D1_PCT[["IZ-Whiff%"]] %||% NA_real_,
     `Barrel%`   = D1_PCT[["Barrel%"]] %||% NA_real_
   )
 
@@ -2903,7 +2864,7 @@ build_hitter_pitchtype_table <- function(game_p, season_p = NULL) {
     for (nm in names(d1_vals)) {
       j <- which(names(out) == nm)
       if (!length(j)) next
-      lower_better <- nm %in% c("Chase%","Whiff%")
+      lower_better <- nm %in% c("Chase%","Whiff%","IZ Whiff%")
       if (nm == "Whiff%") {
         if (is.finite(pt_ref_whiff[i])) {
           fills[i, j] <- d1_shade_fill(season_raw[i, nm], pt_ref_whiff[i], lower_better)
@@ -3145,7 +3106,7 @@ compose_team_hit_report_plot <- function(game_p, season_p, game_id = NULL, seaso
   
   row2_left  <- safe_tbl_plot(proc_df, "Process Metrics")
   row2_right <- safe_tbl_plot(pt_df, "Pitch Type Performance")
-  row2 <- (row2_left | row2_right) + patchwork::plot_layout(widths = c(0.95, 1.05))
+  row2 <- (row2_left | row2_right) + patchwork::plot_layout(widths = c(0.32, 0.68))
   
   row_counts <- safe_tbl_plot(count_df, "Count Breakdown")
   
@@ -3153,7 +3114,7 @@ compose_team_hit_report_plot <- function(game_p, season_p, game_id = NULL, seaso
   row_inn  <- wrap_plot_with_title("Inning Breakdown", inn_plot, title_h = 0.06)
   
   final <- header / row2 / row_counts / row_inn +
-    patchwork::plot_layout(heights = c(0.09, 0.25, 0.28, 0.38))
+    patchwork::plot_layout(heights = c(0.09, 0.25, 0.31, 0.35))
   
   # Watermark (bobcat)
   wm_path <- if (exists("bobcat_logo", inherits = TRUE) && nzchar(bobcat_logo) && file.exists(bobcat_logo)) {
@@ -3256,7 +3217,7 @@ aar_strike_zone_plot <- function(d){
       aes(fill = swing_take, shape = PitchTypePlot),
       colour = "black", size = 3, alpha = 0.95, stroke = 0.9, na.rm = TRUE
     ) +
-    geom_text(aes(label = PitchNum), size = 3, fontface = "bold", vjust = 0.5, hjust = 0.5, na.rm = TRUE) +
+    geom_pitch_label(aes(label = PitchNum), fontface = "bold", vjust = 0.5, hjust = 0.5, na.rm = TRUE) +
     scale_fill_manual(
       name = "Result",
       values = c("Take"="#501214", "Swing"="#B4975A"),
@@ -3516,7 +3477,7 @@ catcher_framing_zone_plot <- function(d, title = NULL){
       aes(fill = PitchType),
       shape = 21, size = 7.4, colour = "black", stroke = 0.9, alpha = 0.95, show.legend = TRUE
     ) +
-    geom_text(aes(label = PitchNumSub), size = 4.4, fontface = "bold", color = "white") +
+    geom_pitch_label(aes(label = PitchNumSub), fontface = "bold", color = "white") +
     coord_fixed(xlim = xlim, ylim = ylim, expand = FALSE) +
     scale_x_reverse() +
     scale_fill_manual(
@@ -7392,7 +7353,7 @@ server <- function(input, output, session){
       # points + numbers
       geom_pitch_location(aes(shape = TypeGroup, fill = Decision),
                  size = 8, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
-      geom_text(aes(label = PitchNum), size = 4.8, fontface = "bold", color = "white") +
+      geom_pitch_label(aes(label = PitchNum), fontface = "bold", color = "white") +
       scale_shape_manual(
         name   = "Pitch type",
         values = c("HARD" = 21, "BREAK" = 24, "SOFT" = 22),
@@ -7506,7 +7467,7 @@ server <- function(input, output, session){
                  color = "grey70", linewidth = 0.4) +
       geom_pitch_location(units = "inches", aes(shape = TypeGroup, fill = Decision),
                  size = 5.2, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
-      geom_text(aes(label = PitchNum), size = 3.2, fontface = "bold", color = "white", show.legend = FALSE) +
+      geom_pitch_label(aes(label = PitchNum), units = "inches", fontface = "bold", color = "white", show.legend = FALSE) +
       scale_shape_manual(values = c("HARD"=21, "BREAK"=24, "SOFT"=22), drop = FALSE) +
       scale_fill_manual(values = c("SWING"="#B4975A","TAKE"="#501214"), drop = FALSE) +
       coord_fixed(xlim = c(-20, 20), ylim = c(0, 50), expand = FALSE) +
@@ -7979,7 +7940,7 @@ server <- function(input, output, session){
                      inherit.aes = FALSE, linetype="dashed", alpha=0.35) +
         geom_pitch_location(aes(shape = TypeGroup, fill = Decision),
                    size = 7.8, color = "black", stroke = 0.7, alpha = 0.95, show.legend = TRUE) +
-        geom_text(aes(label = PitchNum), size = 5.3, fontface = "bold", color = "white") +
+        geom_pitch_label(aes(label = PitchNum), fontface = "bold", color = "white") +
         scale_shape_manual(
           name   = "Pitch type",
           values = c("HARD"=21,"BREAK"=24,"SOFT"=22),
@@ -8201,7 +8162,7 @@ server <- function(input, output, session){
                      color = "grey70", linewidth = 0.4) +
           geom_pitch_location(units = "inches", aes(shape = TypeGroup, fill = Decision),
                      size = 5.2, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
-          geom_text(aes(label = PitchNum), size = 3.2, fontface = "bold", color = "white", show.legend = FALSE) +
+          geom_pitch_label(aes(label = PitchNum), units = "inches", fontface = "bold", color = "white", show.legend = FALSE) +
           scale_shape_manual(
             values = c("HARD"=21, "BREAK"=24, "SOFT"=22),
             breaks = c("HARD","BREAK","SOFT"),
@@ -8293,7 +8254,7 @@ server <- function(input, output, session){
       is_barrel_tx <- function(pc, pr, ev, la){
         if (exists("is_barrel_txst", inherits=TRUE))
           is_barrel_txst(pc, pr, ev, la)
-        else ifelse(is.finite(ev) & is.finite(la) & ev >= 95 & la >= 10 & la <= 30, TRUE, FALSE)
+        else ifelse(is.finite(ev) & is.finite(la) & ev >= 95 & la >= 5 & la <= ifelse(ev < 100, 25, ifelse(ev < 105, 28, 40)), TRUE, FALSE)
       }
       safe_ratio <- function(num, den) ifelse(den > 0, num/den, NA_real_)
       

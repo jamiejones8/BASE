@@ -98,14 +98,26 @@ if (nrow(workspace$dedupe_hitting_events(fallback_rows)) != 2L) {
   fail("Hitting event fallback identity still collides across games or inning halves.")
 }
 
-expected_barrels <- c(TRUE, FALSE, TRUE, FALSE)
+expected_barrels <- c(TRUE, FALSE, TRUE, FALSE, TRUE, FALSE, TRUE, FALSE, TRUE, FALSE)
 actual_barrels <- workspace$is_barrel_txst(
-  rep("InPlay", 4), rep("HomeRun", 4),
-  c(95, 94.9, 100, 100), c(5, 20, 35, 35.1)
+  rep("InPlay", 10), rep("HomeRun", 10),
+  c(95,94.9,99.9,99.9,100,100,104.9,104.9,105,105),
+  c(5,20,25,25.1,28,28.1,28,28.1,40,40.1)
 )
 if (!identical(actual_barrels, expected_barrels)) {
-  fail("Hitting barrel boundaries are not consistently 95+ mph and 5-35 degrees.")
+  fail("Hitting barrel boundaries do not follow the 95/100/105 mph sliding scale.")
 }
+
+# In-zone whiffs divide by in-zone swings, excluding outside-zone whiffs.
+zone_fixture <- tibble::tibble(
+  PA_ID=as.character(1:4),PitchCall=c("StrikeSwinging","InPlay","StrikeSwinging","BallCalled"),
+  PlayResult=c("Undefined","Out","Undefined","Undefined"),PitchofPA=1,
+  PlateLocSide=c(0,0,2,0),PlateLocHeight=2.5,ExitSpeed=NA_real_,Angle=NA_real_)
+metrics <- workspace$calc_hitter_metrics(zone_fixture)
+stopifnot(isTRUE(all.equal(metrics$iz_whiff,.5)))
+proc <- workspace$build_hitter_process_table(zone_fixture,zone_fixture)
+stopifnot(identical(proc$Metric,c("IZ Swing%","Chase%","Whiff%","IZ Whiff%","Barrel%")),
+          proc$Game[proc$Metric=="IZ Whiff%"]=="50.0%")
 
 barrel_fixture <- tibble::tibble(
   PA_ID = c("measured", "unmeasured"),

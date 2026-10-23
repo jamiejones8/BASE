@@ -3519,7 +3519,7 @@ catcher_framing_zone_plot <- function(d, title = NULL, show_pitch_numbers = TRUE
     scale_fill_manual(values = pitch_colors, breaks = facet_levels, limits = facet_levels, drop = FALSE, name = "Pitch Type")
   if (show_pitch_numbers) {
     out <- out +
-      geom_text(aes(x = -plot_x, y = plot_z, label = PitchNumSub), size = 4.4, fontface = "bold", color = "white")
+      geom_pitch_label(aes(x = -plot_x, y = plot_z, label = PitchNumSub), fontface = "bold", color = "white")
   }
   out
 }

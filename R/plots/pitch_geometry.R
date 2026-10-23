@@ -23,7 +23,7 @@ base_pitch_in_zone <- function(x, y, units = c("feet", "inches")) {
 # Polygon geometry is expressed in pitch-coordinate units, so both PDFs and
 # ggplotly keep the correct ball footprint regardless of panel size. Every
 # outcome symbol fits inside the ball diameter without drawing a second glyph.
-base_pitch_vertices <- function(shape = 19, symbol = FALSE) {
+base_pitch_vertices <- function(shape = 19, symbol = FALSE, inner = .80) {
   theta <- seq(0, 2*pi, length.out = 97)
   circle <- cbind(cos(theta), sin(theta))
   shape <- suppressWarnings(as.integer(shape))
@@ -34,12 +34,13 @@ base_pitch_vertices <- function(shape = 19, symbol = FALSE) {
     p <- cbind(cos(a),sin(a)) * if (shape %in% c(6,25)) -1 else 1
   } else if (shape %in% c(5,18,23)) p <- rbind(c(0,1),c(1,0),c(0,-1),c(-1,0),c(0,1))
   else if (shape %in% c(3,4,8)) {
-    p <- rbind(c(-.12,-1),c(.12,-1),c(.12,-.12),c(1,-.12),c(1,.12),c(.12,.12),c(.12,1),c(-.12,1),c(-.12,.12),c(-1,.12),c(-1,-.12),c(-.12,-.12),c(-.12,-1)) / sqrt(1.0144)
+    arm <- if (inner < .80) .20 else .12
+    p <- rbind(c(-arm,-1),c(arm,-1),c(arm,-arm),c(1,-arm),c(1,arm),c(arm,arm),c(arm,1),c(-arm,1),c(-arm,arm),c(-1,arm),c(-1,-arm),c(-arm,-arm),c(-arm,-1)) / sqrt(1+arm^2)
     if (shape %in% c(4,8)) p <- p %*% matrix(c(cos(pi/4),sin(pi/4),-sin(pi/4),cos(pi/4)),2)
   } else p <- circle
   # The border follows the selected shape, never an enclosing circle.
-  if (!symbol) return(rbind(p, p[nrow(p):1,,drop=FALSE]*.80,p[1,]))
-  p * .80
+  if (!symbol) return(rbind(p, p[nrow(p):1,,drop=FALSE]*inner,p[1,]))
+  p * inner
 }
 base_pitch_polygon_data <- function(data, radius, component = "both") {
   data <- data[is.finite(data$x) & is.finite(data$y), , drop=FALSE]
@@ -50,7 +51,8 @@ base_pitch_polygon_data <- function(data, radius, component = "both") {
     parts <- switch(component, outline = FALSE, symbol = TRUE,
                     if (shape == 1) FALSE else c(FALSE,TRUE))
     do.call(rbind, lapply(parts, function(symbol) {
-      v <- base_pitch_vertices(shape, symbol) * radius
+      inner <- if ("stroke" %in% names(row) && is.finite(row$stroke) && row$stroke > 1) .65 else .80
+      v <- base_pitch_vertices(shape, symbol, inner) * radius
       out <- row[rep(1,nrow(v)),,drop=FALSE]
       out$x <- row$x + v[,1]; out$y <- row$y + v[,2]
       out$group <- i*2L + as.integer(symbol)
@@ -96,4 +98,39 @@ geom_pitch_location <- function(mapping = NULL, data = NULL, ..., units = "feet"
       params=c(list(...),list(radius=radius*coordinate_scale,
                              component=component,na.rm=na.rm)))
   })
+}
+
+# Fit bold pitch numbers inside the ball at draw time, when panel size is known.
+# The rectangle fits inside the filled triangle as well as circles and squares.
+makeContent.base_pitch_label <- function(x) {
+  text <- grid::textGrob(x$label, gp = grid::gpar(fontsize=10, fontface="bold", col=x$colour))
+  available_w <- grid::convertWidth(grid::unit(x$box_width,"npc"),"points",valueOnly=TRUE)
+  available_h <- grid::convertHeight(grid::unit(x$box_height,"npc"),"points",valueOnly=TRUE)
+  text_w <- grid::convertWidth(grid::grobWidth(text),"points",valueOnly=TRUE)
+  text_h <- grid::convertHeight(grid::grobHeight(text),"points",valueOnly=TRUE)
+  size <- 10 * min(available_w/max(text_w,1e-6), available_h/max(text_h,1e-6))
+  text <- grid::editGrob(text, x=grid::unit(x$x,"npc"), y=grid::unit(x$y,"npc"),
+                         gp=grid::gpar(fontsize=max(1,floor(size)),fontface="bold",col=x$colour))
+  grid::setChildren(x,grid::gList(text))
+}
+geom_pitch_label <- function(mapping=NULL,data=NULL,...,units="feet",inherit.aes=TRUE,
+                             show.legend=FALSE,na.rm=TRUE) {
+  registerS3method("makeContent","base_pitch_label",makeContent.base_pitch_label,envir=asNamespace("grid"))
+  radius <- BASE_BALL_RADIUS_IN / if(units=="feet")12 else 1
+  geom <- ggplot2::ggproto("GeomPitchLabel",ggplot2::GeomText,
+    draw_panel=function(data,panel_params,coord,na.rm=TRUE,radius=BASE_BALL_RADIUS_IN/12) {
+      data <- data[is.finite(data$x)&is.finite(data$y)&!is.na(data$label),,drop=FALSE]
+      if(!nrow(data))return(grid::nullGrob())
+      center <- coord$transform(data,panel_params)
+      edge <- data; edge$x <- edge$x + radius; edge$y <- edge$y + radius
+      edge <- coord$transform(edge,panel_params)
+      grobs <- lapply(seq_len(nrow(data)),function(i) grid::gTree(
+        x=center$x[i],y=center$y[i],label=as.character(data$label[i]),colour=data$colour[i],
+        box_width=abs(edge$x[i]-center$x[i])*.60,
+        box_height=abs(edge$y[i]-center$y[i])*.48,cl="base_pitch_label"))
+      grid::gTree(children=do.call(grid::gList,grobs))
+    })
+  ggplot2::layer(mapping=mapping,data=data,geom=geom,stat="identity",position="identity",
+    inherit.aes=inherit.aes,show.legend=show.legend,
+    params=c(list(...),list(radius=radius,na.rm=na.rm)))
 }
