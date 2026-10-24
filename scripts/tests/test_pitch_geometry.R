@@ -68,12 +68,16 @@ label_file <- tempfile(fileext=".pdf")
 for (panel_inches in c(2,6)) {
   grDevices::pdf(label_file,width=panel_inches,height=panel_inches)
   grid::pushViewport(grid::viewport())
-  for(label in c("1","12","123")) {
-    fitted <- makeContent.base_pitch_label(grid::gTree(x=.5,y=.5,label=label,
+  for (shape in c(21,22,24)) for(label in c("1","12","123")) {
+    fitted <- makeContent.base_pitch_label(grid::gTree(x=.5,y=.5,label=label,shape=shape,
       colour="white",box_width=.03,box_height=.024,cl="base_pitch_label"))
     text <- fitted$children[[1]]
-    stopifnot(grid::convertWidth(grid::grobWidth(text),"npc",valueOnly=TRUE)<=.03001,
-              grid::convertHeight(grid::grobHeight(text),"npc",valueOnly=TRUE)<=.02401)
+    w <- grid::convertWidth(grid::grobWidth(text),"npc",valueOnly=TRUE)/.03
+    h <- grid::convertHeight(grid::grobHeight(text),"npc",valueOnly=TRUE)/.024
+    y <- (grid::convertY(text$y,"npc",valueOnly=TRUE)-.5)/.024
+    usage <- if (shape == 21) sqrt((w/2)^2+(h/2)^2)/.8 else if (shape == 22) max(w,h)/(.8*sqrt(2)) else (w/2/sqrt(3)+y+h/2)/.8
+    stopifnot(usage <= 1.001, usage > .65)
+    if(shape == 24) stopifnot(y-h/2 >= -.40001)
   }
   grid::popViewport(); grDevices::dev.off()
 }

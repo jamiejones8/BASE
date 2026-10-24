@@ -101,16 +101,32 @@ geom_pitch_location <- function(mapping = NULL, data = NULL, ..., units = "feet"
 }
 
 # Fit bold pitch numbers inside the ball at draw time, when panel size is known.
-# The rectangle fits inside the filled triangle as well as circles and squares.
+# Fit the measured text rectangle to the actual filled shape.
 makeContent.base_pitch_label <- function(x) {
   text <- grid::textGrob(x$label, gp = grid::gpar(fontsize=10, fontface="bold", col=x$colour))
   available_w <- grid::convertWidth(grid::unit(x$box_width,"npc"),"points",valueOnly=TRUE)
   available_h <- grid::convertHeight(grid::unit(x$box_height,"npc"),"points",valueOnly=TRUE)
   text_w <- grid::convertWidth(grid::grobWidth(text),"points",valueOnly=TRUE)
   text_h <- grid::convertHeight(grid::grobHeight(text),"points",valueOnly=TRUE)
-  size <- 10 * min(available_w/max(text_w,1e-6), available_h/max(text_h,1e-6))
-  text <- grid::editGrob(text, x=grid::unit(x$x,"npc"), y=grid::unit(x$y,"npc"),
-                         gp=grid::gpar(fontsize=max(1,floor(size)),fontface="bold",col=x$colour))
+  shape <- if (is.null(x$shape)) 21 else x$shape
+  # Font devices can quantize sizes. Measure candidate glyphs on the actual
+  # device instead of assuming that widths scale perfectly from a 10pt font.
+  low <- 0; high <- 10 * 2 * max(available_w/text_w, available_h/text_h)
+  for (iteration in seq_len(18)) {
+    size <- (low + high)/2
+    candidate <- grid::editGrob(text, gp=grid::gpar(fontsize=size,fontface="bold",col=x$colour))
+    w <- grid::convertWidth(grid::grobWidth(candidate),"points",valueOnly=TRUE)/available_w
+    h <- grid::convertHeight(grid::grobHeight(candidate),"points",valueOnly=TRUE)/available_h
+    usage <- if (shape %in% c(22,15,0)) max(w,h)/sqrt(2) else if (shape %in% c(24,17,2,25,6)) {
+      (h+w/(2*sqrt(3)))/1.5
+    } else if (shape %in% c(23,18,5)) (w+h)/2 else sqrt(w*w+h*h)/2
+    if (usage <= .80*.98) low <- size else high <- size
+  }
+  text <- grid::editGrob(text,gp=grid::gpar(fontsize=low,fontface="bold",col=x$colour))
+  h <- grid::convertHeight(grid::grobHeight(text),"points",valueOnly=TRUE)/available_h
+  offset <- if (shape %in% c(24,17,2,25,6)) (h/2-.80*.98/2) else 0
+  if (shape %in% c(25,6)) offset <- -offset
+  text <- grid::editGrob(text,x=grid::unit(x$x,"npc"),y=grid::unit(x$y+offset*x$box_height,"npc"))
   grid::setChildren(x,grid::gList(text))
 }
 geom_pitch_label <- function(mapping=NULL,data=NULL,...,units="feet",inherit.aes=TRUE,
@@ -118,6 +134,7 @@ geom_pitch_label <- function(mapping=NULL,data=NULL,...,units="feet",inherit.aes
   registerS3method("makeContent","base_pitch_label",makeContent.base_pitch_label,envir=asNamespace("grid"))
   radius <- BASE_BALL_RADIUS_IN / if(units=="feet")12 else 1
   geom <- ggplot2::ggproto("GeomPitchLabel",ggplot2::GeomText,
+    default_aes=ggplot2::aes(colour="black",size=3.88,angle=0,hjust=.5,vjust=.5,alpha=NA,family="",fontface=1,lineheight=1.2,shape=21),
     draw_panel=function(data,panel_params,coord,na.rm=TRUE,radius=BASE_BALL_RADIUS_IN/12) {
       data <- data[is.finite(data$x)&is.finite(data$y)&!is.na(data$label),,drop=FALSE]
       if(!nrow(data))return(grid::nullGrob())
@@ -126,8 +143,8 @@ geom_pitch_label <- function(mapping=NULL,data=NULL,...,units="feet",inherit.aes
       edge <- coord$transform(edge,panel_params)
       grobs <- lapply(seq_len(nrow(data)),function(i) grid::gTree(
         x=center$x[i],y=center$y[i],label=as.character(data$label[i]),colour=data$colour[i],
-        box_width=abs(edge$x[i]-center$x[i])*.60,
-        box_height=abs(edge$y[i]-center$y[i])*.48,cl="base_pitch_label"))
+        shape=data$shape[i],box_width=abs(edge$x[i]-center$x[i]),
+        box_height=abs(edge$y[i]-center$y[i]),cl="base_pitch_label"))
       grid::gTree(children=do.call(grid::gList,grobs))
     })
   ggplot2::layer(mapping=mapping,data=data,geom=geom,stat="identity",position="identity",

@@ -4516,8 +4516,10 @@ data_processing_workspace_ui <- function() {
           class = "base-csv-editor-controls",
           shiny::selectInput("dp_csv_source", "CSV file", choices = character()),
           shiny::actionButton("dp_csv_reload", "Reload file", class = "btn btn-outline-secondary"),
-          shiny::actionButton("dp_csv_save", "Save changes", class = "btn-primary")
+          shiny::actionButton("dp_csv_save", "Save changes", class = "btn-primary"),
+          tags$button(id = "dp_csv_fill", type = "button", class = "btn btn-outline-secondary", `aria-pressed` = "false", "Edit across rows/columns")
         ),
+        tags$p("In Edit across rows/columns mode, drag a cell across visible rows or columns to copy its value. Top = red; Bottom = blue. Fills stop at half-inning boundaries; game and inning identifiers cannot be filled."),
         shiny::uiOutput("dp_csv_editor_status"),
         tags$div(class = "base-csv-table-wrap", DT::DTOutput("dp_csv_editor"))
       )
@@ -4654,6 +4656,7 @@ data_processing_server <- function(input, output, session) {
   output$dp_pulse_workload_status <- shiny::renderUI(render_replacement_status("PULSE_WORKLOAD", states$PULSE_WORKLOAD()))
   output$dp_arm_care_status <- shiny::renderUI(render_replacement_status("ARM_CARE", states$ARM_CARE()))
 
+  csv_render_version <- shiny::reactiveVal(0L)
   csv_rows <- shiny::reactiveVal(NULL)
   csv_original <- shiny::reactiveVal(NULL)
   csv_fingerprint <- shiny::reactiveVal(NULL)
@@ -4676,6 +4679,7 @@ data_processing_server <- function(input, output, session) {
   }
 
   load_csv_editor <- function(target_id) {
+    csv_render_version(shiny::isolate(csv_render_version()) + 1L)
     if (is.null(target_id) || !nzchar(target_id)) {
       csv_rows(NULL)
       csv_original(NULL)
@@ -4763,12 +4767,14 @@ data_processing_server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   output$dp_csv_editor <- DT::renderDT({
-    rows <- csv_rows()
+    csv_render_version()
+    rows <- shiny::isolate(csv_rows())
     shiny::req(!is.null(rows))
     DT::datatable(
       rows,
       rownames = FALSE,
       editable = list(target = "cell"),
+      callback = DT::JS(readLines(file.path(base_bootstrap_root, "www", "csv-editor.js"), warn = FALSE)),
       filter = "top",
       selection = "none",
       options = list(
@@ -4780,7 +4786,7 @@ data_processing_server <- function(input, output, session) {
       ),
       class = "stripe hover compact"
     )
-  }, server = TRUE)
+  }, server = FALSE)
 
   shiny::observeEvent(input$dp_csv_editor_cell_edit, {
     rows <- csv_rows()
@@ -4788,7 +4794,6 @@ data_processing_server <- function(input, output, session) {
     updated <- DT::editData(
       rows,
       input$dp_csv_editor_cell_edit,
-      proxy = DT::dataTableProxy("dp_csv_editor", session = session),
       rownames = FALSE
     )
     updated[] <- lapply(updated, as.character)
@@ -4802,6 +4807,31 @@ data_processing_server <- function(input, output, session) {
         "All changes have been reverted; the file matches the saved source."
       }
     ))
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input$dp_csv_fill_edit, {
+    edit <- input$dp_csv_fill_edit
+    rows <- csv_rows()
+    original <- csv_original()
+    shiny::req(!is.null(rows), !is.null(original))
+    rr <- as.integer(unlist(edit$rows)); cc <- as.integer(unlist(edit$cols))
+    src <- as.integer(edit$source); sc <- as.integer(edit$sourceCol)
+    shiny::req(length(src) == 1L, length(sc) == 1L, length(rr), length(cc),
+      all(c(rr, src) %in% seq_len(nrow(rows))), all(c(cc, sc) %in% seq_len(ncol(rows))))
+    half <- intersect(c("Top/Bottom", "Top.Bottom", "TopBottom"), names(original))
+    shiny::req(length(half) > 0L, "Inning" %in% names(original))
+    keys <- intersect(c("GameID", "Date", "HomeTeam", "AwayTeam", "Inning", half[1]), names(original))
+    shiny::req(!any(names(rows)[cc] %in% keys))
+    # Validate the entire source interval, even when filtering hides rows.
+    interval <- seq.int(min(c(rr, src)), max(c(rr, src)))
+    shiny::req(tolower(trimws(original[[half[1]]][src])) %in% c("top", "bottom", "bot"),
+      !is.na(original$Inning[src]), nzchar(original$Inning[src]))
+    for (key in keys) shiny::req(all(!is.na(original[[key]][interval]) & original[[key]][interval] == original[[key]][src]))
+    rows[rr, cc] <- rows[[sc]][src]
+    csv_rows(rows)
+    changed <- base_trackman_changed_cells(csv_original(), rows)
+    csv_message(list(type = if (changed > 0L) "dirty" else "ready",
+      text = paste(changed, "cells have unsaved changes.")))
   }, ignoreInit = TRUE)
 
   output$dp_csv_editor_status <- shiny::renderUI({

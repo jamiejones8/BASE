@@ -3229,7 +3229,7 @@ aar_strike_zone_plot <- function(d){
       aes(fill = swing_take, shape = PitchTypePlot),
       colour = "black", size = 3, alpha = 0.95, stroke = 0.9, na.rm = TRUE
     ) +
-    geom_pitch_label(aes(label = PitchNum), fontface = "bold", vjust = 0.5, hjust = 0.5, na.rm = TRUE) +
+    geom_pitch_label(aes(label = PitchNum, shape = PitchTypePlot), fontface = "bold", vjust = 0.5, hjust = 0.5, na.rm = TRUE) +
     scale_fill_manual(
       name = "Result",
       values = c("Take"="#501214", "Swing"="#B4975A"),
@@ -7366,7 +7366,7 @@ server <- function(input, output, session){
       # points + numbers
       geom_pitch_location(aes(shape = TypeGroup, fill = Decision),
                  size = 8, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
-      geom_pitch_label(aes(label = PitchNum), fontface = "bold", color = "white") +
+      geom_pitch_label(aes(label = PitchNum, shape = TypeGroup), fontface = "bold", color = "white") +
       scale_shape_manual(
         name   = "Pitch type",
         values = c("HARD" = 21, "BREAK" = 24, "SOFT" = 22),
@@ -7480,7 +7480,7 @@ server <- function(input, output, session){
                  color = "grey70", linewidth = 0.4) +
       geom_pitch_location(units = "inches", aes(shape = TypeGroup, fill = Decision),
                  size = 5.2, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
-      geom_pitch_label(aes(label = PitchNum), units = "inches", fontface = "bold", color = "white", show.legend = FALSE) +
+      geom_pitch_label(aes(label = PitchNum, shape = TypeGroup), units = "inches", fontface = "bold", color = "white", show.legend = FALSE) +
       scale_shape_manual(values = c("HARD"=21, "BREAK"=24, "SOFT"=22), drop = FALSE) +
       scale_fill_manual(values = c("SWING"="#B4975A","TAKE"="#501214"), drop = FALSE) +
       coord_fixed(xlim = c(-20, 20), ylim = c(0, 50), expand = FALSE) +
@@ -7953,7 +7953,7 @@ server <- function(input, output, session){
                      inherit.aes = FALSE, linetype="dashed", alpha=0.35) +
         geom_pitch_location(aes(shape = TypeGroup, fill = Decision),
                    size = 7.8, color = "black", stroke = 0.7, alpha = 0.95, show.legend = TRUE) +
-        geom_pitch_label(aes(label = PitchNum), fontface = "bold", color = "white") +
+        geom_pitch_label(aes(label = PitchNum, shape = TypeGroup), fontface = "bold", color = "white") +
         scale_shape_manual(
           name   = "Pitch type",
           values = c("HARD"=21,"BREAK"=24,"SOFT"=22),
@@ -8175,7 +8175,7 @@ server <- function(input, output, session){
                      color = "grey70", linewidth = 0.4) +
           geom_pitch_location(units = "inches", aes(shape = TypeGroup, fill = Decision),
                      size = 5.2, color = "black", stroke = 0.6, alpha = 0.95, show.legend = FALSE) +
-          geom_pitch_label(aes(label = PitchNum), units = "inches", fontface = "bold", color = "white", show.legend = FALSE) +
+          geom_pitch_label(aes(label = PitchNum, shape = TypeGroup), units = "inches", fontface = "bold", color = "white", show.legend = FALSE) +
           scale_shape_manual(
             values = c("HARD"=21, "BREAK"=24, "SOFT"=22),
             breaks = c("HARD","BREAK","SOFT"),
