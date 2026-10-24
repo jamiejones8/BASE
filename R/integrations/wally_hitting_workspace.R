@@ -396,8 +396,7 @@ base_hitting_embedded_head <- function() {
         box-shadow: var(--base-shadow-sm) !important;
       }
       .base-hitting-workspace table.dataTable thead th,
-      .base-hitting-workspace .table thead th,
-      .base-hitting-workspace .aar-kpi thead th {
+      .base-hitting-workspace .table thead th {
         background: var(--base-maroon) !important;
         color: #fff !important;
       }

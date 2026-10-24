@@ -532,3 +532,6 @@ cat(
   "Wally Pitching integration passed:", nrow(prepared),
   "folder-backed rows,", length(expected_tabs), "tabs, and Pitch Decay server smoke test.\n"
 )
+team_qa <- Sys.getenv('BASE_PITCHING_TEAM_QA','')
+if (nzchar(team_qa)) ggplot2::ggsave(team_qa,
+  workspace$compose_team_report_plot(aar_render_payload$game,aar_render_payload$season,season_col_label='2026 Season'),width=8.5,height=11)

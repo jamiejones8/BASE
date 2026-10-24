@@ -2952,82 +2952,13 @@ if (!exists("txst_table_polish", mode = "function")) {
 
 # --- One table (data.frame -> styled table -> ggplot) + maroon title
 safe_tbl_plot <- function(obj, title = "Table", season_col_label = "Season") {
-  normalize_game_fields <- function(x) {
-    if (is.null(x) || !nrow(x)) return(x)
-    
-    # Coerce IDs to character so %in% matching works
-    if ("CustomGameID" %in% names(x)) x$CustomGameID <- as.character(x$CustomGameID)
-    
-    # Coerce dates to Date (handles "YYYY-MM-DD" and "m/d/YYYY")
-    if ("GameDate" %in% names(x)) {
-      gd <- suppressWarnings(as.Date(x$GameDate))
-      if (all(is.na(gd))) gd <- suppressWarnings(as.Date(x$GameDate, format = "%m/%d/%Y"))
-      x$GameDate <- gd
-    }
-    
-    x
-  }
-  
-  build_body <- function(o) {
-    # Ensure IDs/dates are normalized for all downstream filters/tables
-    o <- normalize_game_fields(o)
-    
-    if (inherits(o, c("data.frame","tbl_df"))) {
-      df <- as.data.frame(o)
-      
-      # choose the correct builder (ensures Process & PTP use shaded versions)
-      tbl <-
-        if (identical(title, "Process Metrics") && exists("txst_process_table", mode = "function")) {
-          txst_process_table(df, season_col_label = season_col_label)
-        } else if (identical(title, "Count Breakdown") && exists("txst_count_breakdown_table", mode = "function")) {
-          txst_count_breakdown_table(df)
-        } else if (identical(title, "Pitch Type Performance") && exists("txst_ptperf_table", mode = "function")) {
-          txst_ptperf_table(df)
-        } else if (exists("as_txst_table", mode = "function")) {
-          as_txst_table(df)
-        } else {
-          ggpubr::ggtexttable(df, rows = NULL, theme = ggpubr::ttheme("blank"))
-        }
-      
-      # --- Ensure we always return a renderable grob ---
-      if (is.null(tbl)) {
-        return(grid::textGrob(""))
-      }
-      
-      if (inherits(tbl, "ggplot")) {
-        return(tbl + theme(plot.margin = margin(0,0,0,0)))
-      }
-      
-      if (inherits(tbl, c("data.frame", "tbl_df", "tbl"))) {
-        if (requireNamespace("gridExtra", quietly = TRUE)) {
-          tbl <- gridExtra::tableGrob(tbl, rows = NULL)
-        } else {
-          tbl <- grid::textGrob("Table render failed (gridExtra missing).")
-        }
-      }
-      
-      # Key: render via ggplotify so cell backgrounds stay visible
-      g <- try(ggplotify::as.ggplot(tbl), silent = TRUE)
-      if (inherits(g, "try-error")) {
-        g <- cowplot::ggdraw() + cowplot::draw_grob(cowplot::as_grob(tbl))
-      }
-      return(g + theme(plot.margin = margin(0,0,0,0)))
-    }
-    
-    if (inherits(o, "ggplot"))  return(o + theme(plot.margin = margin(0,0,0,0)))
-    if (inherits(o, c("grob","gTree","gTable","gtable"))) {
-      return(ggplotify::as.ggplot(o) + theme(plot.margin = margin(0,0,0,0)))
-    }
-    ggplot() + theme_void() + labs(title = paste(title, "(unavailable)"))
-  }
-  
-  body_plot  <- build_body(obj)
-  title_plot <- .title_strip_plot(title)
-  if (identical(title, "Count Breakdown")) {
-    return((title_plot / patchwork::plot_spacer() / body_plot) +
-             patchwork::plot_layout(heights = c(0.12, 0.08, 0.80)))
-  }
-  (title_plot / body_plot) + patchwork::plot_layout(heights = c(0.12, 0.88))
+  tbl <- if (inherits(obj, "data.frame")) {
+    if (title == "Process Metrics") txst_process_table(obj, season_col_label = season_col_label)
+    else if (title == "Count Breakdown") txst_count_breakdown_table(obj)
+    else if (title == "Pitch Type Performance") txst_ptperf_table(obj)
+    else as_txst_table(obj)
+  } else obj
+  base_titled_report_table(tbl, title)
 }
 
 # --- thin vertical separator for row 2 ---
@@ -3404,35 +3335,6 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
     Extension        = fmt_release_delta(rel_game$Extension, rel_season$Extension),
     check.names = FALSE
   )
-  # Full-width title bar + table body
-  release_title <- .title_strip_plot("Release Points") +
-    theme(plot.margin = margin(0,6,0,6))
-  release_tbl <- if (exists("as_txst_table", mode = "function")) {
-    as_txst_table(release_df)
-  } else {
-    ggpubr::ggtexttable(release_df, rows = NULL, theme = ggpubr::ttheme("blank"))
-  }
-  release_body <- if (inherits(release_tbl, "ggplot")) {
-    release_tbl
-  } else {
-    ggplotify::as.ggplot(release_tbl)
-  }
-  release_body <- release_body + theme(plot.margin = margin(0,6,2,6))
-  
-  # ---------- Title strip (maroon/gold) ----------
-  .title_strip_plot <- function(title) {
-    ggplot() +
-      geom_rect(aes(xmin = 0, xmax = 1, ymin = 0, ymax = 1), fill = "#501214") +
-      annotate(
-        "text", x = 0.5, y = 0.5, label = title,
-        fontface = "bold", size = 11/.pt, color = "#B4975A",
-        hjust = 0.5, vjust = 0.5
-      ) +
-      coord_cartesian(expand = FALSE) +
-      theme_void() +
-      theme(plot.margin = margin(0, 0, 0, 0))
-  }
-  
   # ---------- Build AAR tables ----------
   proc_df <- tryCatch(
     build_process_table(game_p, season_p, season_col_label_local),
@@ -3481,8 +3383,7 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
   
   # ---------- Assemble rows ----------
   row1 <- header + patchwork::plot_spacer() + patchwork::plot_layout(widths = c(1,0), heights = 1)
-  row1b <- (release_title | patchwork::plot_spacer()) / (release_body | patchwork::plot_spacer()) +
-    patchwork::plot_layout(heights = c(0.26, 0.74), widths = c(1, 1))
+  row1b <- safe_tbl_plot(release_df, "Release Points") | patchwork::plot_spacer()
   row4 <- (mov | (zR / zL)) + patchwork::plot_layout(widths = c(1, 1))
   row4 <- row4 & theme(plot.margin = margin(0,0,0,0))
   
@@ -3493,8 +3394,7 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
   final <- row1 / row1b / row2 / row3 / row4 +
     patchwork::plot_layout(heights = c(0.12, 0.10, 0.22, 0.22, 0.34))
   
-  # ---------- AAR-only: watermark + TXST logo layering ----------
-  header_h <- 0.15
+  # ---------- AAR-only: watermark + Bobcat corner logo ----------
   # Find assets
   find_asset <- function(basenames) {
     exts <- c("png","jpg","jpeg")
@@ -3517,29 +3417,24 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
                                   interpolate = TRUE, gp = grid::gpar(alpha = 0.60))
     }
   }
-  # TXST logo top-right sized to header band
-  txst_path <- get0("BASE_PITCHING_TXST_LOGO_PATH", inherits = TRUE, ifnotfound = "")
-  if (!nzchar(txst_path) || !file.exists(txst_path)) {
-    txst_path <- find_asset(c("txstlogo","TXSTlogo","Txstlogo","txst"))
-  }
+  # Use the Bobcat mark in the top-right header, preserving its aspect ratio.
+  txst_path <- wm_path
   txst_grob <- NULL; txst_asp <- 1
   if (!is.null(txst_path)) {
     ext <- tolower(tools::file_ext(txst_path))
     img <- if (ext == "png") png::readPNG(txst_path) else if (ext %in% c("jpg","jpeg") && requireNamespace("jpeg", quietly = TRUE)) jpeg::readJPEG(txst_path) else NULL
     if (!is.null(img)) {
-      txst_grob <- grid::rasterGrob(img, interpolate = TRUE)
+      txst_grob <- grid::rasterGrob(img, x=.98, y=.98, width=grid::unit(.10,"npc"),
+                                    just=c("right","top"), interpolate=TRUE)
       h <- dim(img)[1]; w <- dim(img)[2]
       if (is.finite(h) && is.finite(w) && h > 0) txst_asp <- w / h
     }
   }
-  logo_h <- header_h * 0.98
-  logo_w <- min(logo_h * txst_asp, 0.40)
   
   cowplot::ggdraw() +
     { if (!is.null(wm_grob)) cowplot::draw_grob(wm_grob, x = 0.5, y = 0.5, width = 1, height = 1) } +
     cowplot::draw_plot(final, x = 0, y = 0, width = 1, height = 1) +
-    { if (!is.null(txst_grob)) cowplot::draw_grob(txst_grob, x = 0.995, y = 0.995,
-                                                  width = logo_w, height = logo_h, hjust = 1, vjust = 1) }
+    { if (!is.null(txst_grob)) cowplot::draw_grob(txst_grob, x=0, y=0, width=1, height=1) }
 }
 
 compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {

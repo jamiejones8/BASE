@@ -1574,7 +1574,7 @@ summarize_by_pitchtype <- function(d){
 }
 
 performance_timeseries_choices <- c(
-  "wOBA", "wOBAcon", "xwOBA", "xwOBAcon", "OBP", "SLG", "OPS",
+  "PA", "hRV", "wOBA", "wOBAcon", "xwOBA", "xwOBAcon", "OBP", "SLG", "OPS",
   "K%", "BB%", "Barrel%",
   "Swing%", "IZ-Swing%", "Whiff%", "IZ-Whiff%",
   "Chase%", "Pre2K Chase%", "2K Chase%",
@@ -1865,6 +1865,7 @@ ui <- base_hitting_page(
         ),
         withSpinner(DTOutput("perf_tbl"), type = 4, color = "#501214")
       ),
+      uiOutput("hit_performance_percentiles"),
       div(
         class = "mt-3",
         selectizeInput(
@@ -2386,7 +2387,7 @@ txst_process_table <- function(df, season_col_label = "Season") {
     geom_rect(aes(xmin=xmin,xmax=xmax,ymin=y-.5,ymax=y+.5,fill=I(fill)),
               colour="#D0D0D0",linewidth=.3) +
     geom_text(aes(label=label),size=3.2) +
-    annotate("text",x=(head(edges,-1)+tail(edges,-1))/2,y=n+1,label=names(df),size=3.2) +
+    annotate("text",x=(head(edges,-1)+tail(edges,-1))/2,y=n+1,label=gsub(" ","\n",names(df),fixed=TRUE),size=3.2) +
     coord_cartesian(xlim=c(0,4.55),ylim=c(.5,n+1.5),expand=FALSE) +
     theme_void() + theme(plot.margin=margin(0,8,0,0))
 }
@@ -2595,43 +2596,13 @@ txst_ptperf_table <- function(df) {
 }
 
 safe_tbl_plot <- function(obj, title = "Table", season_col_label = "Season") {
-  build_body <- function(o) {
-    if (inherits(o, c("data.frame","tbl_df"))) {
-      fills_attr <- attr(o, "cell_fills")
-      df <- as.data.frame(o)
-      if (!is.null(fills_attr)) attr(df, "cell_fills") <- fills_attr
-      tbl <-
-        if (identical(title, "Process Metrics")) {
-          txst_process_table(df, season_col_label = season_col_label)
-        } else if (identical(title, "Count Breakdown")) {
-          txst_count_breakdown_table(df)
-        } else if (identical(title, "Pitch Type Performance")) {
-          txst_ptperf_table(df)
-        } else {
-          as_txst_table(df)
-        }
-      
-      if (inherits(tbl, "ggplot")) return(tbl + theme(plot.margin = margin(0,0,0,0)))
-      g <- try(ggplotify::as.ggplot(tbl), silent = TRUE)
-      if (inherits(g, "try-error")) {
-        g <- cowplot::ggdraw() + cowplot::draw_grob(cowplot::as_grob(tbl))
-      }
-      return(g + theme(plot.margin = margin(0,0,0,0)))
-    }
-    if (inherits(o, "ggplot")) return(o + theme(plot.margin = margin(0,0,0,0)))
-    if (inherits(o, c("grob","gTree","gTable","gtable"))) {
-      return(ggplotify::as.ggplot(o) + theme(plot.margin = margin(0,0,0,0)))
-    }
-    ggplot() + theme_void() + labs(title = paste(title, "(unavailable)"))
-  }
-  
-  body_plot  <- build_body(obj)
-  title_plot <- .title_strip_plot(title)
-  if (identical(title, "Count Breakdown")) {
-    return((title_plot / patchwork::plot_spacer() / body_plot) +
-             patchwork::plot_layout(heights = c(0.09, 0.00, 0.91)))
-  }
-  (title_plot / body_plot) + patchwork::plot_layout(heights = c(0.09, 0.91))
+  tbl <- if (inherits(obj, "data.frame")) {
+    if (title == "Process Metrics") txst_process_table(obj, season_col_label = season_col_label)
+    else if (title == "Count Breakdown") txst_count_breakdown_table(obj)
+    else if (title == "Pitch Type Performance") txst_ptperf_table(obj)
+    else as_txst_table(obj)
+  } else obj
+  base_titled_report_table(tbl, title)
 }
 
 wrap_plot_with_title <- function(title, p, title_h = 0.09) {
@@ -3024,6 +2995,7 @@ build_inning_breakdown_plot <- function(game_p) {
       Inning = i,
       `Chase%`    = m$chase,
       `Whiff%`    = m$whiff,
+      `IZ Whiff%` = m$iz_whiff,
       `IZ Swing%` = m$iz_swing,
       `Barrel%`   = m$barrel
     )
@@ -3031,12 +3003,12 @@ build_inning_breakdown_plot <- function(game_p) {
   
   long <- tidyr::pivot_longer(
     inn_tbl,
-    cols = c("Chase%","Whiff%","IZ Swing%","Barrel%"),
+    cols = c("Chase%","Whiff%","IZ Whiff%","IZ Swing%","Barrel%"),
     names_to = "Metric",
     values_to = "Value"
   )
   
-  long$Metric <- factor(long$Metric, levels = c("Chase%","Whiff%","IZ Swing%","Barrel%"))
+  long$Metric <- factor(long$Metric, levels = c("Chase%","Whiff%","IZ Whiff%","IZ Swing%","Barrel%"))
   
   ggplot(long, aes(x = Inning, y = Value, color = Metric, group = Metric)) +
     geom_line(linewidth = 1, na.rm = TRUE) +
@@ -3044,6 +3016,7 @@ build_inning_breakdown_plot <- function(game_p) {
     scale_color_manual(values = c(
       "Chase%"    = "#501214",
       "Whiff%"    = "#FF0000",
+      "IZ Whiff%" = "#F28E2B",
       "IZ Swing%" = "#B4975A",
       "Barrel%"   = "#008000"
     )) +
@@ -3676,6 +3649,87 @@ D1_NON <- c(
 )
 lower_better <- c("K%","Whiff%","IZ-Whiff%","Chase%","Pre2K Chase%","2K Chase%")
 
+# Compact, parquet-derived season distributions are loaded once per workspace.
+hitting_d1_reference <- local({
+  root <- file.path(dirname(BOBCAT_LOGO_PATH), '..', 'data')
+  read <- function(name) {
+    candidates <- c(file.path(root,name),file.path("data",name))
+    path <- candidates[file.exists(candidates)][1]
+    if (!is.na(path)) readr::read_csv(path,show_col_types=FALSE) else tibble::tibble()
+  }
+  list(values=read('d1_hitting_percentiles.csv'),averages=read('d1_hitting_averages.csv'))
+})
+hitting_d1_lower_better <- c('K%','Whiff%','IZ-Whiff%','Chase%','Pre2K Chase%','2K Chase%','GB%','PU%','Foul Ball%')
+hitting_d1_percentile <- function(value, metric, reference=hitting_d1_reference$values) {
+  if (!is.finite(value) || !nrow(reference)) return(NA_real_)
+  vals <- reference$value[reference$metric == metric & is.finite(reference$value)]
+  if (!length(vals)) return(NA_real_)
+  # Midrank ties avoid giving all tied values a 100th-percentile badge.
+  pct <- 100 * (mean(vals < value) + .5 * mean(vals == value))
+  if (metric %in% hitting_d1_lower_better) pct <- 100-pct
+  pct
+}
+hitting_d1_average_lookup <- function() {
+  ref <- hitting_d1_reference$averages
+  if (!nrow(ref)) return(c(D1_NON,D1_PCT))
+  c(stats::setNames(ref$average,ref$metric), c(D1_NON,D1_PCT)[setdiff(names(c(D1_NON,D1_PCT)),ref$metric)])
+}
+apply_hitting_empirical_shading <- function(tbl_num,tbl_fmt,palette='coach') {
+  for (metric in intersect(performance_table_metrics,intersect(names(tbl_num),names(tbl_fmt)))) {
+    values <- tbl_num[[metric]]
+    tbl_fmt[[metric]] <- vapply(seq_along(values),function(i) {
+      pct <- hitting_d1_percentile(values[i],metric)
+      if (!is.finite(pct)) return(as.character(tbl_fmt[[metric]][i]))
+      shade_cell(as.character(tbl_fmt[[metric]][i]),severity_rgba_fill((pct-50)/50,palette))
+    },character(1))
+  }
+  tbl_fmt
+}
+HITTING_PERCENTILE_CSS <- "    .hit-percentiles{box-sizing:border-box;background:rgba(255,255,255,0.94);border:1px solid rgba(0,117,138,.32);border-radius:8px;padding:12px 14px;margin-bottom:12px;min-height:0;width:100%;display:flex;flex-direction:column}
+    .hit-percentiles .cr-percentile-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;border-bottom:2px solid #078197;padding-bottom:6px;margin-bottom:8px}
+    .hit-percentiles .cr-percentile-title{font-weight:800;color:#222;font-size:1rem;line-height:1.1}
+    .hit-percentiles .cr-percentile-subtitle{font-size:.78rem;font-weight:800;color:#078197;text-align:right;line-height:1.1}
+    .hit-percentiles .cr-percentile-scale{display:grid;grid-template-columns:1fr 1fr 1fr;margin:0 84px 4px 122px;font-size:.62rem;font-weight:800;letter-spacing:.02em}
+    .hit-percentiles .cr-percentile-scale span:nth-child(1){color:#3464B8;text-align:left}
+    .hit-percentiles .cr-percentile-scale span:nth-child(2){color:#A4BEC1;text-align:center}
+    .hit-percentiles .cr-percentile-scale span:nth-child(3){color:#D9252E;text-align:right}
+    .hit-percentiles .cr-percentile-rows{flex:1;display:flex;flex-direction:column;justify-content:space-between}
+    .hit-percentiles .cr-percentile-row{display:grid;grid-template-columns:98px minmax(220px,1fr) 56px;gap:9px;align-items:center;min-height:28px}
+    .hit-percentiles .cr-percentile-label{font-size:.72rem;line-height:1.05;text-align:right;color:#444;white-space:normal}
+    .hit-percentiles .cr-percentile-track-wrap{position:relative;height:18px}
+    .hit-percentiles .cr-percentile-track{position:absolute;left:0;right:0;top:7px;height:5px;background:#D8E8E9;border-radius:0}
+    .hit-percentiles .cr-percentile-fill{position:absolute;left:0;top:4px;height:11px;border-radius:0}
+    .hit-percentiles .cr-percentile-average{position:absolute;left:50%;top:3px;width:2px;height:13px;background:rgba(255,255,255,.55)}
+    .hit-percentiles .cr-percentile-badge{position:absolute;top:0;transform:translateX(-50%);min-width:24px;height:18px;border-radius:10px;color:white;font-size:.68rem;font-weight:900;line-height:18px;text-align:center;padding:0 5px}
+    .hit-percentiles .cr-percentile-value{font-size:.68rem;color:#444;text-align:right;white-space:nowrap}
+    .hit-percentiles .cr-percentile-row-empty{opacity:.55}
+    .hit-percentiles .cr-percentile-empty{font-size:.85rem;color:#555}
+.hit-percentiles .cr-percentile-rows{gap:8px;}
+.hit-percentiles .cr-percentile-row{grid-template-columns:98px minmax(100px,1fr) 60px;gap:24px;}
+.hit-percentiles{margin-top:16px;}
+"
+hitting_percentile_rankings_ui <- function(stats, hitter) {
+  rows <- lapply(performance_table_metrics,function(metric) {
+    value <- stats[[metric]][1]; pct <- hitting_d1_percentile(value,metric)
+    pos <- if (is.finite(pct)) pct else 0
+    color <- if (!is.finite(pct)) '#BFC9CA' else if(pct>=90) '#E33434' else if(pct>=75) '#DC735F' else if(pct>=60) '#D39383' else if(pct>=40) '#AAC6CB' else if(pct>=25) '#8CAAD2' else '#5D7EBC'
+    label <- if (!is.finite(value)) '--' else if(grepl('%$',metric)) sprintf('%.1f%%',100*value) else if(metric=='PA') sprintf('%.0f',value) else if(metric %in% c('MaxEV','90th EV','hRV')) sprintf('%.1f',value) else sprintf('%.3f',value)
+    div(class='cr-percentile-row',
+      div(class='cr-percentile-label',metric),
+      div(class='cr-percentile-track-wrap',div(class='cr-percentile-track'),
+        div(class='cr-percentile-fill',style=sprintf('width:%.2f%%;background:%s;',pos,color)),
+        div(class='cr-percentile-average'),
+        div(class='cr-percentile-badge',style=sprintf('left:%.2f%%;background:%s;',pos,color),if(is.finite(pct)) round(pct) else '--')),
+      div(class='cr-percentile-value',label))
+  })
+  div(class='cr-percentile-card hit-percentiles',
+    tags$style(HTML(HITTING_PERCENTILE_CSS)),
+    div(class='cr-percentile-header',div(class='cr-percentile-title','D1 Percentile Rankings'),div(class='cr-percentile-subtitle',hitter)),
+    div(class='cr-percentile-scale',span('POOR'),span('AVERAGE'),span('GREAT')),
+    div(class='cr-percentile-rows',rows),
+    tags$small('D1 hitters with 50+ PA. PA ranks playing time. Rates use the current filters; small samples can move sharply. D1 average lines show the mean qualified hitter.'))
+}
+
 # Fixed comparison points for the downloadable hitting leaderboard. These are
 # deliberately independent of the players currently shown on the sheet: the
 # same performance always receives the same color.
@@ -4088,46 +4142,27 @@ build_swing_decisions_tbl <- function(d){
   return(tbl)
 }
 
-# PDF devices cannot reliably render color emoji. Build each umpire marker as
-# vector artwork inside a nested, physically square viewport. The outer tree is
-# intentionally viewport-free because gtable assigns it the (rectangular) table
-# cell viewport when drawing; keeping the square on the inner tree prevents the
-# marker from being compressed vertically with the cell.
-hitting_aar_umpire_icon_grob <- function(marker, size_in = 0.18) {
-  marker <- as.character(marker %||% "")
-  icon <- if (identical(marker, "🍀")) {
-    grid::grobTree(
-      grid::segmentsGrob(x0 = .50, y0 = .18, x1 = .54, y1 = .42,
-                         gp = grid::gpar(col = "#1B5E20", lwd = 1.4)),
-      grid::circleGrob(x = c(.43, .57, .43, .57), y = c(.48, .48, .62, .62), r = .10,
-                       gp = grid::gpar(fill = "#2E7D32", col = "#1B5E20", lwd = .6))
-    )
-  } else if (identical(marker, "🤖")) {
-    grid::grobTree(
-      grid::segmentsGrob(x0 = .50, y0 = .70, x1 = .56, y1 = .82,
-                         gp = grid::gpar(col = "#455A64", lwd = 1.1)),
-      grid::circleGrob(x = .57, y = .84, r = .025,
-                       gp = grid::gpar(fill = "#90A4AE", col = "#455A64", lwd = .5)),
-      grid::roundrectGrob(x = .50, y = .51, width = .52, height = .38,
-                          r = grid::unit(.06, "npc"),
-                          gp = grid::gpar(fill = "#B0BEC5", col = "#455A64", lwd = .8)),
-      grid::circleGrob(x = c(.42, .58), y = .55, r = .035,
-                       gp = grid::gpar(fill = "#263238", col = NA)),
-      grid::segmentsGrob(x0 = .40, y0 = .43, x1 = .60, y1 = .43,
-                         gp = grid::gpar(col = "#455A64", lwd = .8))
-    )
-  } else {
-    return(grid::nullGrob())
-  }
-
-  square_icon <- grid::grobTree(
-    icon,
-    vp = grid::viewport(
-      width = grid::unit(size_in, "in"),
-      height = grid::unit(size_in, "in")
-    )
-  )
-  grid::grobTree(square_icon)
+# The app and PDF use identical, tightly cropped color-emoji artwork.
+hitting_aar_umpire_asset <- function(marker) {
+  if (identical(marker, "🍀")) "ump-clover.png" else if (identical(marker, "🤖")) "ump-robot.png" else ""
+}
+hitting_aar_umpire_icon_grob <- function(marker, size_in = NULL) {
+  file <- hitting_aar_umpire_asset(marker)
+  if (!nzchar(file)) return(grid::nullGrob())
+  asset_dir <- dirname(BOBCAT_LOGO_PATH)
+  if (!file.exists(file.path(asset_dir, file))) asset_dir <- "www"
+  img <- png::readPNG(file.path(asset_dir,file))
+  aspect <- dim(img)[2]/dim(img)[1]
+  # snpc preserves aspect ratio while filling the smaller cell dimension.
+  side <- if (is.null(size_in)) grid::unit(1, "snpc") else grid::unit(size_in, "in")
+  grid::grobTree(grid::rasterGrob(img, width=side*min(1,aspect), height=side*min(1,1/aspect), interpolate=TRUE))
+}
+hitting_aar_umpire_html <- function(marker) {
+  file <- hitting_aar_umpire_asset(marker)
+  if (!nzchar(file)) return("")
+  prefix <- get0("BASE_HITTING_ASSET_PREFIX", inherits=TRUE, ifnotfound="static")
+  as.character(tags$img(src=paste0(prefix,"/",file),alt=marker,
+    style="display:block;height:24px;max-width:100%;object-fit:contain;margin:auto;"))
 }
 
 # Auto column widths from max string width (header + body), with padding
@@ -6858,8 +6893,10 @@ server <- function(input, output, session){
       decision_col
     ))
 
+    tbl$Ump <- vapply(as.character(tbl$Ump), hitting_aar_umpire_html, character(1))
     dt <- DT::datatable(
       tbl,
+      escape = setdiff(names(tbl), "Ump"),
       rownames = FALSE,
       class = "compact hover stripe aar-table",    # ← add 'stripe'
       options = list(
@@ -7098,6 +7135,12 @@ server <- function(input, output, session){
     ignoreInit = FALSE
   )
   
+  output$hit_performance_percentiles <- renderUI({
+    d <- dat_filt()
+    req(nrow(d) > 0)
+    hitting_percentile_rankings_ui(summarize_overall(d), input$Hitter %||% "Selected hitters")
+  })
+
   # -------------------- Performance Table --------------------
   output$perf_tbl <- DT::renderDT({
     d <- dat_filt()
@@ -7146,7 +7189,7 @@ server <- function(input, output, session){
       
       tbl_fmt <- tbl_num %>% format_perf_table()
       
-      tbl_fmt <- apply_d1_shading(tbl_num, tbl_fmt) %>%
+      tbl_fmt <- apply_hitting_empirical_shading(tbl_num, tbl_fmt) %>%
         dplyr::select(dplyr::all_of(c("Name", performance_table_metrics)))
       
       DT::datatable(
@@ -7172,7 +7215,7 @@ server <- function(input, output, session){
       tbl_num <- summarize_by_pitchtype(d)
       
       tbl_fmt <- tbl_num %>% format_perf_table()
-      tbl_fmt <- apply_d1_shading(tbl_num, tbl_fmt) %>%
+      tbl_fmt <- apply_hitting_empirical_shading(tbl_num, tbl_fmt) %>%
         dplyr::select(dplyr::all_of(c("PitchType", performance_table_metrics)))
       
       DT::datatable(
@@ -7252,7 +7295,7 @@ server <- function(input, output, session){
     
     shiny::validate(shiny::need(nrow(long) > 0, "No finite values for selected stats."))
     
-    avg_lookup <- c(D1_NON, D1_PCT)
+    avg_lookup <- hitting_d1_average_lookup()
     ref <- tibble::tibble(
       Metric = stats_sel,
       LeagueAvg = unname(avg_lookup[stats_sel])
@@ -7285,7 +7328,7 @@ server <- function(input, output, session){
       geom_hline(data = ref, aes(yintercept = LeagueAvg), linetype = "dashed", color = "grey45", linewidth = 0.7) +
       geom_text(
         data = ref,
-        aes(x = Inf, y = LeagueAvg, label = "League Avg"),
+        aes(x = Inf, y = LeagueAvg, label = "D1 Avg"),
         inherit.aes = FALSE,
         hjust = 1.05, vjust = -0.35, color = "grey35", size = 3
       ) +
@@ -7767,7 +7810,7 @@ server <- function(input, output, session){
         tbl_pdf <- dplyr::select(tbl_pdf, dplyr::all_of(want_cols))
       }
       # Base PDF fonts do not reliably contain color emoji. Keep the semantic
-      # values in the data, then draw compact vector clover/robot icons below.
+      # values in the data, then draw the same color-emoji assets as the app.
       ump_values_pdf <- as.character(tbl_pdf$Ump)
       tbl_pdf$Ump <- ""
       
@@ -7910,7 +7953,7 @@ server <- function(input, output, session){
         )
       }
 
-      # Draw PDF-safe vector equivalents of the requested emoji markers.
+      # Draw shared color-emoji assets, fitted to the cell.
       ump_col <- which(colnames(tbl_pdf) == "Ump")
       if (length(ump_col) == 1L) {
         core_fg <- which(g_swing_tbl$layout$name == "core-fg" & g_swing_tbl$layout$l == ump_col)
@@ -9472,28 +9515,22 @@ server <- function(input, output, session){
     
     rows <- lapply(seq_len(nrow(tbl)), function(i){
       bg <- shade_for(tbl$Metric[i], tbl$Season[i], tbl$D1[i])
-      tags$tr(
-        tags$td(tbl$Metric[i]),
-        tags$td(fmt_cnt(tbl$Game[i])),
-        tags$td(style = if (nzchar(bg)) paste0("background-color:", bg, ";") else NULL,
+      tags$tr(style=paste0("background:",if(i %% 2 == 0) "#F8F3EA" else "#FFFFFF",";color:#1a1a1a;"),
+        tags$td(style="padding:10px;border:1px solid #E4D8C6;", tbl$Metric[i]),
+        tags$td(style="padding:10px;border:1px solid #E4D8C6;", fmt_cnt(tbl$Game[i])),
+        tags$td(style = paste0("padding:10px;border:1px solid #E4D8C6;", if (nzchar(bg)) paste0("background-color:",bg,";") else ""),
                 fmt_pct(tbl$Season[i])),
-        tags$td(fmt_pct(tbl$D1[i]))
+        tags$td(style="padding:10px;border:1px solid #E4D8C6;", fmt_pct(tbl$D1[i]))
       )
     })
     
-    tagList(
-      div(class = "aar-kpi-title", "Hit Strikes Hard"),
-      tags$table(
-        class = "aar-kpi",
+    tags$div(style="width:100%;overflow-x:auto;",
+      tags$table(class = "aar-kpi", style="width:100%;min-width:420px;border-collapse:collapse;table-layout:fixed;font-size:16px;text-align:center;",
         tags$thead(
-          tags$tr(
-            tags$th(""),
-            tags$th("This Game"),
-            tags$th(season_label),
-            tags$th("D1 Avg")
-          )
-        ),
-        tags$tbody(rows)
+          tags$tr(tags$th(colspan=4, style="background:#501214;color:#B4975A;padding:9px;border:1px solid #B4975A;font-size:20px;", "Hit Strikes Hard")),
+          tags$tr(lapply(c("Metric","This Game",season_label,"D1 Avg"), function(label)
+            tags$th(style="background:#501214;color:#B4975A;padding:8px;border:1px solid #B4975A;text-align:center;", label)))
+        ), tags$tbody(rows)
       )
     )
   })

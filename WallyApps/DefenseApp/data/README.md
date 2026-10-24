@@ -15,3 +15,7 @@ The BASE adapter excludes spring 2026 positioning because its fielding tags are 
 In Data Processing, use either **2026 fall player positioning** **2027 Scrimmages player positioning**, or **2027 Season player positioning**, select a game CSV, then click Validate and append. Each card writes to its own cumulative positioning file. Fall positions match the 2026 Fall TrackMan source; 2027 scrimmage positions match the 2027 Scrimmages TrackMan source. Existing stored filenames are preserved. Upload order does not matter: positions match when their companion TrackMan data arrives. Reload BASE after an import if Defense is already open.
 
 Managed season TrackMan exports take precedence over bundled contact copies. The legacy positioning source remains a fall-2026 fallback; new uploads use the selected season explicitly.
+
+## D1 receiving reference
+
+`d1_catcher_framing_metrics.csv` is bundled for production percentile calculations. It was rebuilt from the D1 Pitching:Hitting parquet export using the receiving app's ball/strike geometry (2.90-inch ball intersecting the strike zone), with 19,505 catcher/metric rows. The builder accepts `D1_CATCHING_PARQUET` to select a source. Missing data displays `--`, rather than a bar positioned at 50.

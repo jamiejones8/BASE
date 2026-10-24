@@ -1,0 +1,10 @@
+{
+  "source": "D1 Pitching:Hitting File.parquet",
+  "source_bytes": 1055457360,
+  "raw_pitches": 2051176,
+  "unique_pitches": 2051167,
+  "qualified_hitters": 3334,
+  "minimum_pa": 50,
+  "average_definition": "Mean of qualified hitter season values; 50 PA minimum",
+  "stat_definition": "HittingApp summarize_overall; physical ball/zone intersection; current barrel boundaries"
+}

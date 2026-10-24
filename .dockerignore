@@ -72,3 +72,8 @@ data/external/CapeCod26.parquet
 models/shared/brewstuff.model
 models/shared/pitch_models.rds
 models/pitcher/location_plus_model.rds
+
+!WallyApps/DefenseApp/data/d1_catcher_framing_metrics.csv
+!WallyApps/HittingApp/data/d1_hitting_percentiles.csv
+!WallyApps/HittingApp/data/d1_hitting_averages.csv
+!WallyApps/HittingApp/data/d1_hitting_reference_provenance.json

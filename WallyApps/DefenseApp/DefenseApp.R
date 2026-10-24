@@ -3724,7 +3724,7 @@ percentile_rankings_ui <- function(metrics, catcher_name = NULL) {
     row <- metrics[i, , drop = FALSE]
     pct <- row$percentile[[1]]
     pct_label <- if (is.finite(pct)) as.character(as.integer(pct)) else "--"
-    pct_pos <- if (is.finite(pct)) pct else 50
+    pct_pos <- if (is.finite(pct)) pct else 0
     color <- percentile_color(pct)
     disabled_class <- if (is.finite(pct)) "" else " cr-percentile-row-empty"
     div(
@@ -4424,7 +4424,8 @@ server <- function(input, output, session) {
   })
 
   catchers_all <- reactive({
-    d <- catcher_receiving_pool()
+    d <- catcher_receiving_pool() %>%
+      dplyr::filter(.data$SeasonGroup %in% (input$def_season_groups %||% character(0)))
     if (!nrow(d)) return(character(0))
     ch_orig <- unique(nz_chr(d$Catcher))
     ch_disp <- name_display(ch_orig)
@@ -4472,7 +4473,8 @@ server <- function(input, output, session) {
 
   games_for_catcher_multi <- reactive({
     cch <- input$def_CR_catcher
-    d <- catcher_receiving_pool()
+    d <- catcher_receiving_pool() %>%
+      dplyr::filter(.data$SeasonGroup %in% (input$def_season_groups %||% character(0)))
     if (is.null(cch) || !nzchar(cch) || !nrow(d)) {
       return(tibble::tibble(gid = character(0), gdate = as.Date(character(0)), season = character(0)))
     }
@@ -4516,7 +4518,7 @@ server <- function(input, output, session) {
       updateSelectInput(session, "def_CR_catcher", choices = character(0), selected = NULL)
       return()
     }
-    first_choice <- unname(ch[[1]])
+    first_choice <- if (isTRUE(input$def_CR_catcher %in% unname(ch))) input$def_CR_catcher else unname(ch[[1]])
     updateSelectInput(session, "def_CR_catcher", choices = ch, selected = first_choice)
   }, ignoreInit = FALSE)
 
@@ -4541,7 +4543,8 @@ server <- function(input, output, session) {
 
   cr_catch_data_base <- reactive({
     req(input$def_CR_catcher)
-    d <- catcher_receiving_pool() %>% dplyr::filter(.data$Catcher == input$def_CR_catcher)
+    d <- catcher_receiving_pool() %>% dplyr::filter(.data$Catcher == input$def_CR_catcher,
+      .data$SeasonGroup %in% (input$def_season_groups %||% character(0)))
     sel_games <- input$def_CR_games
     if (is.null(sel_games) || !length(sel_games)) return(prepare_catcher_receiving_rows(d[0, , drop = FALSE]))
     d <- d %>% dplyr::filter(.data$CustomGameID %in% sel_games)

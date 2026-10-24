@@ -14,7 +14,7 @@ import pyarrow.parquet as pq
 APP_DIR = Path(__file__).resolve().parents[1]
 WORKSPACE_DIR = APP_DIR.parent
 SHARED_D1_DIR = Path(os.environ.get("D1_FILES_DIR", WORKSPACE_DIR / "D1 Files")).expanduser()
-PARQUET_PATH = SHARED_D1_DIR / "D1 Catching File.parquet"
+PARQUET_PATH = Path(os.environ.get("D1_CATCHING_PARQUET", SHARED_D1_DIR / "D1 Catching File.parquet"))
 OUT_PATH = APP_DIR / "data" / "d1_catcher_framing_metrics.csv"
 
 COLUMNS = [
@@ -139,7 +139,9 @@ def main() -> None:
 
     sx_in = df["plate_x"] * 12
     hz_in = df["plate_z"] * 12
-    df["in_zone"] = sx_in.abs().le(10.0) & hz_in.between(18, 42)
+    dx = np.maximum(sx_in.abs() - 8.5, 0)
+    dy = np.maximum(np.maximum(19.2 - hz_in, hz_in - 40.8), 0)
+    df["in_zone"] = dx * dx + dy * dy <= 1.45 ** 2 + 1e-12
     df["zone_type"] = framing_zone_type(sx_in, hz_in)
 
     throws = df["PitcherThrows"].fillna("").astype(str).str.upper().str[0]

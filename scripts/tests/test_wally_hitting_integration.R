@@ -233,11 +233,9 @@ if (!grepl("^#[0-9A-Fa-f]{6}$", workspace$d1_shade_fill(.40, .30))) {
 }
 for (marker in c("🍀", "🤖")) {
   icon <- workspace$hitting_aar_umpire_icon_grob(marker)
-  square_vp <- icon$children[[1]]$vp
-  icon_width <- grid::convertWidth(square_vp$width, "in", valueOnly = TRUE)
-  icon_height <- grid::convertHeight(square_vp$height, "in", valueOnly = TRUE)
-  if (!isTRUE(all.equal(icon_width, icon_height)) || !is.null(icon$vp)) {
-    fail("Hitting AAR umpire icons are not isolated in a square PDF viewport.")
+  raster <- icon$children[[1]]
+  if (!inherits(raster,"rastergrob") || !is.null(icon$vp) || !grepl("ump-",workspace$hitting_aar_umpire_html(marker))) {
+    fail("Hitting AAR app and PDF must share the same tightly fitted emoji artwork.")
   }
 }
 # One standard deviation above/below the supplied means is approximately
@@ -520,7 +518,18 @@ shiny::testServer(workspace$server, {
   }
   recent_aars <- hit_aar_recent_reports()
   if (!nrow(recent_aars)) fail("Hitting Recent AARs returned no fixture rows.")
-  invisible(output$aar_kpi)
+  kpi_html <- output$aar_kpi$html
+  stopifnot(grepl('Hit Strikes Hard',kpi_html,fixed=TRUE),grepl('Metric',kpi_html,fixed=TRUE),grepl('border-collapse:collapse',kpi_html,fixed=TRUE))
+  invisible(output$hit_performance_percentiles)
+  session$setInputs(hit_perf_ts_stats=c("EV>95%","10-35*%","GB%","LD%","FB%","PU%","Foul Ball%","Airpull%"))
+  stopifnot(all(is.finite(workspace$hitting_d1_average_lookup()[input$hit_perf_ts_stats])))
+  invisible(output$perf_time_series)
+  qa_ui <- Sys.getenv("BASE_HITTING_UI_QA","")
+  if(nzchar(qa_ui)) {
+    htmltools::save_html(htmltools::tagList(workspace$head_css,
+      htmltools::tags$div(style="max-width:700px;margin:24px auto;font-family:Arial;",
+        htmltools::HTML(kpi_html),htmltools::HTML(output$hit_performance_percentiles$html))),qa_ui)
+  }
   invisible(output$aar_swing_tbl)
   invisible(output$perf_tbl)
   invisible(output$lineup_builder_ui)
@@ -580,3 +589,6 @@ cat(
   "folder-backed rows,", length(expected_tabs),
   "tabs, Performance, and Lineup Builder server smoke tests.\n"
 )
+team_qa <- Sys.getenv('BASE_HITTING_TEAM_QA','')
+if (nzchar(team_qa)) ggplot2::ggsave(team_qa,
+  workspace$compose_team_hit_report_plot(workspace$txst_df[workspace$txst_df$CustomGameID == games[1],],workspace$txst_df,game_id=games[1],season_col_label='2026 Season'),width=8.5,height=11)
