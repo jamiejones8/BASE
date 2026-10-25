@@ -838,9 +838,14 @@ opportunity_zone_for_position <- function(pos, bucket, bearing, distance, made_p
   out
 }
 
+defense_hidden_player <- function(x) {
+  x <- tolower(gsub("[^a-zA-Z0-9 ]", " ", as.character(x)))
+  !is.na(x) & grepl("\\b(walk\\s*on|pelien|arebalo|ben|major|sidener)\\b",x,perl=TRUE)
+}
+
 position_opportunity_for_row <- function(pos, pitch_call, play_result, bucket, bearing, distance, made_play,
                                          explicit_target = NULL, fhc_ok = TRUE,
-                                         manual_target = FALSE, fielded_by = NULL, player_name = NULL) {
+                                         manual_target = FALSE, fielded_by = NULL, player_name = NULL, hang_time = NA_real_) {
   target <- explicit_target %||% rep(NA_character_, length(bucket))
   has_target <- !is.na(target) & nzchar(target)
   manual_target <- manual_target %||% rep(FALSE, length(bucket))
@@ -853,7 +858,8 @@ position_opportunity_for_row <- function(pos, pitch_call, play_result, bucket, b
   included <- included_bip_result(pitch_call, play_result)
   zone <- opportunity_zone_for_position(pos, bucket, bearing, distance, made_play)
   beyond_wall_miss <- of_air_beyond_wall(pos, bucket, bearing, distance) & !(made_play %in% TRUE)
-  forced_exclude <- (pos %in% OUTFIELD_POSITIONS & bucket == "Ground") |
+  short_line <- bucket == "Line" & is.finite(distance) & distance < 200 & is.finite(hang_time) & hang_time < 3
+  forced_exclude <- (pos %in% OUTFIELD_POSITIONS & (bucket == "Ground" | short_line)) |
     (pos %in% OUTFIELD_POSITIONS & bucket %in% c("Fly", "Line", "Popup") & made_play %in% TRUE & is.finite(distance) & distance <= 150) |
     beyond_wall_miss
   has_spatial_model <- bucket != "Unknown" & is.finite(bearing)
@@ -1079,13 +1085,15 @@ standardize_defense <- function(raw) {
       fielded_ball = logical(), clean_field = logical(), putouts = numeric(),
       assists = numeric(), errors = numeric(),
       opportunity = logical(), opportunity_position = character(),
-      source_file = character(), row_in_file = integer()
+      event_id = character(), source_file = character(), row_in_file = integer()
     ))
   }
 
   source_file <- if ("source_file" %in% names(raw)) raw$source_file else rep(NA_character_, nrow(raw))
   row_in_file <- if ("row_in_file" %in% names(raw)) raw$row_in_file else seq_len(nrow(raw))
 
+  uid <- coalesce_chr_cols(raw,c("PitchUID","PlayID"))
+  event_id <- ifelse(nzchar(uid),paste0("pitch:",uid),paste("row",source_file,row_in_file,sep=":"))
   wide_positions <- c("1B", "2B", "3B", "SS", "LF", "CF", "RF")
   wide_has_names <- all(paste0(wide_positions, "_Name") %in% names(raw))
   wide_has_coords <- all(paste0(wide_positions, "_PositionAtReleaseX") %in% names(raw)) &&
@@ -1198,7 +1206,7 @@ standardize_defense <- function(raw) {
         explicit_target = opportunity_position, fhc_ok = fhc_ok,
         manual_target = manual_source,
         fielded_by = ifelse(manual_ground_of, "", manual_fielded_by),
-        player_name = player
+        player_name = player, hang_time = hang_time
       )
       opp <- opp_info$opportunity
       pos_putouts <- col_num(raw, c(paste0(pos, "_Putouts"), paste0(pos, "_PO"), "Putouts", "PO"))
@@ -1255,6 +1263,7 @@ standardize_defense <- function(raw) {
         errors = ifelse(opp, pos_errors, NA_real_),
         opportunity = opp,
         opportunity_position = ifelse(has_target_position, opportunity_position, pos),
+        event_id = event_id,
         source_file = source_file,
         row_in_file = row_in_file
       )
@@ -1341,7 +1350,7 @@ standardize_defense <- function(raw) {
         distance[idx],
         made_play[idx],
         explicit_target = opportunity_position[idx],
-        fhc_ok = explicit_opp[idx]
+        fhc_ok = explicit_opp[idx], hang_time = hang_time[idx]
       )
     }
   )
@@ -1420,6 +1429,7 @@ standardize_defense <- function(raw) {
     errors = ifelse(opportunity, errors, NA_real_),
     opportunity = opportunity,
     opportunity_position = opportunity_position,
+    event_id = event_id,
     source_file = source_file,
     row_in_file = row_in_file
   )
@@ -1430,6 +1440,7 @@ batted_ball_raw_df <- load_batted_ball_data()
 raw_df <- attach_batted_ball_data(raw_df, batted_ball_raw_df)
 d1_defense_play_probability_baseline <- load_d1_defense_play_probability_baseline()
 defense_df <- standardize_defense(raw_df)
+defense_df <- defense_df %>% dplyr::filter(!defense_hidden_player(.data$player))
 defense_df <- add_expected_play_probabilities(defense_df, d1_defense_play_probability_baseline)
 catching_raw_df <- load_catching_data()
 
@@ -1631,6 +1642,7 @@ standardize_catching <- function(d) {
 }
 
 catching_df <- standardize_catching(catching_raw_df)
+catching_df <- catching_df %>% dplyr::filter(!defense_hidden_player(.data$Catcher))
 d1_catcher_framing_baseline <- load_d1_catcher_framing_baseline()
 
 framing_metric_specs <- tibble::tribble(
@@ -1795,7 +1807,7 @@ summarize_leaderboard <- function(d) {
   }
 
   d %>%
-    dplyr::filter(.data$opportunity %in% TRUE, !is.na(.data$player), nzchar(.data$player)) %>%
+    dplyr::filter(.data$position %in% c(INFIELD_POSITIONS,OUTFIELD_POSITIONS), !defense_hidden_player(.data$player), .data$opportunity %in% TRUE, !is.na(.data$player), nzchar(.data$player)) %>%
     dplyr::group_by(.data$player) %>%
     dplyr::summarise(
       Positions = paste(unique(.data$position[!is.na(.data$position) & nzchar(.data$position)]), collapse = ", "),
@@ -2055,11 +2067,12 @@ opportunity_spray_plot <- function(d, pos = NULL, title = "Opportunities") {
     )
 }
 
-opportunity_spray_plotly <- function(d, pos = NULL, title = "Opportunities") {
+opportunity_spray_plotly <- function(d, pos = NULL, title = "Opportunities", source = "def-opportunities") {
+  if (!"event_id" %in% names(d)) d$event_id <- rep(NA_character_,nrow(d))
   fld <- make_field_layers()
   pos <- pos %||% if (nrow(d)) d$position[[1]] else ""
 
-  p <- plotly::plot_ly(type = "scatter", mode = "lines", hoverinfo = "none") %>%
+  p <- plotly::plot_ly(source=source, type = "scatter", mode = "lines", hoverinfo = "none") %>%
     plotly::add_trace(
       x = fld$track_poly$x,
       y = fld$track_poly$y,
@@ -2225,6 +2238,7 @@ opportunity_spray_plotly <- function(d, pos = NULL, title = "Opportunities") {
         mode = "markers",
         name = bucket,
         text = ~hover_text,
+        key = ~event_id,
         hoverinfo = "text",
         marker = list(
           color = point_styles[[bucket]]$color,
@@ -2237,7 +2251,7 @@ opportunity_spray_plotly <- function(d, pos = NULL, title = "Opportunities") {
 
   p %>%
     plotly::layout(
-      title = list(text = title, x = 0.5),
+      title = list(text = title, x = 0.5), dragmode="lasso",
       xaxis = list(visible = FALSE, range = spray_xlim, scaleanchor = "y", scaleratio = 1),
       yaxis = list(visible = FALSE, range = spray_ylim),
       margin = list(l = 0, r = 0, t = 42, b = 0),
@@ -2246,7 +2260,8 @@ opportunity_spray_plotly <- function(d, pos = NULL, title = "Opportunities") {
       plot_bgcolor = "rgba(0,0,0,0)",
       paper_bgcolor = "rgba(0,0,0,0)"
     ) %>%
-    plotly::config(displayModeBar = FALSE)
+    plotly::config(displayModeBar = TRUE, modeBarButtonsToAdd=c("lasso2d","select2d")) %>%
+    plotly::event_register("plotly_selected") %>% plotly::event_register("plotly_click")
 }
 
 RANGE_MIN_POSITION_BIP <- 40L
@@ -2954,6 +2969,7 @@ add_oaa_sector_traces <- function(p, polys, sector_summary, sector_col, max_abs_
 }
 
 add_oaa_point_traces <- function(p, point_d) {
+  if (!"event_id" %in% names(point_d)) point_d$event_id <- rep(NA_character_,nrow(point_d))
   point_styles <- list(
     Made = list(color = "#0B7A3B", symbol = "circle"),
     Missed = list(color = "#B00020", symbol = "circle"),
@@ -2971,6 +2987,7 @@ add_oaa_point_traces <- function(p, point_d) {
         mode = "markers",
         name = bucket,
         text = ~hover_text,
+        key = ~event_id,
         hoverinfo = "text",
         marker = list(
           color = point_styles[[bucket]]$color,
@@ -3156,7 +3173,7 @@ range_360_plot <- function(d, title = "360 Degree Range") {
     theme(plot.title = element_text(face = "bold", color = "#501214", hjust = 0.5), legend.position = "bottom")
 }
 
-range_360_plotly <- function(d, title = "360 Degree Range", include_hang_time = FALSE) {
+range_360_plotly <- function(d, title = "360 Degree Range", include_hang_time = FALSE, source="def-of-oaa") {
   total_opps <- sum(d$opportunity %in% TRUE, na.rm = TRUE)
   d <- range_sector_data(d)
   if (!nrow(d)) {
@@ -3219,7 +3236,7 @@ range_360_plotly <- function(d, title = "360 Degree Range", include_hang_time = 
     )
   point_d$hover_text <- oaa_point_hover(point_d, "range_sector", include_hang_time)
 
-  p <- plotly::plot_ly(type = "scatter", mode = "lines", hoverinfo = "none")
+  p <- plotly::plot_ly(source=source,type = "scatter", mode = "lines", hoverinfo = "none")
   p <- add_oaa_sector_traces(p, polys, sector_summary, "range_sector", max_abs_oaa)
   separator_angles <- c(-30, 30, 90, 150, 210, 270)
   for (ang in separator_angles) {
@@ -3255,7 +3272,7 @@ range_360_plotly <- function(d, title = "360 Degree Range", include_hang_time = 
       font = list(color = "#501214", size = 13)
     ) %>%
     plotly::layout(
-      title = list(text = title, x = 0.5),
+      title = list(text = title, x = 0.5),dragmode="lasso",
       xaxis = list(visible = FALSE, range = c(-radius, radius), scaleanchor = "y", scaleratio = 1),
       yaxis = list(visible = FALSE, range = c(-radius, radius)),
       margin = list(l = 0, r = 0, t = 42, b = 0),
@@ -3264,10 +3281,11 @@ range_360_plotly <- function(d, title = "360 Degree Range", include_hang_time = 
       plot_bgcolor = "rgba(0,0,0,0)",
       paper_bgcolor = "rgba(0,0,0,0)"
     ) %>%
-    plotly::config(displayModeBar = FALSE)
+    plotly::config(displayModeBar=TRUE,modeBarButtonsToAdd=c("lasso2d","select2d")) %>%
+    plotly::event_register("plotly_selected") %>% plotly::event_register("plotly_click")
 }
 
-if_oaa_sector_plotly <- function(d, title = "IF OAA", include_hang_time = FALSE) {
+if_oaa_sector_plotly <- function(d, title = "IF OAA", include_hang_time = FALSE, source="def-if-ground") {
   total_opps <- sum(d$opportunity %in% TRUE, na.rm = TRUE)
   d <- if_direction_sector_data(d)
   if (!nrow(d)) {
@@ -3330,7 +3348,7 @@ if_oaa_sector_plotly <- function(d, title = "IF OAA", include_hang_time = FALSE)
     )
   point_d$hover_text <- oaa_point_hover(point_d, "if_direction_sector", include_hang_time)
 
-  p <- plotly::plot_ly(type = "scatter", mode = "lines", hoverinfo = "none")
+  p <- plotly::plot_ly(source=source,type = "scatter", mode = "lines", hoverinfo = "none")
   p <- add_oaa_sector_traces(p, polys, sector_summary, "if_direction_sector", max_abs_oaa)
   for (ang in c(0, 90, 180, 270)) {
     p <- p %>%
@@ -3365,7 +3383,7 @@ if_oaa_sector_plotly <- function(d, title = "IF OAA", include_hang_time = FALSE)
       font = list(color = "#501214", size = 13)
     ) %>%
     plotly::layout(
-      title = list(text = title, x = 0.5),
+      title = list(text = title, x = 0.5),dragmode="lasso",
       xaxis = list(visible = FALSE, range = c(-radius, radius), scaleanchor = "y", scaleratio = 1),
       yaxis = list(visible = FALSE, range = c(-radius, radius)),
       margin = list(l = 0, r = 0, t = 42, b = 0),
@@ -3374,7 +3392,8 @@ if_oaa_sector_plotly <- function(d, title = "IF OAA", include_hang_time = FALSE)
       plot_bgcolor = "rgba(0,0,0,0)",
       paper_bgcolor = "rgba(0,0,0,0)"
     ) %>%
-    plotly::config(displayModeBar = FALSE)
+    plotly::config(displayModeBar=TRUE,modeBarButtonsToAdd=c("lasso2d","select2d")) %>%
+    plotly::event_register("plotly_selected") %>% plotly::event_register("plotly_click")
 }
 
 prepare_catcher_receiving_rows <- function(d) {
@@ -4062,7 +4081,16 @@ ui <- base_defense_page(
       navset_tab(
         nav_panel("Overall", div(class = "defense-panel", withSpinner(DTOutput("leaderboard_overall_table"), type = 4, color = "#501214"))),
         nav_panel("IF", div(class = "defense-panel", withSpinner(DTOutput("leaderboard_if_table"), type = 4, color = "#501214"))),
-        nav_panel("OF", div(class = "defense-panel", withSpinner(DTOutput("leaderboard_of_table"), type = 4, color = "#501214")))
+        nav_panel("OF", div(class = "defense-panel", withSpinner(DTOutput("leaderboard_of_table"), type = 4, color = "#501214"))),
+        nav_panel("MIF", div(class="defense-panel", DTOutput("leaderboard_mif_table"))),
+        nav_panel("CIF", div(class="defense-panel", DTOutput("leaderboard_cif_table"))),
+        nav_panel("1B", div(class="defense-panel", DTOutput("leaderboard_1b_table"))),
+        nav_panel("2B", div(class="defense-panel", DTOutput("leaderboard_2b_table"))),
+        nav_panel("3B", div(class="defense-panel", DTOutput("leaderboard_3b_table"))),
+        nav_panel("SS", div(class="defense-panel", DTOutput("leaderboard_ss_table"))),
+        nav_panel("LF", div(class="defense-panel", DTOutput("leaderboard_lf_table"))),
+        nav_panel("CF", div(class="defense-panel", DTOutput("leaderboard_cf_table"))),
+        nav_panel("RF", div(class="defense-panel", DTOutput("leaderboard_rf_table")))
       )
     ),
     nav_panel(
@@ -4085,6 +4113,7 @@ ui <- base_defense_page(
           width = "220px"
         )
       ),
+      div(class="defense-panel", helpText("Click a play or use the lasso to select plays to remove or reassign."), uiOutput("def_edit_controls")),
       div(class = "defense-panel opportunity-field-panel", withSpinner(plotlyOutput("opportunity_spray", height = "92vh"), type = 4, color = "#501214")),
       div(class = "defense-panel", withSpinner(DTOutput("opportunity_table"), type = 4, color = "#501214"))
     ),
@@ -4154,8 +4183,8 @@ ui <- base_defense_page(
         selectInput(
           "range_position",
           "Position",
-          choices = position_choices,
-          selected = if ("SS" %in% position_choices) "SS" else position_choices[[1]],
+          choices = c("Total", OUTFIELD_POSITIONS),
+          selected = "Total",
           width = "220px"
         )
       ),
@@ -4177,8 +4206,8 @@ ui <- base_defense_page(
         selectInput(
           "if_position",
           "Position",
-          choices = position_choices,
-          selected = if ("SS" %in% position_choices) "SS" else position_choices[[1]],
+          choices = c("Total", INFIELD_POSITIONS),
+          selected = "Total",
           width = "220px"
         )
       ),
@@ -4248,9 +4277,70 @@ ui <- base_defense_page(
   )
 )
 
+defense_edit_path <- function() {
+  root <- if (dir.exists("/base-data")) "/base-data/app_state" else if (exists("base_project_path",mode="function")) base_project_path("app_state") else file.path(getwd(),"app_state")
+  Sys.getenv("BASE_DEFENSE_EDITS_FILE",file.path(root,"defense","opportunity-edits.csv"))
+}
+read_defense_edits <- function(path) {
+  if (!file.exists(path)) return(tibble::tibble(event_id=character(),action=character(),position=character(),player=character(),updated_at=character()))
+  readr::read_csv(path,col_types=readr::cols(.default=readr::col_character()),show_col_types=FALSE,na=character())
+}
+save_defense_edit <- function(path,event_id,action,position="",player="") {
+  stopifnot(length(event_id)==1L,nzchar(event_id),action %in% c("assign","remove","restore"))
+  if(action=="assign") stopifnot(position %in% c(INFIELD_POSITIONS,OUTFIELD_POSITIONS),nzchar(player),!defense_hidden_player(player))
+  dir.create(dirname(path),recursive=TRUE,showWarnings=FALSE)
+  lock <- paste0(path,".lock")
+  if(!dir.create(lock,showWarnings=FALSE)) stop("Another correction is being saved. Please retry.")
+  on.exit(unlink(lock,recursive=TRUE),add=TRUE)
+  edits <- read_defense_edits(path)
+  edits <- edits[edits$event_id != event_id,,drop=FALSE]
+  if(action != "restore") edits <- dplyr::bind_rows(edits,tibble::tibble(event_id=event_id,action=action,position=position,player=player,updated_at=format(Sys.time(),tz="UTC",usetz=TRUE)))
+  tmp <- tempfile(tmpdir=dirname(path)); on.exit(unlink(tmp),add=TRUE)
+  readr::write_csv(edits,tmp)
+  if(!file.rename(tmp,path)) stop("Could not save the opportunity correction.")
+  invisible(edits)
+}
+apply_defense_edits <- function(d,edits,baseline=NULL) {
+  if(!nrow(d) || !nrow(edits)) return(d)
+  for(i in seq_len(nrow(edits))) {
+    edit <- edits[i,]; idx <- which(d$event_id == edit$event_id)
+    if(!length(idx)) next
+    target <- idx[d$position[idx] == edit$position & d$player[idx] == edit$player]
+    # Never erase a play if its saved target no longer matches the source roster.
+    if(edit$action == "assign" && length(target)!=1L) next
+    if(edit$action == "assign") {
+      short <- d$batted_ball_bucket[target] == "Line" && is.finite(d$distance[target]) && d$distance[target]<200 && is.finite(d$hang_time[target]) && d$hang_time[target]<3
+      if(d$position[target] %in% OUTFIELD_POSITIONS && (d$batted_ball_bucket[target]=="Ground" || short)) next
+    }
+    d$opportunity[idx] <- FALSE
+    for(nm in c("made_play","fielded_ball","clean_field")) d[[nm]][idx] <- NA
+    for(nm in c("oaa","drs","putouts","assists","errors","distance_covered")) d[[nm]][idx] <- NA_real_
+    if(edit$action == "assign") {
+      d$opportunity[target] <- TRUE; d$fielded_ball[target] <- TRUE
+      d$made_play[target] <- d$play_bucket[target] == "Out"
+      d$clean_field[target] <- d$play_bucket[target] != "Error"
+      d$putouts[target] <- as.numeric(d$made_play[target]); d$assists[target] <- 0
+      d$errors[target] <- as.numeric(d$play_bucket[target] == "Error")
+      d$opportunity_position[idx] <- edit$position
+      d$opportunity_zone[target] <- opportunity_zone_for_position(d$position[target],d$batted_ball_bucket[target],d$bearing[target],d$distance[target],d$made_play[target])
+      if(is.na(d$opportunity_zone[target]) || !nzchar(d$opportunity_zone[target])) d$opportunity_zone[target] <- paste("Unmapped",edit$position)
+      if(d$play_bucket[target] %in% c("Out","Error")) d$distance_covered[target] <- sqrt((d$ball_x[target]-d$start_x[target])^2+(d$ball_y[target]-d$start_y[target])^2)
+    }
+  }
+  add_expected_play_probabilities(d,baseline)
+}
+
 # -------------------- Server --------------------
 server <- function(input, output, session) {
-  data_all <- reactive(defense_df)
+  edits_path <- defense_edit_path()
+  edits_revision <- reactiveVal(0L)
+  saved_edits <- reactivePoll(1500,session,
+    checkFunc=function() {f<-file.info(edits_path);paste(sprintf("%.6f",as.numeric(f$mtime)),f$size)},
+    valueFunc=function() read_defense_edits(edits_path))
+  data_all <- reactive({
+    edits_revision(); saved_edits()
+    apply_defense_edits(defense_df,read_defense_edits(edits_path),d1_defense_play_probability_baseline)
+  })
   builder_positions <- c("1B", "2B", "3B", "SS", "LF", "CF", "RF")
   builder_input_ids <- c("1B" = "builder_1b", "2B" = "builder_2b", "3B" = "builder_3b", "SS" = "builder_ss", "LF" = "builder_lf", "CF" = "builder_cf", "RF" = "builder_rf")
   catching_postgame_hidden_catchers <- c("Austin Munguia", "Rashawn Galloway")
@@ -4272,6 +4362,80 @@ server <- function(input, output, session) {
     if (length(seasons)) d <- d %>% dplyr::filter(season %in% seasons)
     d
   })
+
+  selected_defense_events <- reactiveVal(character())
+  open_defense_editor <- function(keys) {
+    keys <- intersect(unique(as.character(keys)),data_all()$event_id)
+    if(!length(keys)) return(invisible(NULL))
+    selected_defense_events(keys)
+    events <- data_all() %>% dplyr::filter(.data$event_id %in% keys) %>% dplyr::distinct(.data$event_id,.keep_all=TRUE)
+    labels <- paste(events$date,events$game,name_display(events$hitter),events$play_result,sep=" · ")
+    showModal(modalDialog(title="Correct defensive opportunities",size="l",easyClose=TRUE,
+      selectInput("def_edit_event","Selected play",choices=stats::setNames(events$event_id,labels)),
+      helpText("Starting positions below are the recorded defenders for this play. Reassigning moves the opportunity to one defender and recalculates OAA."),
+      plotlyOutput("def_edit_alignment",height="380px"),
+      tableOutput("def_edit_defenders"),
+      uiOutput("def_edit_target_ui"),
+      footer=tagList(modalButton("Close"),actionButton("def_edit_restore","Restore original"),
+        actionButton("def_edit_remove","Remove opportunity"),actionButton("def_edit_assign","Save reassignment",class="btn-primary"))))
+  }
+  output$def_edit_controls <- renderUI(actionButton("def_edit_review","Review saved corrections"))
+  observeEvent(input$def_edit_review,{
+    keys <- intersect(read_defense_edits(edits_path)$event_id,filtered_data()$event_id)
+    if(!length(keys)) showNotification("No saved corrections in these seasons.") else open_defense_editor(keys)
+  })
+  for(source_name in c("def-opportunities","def-of-oaa","def-if-ground","def-if-air")) local({
+    src <- source_name
+    for(event_name in c("plotly_selected","plotly_click")) local({
+      ev <- event_name
+      observeEvent(plotly::event_data(ev,source=src,priority="event"),{
+        selection <- plotly::event_data(ev,source=src,priority="event")
+        if(!is.null(selection$key)) open_defense_editor(selection$key)
+      },ignoreNULL=TRUE)
+    })
+  })
+  edit_defenders <- reactive({
+    req(input$def_edit_event %in% selected_defense_events())
+    data_all() %>% dplyr::filter(.data$event_id == input$def_edit_event) %>% dplyr::distinct(.data$position,.data$player,.keep_all=TRUE)
+  })
+  output$def_edit_defenders <- renderTable({
+    edit_defenders() %>% dplyr::transmute(Position=.data$position,Player=name_display(.data$player),
+      `Start X (ft)`=round(.data$start_x,1),`Start Y (ft)`=round(.data$start_y,1),Opportunity=.data$opportunity,`Play probability`=fmt_pct(.data$play_probability,1))
+  })
+  output$def_edit_alignment <- renderPlotly({
+    d <- edit_defenders(); fld <- make_field_layers()
+    plotly::plot_ly() %>%
+      plotly::add_paths(x=fld$wall$x,y=fld$wall$y,inherit=FALSE,hoverinfo="skip",showlegend=FALSE,line=list(color="#501214")) %>%
+      plotly::add_markers(data=d,x=~start_y,y=~start_x,text=~paste(position,name_display(player)),hoverinfo="text",name="Starting positions",marker=list(color="#501214",size=12)) %>%
+      plotly::add_markers(x=d$ball_y[1],y=d$ball_x[1],name="Ball in play",marker=list(color="#ac9155",size=14,symbol="diamond")) %>%
+      plotly::layout(xaxis=list(title="Feet from center",scaleanchor="y",scaleratio=1),yaxis=list(title="Feet from home"),margin=list(t=15,b=40))
+  })
+  output$def_edit_target_ui <- renderUI({
+    d <- edit_defenders()
+    choices <- stats::setNames(paste(d$position,d$player,sep="\037"),paste(d$position,name_display(d$player),sep=" — "))
+    selectInput("def_edit_target","Assign opportunity to",choices=choices,selected=unname(choices[if(any(d$opportunity %in% TRUE)) which(d$opportunity)[1] else 1L]))
+  })
+  commit_defense_edit <- function(action) {
+    tryCatch({
+      id <- input$def_edit_event
+      if(!length(id) || !id %in% selected_defense_events()) stop("Select a play first.")
+      position <- player <- ""
+      if(action == "assign") {
+        d <- edit_defenders(); choices <- paste(d$position,d$player,sep="\037")
+        row <- match(input$def_edit_target,choices)
+        if(is.na(row)) stop("Choose a recorded defender for this play.")
+        position <- d$position[row]; player <- d$player[row]
+        short <- d$batted_ball_bucket[row]=="Line" && is.finite(d$distance[row]) && d$distance[row]<200 && is.finite(d$hang_time[row]) && d$hang_time[row]<3
+        if(position %in% OUTFIELD_POSITIONS && (d$batted_ball_bucket[row]=="Ground" || short)) stop("Ground balls and short, low line drives cannot be outfield opportunities.")
+      }
+      save_defense_edit(edits_path,id,action,position,player)
+      edits_revision(edits_revision()+1L)
+      showNotification("Opportunity correction saved.",type="message")
+    },error=function(e) showNotification(conditionMessage(e),type="error"))
+  }
+  observeEvent(input$def_edit_assign,commit_defense_edit("assign"))
+  observeEvent(input$def_edit_remove,commit_defense_edit("remove"))
+  observeEvent(input$def_edit_restore,commit_defense_edit("restore"))
 
   scoped_opportunities <- function(position_set = NULL, player = NULL) {
     d <- filtered_data()
@@ -4313,6 +4477,8 @@ server <- function(input, output, session) {
       updateSelectInput(session, input_id, choices = character(0), selected = NULL)
       return(invisible(NULL))
     }
+    include_total <- input_id %in% c("range_position","if_position")
+    if (include_total) choices <- c("Total",choices)
     labels_n <- counts$n[match(choices, counts$position)]
     labels <- ifelse(is.na(labels_n), choices, paste0(choices, " (", labels_n, ")"))
     updateSelectInput(
@@ -4392,15 +4558,15 @@ server <- function(input, output, session) {
 
   range_data <- reactive({
     d <- scoped_opportunities(OUTFIELD_POSITIONS, input$of_player)
-    pos <- input$range_position %||% character(0)
-    if (length(pos) && nzchar(pos)) d <- d %>% dplyr::filter(position == !!pos)
+    pos <- input$range_position %||% "Total"
+    if (length(pos) && nzchar(pos) && pos != "Total") d <- d %>% dplyr::filter(position == !!pos)
     d
   })
 
   if_base_data <- reactive({
     d <- scoped_opportunities(INFIELD_POSITIONS, input$if_player)
-    pos <- input$if_position %||% character(0)
-    if (length(pos) && nzchar(pos)) d <- d %>% dplyr::filter(position == !!pos)
+    pos <- input$if_position %||% "Total"
+    if (length(pos) && nzchar(pos) && pos != "Total") d <- d %>% dplyr::filter(position == !!pos)
     d
   })
 
@@ -4742,6 +4908,14 @@ server <- function(input, output, session) {
     )
   })
 
+  extra_leaderboards <- list(mif=c("SS","2B"),cif=c("1B","3B"),
+    `1b`="1B",`2b`="2B",`3b`="3B",ss="SS",lf="LF",cf="CF",rf="RF")
+  for (key in names(extra_leaderboards)) local({
+    positions <- extra_leaderboards[[key]]; id <- paste0("leaderboard_",key,"_table")
+    output[[id]] <- DT::renderDT(render_leaderboard_dt(summarize_leaderboard(
+      filtered_data() %>% dplyr::filter(.data$position %in% positions))))
+  })
+
   output$leaderboard_overall_table <- DT::renderDT({
     render_leaderboard_dt(summarize_leaderboard(filtered_data()))
   })
@@ -4938,7 +5112,7 @@ server <- function(input, output, session) {
   output$if_air_oaa_plot <- renderPlotly({
     player_label <- input$if_player %||% "Player"
     pos_label <- input$if_position %||% "Position"
-    if_oaa_sector_plotly(if_air_data(), sprintf("%s: %s Air Ball IF OAA", name_display(player_label), pos_label), include_hang_time = TRUE)
+    if_oaa_sector_plotly(if_air_data(), sprintf("%s: %s Air Ball IF OAA", name_display(player_label), pos_label), include_hang_time = TRUE, source="def-if-air")
   })
 
   output$if_air_oaa_table <- DT::renderDT({

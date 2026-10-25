@@ -77,6 +77,33 @@ base_prepare_catcher_framing_baseline <- function() baseline_fixture
 
 workspace <- base_wally_defense_environment(catching_fixture)
 if (!is.function(workspace$server)) fail("Embedded Defense server is unavailable.")
+# Opportunity edits use isolated storage in every test run.
+edit_test_dir <- tempfile("defense-edits-"); dir.create(edit_test_dir)
+Sys.setenv(BASE_DEFENSE_EDITS_FILE=file.path(edit_test_dir,"edits.csv"))
+stopifnot(all(workspace$defense_hidden_player(c("Walk On","WalkOn Player","Pelien, Jake","Arebalo","Ben Smith","Major, Joe","Sidener"))),
+          !any(workspace$defense_hidden_player(c("Bennett Fryman","Benjamin Jones","Bentley"))))
+for (spec in list(c(199,2.9,FALSE),c(200,2.9,TRUE),c(199,3,TRUE))) {
+  result <- workspace$position_opportunity_for_row("CF","InPlay","Single","Line",0,spec[1],FALSE,hang_time=spec[2])
+  stopifnot(identical(result$opportunity,as.logical(spec[3])))
+}
+stopifnot(!workspace$position_opportunity_for_row("CF","InPlay","Single","Ground",0,300,FALSE,hang_time=5)$opportunity)
+original <- workspace$defense_df
+chosen <- original[which(original$position=="SS" & original$play_bucket=="Out")[1],]
+stopifnot(nrow(chosen)==1,!is.na(chosen$event_id))
+edit_path <- file.path(edit_test_dir,"persistence.csv")
+workspace$save_defense_edit(edit_path,chosen$event_id,"assign","SS",chosen$player)
+edited <- workspace$apply_defense_edits(original,workspace$read_defense_edits(edit_path),workspace$d1_defense_play_probability_baseline)
+rows <- edited[edited$event_id==chosen$event_id,]
+stopifnot(sum(rows$opportunity)==1,rows$position[rows$opportunity]=="SS",is.finite(rows$oaa[rows$opportunity]))
+workspace$save_defense_edit(edit_path,chosen$event_id,"remove")
+removed <- workspace$apply_defense_edits(original,workspace$read_defense_edits(edit_path),workspace$d1_defense_play_probability_baseline)
+stopifnot(!any(removed$opportunity[removed$event_id==chosen$event_id]),all(is.na(removed$oaa[removed$event_id==chosen$event_id])))
+workspace$save_defense_edit(edit_path,chosen$event_id,"restore")
+stopifnot(identical(workspace$apply_defense_edits(original,workspace$read_defense_edits(edit_path)),original))
+# Pitchers never enter fielding leaderboards; two-way players keep fielding rows.
+leader_input <- dplyr::bind_rows(original, dplyr::mutate(chosen,player="Pitcher only",position="P",opportunity=TRUE),
+  dplyr::mutate(chosen,player="Ben",opportunity=TRUE))
+stopifnot(!any(workspace$summarize_leaderboard(leader_input)$Player %in% c("Pitcher only","Ben")))
 if (!nrow(workspace$defense_df)) fail("Defense fixture produced no standardized opportunities.")
 if (!nrow(workspace$catching_df)) fail("Catching fixture produced no receiving rows.")
 
@@ -200,6 +227,25 @@ unlink(report_path)
 workspace$validate <- function(...) stop("masked non-Shiny validate() was called")
 
 shiny::testServer(workspace$server, {
+  original_defense <- workspace$defense_df
+  pooled <- original_defense[seq_len(4),]
+  pooled$player <- "Total Test"; pooled$position <- c("SS","2B","LF","CF"); pooled$opportunity <- TRUE
+  workspace$defense_df <- dplyr::bind_rows(original_defense,pooled)
+  session$setInputs(def_season_groups=pooled$season[1],if_player="Total Test",of_player="Total Test",if_position="Total",range_position="Total")
+  stopifnot(setequal(if_base_data()$position,c("SS","2B")),setequal(range_data()$position,c("LF","CF")))
+  session$setInputs(if_position="SS",range_position="CF")
+  stopifnot(identical(unique(if_base_data()$position),"SS"),identical(unique(range_data()$position),"CF"))
+  workspace$defense_df <- original_defense
+  edits_revision(edits_revision()+1L)
+  open_defense_editor(chosen$event_id)
+  session$setInputs(def_edit_event=chosen$event_id,def_edit_target=paste("SS",chosen$player,sep="\037"),def_edit_assign=1)
+  stopifnot(nrow(workspace$read_defense_edits(edits_path))==1L,
+            sum(data_all()$opportunity[data_all()$event_id==chosen$event_id])==1L)
+  session$setInputs(def_edit_remove=1)
+  stopifnot(!any(data_all()$opportunity[data_all()$event_id==chosen$event_id]))
+  session$setInputs(def_edit_restore=1)
+  stopifnot(nrow(workspace$read_defense_edits(edits_path))==0L)
+
   session$setInputs(def_season_groups = "S26")
   session$flushReact()
   if (!nrow(filtered_data())) fail("Defense season filter returned no fixture rows.")
@@ -257,3 +303,5 @@ cat(
   "standardized opportunities,", nrow(catcher_rows), "catcher rows,",
   length(expected_tabs), "tabs, and server smoke tests.\n"
 )
+
+unlink(edit_test_dir,recursive=TRUE)
