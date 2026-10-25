@@ -1,0 +1,11 @@
+source('model.R')
+r <- read_roster('data/roster.csv')
+stopifnot(length(r)==38, season_year(as.Date('2026-10-21'))==2027, season_year(as.Date('2027-07-31'))==2027, season_year(as.Date('2027-08-01'))==2028)
+stopifnot(r[[17]]$throws=='L',r[[7]]$bats=='L',r[[1]]$bats=='R')
+f <- r[[1]]
+stopifnot(all(vapply(2027:2032,function(y)project_class(f,y),numeric(1))==1:6))
+s <- list(profiles=list(), charts=list('2027'=list(SP=list('roster-1'),Closer=list(),Bullpen=list())))
+stopifnot(validate_state(s,vapply(r,`[[`,'','id')))
+s$charts[['2027']]$Closer <- list('roster-1')
+stopifnot(inherits(try(validate_state(s,vapply(r,`[[`,'','id')),silent=TRUE),'try-error'))
+cat('Roster, season rollover, five-year projection, and duplicate pitcher validation passed.\n')

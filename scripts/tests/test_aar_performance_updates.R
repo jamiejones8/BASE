@@ -6,7 +6,7 @@ load_named <- function(path,names,envir) {
 }
 h <- new.env(parent=globalenv())
 h$BOBCAT_LOGO_PATH <- base_project_path('WallyApps','HittingApp','www','Bobcatlogo.png')
-load_named('WallyApps/HittingApp/HittingApp.R',c('performance_table_metrics','hitting_d1_reference','hitting_d1_lower_better',
+load_named('WallyApps/HittingApp/HittingApp.R',c('performance_table_metrics','hitting_group_percentile_metrics','hitting_d1_reference','hitting_d1_lower_better',
   'hitting_d1_percentile','hitting_d1_average_lookup','D1_NON','D1_PCT','shade_cell','severity_rgba_fill',
   'apply_hitting_empirical_shading','HITTING_PERCENTILE_CSS','hitting_percentile_rankings_ui','build_inning_breakdown_plot'),h)
 ref <- h$hitting_d1_reference
@@ -17,13 +17,24 @@ for (metric in h$performance_table_metrics) {
   lo <- h$hitting_d1_percentile(min(values)-1,metric); hi <- h$hitting_d1_percentile(max(values)+1,metric)
   stopifnot(if(metric %in% h$hitting_d1_lower_better) lo==100 && hi==0 else lo==0 && hi==100)
 }
-nums <- as.data.frame(as.list(setNames(ref$averages$average,ref$averages$metric)))
-names(nums) <- ref$averages$metric
+total_avg <- ref$averages[ref$averages$group == "Total",]
+nums <- as.data.frame(as.list(setNames(total_avg$average,total_avg$metric)))
+names(nums) <- total_avg$metric
 fmt <- as.data.frame(lapply(nums,as.character),check.names=FALSE)
 shaded <- h$apply_hitting_empirical_shading(nums,fmt)
 stopifnot(all(h$performance_table_metrics %in% names(shaded)))
 html <- as.character(h$hitting_percentile_rankings_ui(nums,'Test Hitter'))
-stopifnot(lengths(regmatches(html,gregexpr('class="cr-percentile-row"',html,fixed=TRUE))) == length(h$performance_table_metrics))
+stopifnot(lengths(regmatches(html,gregexpr('class="cr-percentile-row"',html,fixed=TRUE))) == length(h$performance_table_metrics)-1L)
+stopifnot(!grepl('>PA</div>',html,fixed=TRUE))
+for (group in c("Hard","Breaking","Soft")) {
+  group_html <- as.character(h$hitting_percentile_rankings_ui(nums,"Test Hitter",group))
+  stopifnot(lengths(regmatches(group_html,gregexpr('class="cr-percentile-row"',group_html,fixed=TRUE))) == 23L)
+  stopifnot(setequal(ref$averages$metric[ref$averages$group==group],h$hitting_group_percentile_metrics))
+}
+# A given value must rank against its own group, not the Total distribution.
+custom <- data.frame(group=c("Total","Total","Hard","Hard"),metric="wOBA",value=c(.2,.3,.4,.5))
+stopifnot(h$hitting_d1_percentile(.35,"wOBA",custom,"Total")==100,
+          h$hitting_d1_percentile(.35,"wOBA",custom,"Hard")==0)
 # No fallback 50s: production framing reference must produce distinct extremes.
 f <- new.env(parent=globalenv())
 load_named('WallyApps/DefenseApp/DefenseApp.R',c('framing_metric_min_chances','add_d1_percentiles'),f)

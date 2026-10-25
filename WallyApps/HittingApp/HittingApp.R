@@ -1589,6 +1589,17 @@ performance_table_metrics <- c(
   "MaxEV", "90th EV", "EV>95%", "10-35*%", "GB%", "LD%", "FB%", "PU%", "Foul Ball%", "Airpull%"
 )
 
+hitting_pitch_groups <- list(Hard=c("Fastball","Sinker"),
+  Breaking=c("Cutter","Slider","Sweeper","Curveball"), Soft=c("Changeup","Splitter"))
+hitting_group_percentile_metrics <- c("wOBA","wOBAcon","xwOBA","xwOBAcon","SLG","hRV","Barrel%",
+  "Swing%","IZ-Swing%","Whiff%","IZ-Whiff%","Chase%","Pre2K Chase%","2K Chase%",
+  "MaxEV","90th EV","10-35*%","GB%","LD%","FB%","PU%","Foul Ball%","Airpull%")
+hitting_pitch_group_rows <- function(d, group="Total") {
+  if (identical(group,"Total")) return(d)
+  types <- if ("PitchType_UNI" %in% names(d)) as.character(d$PitchType_UNI) else pt_coalesce(d)
+  d[types %in% hitting_pitch_groups[[group]],,drop=FALSE]
+}
+
 leaderboard_table_metrics <- c(
   "PA", "K", "BB", "H", "wOBA", "wOBAcon", "xwOBA", "xwOBAcon", "AVG", "OBP", "SLG", "OPS", "hRV",
   "K%", "BB%", "Barrel%",
@@ -1865,9 +1876,13 @@ ui <- base_hitting_page(
         ),
         withSpinner(DTOutput("perf_tbl"), type = 4, color = "#501214")
       ),
-      uiOutput("hit_performance_percentiles"),
+      div(class="hit-performance-analysis",
+        div(class="hit-percentile-column",
+          radioGroupButtons("hit_percentile_group", "Pitch types",
+            choices=c("Total","Hard","Breaking","Soft"), selected="Total", justified=TRUE, size="sm"),
+          uiOutput("hit_performance_percentiles")),
       div(
-        class = "mt-3",
+        class = "hit-timeseries-column",
         selectizeInput(
           "hit_perf_ts_stats", "Time Series Stats",
           choices = performance_timeseries_choices,
@@ -1877,7 +1892,7 @@ ui <- base_hitting_page(
           width = "100%"
         ),
         withSpinner(plotOutput("perf_time_series", height = "520px"), type = 4, color = "#501214")
-      )
+      ))
     ),
     nav_panel(
       title = "Lineup Builder",
@@ -3660,8 +3675,10 @@ hitting_d1_reference <- local({
   list(values=read('d1_hitting_percentiles.csv'),averages=read('d1_hitting_averages.csv'))
 })
 hitting_d1_lower_better <- c('K%','Whiff%','IZ-Whiff%','Chase%','Pre2K Chase%','2K Chase%','GB%','PU%','Foul Ball%')
-hitting_d1_percentile <- function(value, metric, reference=hitting_d1_reference$values) {
+hitting_d1_percentile <- function(value, metric, reference=hitting_d1_reference$values, group="Total") {
   if (!is.finite(value) || !nrow(reference)) return(NA_real_)
+  if (!"group" %in% names(reference) && group != "Total") return(NA_real_)
+  if ("group" %in% names(reference)) reference <- reference[reference$group == group,,drop=FALSE]
   vals <- reference$value[reference$metric == metric & is.finite(reference$value)]
   if (!length(vals)) return(NA_real_)
   # Midrank ties avoid giving all tied values a 100th-percentile badge.
@@ -3671,6 +3688,7 @@ hitting_d1_percentile <- function(value, metric, reference=hitting_d1_reference$
 }
 hitting_d1_average_lookup <- function() {
   ref <- hitting_d1_reference$averages
+  if ("group" %in% names(ref)) ref <- ref[ref$group == "Total",,drop=FALSE]
   if (!nrow(ref)) return(c(D1_NON,D1_PCT))
   c(stats::setNames(ref$average,ref$metric), c(D1_NON,D1_PCT)[setdiff(names(c(D1_NON,D1_PCT)),ref$metric)])
 }
@@ -3685,32 +3703,40 @@ apply_hitting_empirical_shading <- function(tbl_num,tbl_fmt,palette='coach') {
   }
   tbl_fmt
 }
-HITTING_PERCENTILE_CSS <- "    .hit-percentiles{box-sizing:border-box;background:rgba(255,255,255,0.94);border:1px solid rgba(0,117,138,.32);border-radius:8px;padding:12px 14px;margin-bottom:12px;min-height:0;width:100%;display:flex;flex-direction:column}
+HITTING_PERCENTILE_CSS <- "
+    .hit-performance-analysis{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:24px;align-items:start;margin-top:20px}
+    .hit-performance-analysis>div{min-width:0}
+    .hit-percentile-column .btn.active{background:#501214!important;color:white!important;border-color:#501214!important}
+    .hit-timeseries-column .shiny-plot-output{max-width:100%}
+    @media(max-width:1000px){.hit-performance-analysis{grid-template-columns:1fr}}
+    .hit-percentiles{box-sizing:border-box;background:rgba(255,255,255,0.94);border:1px solid rgba(0,117,138,.32);border-radius:8px;padding:12px 14px;margin-bottom:12px;min-height:0;width:100%;display:flex;flex-direction:column}
     .hit-percentiles .cr-percentile-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;border-bottom:2px solid #078197;padding-bottom:6px;margin-bottom:8px}
-    .hit-percentiles .cr-percentile-title{font-weight:800;color:#222;font-size:1rem;line-height:1.1}
-    .hit-percentiles .cr-percentile-subtitle{font-size:.78rem;font-weight:800;color:#078197;text-align:right;line-height:1.1}
-    .hit-percentiles .cr-percentile-scale{display:grid;grid-template-columns:1fr 1fr 1fr;margin:0 84px 4px 122px;font-size:.62rem;font-weight:800;letter-spacing:.02em}
+    .hit-percentiles .cr-percentile-title{font-weight:800;color:#222;font-size:14px;line-height:1.1}
+    .hit-percentiles .cr-percentile-subtitle{font-size:10px;font-weight:800;color:#078197;text-align:right;line-height:1.1}
+    .hit-percentiles .cr-percentile-scale{display:grid;grid-template-columns:1fr 1fr 1fr;margin:0 62px 4px 88px;font-size:9px;font-weight:800;letter-spacing:.02em}
     .hit-percentiles .cr-percentile-scale span:nth-child(1){color:#3464B8;text-align:left}
     .hit-percentiles .cr-percentile-scale span:nth-child(2){color:#A4BEC1;text-align:center}
     .hit-percentiles .cr-percentile-scale span:nth-child(3){color:#D9252E;text-align:right}
     .hit-percentiles .cr-percentile-rows{flex:1;display:flex;flex-direction:column;justify-content:space-between}
     .hit-percentiles .cr-percentile-row{display:grid;grid-template-columns:98px minmax(220px,1fr) 56px;gap:9px;align-items:center;min-height:28px}
-    .hit-percentiles .cr-percentile-label{font-size:.72rem;line-height:1.05;text-align:right;color:#444;white-space:normal}
+    .hit-percentiles .cr-percentile-label{font-size:11px;line-height:1.05;text-align:right;color:#444;white-space:normal}
     .hit-percentiles .cr-percentile-track-wrap{position:relative;height:18px}
     .hit-percentiles .cr-percentile-track{position:absolute;left:0;right:0;top:7px;height:5px;background:#D8E8E9;border-radius:0}
     .hit-percentiles .cr-percentile-fill{position:absolute;left:0;top:4px;height:11px;border-radius:0}
     .hit-percentiles .cr-percentile-average{position:absolute;left:50%;top:3px;width:2px;height:13px;background:rgba(255,255,255,.55)}
-    .hit-percentiles .cr-percentile-badge{position:absolute;top:0;transform:translateX(-50%);min-width:24px;height:18px;border-radius:10px;color:white;font-size:.68rem;font-weight:900;line-height:18px;text-align:center;padding:0 5px}
-    .hit-percentiles .cr-percentile-value{font-size:.68rem;color:#444;text-align:right;white-space:nowrap}
+    .hit-percentiles .cr-percentile-badge{position:absolute;top:0;transform:translateX(-50%);min-width:24px;height:18px;border-radius:10px;color:white;font-size:10px;font-weight:900;line-height:18px;text-align:center;padding:0 5px}
+    .hit-percentiles .cr-percentile-value{font-size:10px;color:#444;text-align:right;white-space:nowrap}
     .hit-percentiles .cr-percentile-row-empty{opacity:.55}
-    .hit-percentiles .cr-percentile-empty{font-size:.85rem;color:#555}
-.hit-percentiles .cr-percentile-rows{gap:8px;}
-.hit-percentiles .cr-percentile-row{grid-template-columns:98px minmax(100px,1fr) 60px;gap:24px;}
+    .hit-percentiles .cr-percentile-empty{font-size:12px;color:#555}
+.hit-percentiles .cr-percentile-rows{gap:4px;}
+.hit-percentiles>small{font-size:11px;line-height:1.35;margin-top:12px;}
+.hit-percentiles .cr-percentile-row{grid-template-columns:70px minmax(50px,1fr) 44px;gap:18px;}
 .hit-percentiles{margin-top:16px;}
 "
-hitting_percentile_rankings_ui <- function(stats, hitter) {
-  rows <- lapply(performance_table_metrics,function(metric) {
-    value <- stats[[metric]][1]; pct <- hitting_d1_percentile(value,metric)
+hitting_percentile_rankings_ui <- function(stats, hitter, group="Total") {
+  metrics <- if (group == "Total") setdiff(performance_table_metrics,"PA") else hitting_group_percentile_metrics
+  rows <- lapply(metrics,function(metric) {
+    value <- stats[[metric]][1]; pct <- hitting_d1_percentile(value,metric,group=group)
     pos <- if (is.finite(pct)) pct else 0
     color <- if (!is.finite(pct)) '#BFC9CA' else if(pct>=90) '#E33434' else if(pct>=75) '#DC735F' else if(pct>=60) '#D39383' else if(pct>=40) '#AAC6CB' else if(pct>=25) '#8CAAD2' else '#5D7EBC'
     label <- if (!is.finite(value)) '--' else if(grepl('%$',metric)) sprintf('%.1f%%',100*value) else if(metric=='PA') sprintf('%.0f',value) else if(metric %in% c('MaxEV','90th EV','hRV')) sprintf('%.1f',value) else sprintf('%.3f',value)
@@ -3727,7 +3753,7 @@ hitting_percentile_rankings_ui <- function(stats, hitter) {
     div(class='cr-percentile-header',div(class='cr-percentile-title','D1 Percentile Rankings'),div(class='cr-percentile-subtitle',hitter)),
     div(class='cr-percentile-scale',span('POOR'),span('AVERAGE'),span('GREAT')),
     div(class='cr-percentile-rows',rows),
-    tags$small('D1 hitters with 50+ PA. PA ranks playing time. Rates use the current filters; small samples can move sharply. D1 average lines show the mean qualified hitter.'))
+    tags$small(sprintf('D1 hitters with 50+ PA%s. Rates use the current filters; small samples can move sharply. Time-series averages use the Total D1 pool.', if(group == 'Total') '' else paste0(' facing ',tolower(group),' pitches'))))
 }
 
 # Fixed comparison points for the downloadable hitting leaderboard. These are
@@ -7138,7 +7164,10 @@ server <- function(input, output, session){
   output$hit_performance_percentiles <- renderUI({
     d <- dat_filt()
     req(nrow(d) > 0)
-    hitting_percentile_rankings_ui(summarize_overall(d), input$Hitter %||% "Selected hitters")
+    group <- input$hit_percentile_group %||% "Total"
+    req(group %in% c("Total",names(hitting_pitch_groups)))
+    d <- hitting_pitch_group_rows(d,group)
+    hitting_percentile_rankings_ui(summarize_overall(d), input$Hitter %||% "Selected hitters",group)
   })
 
   # -------------------- Performance Table --------------------

@@ -1,0 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+:root{--maroon:#501214;--gold:#ac9155;--ink:#211b1b;--muted:#706666}
+body{background:#f7f3ec;font-family:'Source Sans 3',sans-serif}
+#studio{padding:20px 8px;max-width:none}
+h1,h2{font-family:Oswald,sans-serif;color:var(--maroon)}
+header{border-color:#50121422;padding:18px 22px;background:white;border-radius:12px;box-shadow:0 4px 14px #310a0c0d}
+button{border-color:#50121430;border-radius:8px;color:var(--maroon)}
+button.primary,.matchup-tabs button.active{background:var(--maroon);color:white;box-shadow:0 4px 14px #50121422}
+button:hover{background:#f0e9de;filter:none}.primary:hover,.matchup-tabs button.active:hover{background:#6d3436}
+.years{padding:5px;background:white;border:1px solid #50121422;border-radius:999px;width:fit-content;flex-wrap:wrap}
+.years button{border:0;border-radius:999px;font-size:18px;padding:8px 24px}
+.years button.active{background:var(--maroon);color:white}
+.sidebar,.budget-card,.budget-visualization,.arm-visualization{border-color:#50121422;box-shadow:0 4px 14px #310a0c0d;border-radius:12px}
+.budget-fill{background:var(--maroon)}
+@media(max-width:700px){header{padding:12px}.years button{padding:8px 14px}}

@@ -73,3 +73,7 @@ WallyApps/JucoStatsApp/data/*
 !WallyApps/HittingApp/data/d1_hitting_percentiles.csv
 !WallyApps/HittingApp/data/d1_hitting_averages.csv
 !WallyApps/HittingApp/data/d1_hitting_reference_provenance.json
+
+# Roster Studio source, assets, and the supplied saved roster snapshot.
+!WallyApps/DepthChartApp/
+!WallyApps/DepthChartApp/**

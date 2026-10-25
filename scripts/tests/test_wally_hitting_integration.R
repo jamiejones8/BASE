@@ -356,6 +356,10 @@ shiny::testServer(workspace$server, {
   }
   grouped_data <- workspace$df[rep(1L,8L),]
   grouped_data$PitchType <- c("Fastball","Sinker","Cutter","Slider","Curveball","Sweeper","Changeup","Splitter")
+  grouped_data$PitchType_UNI <- grouped_data$PitchType
+  stopifnot(nrow(workspace$hitting_pitch_group_rows(grouped_data,"Hard"))==2L,
+            nrow(workspace$hitting_pitch_group_rows(grouped_data,"Breaking"))==4L,
+            nrow(workspace$hitting_pitch_group_rows(grouped_data,"Soft"))==2L)
   grouped <- workspace$summarize_by_pitchtype(grouped_data)
   stopifnot(identical(tail(grouped$PitchType,3), c("HARD","BREAKING","SOFT")))
   for (label in c("HARD","BREAKING","SOFT")) {
@@ -521,6 +525,13 @@ shiny::testServer(workspace$server, {
   kpi_html <- output$aar_kpi$html
   stopifnot(grepl('Hit Strikes Hard',kpi_html,fixed=TRUE),grepl('Metric',kpi_html,fixed=TRUE),grepl('border-collapse:collapse',kpi_html,fixed=TRUE))
   invisible(output$hit_performance_percentiles)
+  for (group in c("Hard","Breaking","Soft")) {
+    session$setInputs(hit_percentile_group=group)
+    group_html <- output$hit_performance_percentiles$html
+    stopifnot(!grepl('>PA</div>',group_html,fixed=TRUE),
+      lengths(regmatches(group_html,gregexpr('class="cr-percentile-row"',group_html,fixed=TRUE)))==23L)
+  }
+  session$setInputs(hit_percentile_group="Total")
   session$setInputs(hit_perf_ts_stats=c("EV>95%","10-35*%","GB%","LD%","FB%","PU%","Foul Ball%","Airpull%"))
   stopifnot(all(is.finite(workspace$hitting_d1_average_lookup()[input$hit_perf_ts_stats])))
   invisible(output$perf_time_series)

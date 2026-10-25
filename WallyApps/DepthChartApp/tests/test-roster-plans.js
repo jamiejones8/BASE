@@ -1,0 +1,30 @@
+const assert=require('node:assert/strict');
+const M=require('../www/depth-model.js');
+const p=(id,pos,cls=1,year=2027,extra={})=>({id,positions:pos,entryClass:cls,entryYear:year,status:'Signed',...extra});
+const players=[p('namken',['C'],2),p('old',['C'],5),p('nolan',['LHP'],2),p('long',['RHP']),p('left',['LHP']),p('right',['RHP']),p('closer',['RHP']),p('new',['SS'],1,2028,{recruit:true,offerPackage:5000})];
+const source=M.initial(players,2027);
+Object.assign(source,{C:['namken','old'],SP:['nolan',null,null,null],LongRelief:['long',null,null],LHP:['left'],RHP:['right'],Closer:['closer',null,null]});
+const charts={2027:source};M.forward(charts,players,2027,2031);
+for(const y of [2028,2029,2030]){
+ assert.equal(charts[y].C[0],'namken');assert.equal(charts[y].SP[0],'nolan');
+ assert.equal(charts[y].LongRelief[0],'long');assert.equal(charts[y].LHP[0],'left');assert.equal(charts[y].RHP[0],'right');assert.equal(charts[y].Closer[0],'closer');
+}
+assert.equal(charts[2031].C[0],null);assert.equal(charts[2031].SP[0],null);
+const state={charts,matchups:{'v LHP':structuredClone(charts),'v RHP':structuredClone(charts)},funding:{budgets:{2027:100000},awards:{namken:{2027:65000,2029:70000}}}};
+const before=JSON.stringify(state.charts[2027]);
+M.removeFrom(state,'namken',2028);
+assert.equal(JSON.stringify(state.charts[2027]),before);
+const removed=players.map(p=>({...p,removedFrom:state.departures[p.id]}));
+for(const store of [state.charts,...Object.values(state.matchups)])for(const y of [2028,2029,2030,2031])assert.ok(!Object.values(store[y]).flat().includes('namken'));
+assert.equal(M.allocation(state.funding,removed[0],2027),65000);assert.equal(M.allocation(state.funding,removed[0],2028),0);
+assert.equal(state.funding.awards.namken[2029],undefined);
+assert.equal(M.budgetSummary(state.funding,removed,2028).used,5000);
+M.forward(state.charts,removed,2027,2031);
+assert.ok(!state.charts[2028].C.includes('namken'));
+const vs=structuredClone(state.charts);vs[2028].SP[0]=null;vs[2028].Closer=['nolan','closer',null];
+M.forward(vs,removed,2027,2031,{2028:true});assert.equal(vs[2029].Closer[0],'nolan');assert.equal(state.charts[2029].SP[0],'nolan');
+const migrated=M.normalize({SP:['nolan'],Bullpen:['left','right','long'],Closer:['closer']},players,2027);
+assert.deepEqual(migrated.LHP,['left']);assert.deepEqual(migrated.RHP,['right','long']);assert.equal(migrated.LongRelief.length,3);
+const parts=M.budgetBreakdown(state.funding,removed,2027,state.charts[2027]);assert.equal(parts.reduce((n,g)=>n+g.value,0),65000);assert.equal(parts.find(g=>g.name==='Catchers').value,65000);
+const removedParts=M.budgetBreakdown(state.funding,removed,2028,state.charts[2028]);assert.equal(removedParts.find(g=>g.name==='Catchers').value,0);assert.equal(removedParts.find(g=>g.name==='Middle infielders').value,5000);
+console.log('Exact roles, bullpen migration, season-effective removal, historical NIL, independent plans, and pie reconciliation passed.');

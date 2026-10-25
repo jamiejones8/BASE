@@ -42,6 +42,7 @@ base_source("R/integrations/player_health_workspace.R", local = FALSE)
 base_source("R/pages/homebase_page.R", local = FALSE)
 base_source("R/data/defense_data_access.R", local = FALSE)
 base_source("R/integrations/wally_defense_workspace.R", local = FALSE)
+base_source("R/integrations/wally_depth_chart_workspace.R", local = FALSE)
 base_source("R/data/defense_attribution.R", local = FALSE)
 base_source("R/data/pitch_retags.R", local = FALSE)
 
@@ -4070,6 +4071,7 @@ BASE_NAV_TABS <- c(
   opponent_scouting  = "tab_opponent_scouting",
   juco_stats         = "tab_juco_stats",
   defense_workspace  = "tab_defense_workspace",
+  rosters            = "tab_rosters",
   homebase           = "tab_homebase",
   data_processing    = "tab_data_processing",
   player_health      = "tab_player_health",
@@ -5144,6 +5146,7 @@ home_tab_ui <- function() {
             home_quick_link("Hitting", "Lineups, team trends, and hitter development", "team_hitting", "hitting-card.jpg"),
             home_quick_link("Opponent Scouting", "Scout NCAA pitchers and hitters", "opponent_scouting", "opponentscouting-card.jpg"),
             home_quick_link("Defensive Analytics", "Positioning, range, and catcher receiving", "defense_workspace", "defenseiveanalytics.webp"),
+            home_quick_link("Rosters & Recruiting", "Depth charts, recruiting classes, and roster planning", "rosters", "Bobcatswalkoff.webp"),
             home_quick_link("HomeBASE", "Search and open an individual player snapshot", "homebase", "homeBASE.jpg"),
             home_quick_link("JUCO Scouting", "Compare junior-college hitters and pitchers", "juco_stats", "jucoscouting.png"),
             home_quick_link("Data Processing", "Retag, validate, and prepare application data", "data_processing", "dataprocessing.jpg"),
@@ -5301,6 +5304,7 @@ base_application_ui <- navbarPage(
   tabPanel("Hitting",          value = "tab_team_hitting",   base_team_hitting_workspace_ui()),
   tabPanel("Opponent Scouting", value = "tab_opponent_scouting", opponent_scouting_workspace_ui()),
   tabPanel("Defense Workspace", value = "tab_defense_workspace", base_team_defense_workspace_ui()),
+  tabPanel("Rosters & Recruiting", value = "tab_rosters", base_rosters_workspace_ui()),
   tabPanel("HomeBASE",         value = "tab_homebase",       homebase_page_ui()),
   tabPanel("JUCO Scouting",    value = "tab_juco_stats",     base_juco_stats_workspace_ui()),
   tabPanel("Data Processing",  value = "tab_data_processing", data_processing_workspace_ui()),
@@ -5422,6 +5426,9 @@ server <- function(input, output, session) {
            identical(input$base_postgame_report_tabs, "Catching AAR"))
     }
   )
+
+  base_lazy_workspace_server(input, session, "tab_rosters",
+    initialize = function() base_rosters_workspace_server(), id = "rosters")
 
   catcher_data <- reactive({
     combine_with_manual(season_data, input$catcher_manual_enabled, input$catcher_manual_csv)
