@@ -36,6 +36,7 @@ def main() -> int:
         "team_hitting",
         "opponent_scouting",
         "defense",
+        "rosters",
         "homebase",
         "juco_stats",
         "data_processing",
@@ -44,8 +45,8 @@ def main() -> int:
     ids = [item.get("id") for item in workspaces]
     if ids != expected_ids:
         fail(f"Workspace order differs from the approved hierarchy: {ids}")
-    if [item.get("order") for item in workspaces] != list(range(1, 10)):
-        fail("Workspace order values must be contiguous from 1 through 9.")
+    if [item.get("order") for item in workspaces] != list(range(1, len(expected_ids) + 1)):
+        fail("Workspace order values must be contiguous and match the approved workspace count.")
 
     navigation = config.get("navigation", {})
     if navigation.get("global_navbar") != "hidden":
@@ -156,6 +157,7 @@ def main() -> int:
         "tab_opponent_scouting",
         "tab_juco_stats",
         "tab_defense_workspace",
+        "tab_rosters",
         "tab_homebase",
         "tab_data_processing",
         "tab_player_health",
@@ -164,20 +166,18 @@ def main() -> int:
     if missing_tabs:
         fail(f"Unified shell is missing workspace routes: {missing_tabs}")
 
-    card_targets = [
-        '"postgame_reports", "postgamereports.jpg"',
-        '"team_pitching", "pitching.jpg"',
-        '"team_hitting", "hitting-card.jpg"',
-        '"opponent_scouting", "opponentscouting-card.jpg"',
-        '"defense_workspace", "defenseiveanalytics.webp"',
-        '"homebase", "homeBASE.jpg"',
-        '"juco_stats", "jucoscouting.png"',
-        '"data_processing", "dataprocessing.jpg"',
-        '"player_health", "medicine.jpg"',
-    ]
-    card_positions = [app_source.find(target) for target in card_targets]
-    if any(position < 0 for position in card_positions) or card_positions != sorted(card_positions):
-        fail("Home cards are missing or differ from the approved nine-workspace order.")
+    # Card routing/order is independent of editorial photo choices.
+    cards = re.findall(
+        r'home_quick_link\(\s*"[^"\n]*"\s*,\s*"[^"\n]*"\s*,\s*"([^"\n]+)"\s*,\s*"([^"\n]+)"\s*\)',
+        app_source,
+    )
+    expected_targets = ["defense_workspace" if key == "defense" else key for key in expected_ids]
+    actual_targets = [target for target, _ in cards]
+    if actual_targets != expected_targets:
+        fail(f"Home card order differs from the approved workspace order: {actual_targets}; expected {expected_targets}")
+    for target, image in cards:
+        if not (ROOT / "www" / image).is_file():
+            fail(f"Home card {target} references a missing photo: {image}")
     if 'id = "base-shell-home"' not in app_source:
         fail("The persistent Home control is not implemented in the app shell.")
     if 'base_source("R/integrations/wally_pitching_workspace.R"' not in app_source:
@@ -251,7 +251,7 @@ def main() -> int:
                     f"{shared_ids}"
                 )
 
-    print("BASE workspace hierarchy and unified shell are valid: Home plus 9 ordered workspaces.")
+    print("BASE workspace hierarchy and unified shell are valid: Home plus 10 ordered workspaces.")
     return 0
 
 

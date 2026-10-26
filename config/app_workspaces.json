@@ -124,8 +124,20 @@
       "catching_policy": "Season-level catcher statistics live here; the single-game catcher AAR and its PDF live in Postgame Reports. Both use shared catching calculations."
     },
     {
-      "id": "homebase",
+      "id": "rosters",
       "order": 6,
+      "title": "Rosters & Recruiting",
+      "description": "Plan depth charts, saved rosters, recruiting classes, and player development.",
+      "implementation_policy": "Embed DepthChartApp with its saved rosters and recruiting logic in the BASE theme.",
+      "tools": [
+        "Depth charts",
+        "Roster planning",
+        "Recruiting"
+      ]
+    },
+    {
+      "id": "homebase",
+      "order": 7,
       "title": "HomeBASE",
       "description": "Search any available player and open a role-aware individual snapshot.",
       "implementation_policy": "Rename and replace BASE Media. Support national search plus direct Texas State roster-card navigation.",
@@ -145,7 +157,7 @@
     },
     {
       "id": "juco_stats",
-      "order": 7,
+      "order": 8,
       "title": "JUCO Scouting",
       "description": "Search and compare junior-college hitting and pitching leaderboards.",
       "implementation_policy": "Host Wally's JucoStatsApp inside the BASE shell while preserving its filters, percentile shading, and standalone workflow.",
@@ -156,7 +168,7 @@
     },
     {
       "id": "data_processing",
-      "order": 8,
+      "order": 9,
       "title": "Data Processing",
       "description": "Prepare, validate, and correct data used throughout BASE.",
       "implementation_policy": "Visible to all users for now. Persistent mutations must still disclose source, target, and saved status.",
@@ -192,7 +204,7 @@
     },
     {
       "id": "player_health",
-      "order": 9,
+      "order": 10,
       "title": "Sports Science",
       "description": "Monitor VALD, ArmCare, PULSE, TrackMan, combined trends, KPI correlations, alerts, and force traces.",
       "implementation_policy": "Embed the Sports Science 2 dashboard inside the BASE shell as a distinct application version, preserve its source calculations and exports, and scope only the presentation layer to BASE styling.",
