@@ -21,8 +21,11 @@ required_data_processing_controls <- c(
       "dp_positioning_scrimmages", "dp_positioning_s27"),
     function(prefix) paste0(prefix, c("_file", "_append", "_status"))
   ), use.names = FALSE),
-  "dp_pulse_events_replace", "dp_pulse_workload_replace", "dp_arm_care_replace",
-  "Replace Arm Care and PULSE exports",
+  unlist(lapply(
+    c("dp_pulse_events", "dp_pulse_workload", "dp_arm_care", "dp_blast"),
+    function(prefix) paste0(prefix, c("_file", "_replace", "_status"))
+  ), use.names = FALSE),
+  "Append Arm Care, PULSE, and Blast exports",
   "dp_csv_source", "dp_csv_editor", "dp_csv_save",
   "dp_scouting_file", "dp_scouting_save", "dp_scouting_status"
 )

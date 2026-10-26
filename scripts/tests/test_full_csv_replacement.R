@@ -57,6 +57,7 @@ stopifnot(position_result$total_rows == 2,
  all(base_read_trackman_import(position_result$destination)$SeasonGroup == "F26"))
 # Sports Science replacement backs up the previous file and rejects stale reviews.
 health_root <- file.path(scratch, "health")
+Sys.setenv(BASE_PLAYER_HEALTH_EXPORT_DIR = health_root)
 required <- base_sports_science_import_target("PULSE_WORKLOAD")$required
 health <- as.data.frame(stats::setNames(rep(list("1"), length(required)), required), check.names = FALSE)
 health$date <- "2026-10-17"
