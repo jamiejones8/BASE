@@ -772,6 +772,18 @@ filter_team <- function(d, team_col, team_code = TEAM_CODE) {
   d[team_mask(d, team_col, team_code), , drop = FALSE]
 }
 
+# Team Total pools pitches and plate appearances, rather than averaging player rates.
+hitting_selection_mask <- function(d, player, bullpen = FALSE) {
+  if(identical(as.character(player), "Team Total")) return(team_mask(d,"BatterTeam"))
+  keep <- !is.na(d$Batter) & d$Batter == player
+  if(bullpen && "Pitcher" %in% names(d)) keep <- keep | (!is.na(d$Pitcher) & d$Pitcher == player)
+  keep
+}
+hitting_report_label <- function(d) {
+  if(".base_team_total" %in% names(d) && any(d$.base_team_total %in% TRUE)) "Team Total"
+  else as.character(d$Batter[[1]])
+}
+
 txst_df <- df %>%
   dplyr::filter(!(is_bullpen %in% TRUE)) %>%
   filter_team("BatterTeam")
@@ -1738,7 +1750,7 @@ base_hitting_aar_builder_ui <- tagList(
       class = "aar-card",
       style = "display:flex; gap:12px; align-items:end; flex-wrap:wrap;",
       selectInput(
-        "aar_hitter", "Hitter", choices = aar_hitters,
+        "aar_hitter", "Hitter", choices = c("Team Total", aar_hitters),
         selected = if (length(aar_hitters)) aar_hitters[[1]] else NULL,
         width = "280px"
       ),
@@ -1827,7 +1839,7 @@ ui <- base_hitting_page(
   ")),
   sidebar = sidebar(
     title = "Select Hitter / Game / Splits",
-    selectInput("Hitter", "Hitter", choices = hitters_txst, selected = hitters_txst[[1]]),
+    selectInput("Hitter", "Hitter", choices = c("Team Total", hitters_txst), selected = hitters_txst[[1]]),
     checkboxGroupInput(
       "hit_season_groups", "Quick-select seasons",
       choices  = SEASON_CHOICES,
@@ -4819,11 +4831,11 @@ server <- function(input, output, session){
     
     d <- if (isTRUE(input$hit_Bullpens)) {
       bullpens_df %>%
-        dplyr::filter((Batter == input$Hitter) | (Pitcher == input$Hitter))
+        dplyr::filter(hitting_selection_mask(bullpens_df,input$Hitter,TRUE))
     } else {
       dd <- df %>%
         dplyr::filter(
-          .data$Batter == input$Hitter,
+          hitting_selection_mask(df,input$Hitter),
           .data$CustomGameID %in% input$Game,
           !(is_bullpen %in% TRUE)
         )
@@ -4833,7 +4845,7 @@ server <- function(input, output, session){
       if (nrow(dd) == 0 && nzchar(TEAM_CODE)) {
         dd <- df %>%
           dplyr::filter(
-            .data$Batter == input$Hitter,
+            hitting_selection_mask(df,input$Hitter),
             .data$CustomGameID %in% input$Game,
             !(is_bullpen %in% TRUE)
           ) %>%
@@ -6685,7 +6697,8 @@ server <- function(input, output, session){
       )
     
     # Keep only this hitter’s **real game** rows (or BP if toggled)
-    d <- d %>% dplyr::filter(.data$Batter == aar_hitter, !(is_bullpen %in% TRUE))
+    d <- d %>% dplyr::filter(hitting_selection_mask(d,aar_hitter), !(is_bullpen %in% TRUE))
+    d$.base_team_total <- identical(aar_hitter,"Team Total")
     
     # Build the hitter's game list (newest → oldest) and pick the current selection
     gf <- if (!is.null(hitter_override) && nzchar(as.character(hitter_override))) {
@@ -6819,7 +6832,7 @@ server <- function(input, output, session){
   
   output$aar_player_name <- renderText({
     d <- aar_data(); if (!nrow(d)) return("")
-    unique(d$Batter)[1]
+    hitting_report_label(d)
   })
   output$aar_game_date <- renderText({
     d <- aar_data(); if (!nrow(d)) return("")
@@ -6832,7 +6845,7 @@ server <- function(input, output, session){
     d <- aar_data()
     if (is.null(d) || !nrow(d)) return(NULL)
 
-    player_name <- name_display(unique(d$Batter)[1] %||% "Hitter")
+    player_name <- name_display(hitting_report_label(d) %||% "Hitter")
     gd <- dplyr::coalesce(d$GameDate, parse_date_any(d$Date), extract_date_from_filename(d$source_file))
     gd <- gd[!is.na(gd)]
     date_label <- if (length(gd)) format(gd[1], "%B %d, %Y") else as.character(input$AARGame %||% "")
@@ -7026,14 +7039,14 @@ server <- function(input, output, session){
     
     if (isTRUE(input$hit_Bullpens)) {
       dd <- bullpens_df %>%
-        dplyr::filter((.data$Batter == h) | (.data$Pitcher == h))
+        dplyr::filter(hitting_selection_mask(bullpens_df,h,TRUE))
       gd <- dplyr::coalesce(parse_date_any(dd$Date), extract_date_from_filename(dd$source_file))
       tibble::tibble(gid = dd$CustomGameID_BP, gdate = gd, season = NA_character_) %>%
         dplyr::distinct(gid, gdate) %>%
         dplyr::arrange(dplyr::desc(gdate), dplyr::desc(gid))
     } else {
       dd <- df %>%
-        dplyr::filter(.data$Batter == h, !(is_bullpen %in% TRUE))
+        dplyr::filter(hitting_selection_mask(df,h), !(is_bullpen %in% TRUE))
       gd <- dplyr::coalesce(dd$GameDate, parse_date_any(dd$Date), extract_date_from_filename(dd$source_file))
       season_col <- if ("SeasonTag" %in% names(dd)) "SeasonTag" else if ("SeasonGroup" %in% names(dd)) "SeasonGroup" else NULL
       sg <- if (!is.null(season_col)) as.character(dd[[season_col]]) else NA_character_
@@ -7050,7 +7063,7 @@ server <- function(input, output, session){
         gid = character(0), gdate = as.Date(character(0)), season = character(0)
       ))
     }
-    dd <- df %>% dplyr::filter(.data$Batter == h, !(is_bullpen %in% TRUE))
+    dd <- df %>% dplyr::filter(hitting_selection_mask(df,h), !(is_bullpen %in% TRUE))
     gd <- dplyr::coalesce(
       dd$GameDate,
       parse_date_any(dd$Date),
@@ -7686,7 +7699,7 @@ server <- function(input, output, session){
       
       
       # ---------- HEADER (Player, date, opponent; logos if available) ----------
-      player_name <- unique(d$Batter)[1] %||% ""
+      player_name <- hitting_report_label(d) %||% ""
       gdates <- dplyr::coalesce(d$GameDate, parse_date_any(d$Date), extract_date_from_filename(d$source_file))
       gdate  <- gdates[!is.na(gdates)][1]
       
@@ -8564,7 +8577,7 @@ server <- function(input, output, session){
   output$hit_aar_pdf <- downloadHandler(
     filename = function() {
       d <- tryCatch(hit_aar_download_data(), error = function(e) NULL)
-      plyr <- if (!is.null(d) && nrow(d) && "Batter" %in% names(d)) gsub("[^A-Za-z0-9]+","_", unique(d$Batter)[1]) else "Player"
+      plyr <- if (!is.null(d) && nrow(d) && "Batter" %in% names(d)) gsub("[^A-Za-z0-9]+","_", hitting_report_label(d)) else "Player"
       gdt  <- if (!is.null(d) && nrow(d) && "GameDate" %in% names(d)) as.character(sort(unique(d$GameDate))[1]) else as.character(Sys.Date())
       sprintf("AAR_%s_%s.pdf", plyr, gdt)
     },
@@ -9519,7 +9532,7 @@ server <- function(input, output, session){
     # Season comparison follows the report's hitter and selected game's season,
     # independently of the Hitting workspace sidebar.
     d_season <- df %>%
-      dplyr::filter(.data$Batter == aar_hitter_value(), !(is_bullpen %in% TRUE))
+      dplyr::filter(hitting_selection_mask(df,aar_hitter_value()), !(is_bullpen %in% TRUE))
     if (!is.na(info$group) && "SeasonGroup" %in% names(d_season)) {
       d_season <- d_season %>%
         dplyr::filter(toupper(trimws(.data$SeasonGroup)) == info$group)

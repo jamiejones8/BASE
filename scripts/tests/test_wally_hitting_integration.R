@@ -547,6 +547,33 @@ shiny::testServer(workspace$server, {
   invisible(output$hit_leaderboard_table)
   invisible(output$leaderboard_team_table)
 
+  # Team Total includes only our hitters and leaves independent workspaces alone.
+  leader_before <- output$hit_leaderboard_table
+  lineup_before <- output$lineup_builder_ui
+  session$setInputs(Hitter="Team Total",PitcherHand="All")
+  session$flushReact()
+  team_games <- games_for_hitter()$gid
+  session$setInputs(Game=team_games)
+  session$flushReact()
+  pooled <- dat_filt()
+  expected <- workspace$df %>% dplyr::filter(
+    workspace$team_mask(workspace$df,"BatterTeam"),
+    CustomGameID %in% team_games, !(is_bullpen %in% TRUE))
+  stopifnot(nrow(pooled)==nrow(expected),nrow(pooled)>0,
+    all(workspace$team_mask(pooled,"BatterTeam")))
+  stopifnot(isTRUE(all.equal(workspace$summarize_overall(pooled)$PA,
+    workspace$summarize_overall(expected)$PA)))
+  for(group in c("Total","Hard","Breaking","Soft")) {
+    session$setInputs(hit_percentile_group=group)
+    stopifnot(grepl("Team Total",output$hit_performance_percentiles$html,fixed=TRUE))
+  }
+  invisible(output$perf_time_series)
+  invisible(output$perf_tbl)
+  stopifnot(identical(leader_before,output$hit_leaderboard_table),identical(lineup_before,output$lineup_builder_ui))
+  team_aar <- aar_game_data_for(team_games[[1]],hitter_override="Team Total")
+  stopifnot(nrow(team_aar)>0,workspace$hitting_report_label(team_aar)=="Team Total")
+  session$setInputs(Hitter=hitter,Game=games,hit_percentile_group="Total")
+
   # Postgame Reports owns separate AAR controls. The PDF must not depend on
   # the legacy Hitting sidebar's player selection being present.
   session$setInputs(Hitter = NULL)
