@@ -988,7 +988,7 @@ table tbody td[style*="background-color"] {
   transition: transform 260ms ease;
 }
 .home-quick-link[data-target="team_pitching"] .home-quick-image { object-position: 50% 8%; }
-.home-quick-link[data-target="team_hitting"] .home-quick-image { object-fit: contain !important; object-position: 50% 50%; transform: scale(1.3); }
+.home-quick-link[data-target="team_hitting"] .home-quick-image { object-fit: contain !important; object-position: 50% 50%; transform: scale(1.65); }
 .home-quick-link[data-target="opponent_scouting"] .home-quick-image { object-position: 50% 45%; }
 .home-quick-link[data-target="defense_workspace"] .home-quick-image { object-position: 50% 8%; }
 .home-quick-link[data-target="homebase"] .home-quick-image { object-position: 50% 2%; }
@@ -1964,5 +1964,5 @@ table tbody td[style*="background-color"] {
 .home-quick-link[data-target="rosters"] .home-quick-image { object-position: 50% 0%; }
 
 /* Preserve bat, ball, faces and raised hands instead of zooming on hover. */
-.home-quick-link[data-target="team_hitting"]:hover .home-quick-image { transform: scale(1.3); }
+.home-quick-link[data-target="team_hitting"]:hover .home-quick-image { transform: scale(1.65); }
 .home-quick-link[data-target="opponent_scouting"]:hover .home-quick-image { transform: none; }

@@ -15,7 +15,10 @@ example_rows <- function(target_id, count = 2L, marker = "new") {
     check.names = FALSE,
     stringsAsFactors = FALSE
   )
-  if (identical(target$id, "ARM_CARE")) {
+  if (identical(target$id,"BLAST")) {
+    rows$Date <- as.character(as.Date("2026-09-20") + seq_len(count))
+    rows$BatSpeed <- marker
+  } else if (identical(target$id, "ARM_CARE")) {
     rows[["First Name"]] <- paste0("Arm", seq_len(count))
     rows[["Last Name"]] <- "Athlete"
     rows[["Exam Date"]] <- format(as.Date("2026-09-20") + seq_len(count), "%m/%d/%Y")
@@ -43,7 +46,7 @@ write_fixture <- function(rows, path) {
 
 for (target_id in names(BASE_SPORTS_SCIENCE_IMPORT_TARGETS)) {
   target <- base_sports_science_import_target(target_id)
-  old_names <- if (identical(target_id, "ARM_CARE")) {
+  old_names <- if (identical(target_id,"BLAST")) "blast.csv" else if (identical(target_id, "ARM_CARE")) {
     c("Daily Log old.csv", "Daily Log newer.csv")
   } else if (identical(target_id, "PULSE_EVENTS")) {
     c("old_events.csv")
@@ -66,7 +69,7 @@ for (target_id in names(BASE_SPORTS_SCIENCE_IMPORT_TARGETS)) {
     fail(target$label, " replacement reported incorrect row or replacement counts.")
   }
   saved <- base_read_sports_science_import(files[[1]])
-  marker_column <- if (identical(target_id, "ARM_CARE")) "Arm Score" else if (identical(target_id, "PULSE_EVENTS")) "tag" else "A:C Ratio"
+  marker_column <- if (identical(target_id,"BLAST")) "BatSpeed" else if (identical(target_id, "ARM_CARE")) "Arm Score" else if (identical(target_id, "PULSE_EVENTS")) "tag" else "A:C Ratio"
   if (nrow(saved) != 2L || !all(saved[[marker_column]] == "new")) {
     fail(target$label, " retained old rows or failed to save the new snapshot.")
   }
@@ -90,3 +93,29 @@ if (!identical(before, after)) {
 }
 
 cat("Sports Science imports passed: schema validation, atomic replacement, old-file removal, and rollback safety.\n")
+
+# Default uploader preserves entire old dates, including all athlete rows.
+for(id in names(BASE_SPORTS_SCIENCE_IMPORT_TARGETS)) {
+  root <- tempfile();dir.create(root)
+  path <- tempfile(fileext=".csv")
+  old <- example_rows(id,1,"old")
+  write_fixture(old,path)
+  base_append_sports_science_import(path,id,root)
+  incoming <- example_rows(id,3,"new")
+  # Multiple athletes/events on the new day must all survive.
+  incoming <- rbind(incoming,incoming[2,,drop=FALSE])
+  write_fixture(incoming,path)
+  result <- base_append_sports_science_import(path,id,root)
+  saved <- base_read_sports_science_import(result$destination)
+  stopifnot(result$inserted_rows==3,result$skipped_rows==1,nrow(saved)==4,
+    identical(as.character(saved[1,]),as.character(old[1,])))
+  again <- base_append_sports_science_import(path,id,root)
+  stopifnot(again$inserted_rows==0,again$skipped_rows==4,again$total_rows==4)
+  before <- tools::md5sum(again$destination)
+  bad <- incoming;bad[[base_sports_science_import_target(id)$date_column]][1]<-"not a date"
+  write_fixture(bad,path)
+  err <- tryCatch(base_append_sports_science_import(path,id,root),error=identity)
+  stopifnot(inherits(err,"error"),identical(before,tools::md5sum(again$destination)))
+  unlink(c(root,path),recursive=TRUE)
+}
+cat("Date append, overlap preservation, multi-event dates, repeat uploads, Blast and invalid-upload safety passed.\n")

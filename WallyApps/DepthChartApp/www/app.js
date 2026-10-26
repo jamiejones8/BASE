@@ -197,7 +197,7 @@ function rosterView(root){
 function armVisualization(){
  const section=el('section','arm-visualization');section.append(el('h2','',`${year} pitcher release and inferred arm angle`));
  const pitchers=active().filter(p=>M.eligible(p,'SP')),points=pitchers.map(p=>({p,point:M.armPoint(p,year)})).filter(d=>d.point);
- section.append(el('p','muted',`${points.length} plotted · ${pitchers.length-points.length} awaiting complete measurements. Release positions are in feet; shoulder anchor is player height minus 10 inches.`));
+ section.append(el('p','muted',`${points.length} plotted · ${pitchers.length-points.length} awaiting complete measurements. Release positions are in feet; shoulder anchor is player height minus 10 inches. Unknown release side uses 1.5 ft for this chart only.`));
  const colors=['#fff','#d8dce0','#cce7b7','#f7e28e','#e7a3a0'];
  const key=el('div','arm-key');CLASSES.forEach((name,i)=>{const item=el('span','arm-key-item'),dot=el('span','arm-class-dot');dot.style.background=colors[i];item.append(dot,document.createTextNode(name));key.append(item);});key.append(el('span','','Solid: Signed'),el('span','','Long dash: Offered'),el('span','','Short dash: Committed'));section.append(key);
  if(points.length){

@@ -129,8 +129,8 @@ function compactMoney(value){
 }
 function armPoint(p,y){
  const has=value=>typeof value==='number'&&Number.isFinite(value);
- if(!active(p,y)||!eligible(p,'SP')||!has(p.heightIn)||!has(p.releaseHeightFt)||!has(p.releaseSideFt)||!['L','R'].includes(p.throws))return null;
- const x=(p.throws==='L'?-1:1)*Math.abs(p.releaseSideFt),anchorY=(p.heightIn-10)/12;
+ if(!active(p,y)||!eligible(p,'SP')||!has(p.heightIn)||!has(p.releaseHeightFt)||!['L','R'].includes(p.throws))return null;
+ const x=(p.throws==='L'?-1:1)*(has(p.releaseSideFt)&&p.releaseSideFt!==0?Math.abs(p.releaseSideFt):1.5),anchorY=(p.heightIn-10)/12;
  return {id:p.id,x,y:p.releaseHeightFt,anchorY,angle:Math.atan2(p.releaseHeightFt-anchorY,Math.abs(x))*180/Math.PI,classYear:grade(p,y),status:p.status};
 }
 const api={positions,defense,arms,limits,labels,grade,active,eligible,throwingHand,reliefGroup,nameClass,lineup,dhCandidates,initial,normalize,project,forward,removeFrom,categories,budgetCategory,budgetBreakdown,amountAt,allocation,budgetSummary,compactMoney,armPoint,reorderDepth,moveDepth};

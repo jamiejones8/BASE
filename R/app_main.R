@@ -4387,10 +4387,10 @@ data_processing_workspace_ui <- function() {
           tags$span(class = "base-tool-eyebrow", "Sports Science source"),
           tags$h3(target$label)
         ),
-        tags$span(class = "base-import-year", "Replace")
+        tags$span(class = "base-import-year", "Append")
       ),
       tags$p(
-        "Upload a complete vendor CSV. BASE validates its schema, then atomically replaces the previous file used by the Sports Science workspace."
+        "Upload a vendor CSV. Dates already stored are kept unchanged; only new calendar dates are appended. Blast accepts a Date or Swing Date column and is stored for future analysis."
       ),
       shiny::fileInput(
         inputId = paste0(input_id, "_file"),
@@ -4401,11 +4401,11 @@ data_processing_workspace_ui <- function() {
       ),
       shiny::actionButton(
         inputId = paste0(input_id, "_replace"),
-        label = paste("Validate and replace", target$label),
+        label = paste("Validate and append", target$label),
         class = "btn-primary base-import-submit"
       ),
       shiny::uiOutput(output_id),
-      full_file_controls(input_id)
+      NULL
     )
   }
 
@@ -4467,16 +4467,17 @@ data_processing_workspace_ui <- function() {
       tags$div(
         class = "base-import-section-heading",
         tags$div(class = "base-eyebrow", "Sports Science ingestion"),
-        tags$h3("Replace Arm Care and PULSE exports"),
+        tags$h3("Append Arm Care, PULSE, and Blast exports"),
         tags$p(
-          "Each validated upload replaces the complete previous vendor export. Existing data remains active if validation or saving fails."
+          "Existing calendar dates win, including all athletes and events on those dates. Only previously unstored dates are added. Invalid uploads leave saved data unchanged."
         )
       ),
       tags$div(
         class = "base-import-grid base-health-import-grid",
         replacement_card("PULSE_EVENTS", "dp_pulse_events", "dp_pulse_events_status"),
         replacement_card("PULSE_WORKLOAD", "dp_pulse_workload", "dp_pulse_workload_status"),
-        replacement_card("ARM_CARE", "dp_arm_care", "dp_arm_care_status")
+        replacement_card("ARM_CARE", "dp_arm_care", "dp_arm_care_status"),
+        replacement_card("BLAST", "dp_blast", "dp_blast_status")
       ),
       tags$div(
         class = "base-import-section-heading",
@@ -4542,7 +4543,8 @@ data_processing_server <- function(input, output, session) {
     PP_S27 = shiny::reactiveVal(NULL),
     PULSE_EVENTS = shiny::reactiveVal(NULL),
     PULSE_WORKLOAD = shiny::reactiveVal(NULL),
-    ARM_CARE = shiny::reactiveVal(NULL)
+    ARM_CARE = shiny::reactiveVal(NULL),
+    BLAST = shiny::reactiveVal(NULL)
   )
 
   render_status <- function(target_id, state) {
@@ -4621,7 +4623,7 @@ data_processing_server <- function(input, output, session) {
     if (!is.null(state) && identical(state$type, "error")) {
       return(tags$div(
         class = "base-import-status is-error",
-        tags$strong("Replacement not saved"),
+        tags$strong("Import not saved"),
         state$message,
         tags$span(class = "base-import-path", status$path)
       ))
@@ -4630,13 +4632,14 @@ data_processing_server <- function(input, output, session) {
       result <- state$result
       return(tags$div(
         class = "base-import-status is-success",
-        tags$strong(paste(target$label, "source replaced")),
+        tags$strong(paste(target$label, "source updated")),
         paste0(
-          format(result$received_rows, big.mark = ","), " rows saved for ",
+          result$inserted_rows, " rows appended; ", result$skipped_rows, " rows on existing dates skipped. ",
+          result$total_rows, " total stored rows. Uploaded dates: ",
           result$first_date, " through ", result$last_date, "."
         ),
         tags$br(),
-        "The Sports Science page will detect this replacement automatically.",
+        if(identical(target_id,"BLAST")) "Blast data is stored for future analysis." else "The Sports Science page will detect this update automatically.",
         tags$span(class = "base-import-path", result$destination)
       ))
     }
@@ -4657,6 +4660,7 @@ data_processing_server <- function(input, output, session) {
 
   output$dp_pulse_events_status <- shiny::renderUI(render_replacement_status("PULSE_EVENTS", states$PULSE_EVENTS()))
   output$dp_pulse_workload_status <- shiny::renderUI(render_replacement_status("PULSE_WORKLOAD", states$PULSE_WORKLOAD()))
+  output$dp_blast_status <- shiny::renderUI(render_replacement_status("BLAST", states$BLAST()))
   output$dp_arm_care_status <- shiny::renderUI(render_replacement_status("ARM_CARE", states$ARM_CARE()))
 
   csv_render_version <- shiny::reactiveVal(0L)
@@ -4979,15 +4983,15 @@ data_processing_server <- function(input, output, session) {
       target <- base_sports_science_import_target(target_id)
       upload <- input[[paste0(input_prefix, "_file")]]
       if (is.null(upload) || !nzchar(upload$datapath)) {
-        state(list(type = "error", message = paste("Choose a", target$label, "CSV before replacing the source.")))
+        state(list(type = "error", message = paste("Choose a", target$label, "CSV before appending data.")))
         return()
       }
       result <- tryCatch(
         shiny::withProgress(
-          message = paste("Replacing", target$label),
+          message = paste("Appending", target$label),
           value = 0.35,
           {
-            replaced <- base_replace_sports_science_import(upload$datapath, target$id)
+            replaced <- base_append_sports_science_import(upload$datapath, target$id)
             shiny::incProgress(0.65)
             replaced
           }
@@ -5001,7 +5005,7 @@ data_processing_server <- function(input, output, session) {
       }
       state(list(type = "success", result = result))
       shiny::showNotification(
-        paste(result$target_label, "replaced with", format(result$received_rows, big.mark = ","), "rows."),
+        paste(result$target_label, result$inserted_rows, "rows appended;", result$skipped_rows, "overlap rows skipped."),
         type = "message",
         duration = 6
       )
@@ -5011,6 +5015,7 @@ data_processing_server <- function(input, output, session) {
   register_replacement("PULSE_EVENTS", "dp_pulse_events", states$PULSE_EVENTS)
   register_replacement("PULSE_WORKLOAD", "dp_pulse_workload", states$PULSE_WORKLOAD)
   register_replacement("ARM_CARE", "dp_arm_care", states$ARM_CARE)
+  register_replacement("BLAST", "dp_blast", states$BLAST)
 
   # Full-source replacement is separate from the single-game append workflow.
   pending_full_file <- shiny::reactiveVal(NULL)

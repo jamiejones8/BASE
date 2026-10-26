@@ -77,13 +77,25 @@ for (expr in parse("R/app_main.R")) {
 }
 html <- as.character(data_processing_workspace_ui())
 prefixes <- c("dp_f26", "dp_ps27", "dp_s27", "dp_bp", "dp_positioning_f26",
- "dp_positioning_scrimmages", "dp_positioning_s27", "dp_pulse_events", "dp_pulse_workload", "dp_arm_care", "dp_scouting")
+ "dp_positioning_scrimmages", "dp_positioning_s27", "dp_scouting")
 for (prefix in prefixes) for (suffix in c("_download_full", "_full_file", "_full_status")) {
  stopifnot(grepl(paste0(prefix, suffix), html, fixed = TRUE))
+}
+# Vendor drop zones append dates; they must not expose replacement uploaders.
+for(prefix in c("dp_pulse_events","dp_pulse_workload","dp_arm_care","dp_blast")) {
+ stopifnot(grepl(paste0(prefix,"_file"),html,fixed=TRUE),
+  grepl(paste0(prefix,"_replace"),html,fixed=TRUE),
+  !grepl(paste0(prefix,"_full_file"),html,fixed=TRUE))
 }
 for (name in c("base_clear_team_pitching_cache", "base_clear_team_hitting_cache", "base_clear_wally_pitching_state", "base_clear_wally_hitting_state", "base_clear_wally_defense_state", "homebase_clear_history_cache")) assign(name, function() NULL)
 shiny::testServer(data_processing_server, {
  session$flushReact()
+ blast_upload <- file.path(scratch,"blast-upload.csv")
+ utils::write.csv(data.frame(`Swing Date`=c("2026-10-20","2026-10-21"),BatSpeed=c(70,75),check.names=FALSE),blast_upload,row.names=FALSE)
+ session$setInputs(dp_blast_file=list(datapath=blast_upload,name="blast-upload.csv"),dp_blast_replace=1)
+ stopifnot(states$BLAST()$type=="success",states$BLAST()$result$inserted_rows==2)
+ session$setInputs(dp_blast_replace=2)
+ stopifnot(states$BLAST()$result$inserted_rows==0,states$BLAST()$result$skipped_rows==2)
  session$setInputs(dp_f26_full_file = list(datapath = upload, name = "edited.csv"))
  stopifnot(pending_full_file()$target_id == "F26", nrow(base_read_trackman_import(path)) == 2)
  session$setInputs(dp_confirm_full_replace = 1)

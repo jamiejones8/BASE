@@ -1,10 +1,8 @@
-# Atomic replacement imports for the Sports Science workspace.
-#
-# These sources are vendor snapshots, not cumulative feeds. A successful
-# upload replaces every older matching export so the embedded ArmCare and
-# PULSE views read only the newly supplied file.
+# Vendor imports support append-by-calendar-date and explicit full replacement.
 
 BASE_SPORTS_SCIENCE_IMPORT_TARGETS <- list(
+  BLAST = list(id="BLAST", label="Blast", filename="blast.csv", pattern="^blast[.]csv$",
+    required=c("Date"), date_column="Date", date_kind="armcare_date"),
   PULSE_EVENTS = list(
     id = "PULSE_EVENTS",
     label = "PULSE Events",
@@ -107,6 +105,11 @@ base_validate_sports_science_import <- function(rows, target_id) {
   rows <- tibble::as_tibble(rows)
   if (!nrow(rows)) stop("The selected ", target$label, " CSV has no data rows.", call. = FALSE)
 
+  if(identical(target$id,"BLAST") && !"Date" %in% names(rows)) {
+    aliases <- tolower(gsub("[^a-zA-Z]","",names(rows)))
+    col <- which(aliases %in% c("date","swingdate","recordeddate","datetime","timestamp","recordedat"))
+    if(length(col)==1) names(rows)[col] <- "Date"
+  }
   missing <- setdiff(target$required, names(rows))
   if (length(missing)) {
     stop(
@@ -116,15 +119,16 @@ base_validate_sports_science_import <- function(rows, target_id) {
     )
   }
 
-  first_name <- if (identical(target$id, "ARM_CARE")) rows[["First Name"]] else rows$firstName
-  last_name <- if (identical(target$id, "ARM_CARE")) rows[["Last Name"]] else rows$lastName
-  named_rows <- nzchar(trimws(ifelse(is.na(first_name), "", first_name))) |
-    nzchar(trimws(ifelse(is.na(last_name), "", last_name)))
-  if (!any(named_rows)) {
-    stop(target$label, " must contain at least one athlete name.", call. = FALSE)
+  if (!identical(target$id,"BLAST")) {
+    first_name <- if (identical(target$id, "ARM_CARE")) rows[["First Name"]] else rows$firstName
+    last_name <- if (identical(target$id, "ARM_CARE")) rows[["Last Name"]] else rows$lastName
+    named_rows <- nzchar(trimws(ifelse(is.na(first_name), "", first_name))) |
+      nzchar(trimws(ifelse(is.na(last_name), "", last_name)))
+    if (!any(named_rows)) stop(target$label, " must contain at least one athlete name.", call. = FALSE)
   }
 
   raw_dates <- trimws(as.character(rows[[target$date_column]]))
+  if(identical(target$id,"BLAST")) raw_dates <- sub("[T ].*$","",raw_dates)
   parsed <- switch(
     target$date_kind,
     datetime = suppressWarnings(as.POSIXct(raw_dates, format = "%Y-%m-%dT%H:%M:%OS", tz = "UTC")),
@@ -149,7 +153,7 @@ base_validate_sports_science_import <- function(rows, target_id) {
 }
 
 base_replace_sports_science_import <- function(upload_path, target_id, root = NULL,
-                                              expected_fingerprint = NULL, check_fingerprint = FALSE) {
+                                              expected_fingerprint = NULL, check_fingerprint = FALSE, append_dates = FALSE) {
   target <- base_sports_science_import_target(target_id)
   directory <- base_sports_science_import_root(root)
   destination <- base_sports_science_import_path(target$id, root = directory)
@@ -180,13 +184,31 @@ base_replace_sports_science_import <- function(upload_path, target_id, root = NU
   )
   checked <- base_validate_sports_science_import(incoming, target$id)
 
+  prior_files <- base_sports_science_import_files(target$id, root = directory)
+  combined <- checked$rows
+  inserted_rows <- nrow(combined); skipped_rows <- 0L
+  if(isTRUE(append_dates)) {
+    existing <- list(); stored_dates <- character()
+    # Earlier stored exports win if historical files also overlap each other.
+    if(length(prior_files)) prior_files <- prior_files[order(file.info(prior_files)$mtime,prior_files)]
+    for(path in prior_files) {
+      prior <- base_validate_sports_science_import(base_read_sports_science_import(path),target$id)
+      days <- as.character(as.Date(prior$dates))
+      keep <- !days %in% stored_dates
+      existing[[length(existing)+1L]] <- prior$rows[keep,,drop=FALSE]
+      stored_dates <- union(stored_dates,days)
+    }
+    keep <- !as.character(as.Date(checked$dates)) %in% stored_dates
+    inserted_rows <- sum(keep); skipped_rows <- sum(!keep)
+    combined <- dplyr::bind_rows(c(existing,list(checked$rows[keep,,drop=FALSE])))
+  }
   staged <- tempfile(pattern = ".base-sports-science-", tmpdir = directory, fileext = ".csv")
   on.exit(if (file.exists(staged)) unlink(staged), add = TRUE)
-  if (!file.copy(upload_path, staged, overwrite = TRUE) || file.info(staged)$size <= 0) {
+  readr::write_csv(combined,staged,na="")
+  if (!file.exists(staged) || file.info(staged)$size <= 0) {
     stop("The uploaded ", target$label, " file could not be staged.", call. = FALSE)
   }
 
-  prior_files <- base_sports_science_import_files(target$id, root = directory)
   if (isTRUE(check_fingerprint)) invisible(lapply(prior_files, base_backup_source_csv))
   backup_dir <- tempfile(pattern = paste0(".base-", tolower(target$id), "-previous-"), tmpdir = directory)
   if (!dir.create(backup_dir, showWarnings = FALSE)) {
@@ -221,6 +243,7 @@ base_replace_sports_science_import <- function(upload_path, target_id, root = NU
     target_label = target$label,
     destination = destination,
     received_rows = nrow(checked$rows),
+    inserted_rows = inserted_rows, skipped_rows = skipped_rows, total_rows = nrow(combined),
     replaced_files = length(prior_files),
     first_date = as.character(min(checked$dates)),
     last_date = as.character(max(checked$dates))
@@ -255,4 +278,8 @@ base_sports_science_source_status <- function(target_id, root = NULL) {
     size = unname(info$size[[1]]),
     modified = unname(info$mtime[[1]])
   )
+}
+
+base_append_sports_science_import <- function(upload_path,target_id,root=NULL) {
+  base_replace_sports_science_import(upload_path,target_id,root=root,append_dates=TRUE)
 }

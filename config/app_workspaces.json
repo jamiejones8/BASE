@@ -199,6 +199,12 @@
           "title": "Bullpen TrackMan Import",
           "storage": "Active cumulative bullpen CSV configured by BASE_BULLPEN_DATA_FILE",
           "behavior": "Validate one bullpen session and Texas State participation, deduplicate stable pitch IDs, then append atomically to the source loaded by Team Pitching."
+        },
+        {
+          "id": "blast_import",
+          "title": "Blast CSV Import",
+          "storage": "blast.csv in the configured persistent vendor import directory",
+          "behavior": "Store all columns for future analysis. Keep existing calendar dates unchanged and append all rows from new dates."
         }
       ]
     },
