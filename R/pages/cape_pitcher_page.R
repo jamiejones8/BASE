@@ -142,13 +142,8 @@ cape_pitcher_arm_angle_value <- function(rel_height, rel_side, pitcher_throws,
     return(NA_real_)
   }
 
-  shoulder_height <- height_feet * 0.7
-  adjusted_rel_side <- rel_side - set_position
-  side_eff <- if (identical(pitcher_throws, "Left")) {
-    -adjusted_rel_side
-  } else {
-    adjusted_rel_side
-  }
+  shoulder_height <- height_feet - 10/12
+  side_eff <- abs(rel_side)
 
   atan2(rel_height - shoulder_height, side_eff) * (180 / pi)
 }
@@ -1806,7 +1801,7 @@ cape_pitcher_player_page_ui <- function() {
                 class = "btn btn-default btn-sm btn-block"
               ),
               tags$p(
-                "Uses the current pitcher's average release height and release side with shoulder height set to 70% of the entered height.",
+                "Uses the current pitcher's average release height and release side with shoulder height set to the entered height minus 10 inches.",
                 class = "cpp-retag-note"
               ),
               tags$div(

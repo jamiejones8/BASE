@@ -2310,15 +2310,15 @@ arm_angle_segments <- function(p, limit = 25, default_height_ft = 6 + 2/12) {
       .groups = "drop"
     ) %>%
     dplyr::mutate(
-      adj = RelHeight - 0.7 * pitcher_height,
-      slope = adj / abs(RelSide),
-      x_abs = dplyr::if_else(slope >= 1, limit / slope, limit),
+      adj = RelHeight - (pitcher_height - 10/12),
+      angle = atan2(adj, abs(RelSide)),
+      ray_scale = limit / pmax(abs(cos(angle)), abs(sin(angle))),
       x = 0,
       y = 0,
-      xend = sign(RelSide) * x_abs,
-      yend = slope * x_abs
+      xend = ifelse(RelSide < 0, -1, 1) * cos(angle) * ray_scale,
+      yend = sin(angle) * ray_scale
     ) %>%
-    dplyr::filter(is.finite(slope), slope > 0, is.finite(xend), is.finite(yend), yend > 0) %>%
+    dplyr::filter(is.finite(RelSide), is.finite(adj), is.finite(xend), is.finite(yend)) %>%
     dplyr::select(PitchType, x, y, xend, yend)
 }
 
@@ -8533,7 +8533,7 @@ server <- function(input, output, session){
         
         hand <- guess_throw_hand(input$aar_pitcher, gp)
         s    <- movement_line_slope(hand, gp)
-        deg  <- if (is.finite(s)) atan(-s) * 180 / pi else NA_real_
+        deg  <- if (is.finite(s)) atan(s) * 180 / pi else NA_real_
         
         meta  <- aar_selected_game_meta()
         gdate <- meta$date
@@ -8660,7 +8660,7 @@ server <- function(input, output, session){
 
     hand <- guess_throw_hand(pitcher, gp)
     slope <- movement_line_slope(hand, gp)
-    deg <- if (is.finite(slope)) atan(-slope) * 180 / pi else NA_real_
+    deg <- if (is.finite(slope)) atan(slope) * 180 / pi else NA_real_
     date_str <- if (!is.na(gdate)) format(gdate, "%B %d, %Y") else as.character(game_id)
     game_label <- if (nzchar(opponent)) paste(date_str, "-", pitching_team_display_text(opponent)) else date_str
 
@@ -12577,7 +12577,7 @@ server <- function(input, output, session){
     showNotification("Re-tags applied (session only).", type = "message", duration = 4)
   })
   
-  # ---- Arm-angle line slope: cot(theta) = adj/opp in (iVB vs HB) space ----
+  # ---- Arm-angle line slope from horizontal, shoulder = height minus 10 inches ----
   movement_line_slope <- function(hand, d, default_height_ft = 6 + 2/12) {
     rel_z <- suppressWarnings(mean(d$RelHeight, na.rm = TRUE))
     rel_x <- suppressWarnings(mean(d$RelSide,  na.rm = TRUE))
@@ -12590,9 +12590,9 @@ server <- function(input, output, session){
       h <- suppressWarnings(as.numeric(dplyr::first(d$PitcherHeight[!is.na(d$PitcherHeight)])))
       if (is.finite(h)) height_ft <- if (h > 8) h/12 else h
     }
-    adj <- rel_z - 0.7 * height_ft; opp <- abs(rel_x)
-    if (!is.finite(adj) || !is.finite(opp) || opp == 0 || adj <= 0) return(NA_real_)
-    adj / opp
+    adj <- rel_z - (height_ft - 10/12); opp <- abs(rel_x)
+    if (!is.finite(adj) || !is.finite(opp)) return(NA_real_)
+    adj / max(opp, .Machine$double.eps)
   }
 
   # ---- Arm-angle in degrees from release metrics ----
@@ -12600,10 +12600,10 @@ server <- function(input, output, session){
     rel_height <- suppressWarnings(as.numeric(rel_height))
     rel_side   <- suppressWarnings(as.numeric(rel_side))
     height_ft  <- suppressWarnings(as.numeric(height_ft))
-    adj <- rel_height - 0.7 * height_ft
+    adj <- rel_height - (height_ft - 10/12)
     opp <- abs(rel_side)
-    if (!is.finite(adj) || !is.finite(opp) || opp == 0 || adj <= 0) return(NA_real_)
-    atan(opp / adj) * 180 / pi
+    if (!is.finite(adj) || !is.finite(opp)) return(NA_real_)
+    atan2(adj, opp) * 180 / pi
   }
 
   resolve_pitcher_height_ft <- function(pitcher_name, height_ft = NA_real_, default_height_ft = 6 + 2/12) {
@@ -14016,12 +14016,6 @@ function(el,x){
   hitter_view_arm_angle <- reactive({
     d <- movement_plot_data()
     if (!nrow(d)) return(NA_real_)
-
-    if ("arm_angle" %in% names(d)) {
-      measured <- suppressWarnings(as.numeric(d$arm_angle))
-      measured <- abs(measured[is.finite(measured)])
-      if (length(measured)) return(mean(measured))
-    }
 
     rel_height <- suppressWarnings(mean(as.numeric(d$RelHeight), na.rm = TRUE))
     rel_side <- suppressWarnings(mean(as.numeric(d$RelSide), na.rm = TRUE))

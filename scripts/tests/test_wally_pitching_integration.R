@@ -530,8 +530,8 @@ angle_segments <- workspace$arm_angle_segments(aar_render_payload$game)
 if (nrow(angle_segments) < 2L || anyDuplicated(angle_segments$PitchType)) {
   fail("Pitching AAR does not draw a separate arm-angle ray for each pitch type.")
 }
-if (any(angle_segments$y != 0) || any(!is.finite(angle_segments$yend)) || any(angle_segments$yend <= 0)) {
-  fail("Pitching AAR arm-angle rays extend outside the positive y axis.")
+if (any(angle_segments$y != 0) || any(!is.finite(angle_segments$yend))) {
+  fail("Pitching AAR arm-angle rays have invalid endpoints.")
 }
 movement_layers <- workspace$movement_plot(aar_render_payload$game)$layers
 if (any(vapply(movement_layers, function(layer) inherits(layer$geom, "GeomAbline"), logical(1)))) {
@@ -555,3 +555,10 @@ cat(
 team_qa <- Sys.getenv('BASE_PITCHING_TEAM_QA','')
 if (nzchar(team_qa)) ggplot2::ggsave(team_qa,
   workspace$compose_team_report_plot(aar_render_payload$game,aar_render_payload$season,season_col_label='2026 Season'),width=8.5,height=11)
+
+slot_fixture <- tibble::tibble(PitchType=c("Overhand","Sidearm","Submarine"),
+ RelHeight=c(6, 64/12, 4),RelSide=c(2,2,-2),PitcherHeight=74)
+rays <- workspace$arm_angle_segments(slot_fixture)
+expected <- atan2(slot_fixture$RelHeight-(74-10)/12,abs(slot_fixture$RelSide))*180/pi
+actual <- atan2(rays$yend,abs(rays$xend))*180/pi
+stopifnot(isTRUE(all.equal(actual,expected[match(rays$PitchType,slot_fixture$PitchType)])))

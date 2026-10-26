@@ -1960,3 +1960,5 @@ table tbody td[style*="background-color"] {
 #hit_leaderboard_table table, #leaderboard_team_table table {
   width: max-content !important; min-width: 100%; table-layout: auto; white-space: nowrap;
 }
+
+.home-quick-link[data-target="rosters"] .home-quick-image { object-position: 50% 0%; }

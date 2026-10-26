@@ -556,17 +556,17 @@ calculateArmAngle <- function(df) {
     stop(paste("DataFrame is missing required columns:", paste(missing_cols, collapse = ", ")))
   }
 
-  # `set` shifts the assumed standing position on the rubber (feet from center,
-  # +ve = 3B side, -ve = 1B side). Default 0 = middle of rubber.
+  # Match recruiting: shoulder anchor at center, ten inches below player height.
+  # Keep the legacy set column for compatibility; it does not shift this anchor.
   if (!"set" %in% names(df)) df$set <- 0
 
   df <- df %>%
     mutate(
       set_offset = ifelse(is.na(set), 0, set),
-      shoulder_height = height * 0.7,
+      shoulder_height = height - 10/12,
       vertical_distance = RelHeight - shoulder_height,
       adjusted_RelSide = RelSide - set_offset,
-      side_eff = ifelse(PitcherThrows == "Left", -adjusted_RelSide, adjusted_RelSide),
+      side_eff = abs(RelSide),
       armangle = atan2(vertical_distance, side_eff) * (180 / pi)
     ) %>%
     select(-shoulder_height, -vertical_distance, -adjusted_RelSide, -set_offset, -side_eff)
@@ -1698,7 +1698,7 @@ pitcher_card_ui <- function() {
                        selected = "tagged", inline = TRUE),
           tags$label("Enter Pitcher Height (only used for pitchers not in the height CSV)",
                      style = "font-weight:bold; margin-top:8px;"),
-          helpText("Arm angle = atan2(RelHeight - shoulder, RelSide), shoulder = 70% of height. ",
+          helpText("Arm angle = atan2(RelHeight - shoulder, abs(RelSide)), shoulder = height minus 10 inches. ",
                    "Without a height the arm-angle estimate (and Stuff+) can't be computed, so set ",
                    "it here for pitchers missing from the height CSV."),
           fluidRow(
@@ -2114,7 +2114,7 @@ season_pitcher_card_ui <- function() {
                        selected = "tagged", inline = TRUE),
           tags$label("Enter Pitcher Height (only used for pitchers not in the height CSV)",
                      style = "font-weight:bold; margin-top:8px;"),
-          helpText("Arm angle = atan2(RelHeight - shoulder, RelSide), shoulder = 70% of height. ",
+          helpText("Arm angle = atan2(RelHeight - shoulder, abs(RelSide)), shoulder = height minus 10 inches. ",
                    "Without a height the arm-angle estimate (and Stuff+) can't be computed, so set ",
                    "it here for pitchers missing from the height CSV."),
           fluidRow(
