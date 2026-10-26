@@ -1,0 +1,5 @@
+Source: cleaned 2026 NCAA D1 Pitching/Hitting parquet.
+Method: mean remaining runs in complete half innings, one observation per PA/count/out state.
+TrackMan source does not contain base occupancy. This 36-state reference plus walk/strikeout endpoints averages over runners and is an estimate, not Umpire Scorecards' 288-state MLB model.
+Complete-state observations: 1891236
+Complete half innings: 112550

@@ -879,7 +879,17 @@ base_wally_pitching_environment <- function(team_rows) {
   }
 
   workspace <- new.env(parent = globalenv())
+  workspace$BASE_PITCHING_APP_DIR <- dirname(BASE_WALLY_PITCHING_FILE)
   workspace$BASE_PITCHING_DATA <- team_rows
+  workspace$BASE_PITCHING_SOURCE_SIGNATURE <- function() {
+    paths <- base_pitching_supplement_paths()
+    info <- file.info(paths)
+    paste(paths,info$size,sprintf("%.6f",as.numeric(info$mtime)),collapse="|")
+  }
+  workspace$BASE_PITCHING_RELOAD <- function() {
+    base_clear_wally_pitching_state()
+    base_wally_pitching_environment(base_load_team_pitching_data(refresh=TRUE))$df
+  }
   workspace$BASE_PITCHING_D1_PROCESS_BENCHMARKS <- base_d1_aar_benchmarks()$pitching
   workspace$BASE_PITCHING_EMBEDDED <- TRUE
   workspace$BASE_PITCHING_PERCENTILE_REFERENCE_PATH <- base_project_path(

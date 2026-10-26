@@ -286,7 +286,20 @@ if (!nzchar(process_leaderboard_pdf)) {
   process_leaderboard_pdf <- tempfile(fileext = ".pdf")
   on.exit(unlink(process_leaderboard_pdf), add = TRUE)
 }
+refresh_probe <- new.env(parent=emptyenv()); refresh_probe$signature <- "original"; refresh_probe$calls <- 0L
+workspace$BASE_PITCHING_SOURCE_SIGNATURE <- function() refresh_probe$signature
+workspace$BASE_PITCHING_RELOAD <- function() {
+  refresh_probe$calls <- refresh_probe$calls+1L
+  updated <- workspace$df
+  updated$PitchNo[1] <- 261L
+  updated
+}
 shiny::testServer(workspace$server, {
+  session$flushReact()
+  refresh_probe$signature <- "saved-corrections"
+  session$elapse(1600)
+  stopifnot(refresh_probe$calls==1L,rv$df$PitchNo[1]==261L)
+  rv$df <- workspace$df
   session$setInputs(
     PitcherInput = pitcher,
     season_groups = "S26",
@@ -482,6 +495,13 @@ workspace$render_AAR_pdf(
   arm_angle_deg = NULL,
   season_col_label = "Season"
 )
+# External logos must render without invalid grob units; unknown teams fall back.
+team_palette <- function(code) list(logo_url=if(code=="TCU_HFG") "fixture-tcu" else NA_character_)
+fetch_team_logo <- function(code,url) if(!is.na(url)) array(.5,dim=c(2,2,3)) else NULL
+external_game <- aar_render_payload$game
+external_game$PitcherTeam <- "TEX_BOB"; external_game$HomeTeam <- "TCU_HFG"; external_game$AwayTeam <- "TEX_BOB"
+invisible(ggplot2::ggplotGrob(workspace$compose_AAR_plot(external_game,aar_render_payload$season,pitcher,"External fixture")))
+rm(team_palette,fetch_team_logo)
 pitch_type_table <- workspace$build_pitchtype_perf_table(
   aar_render_payload$game,
   aar_render_payload$season

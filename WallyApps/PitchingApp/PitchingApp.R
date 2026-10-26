@@ -385,9 +385,34 @@ pitching_pa_key <- function(d) {
   paste(game, value("Top/Bottom"), value("Inning"), value("PAofInning"), sep = "|")
 }
 
+# Saved TrackMan tags are authoritative; physical CSV row order is not chronology.
+order_pitching_report_rows <- function(d) {
+  if (!nrow(d)) return(d)
+  keys <- list()
+  for (nm in c("CustomGameID", "GameUID", "GameID", "Date")) {
+    if (nm %in% names(d)) { keys[[length(keys)+1L]] <- as.character(d[[nm]]); break }
+  }
+  for (nm in intersect(c("PitchNo", "Inning", "PAofInning", "PitchofPA", "row_in_file"),names(d)))
+    keys[[length(keys)+1L]] <- suppressWarnings(as.numeric(as.character(d[[nm]])))
+  if (!length(keys)) return(d)
+  d[do.call(order,c(keys,list(na.last=TRUE))),,drop=FALSE]
+}
+rebuild_pitching_report_pa <- function(d) {
+  d <- order_pitching_report_rows(tibble::as_tibble(d))
+  if (all(c("Inning","PAofInning") %in% names(d)) &&
+      all(!is.na(d$Inning) & !is.na(d$PAofInning) & nzchar(as.character(d$PAofInning)))) {
+    d$PA_ID <- pitching_pa_key(d)
+    d$PitchNum <- if ("PitchofPA" %in% names(d)) suppressWarnings(as.integer(as.character(d$PitchofPA))) else NA_integer_
+    d <- d %>% dplyr::group_by(PA_ID) %>%
+      dplyr::mutate(PitchNum=dplyr::coalesce(PitchNum,dplyr::row_number())) %>% dplyr::ungroup()
+    d$FirstPitch <- d$PitchNum == 1L
+  }
+  d
+}
+
 # Ensure PA_ID, PitchNum, StrikesPre/BallsPre exist; returns updated df
 ensure_counts <- function(d) {
-  d <- tibble::as_tibble(d)
+  d <- rebuild_pitching_report_pa(d)
   # PA_ID / PitchNum
   if (!("PA_ID" %in% names(d) && "PitchNum" %in% names(d))) {
     # Prefer explicit pitch/PA columns if present
@@ -2955,7 +2980,7 @@ safe_tbl_plot <- function(obj, title = "Table", season_col_label = "Season") {
   tbl <- if (inherits(obj, "data.frame")) {
     if (title == "Process Metrics") txst_process_table(obj, season_col_label = season_col_label)
     else if (title == "Count Breakdown") txst_count_breakdown_table(obj)
-    else if (title == "Pitch Type Performance") txst_ptperf_table(obj)
+    else if (grepl("Pitch Type Performance$", title)) txst_ptperf_table(obj)
     else as_txst_table(obj)
   } else obj
   base_titled_report_table(tbl, title)
@@ -3364,7 +3389,7 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
   row2_left  <- safe_tbl_plot(proc_df, "Process Metrics", season_col_label = season_col_label_local) +
     theme(plot.margin = margin(4,6,4,6))
   
-  row2_right <- safe_tbl_plot(ptpf_df, "Pitch Type Performance", season_col_label = season_col_label_local) +
+  row2_right <- safe_tbl_plot(ptpf_df, "Season Pitch Type Performance", season_col_label = season_col_label_local) +
     theme(plot.margin = margin(4,6,4,6))
   
   row3 <- safe_tbl_plot(mu_df, "Pitch Movement & Usage", season_col_label = season_col_label_local) +
@@ -3379,11 +3404,27 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
     theme(plot.margin = margin(0,0,0,0))
   zL  <- strike_zone_plot(p_l, "Locations - vs LHH", show_batter = TRUE, batter_side = "L") +
     theme(plot.margin = margin(0,0,0,0))
-  mov <- movement_plot(game_p, arm_angle_deg) + theme(plot.margin = margin(0,0,0,0))
+  mov <- movement_plot(game_p, arm_angle_deg) + theme(plot.margin = margin(0,0,0,0),
+    legend.text=element_text(size=6),legend.title=element_text(size=7),
+    legend.key.height=grid::unit(.08,"in"),legend.spacing.y=grid::unit(0,"pt"))
   
   # ---------- Assemble rows ----------
   row1 <- header + patchwork::plot_spacer() + patchwork::plot_layout(widths = c(1,0), heights = 1)
-  row1b <- safe_tbl_plot(release_df, "Release Points") | patchwork::plot_spacer()
+  game_ptpf_df <- build_pitchtype_perf_table(game_p, NULL)
+  game_ptpf <- safe_tbl_plot(game_ptpf_df, "Game Pitch Type Performance", season_col_label = season_col_label_local)
+  left_tables <- safe_tbl_plot(release_df, "Release Points") / row2_left + patchwork::plot_layout(heights=c(1,3))
+  table_height <- function(tbl) {
+    g <- base_report_table_grob(tbl)
+    if(is.null(g)) return(1)
+    sum(grid::convertHeight(g$heights,"in",valueOnly=TRUE)) + 21/72 + .24
+  }
+  game_table_height <- table_height(txst_ptperf_table(game_ptpf_df))
+  season_table_height <- table_height(txst_ptperf_table(ptpf_df))
+  band_height <- max(game_table_height+season_table_height,
+    table_height(as_txst_table(release_df))+table_height(txst_process_table(proc_df,season_col_label_local)))
+  movement_height <- table_height(as_txst_table(mu_df))
+  right_tables <- game_ptpf / row2_right + patchwork::plot_layout(heights=c(game_table_height,season_table_height))
+  row1b <- left_tables | right_tables
   row4 <- (mov | (zR / zL)) + patchwork::plot_layout(widths = c(1, 1))
   row4 <- row4 & theme(plot.margin = margin(0,0,0,0))
   
@@ -3391,8 +3432,8 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
   row2 <- (row2_left | row2_right) + patchwork::plot_layout(widths = c(1, 1))
   
   
-  final <- row1 / row1b / row2 / row3 / row4 +
-    patchwork::plot_layout(heights = c(0.12, 0.10, 0.22, 0.22, 0.34))
+  final <- row1 / row1b / row3 / row4 +
+    patchwork::plot_layout(heights = grid::unit(c(1.1,band_height,movement_height,1),c("in","in","in","null")))
   
   # ---------- AAR-only: watermark + Bobcat corner logo ----------
   # Find assets
@@ -3431,14 +3472,20 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
     }
   }
   
+  matchup <- if (exists("base_report_matchup",mode="function")) base_report_matchup(game_raw,"PitcherTeam") else NULL
+  opponent_image <- if (!is.null(matchup)) base_report_opponent_image(matchup) else NULL
+  if (!is.null(opponent_image) && !is.null(txst_grob)) txst_grob <- grid::editGrob(txst_grob,x=grid::unit(.80,"npc"),width=grid::unit(.075,"npc"))
+  opponent_grob <- if (!is.null(opponent_image)) grid::rasterGrob(opponent_image,x=.98,y=.98,width=grid::unit(.10,"npc"),just=c("right","top"),interpolate=TRUE) else NULL
   cowplot::ggdraw() +
     { if (!is.null(wm_grob)) cowplot::draw_grob(wm_grob, x = 0.5, y = 0.5, width = 1, height = 1) } +
     cowplot::draw_plot(final, x = 0, y = 0, width = 1, height = 1) +
-    { if (!is.null(txst_grob)) cowplot::draw_grob(txst_grob, x=0, y=0, width=1, height=1) }
+    { if (!is.null(txst_grob)) cowplot::draw_grob(txst_grob, x=0, y=0, width=1, height=1) } +
+    { if (!is.null(opponent_grob)) cowplot::draw_grob(opponent_grob) } +
+    { if (!is.null(opponent_grob)) cowplot::draw_label(matchup$separator,x=.845,y=.96,size=12,fontface="bold") }
 }
 
 compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {
-  d <- tibble::as_tibble(game_p)
+  d <- rebuild_pitching_report_pa(game_p)
   if (is.null(d) || !nrow(d)) {
     return(ggplot() + theme_void() + labs(title = "No PA data"))
   }
@@ -3457,46 +3504,8 @@ compose_AAR_pa_grid_plot <- function(game_p, max_cols = 4, max_rows = 9) {
   # Barrel flag for outcome shapes
   d$Barrel <- compute_barrel_flag_leaderboard(d)
   
-  # Build a robust per-PA id for the grid (prefer PitchofPA if present)
-  pa_grid_id <- {
-    if ("PitchofPA" %in% names(d)) {
-      pn <- suppressWarnings(as.integer(readr::parse_number(as.character(d$PitchofPA))))
-      if (any(pn == 1L, na.rm = TRUE)) {
-        start <- pn == 1L
-        start[is.na(start)] <- FALSE
-        cumsum(start)
-      } else {
-        NULL
-      }
-    } else {
-      NULL
-    }
-  }
-  if (!is.null(pa_grid_id)) {
-    if (all(is.na(pa_grid_id)) || !length(pa_grid_id)) pa_grid_id <- NULL
-  }
-  if (is.null(pa_grid_id)) {
-    pa_cols <- c("PlateAppearanceID","PlateAppearanceId","PAId","PA_ID","PAID","AtBatNumber","PA","Pa")
-    pa_col <- intersect(pa_cols, names(d))[1]
-    if (!is.na(pa_col)) {
-      pa_grid_id <- as.character(d[[pa_col]])
-    }
-  }
-  if (!is.null(pa_grid_id)) {
-    if (all(is.na(pa_grid_id)) || !length(pa_grid_id)) pa_grid_id <- NULL
-  }
-  if (is.null(pa_grid_id) && all(c("Inning","PAofInning") %in% names(d))) {
-    # PA identity is independent of the batter's name or roster ID.
-    half <- if ("Top/Bottom" %in% names(d)) nz_chr(d[["Top/Bottom"]]) else ""
-    pa_grid_id <- paste(d$Inning, half, d$PAofInning, sep = "|")
-  }
-  if (!is.null(pa_grid_id)) {
-    if (all(is.na(pa_grid_id)) || !length(pa_grid_id)) pa_grid_id <- NULL
-  }
-  if (is.null(pa_grid_id)) {
-    d_tmp <- ensure_pa(d)
-    pa_grid_id <- d_tmp$PA_ID
-  }
+  # Prefer corrected structural keys over sequential guesses or stale imported IDs.
+  pa_grid_id <- if (all(c("Inning","PAofInning") %in% names(d))) pitching_pa_key(d) else ensure_pa(d)$PA_ID
   d$PA_GRID_ID <- pa_grid_id
   
   # Pitch number in PA for labels
@@ -4085,7 +4094,7 @@ get_pa_last <- function(d) {
 
 # ---- PA/Count safety used by AAR ----
 ensure_pa <- function(d) {
-  d <- tibble::as_tibble(d)
+  d <- rebuild_pitching_report_pa(d)
   
   # If PA scaffolding already present, just ensure FirstPitch & PitchNum
   if ("PA_ID" %in% names(d) && "PitchNum" %in% names(d)) {
@@ -4362,7 +4371,8 @@ data_dir <- Sys.getenv("DATA_DIR", unset = "")
 
 # Resolve app directory even if the working dir is different
 app_file <- tryCatch(sys.frames()[[1]]$ofile, error = function(e) NULL)
-app_dir  <- if (!is.null(app_file) && nzchar(app_file)) dirname(normalizePath(app_file)) else getwd()
+app_dir <- get0("BASE_PITCHING_APP_DIR",inherits=FALSE,ifnotfound=NULL)
+if (is.null(app_dir)) app_dir <- if (!is.null(app_file) && nzchar(app_file)) dirname(normalizePath(app_file)) else getwd()
 
 as_abs <- function(p) {
   if (!nzchar(p)) return("")
@@ -7606,6 +7616,17 @@ server <- function(input, output, session){
   }
 
   rv <- reactiveValues(df = df, retag = FALSE, last_sel = integer(0), sync_hover = FALSE)
+  if (exists("BASE_PITCHING_SOURCE_SIGNATURE",mode="function")) {
+    source_signature <- shiny::reactivePoll(1500, session, BASE_PITCHING_SOURCE_SIGNATURE, BASE_PITCHING_SOURCE_SIGNATURE)
+    initial_signature <- BASE_PITCHING_SOURCE_SIGNATURE()
+    observeEvent(source_signature(), {
+      if (!identical(source_signature(), initial_signature)) {
+        fresh <- BASE_PITCHING_RELOAD()
+        rv$df <- fresh
+        initial_signature <<- source_signature()
+      }
+    },ignoreInit=TRUE)
+  }
 
   # ---- Bullpen tab helpers (Bullpens CSV only via is_bullpen flag) ----
   safe_max_local <- function(x) {

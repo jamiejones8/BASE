@@ -701,3 +701,6 @@ base_source("R/data/barrel_rules.R", local = FALSE)
 base_source("R/data/d1_aar_benchmarks.R", local = FALSE)
 
 base_source("R/reports/team_report_workspace.R", local = FALSE)
+
+base_source("R/reports/report_matchup.R", local = FALSE)
+base_source("R/reports/umpire_scorecard.R", local = FALSE)

@@ -4281,6 +4281,7 @@ postgame_reports_workspace_ui <- function() {
         bslib::nav_panel("Pitching AAR", shiny::uiOutput("base_postgame_pitching_aar")),
         bslib::nav_panel("Hitting AAR", shiny::uiOutput("base_postgame_hitting_aar")),
         bslib::nav_panel("Catching AAR", shiny::uiOutput("base_postgame_catching_aar")),
+        bslib::nav_panel("Umpire Scorecard", base_umpire_report_ui()),
         bslib::nav_panel("Team Reports", bslib::navset_tab(id="base_team_report_tabs",
           bslib::nav_panel("Pitching", shiny::uiOutput("base_postgame_pitching_team")),
           bslib::nav_panel("Hitting", shiny::uiOutput("base_postgame_hitting_team"))))
@@ -5426,6 +5427,10 @@ server <- function(input, output, session) {
            identical(input$base_postgame_report_tabs, "Catching AAR"))
     }
   )
+
+  base_lazy_workspace_server(input, session, "tab_postgame_reports",
+    initialize=function() base_umpire_report_server(input,output,session),id="umpire_scorecard",
+    active_when=function() identical(input$base_nav,"tab_postgame_reports") && identical(input$base_postgame_report_tabs,"Umpire Scorecard"))
 
   base_lazy_workspace_server(input, session, "tab_rosters",
     initialize = function() base_rosters_workspace_server(), id = "rosters")

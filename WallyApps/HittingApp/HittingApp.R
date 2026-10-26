@@ -7735,8 +7735,16 @@ server <- function(input, output, session){
           interpolate = TRUE
         )
       }
-      left_logo <- load_header_logo(TXST_LOGO_PATH)
+      left_logo <- load_header_logo(BOBCAT_LOGO_PATH)
       right_logo <- load_header_logo(BOBCAT_LOGO_PATH)
+      if (exists("base_report_matchup",mode="function")) {
+        opponent_image <- base_report_opponent_image(base_report_matchup(d,"BatterTeam"))
+        if (!is.null(opponent_image)) {
+          aspect <- dim(opponent_image)[2]/dim(opponent_image)[1]
+          right_logo <- grid::rasterGrob(opponent_image,width=grid::unit(min(.70,.55*aspect),"in"),
+            height=grid::unit(min(.55,.70/aspect),"in"),interpolate=TRUE)
+        }
+      }
       
       # Nudge/align logos inside their cells (no vp= on gtable_add_grob)
       if (!inherits(left_logo, "null")) {
