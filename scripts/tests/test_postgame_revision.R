@@ -41,3 +41,24 @@ if(nzchar(Sys.getenv("BASE_UMPIRE_QA"))) {
   print(base_umpire_card_plot(card));dev.off()
 }
 cat("Corrected PA sequence, matchup codes, umpire scoring signs, missing inputs, and reference checks passed.\n")
+
+# Whole-game scores include in-play pitches, and duplicate exports do not add runs.
+h <- g
+h$RunsScored <- 0
+h$RunsScored[c(3,4)] <- c(2,1)
+h$PitchCall[c(3,4)] <- "InPlay"
+h$Strikes[2] <- 2; h$Outs[2] <- 2
+hc <- base_umpire_scorecard_data(rbind(h[80:1,],h[3,]),ref)
+stopifnot(hc$total==80,hc$taken==78,hc$score["away"]==2,hc$score["home"]==1,
+  hc$pitches$.later_runs[hc$pitches$PitchNo==2]==1,nrow(hc$misses)==39)
+stopifnot(hc$pitches$.favor_side[hc$pitches$PitchNo==2]=="In favor")
+h$HomeTeam <- "TCU_HFG"; h$AwayTeam <- "TEX_BOB"
+stopifnot(base_umpire_scorecard_data(h,ref)$pitches$.favor_side[2]=="Against")
+h$HomeTeam <- "TEX_BOB"
+stopifnot(base_umpire_scorecard_data(h,ref)$focus_home)
+names(h)[names(h)=="RunsScored"] <- "Runs Scored On Play"
+stopifnot(base_umpire_scorecard_data(h,ref)$score["away"]==2)
+h$GameUID <- "game";h$GameUID[1]<-""
+stopifnot(length(unique(base_umpire_game_keys(h)))==1)
+# Both plot point layers retain every miss, not just the three impact summaries.
+stopifnot(sum(hc$misses$.miss_type=="Ball called strike")+sum(hc$misses$.miss_type=="Strike called ball")==39)

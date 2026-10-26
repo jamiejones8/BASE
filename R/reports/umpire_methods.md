@@ -62,3 +62,8 @@ missing or either half is absent. Complete game exports are required for final
 game scores. The report includes both pitching teams, deduplicates known pitch
 IDs, and excludes bullpen files. It omits umpire identity, branding, relative
 accuracy, ABS challenges, and the estimated-zone overlay.
+
+
+Full-game coverage: source games involving Texas State are selected before retaining all their pitches, including rows with missing pitcher/batter team tags. Duplicate PitchUID records count once. Accuracy, consistency, and favor assess all located called balls/strikes; swings and balls in play contribute to game-score and later-run context, not called-pitch accuracy. Missing-location takes are disclosed.
+
+The score sums the CSV runs-scored-on-play field (RunsScored in TrackMan exports), assigning top-half runs to away and bottom-half runs to home. Blank cells in an existing runs column count as zero; invalid values or unknown halves leave the score unavailable. Both missed-call plots include every located miss. Colors reflect Texas State's benefit, defaulting to home for scrimmages. Later runs are actual runs on subsequent pitches in the same half inning; they are observational context, not causal run values assigned to the missed call. A complete missed-call table appears beneath the card.

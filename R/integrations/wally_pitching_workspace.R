@@ -65,7 +65,7 @@ base_pitching_supplement_paths <- function() {
   unname(candidates[file.exists(candidates)])
 }
 
-base_read_pitching_source <- function(path) {
+base_read_pitching_source <- function(path, full_game = FALSE) {
   ext <- tolower(tools::file_ext(path))
   rows <- if (ext == "parquet") {
     arrow::read_parquet(path) %>% tibble::as_tibble()
@@ -86,7 +86,7 @@ base_read_pitching_source <- function(path) {
     match(basename(path), source_files)
   ]
   rows$SeasonGroup <- if (identical(source_group, "BP")) NA_character_ else source_group
-  if (!is.na(source_group) && source_group %in% names(BASE_TEAM_SEASON_IMPORT_TARGETS) &&
+  if (!full_game && !is.na(source_group) && source_group %in% names(BASE_TEAM_SEASON_IMPORT_TARGETS) &&
       "PitcherTeam" %in% names(rows)) {
     # Keep both halves of TXST games for shutdown opportunities after TXST scores.
     batting_team <- if ("BatterTeam" %in% names(rows)) base_team_matches(rows$BatterTeam) else FALSE

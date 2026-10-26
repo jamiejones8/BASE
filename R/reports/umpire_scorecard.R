@@ -10,6 +10,10 @@ base_umpire_chr <- function(d,nm) {
 base_umpire_game_keys <- function(d) {
   uid <- base_umpire_chr(d,"GameUID")
   fallback <- paste(base_umpire_chr(d,"Date"),base_umpire_chr(d,"GameID"),base_umpire_chr(d,"AwayTeam"),base_umpire_chr(d,"HomeTeam"),sep="|")
+  for (key in unique(fallback[!nzchar(uid)])) {
+    known <- unique(uid[fallback==key & nzchar(uid)])
+    if(length(known)==1) uid[fallback==key & !nzchar(uid)] <- known
+  }
   ifelse(nzchar(uid),uid,fallback)
 }
 base_umpire_run_reference <- function() readr::read_csv(base_reference_path("umpire_count_out_run_expectancy.csv"),show_col_types=FALSE)
@@ -42,6 +46,24 @@ base_umpire_scorecard_data <- function(d,ref=base_umpire_run_reference()) {
   d <- as.data.frame(d)
   uid <- base_umpire_chr(d,"PitchUID")
   d <- d[!duplicated(ifelse(nzchar(uid),uid,paste0("row:",seq_len(nrow(d))))),,drop=FALSE]
+  d <- d[order(base_umpire_num(d,"PitchNo"),na.last=TRUE),,drop=FALSE]
+  run_column <- names(d)[tolower(gsub("[^a-z]","",tolower(names(d)))) %in% c("runsscoredonplay","runsscored")]
+  if("RunsScoredOnPlay" %in% run_column) run_column <- c("RunsScoredOnPlay",run_column)
+  raw_runs <- if(length(run_column)) base_umpire_chr(d,run_column[1]) else rep(NA_character_,nrow(d))
+  runs <- suppressWarnings(as.numeric(raw_runs))
+  if(length(run_column)) runs[!nzchar(trimws(raw_runs))] <- 0
+  half_all <- tolower(trimws(base_umpire_chr(d,"Top/Bottom")))
+  score_ok <- length(run_column)>0 && all(is.finite(runs) & runs>=0) && all(half_all %in% c("top","bottom"))
+  score <- c(away=if(score_ok) sum(runs[half_all=="top"]) else NA_real_,
+             home=if(score_ok) sum(runs[half_all=="bottom"]) else NA_real_)
+  d$.later_runs <- NA_real_
+  innings <- paste(base_umpire_chr(d,"Inning"),half_all)
+  for(key in unique(innings)) {
+    idx <- which(innings==key)
+    if(all(is.finite(runs[idx]))) d$.later_runs[idx] <- rev(cumsum(rev(runs[idx])))-runs[idx]
+  }
+  home_code <- base_umpire_chr(d,"HomeTeam"); away_code <- base_umpire_chr(d,"AwayTeam")
+  focus_home <- !any(base_team_matches(away_code)) || any(base_team_matches(home_code))
   call <- base_umpire_chr(d,"PitchCall")
   taken <- call %in% c("BallCalled","StrikeCalled")
   x <- base_umpire_num(d,"PlateLocSide"); y <- base_umpire_num(d,"PlateLocHeight")
@@ -55,13 +77,15 @@ base_umpire_scorecard_data <- function(d,ref=base_umpire_run_reference()) {
   p$.offense_runs <- ifelse(p$.correct,0,ifelse(p$.called_strike,-p$.gap,p$.gap))
   half <- tolower(base_umpire_chr(p,"Top/Bottom"))
   p$.home_runs <- ifelse(half=="bottom",p$.offense_runs,ifelse(half=="top",-p$.offense_runs,NA_real_))
+  home_benefit <- ifelse(half=="bottom",!p$.called_strike,ifelse(half=="top",p$.called_strike,NA))
+  p$.favor_side <- ifelse(is.na(home_benefit),"Unknown side",ifelse(home_benefit==focus_home,"In favor","Against"))
   p$.miss_type <- ifelse(p$.called_strike,"Ball called strike","Strike called ball")
   misses <- p[!p$.correct,,drop=FALSE]
   ranked <- misses[order(-abs(misses$.home_runs),na.last=TRUE),,drop=FALSE]
   ranked$.rank <- seq_len(nrow(ranked))
   metric <- function(sel) if(any(sel)) mean(p$.correct[sel]) else NA_real_
   valid_favor <- !nrow(misses) || all(is.finite(misses$.home_runs))
-  list(all=d,pitches=p,misses=ranked,taken=sum(taken),excluded=sum(taken&!loc),
+  list(all=d,pitches=p,misses=ranked,score=score,focus_home=focus_home,total=nrow(d),taken=sum(taken),excluded=sum(taken&!loc),
     accuracy=if(nrow(p)) mean(p$.correct) else NA_real_,
     consistency=base_umpire_consistency(p$.x,p$.y,p$.called_strike),
     ball_accuracy=metric(!p$.called_strike),strike_accuracy=metric(p$.called_strike),
@@ -71,8 +95,7 @@ base_umpire_scorecard_data <- function(d,ref=base_umpire_run_reference()) {
 base_umpire_card_plot <- function(card) {
   first <- function(nm) {x<-base_umpire_chr(card$all,nm); x<-x[nzchar(x)];if(length(x)) x[1] else "Unknown"}
   home <- base_team_display_name(first("HomeTeam")); away <- base_team_display_name(first("AwayTeam"))
-  runs <- base_umpire_num(card$all,"RunsScored"); half <- tolower(base_umpire_chr(card$all,"Top/Bottom"))
-  score <- if(length(runs) && all(is.finite(runs)) && any(half=="top") && any(half=="bottom")) sprintf(" | %s - %s",sum(runs[half=="top"]),sum(runs[half=="bottom"])) else ""
+  score <- if(all(is.finite(card$score))) sprintf(" | %s - %s",card$score["away"],card$score["home"]) else " | Score unavailable"
   if(home==away) {home<-paste(home,"Home");away<-paste(away,"Away")}
   fmt <- function(x) if(is.finite(x)) sprintf("%.0f%%",100*x) else "N/A"
   ring <- function(value,title,subtitle) {
@@ -86,23 +109,30 @@ base_umpire_card_plot <- function(card) {
       ggplot2::labs(title=title,caption=subtitle)+ggplot2::theme(plot.title=ggplot2::element_text(hjust=.5,size=15,face="bold"),plot.caption=ggplot2::element_text(hjust=.5,size=9))
   }
   z <- base_pitch_zone(); missed <- card$misses
-  zone <- ggplot2::ggplot(missed,ggplot2::aes(.x,.y))+
-    ggplot2::annotate("rect",xmin=z$xmin,xmax=z$xmax,ymin=z$ymin,ymax=z$ymax,fill=NA,color="#282828")+
-    ggplot2::geom_point(ggplot2::aes(color=.miss_type),size=5,alpha=.8)+
-    ggplot2::geom_text(data=head(missed[is.finite(missed$.home_runs),],3),ggplot2::aes(label=.rank),size=4,color="black",fontface="bold")+
-    ggplot2::scale_color_manual(values=c("Ball called strike"="#c84b49","Strike called ball"="#58ad63"),drop=FALSE)+
-    ggplot2::coord_fixed(xlim=range(c(-1.4,1.4,missed$.x),na.rm=TRUE)+c(-.15,.15),ylim=range(c(1,4,missed$.y),na.rm=TRUE)+c(-.15,.15))+ggplot2::theme_void()+
-    ggplot2::labs(title="All Missed Calls",color=NULL)+ggplot2::theme(plot.title=ggplot2::element_text(size=17,face="bold",hjust=.5),legend.position="bottom",legend.text=ggplot2::element_text(size=8))
-  if(!nrow(missed)) zone <- zone+ggplot2::annotate("text",x=0,y=4,label="No missed calls")
+  focus <- if(card$focus_home) home else away
+  zone_plot <- function(type,title) {
+    points <- missed[missed$.miss_type==type,,drop=FALSE]
+    plate <- data.frame(x=c(-8.5/12,8.5/12,8.5/12,0,-8.5/12),y=c(.8,.8,.5,.2,.5))
+    ggplot2::ggplot(points,ggplot2::aes(.x,.y))+
+      ggplot2::annotate("rect",xmin=z$xmin,xmax=z$xmax,ymin=z$ymin,ymax=z$ymax,fill=NA,color="#282828")+
+      ggplot2::geom_polygon(data=plate,ggplot2::aes(x,y),inherit.aes=FALSE,fill="white",color="#282828")+
+      ggplot2::geom_point(ggplot2::aes(color=.favor_side),size=4,alpha=.75)+
+      ggplot2::scale_color_manual(values=c("In favor"="#58ad63","Against"="#c84b49","Unknown side"="#888888"),breaks=c("In favor","Against","Unknown side"),drop=FALSE)+
+      ggplot2::coord_fixed(xlim=range(c(-1.4,1.4,missed$.x),na.rm=TRUE)+c(-.15,.15),ylim=range(c(.05,4,missed$.y),na.rm=TRUE)+c(-.05,.15))+
+      ggplot2::theme_void()+ggplot2::labs(title=title,subtitle=paste(nrow(points),"missed calls"),color=focus)+
+      ggplot2::theme(plot.title=ggplot2::element_text(size=14,face="bold",hjust=.5),plot.subtitle=ggplot2::element_text(hjust=.5,size=10),legend.position="bottom",legend.text=ggplot2::element_text(size=8),legend.title=ggplot2::element_text(size=8))
+  }
+  zone <- zone_plot("Ball called strike","Balls Called Strikes")
+  zone2 <- zone_plot("Strike called ball","Strikes Called Balls")
   impact <- head(missed[is.finite(missed$.home_runs),,drop=FALSE],3)
   details <- if(!nrow(impact)) "No rated missed calls." else vapply(seq_len(nrow(impact)),function(i) {
     r<-impact[i,,drop=FALSE]
     name <- function(nm) base_umpire_chr(r,nm)[1]
-    txt<-sprintf("%s. %s %s | Pitch %s\n%s to %s\n%s outs | %s-%s count\n%s\nEstimated impact: %.2f runs",i,name("Top/Bottom"),name("Inning"),name("PitchNo"),name("Pitcher"),name("Batter"),name("Outs"),name("Balls"),name("Strikes"),r$.miss_type,abs(r$.home_runs))
+    txt<-sprintf("%s. %s %s | Pitch %s\n%s to %s\n%s outs | %s-%s count\n%s\nEstimated impact: %.2f runs\nRuns later in half: %s",i,name("Top/Bottom"),name("Inning"),name("PitchNo"),name("Pitcher"),name("Batter"),name("Outs"),name("Balls"),name("Strikes"),r$.miss_type,abs(r$.home_runs),ifelse(is.finite(r$.later_runs),r$.later_runs,"N/A"))
     paste(vapply(strsplit(txt,"\n")[[1]],function(t) paste(strwrap(t,width=35),collapse="\n"),character(1)),collapse="\n")
   },character(1))
-  impact_plot <- cowplot::ggdraw()+cowplot::draw_label("Impactful Missed Calls",x=.02,y=.97,hjust=0,vjust=1,size=17,fontface="bold")
-  for(i in seq_along(details)) impact_plot <- impact_plot+cowplot::draw_label(details[i],x=.02,y=.87-(i-1)*.29,hjust=0,vjust=1,size=10)
+  impact_plot <- cowplot::ggdraw()+cowplot::draw_label("Impactful Missed Calls",x=.02,y=.97,hjust=0,vjust=1,size=13,fontface="bold")
+  for(i in seq_along(details)) impact_plot <- impact_plot+cowplot::draw_label(details[i],x=.02+(i-1)*.33,y=.79,hjust=0,vjust=1,size=8)
   favor_label <- if(is.finite(card$favor)) sprintf("+%.2f",abs(card$favor)) else "N/A"
   favor_team <- if(!is.finite(card$favor)) "Incomplete call inputs" else if(abs(card$favor)<.005) "Even" else paste("runs for",if(card$favor>0) home else away)
   favors <- cowplot::ggdraw()+cowplot::draw_label("Estimated Favor",x=.5,y=.9,size=15,fontface="bold")+
@@ -110,32 +140,42 @@ base_umpire_card_plot <- function(card) {
     cowplot::draw_label(favor_team,x=.5,y=.30,size=11,color="#501214")
   bars <- data.frame(label=c("Accuracy on called balls","Accuracy on called strikes"),value=c(card$ball_accuracy,card$strike_accuracy),color=c("#58ad63","#c84b49"),y=c(2,1))
   bp <- ggplot2::ggplot(bars,ggplot2::aes(y=y))+
-    ggplot2::geom_segment(ggplot2::aes(x=0,xend=1,yend=y),linewidth=9,color="#e4e4e4")+
-    ggplot2::geom_segment(ggplot2::aes(x=0,xend=value,yend=y,color=color),linewidth=9,na.rm=TRUE)+ggplot2::scale_color_identity()+
-    ggplot2::geom_text(ggplot2::aes(x=0,y=y+.30,label=label),hjust=0,size=4,fontface="bold")+
+    ggplot2::geom_segment(ggplot2::aes(x=0,xend=1,yend=y),linewidth=6,color="#e4e4e4")+
+    ggplot2::geom_segment(ggplot2::aes(x=0,xend=value,yend=y,color=color),linewidth=6,na.rm=TRUE)+ggplot2::scale_color_identity()+
+    ggplot2::geom_text(ggplot2::aes(x=0,y=y+.43,label=label),hjust=0,size=4,fontface="bold")+
     ggplot2::geom_text(ggplot2::aes(x=1.04,label=vapply(value,fmt,character(1))),hjust=0,size=5,fontface="bold")+
-    ggplot2::coord_cartesian(xlim=c(0,1.22),ylim=c(.6,2.5),clip="off")+ggplot2::theme_void()
-  foot <- paste0("Zone: BASE 1.60-3.40 ft, 17-inch plate, ball overlap. ",card$excluded," taken pitches excluded: missing location.\n",
+    ggplot2::coord_cartesian(xlim=c(0,1.22),ylim=c(.6,2.8),clip="off")+ggplot2::theme_void()
+  foot <- paste0(card$total," game pitches; ",card$taken," called takes. ",card$excluded," taken pitches excluded: missing location.\n",
     "Favor: D1 count/out estimate; runner occupancy unavailable. Rated misses: ",card$favor_coverage,"/",nrow(missed),".\n",
-    "Consistency: fitted location model (minimum 30 takes, 5 of each call). BASE estimates; not MLB ABS ratings.")
+    "Later runs are observed context, not runs attributed to the call. BASE zone and fitted consistency model.")
   cowplot::ggdraw()+cowplot::draw_label(paste(away,"vs.",home),x=.5,y=.96,size=19,fontface="bold")+
     cowplot::draw_label(paste0("Umpire Scorecard | ",first("Date"),score),x=.5,y=.92,size=15)+
     cowplot::draw_plot(ring(card$accuracy,"Overall Accuracy",sprintf("%s of %s located takes correct",card$correct,nrow(card$pitches))),x=.04,y=.66,width=.31,height=.22)+
     cowplot::draw_plot(favors,x=.35,y=.66,width=.30,height=.22)+
     cowplot::draw_plot(ring(card$consistency,"Overall Consistency","Consistency with fitted call zone"),x=.65,y=.66,width=.31,height=.22)+
-    cowplot::draw_plot(zone,x=.03,y=.22,width=.47,height=.42)+cowplot::draw_plot(impact_plot,x=.52,y=.22,width=.46,height=.42)+
-    cowplot::draw_plot(bp,x=.08,y=.08,width=.84,height=.13)+cowplot::draw_label(foot,x=.04,y=.055,hjust=0,vjust=1,size=7.5)
+    cowplot::draw_plot(zone,x=.03,y=.32,width=.47,height=.34)+cowplot::draw_plot(zone2,x=.52,y=.32,width=.46,height=.34)+
+    cowplot::draw_plot(impact_plot,x=.04,y=.15,width=.92,height=.17)+
+    cowplot::draw_plot(bp,x=.08,y=.06,width=.84,height=.10)+cowplot::draw_label(foot,x=.04,y=.055,hjust=0,vjust=1,size=7.5)
 }
 base_umpire_report_ui <- function() shiny::div(class="base-report-builder",
   shiny::div(class="base-report-controls",shiny::selectInput("umpire_game","Game",choices=NULL),shiny::downloadButton("umpire_pdf","Download Scorecard PDF")),
-  shiny::plotOutput("umpire_scorecard",height="1050px"))
+  shiny::plotOutput("umpire_scorecard",height="1050px"),
+  shiny::h4("Every missed call"),shiny::tableOutput("umpire_misses"))
 base_umpire_report_server <- function(input,output,session) {
   signature <- function() {p<-base_pitching_supplement_paths();i<-file.info(p);paste(p,i$size,as.numeric(i$mtime),collapse="|")}
   rows <- shiny::reactivePoll(2000,session,signature,function() {
-    d <- base_pitching_supplement_rows()
+    frames <- lapply(base_pitching_supplement_paths(),function(path) {
+      d <- base_read_pitching_source(path,full_game=TRUE)
+      d[] <- lapply(d,as.character)
+      d
+    })
+    d <- dplyr::bind_rows(frames)
     if(nrow(d)) {
       d <- d[!(grepl("bullpen",d$source_file,ignore.case=TRUE)),,drop=FALSE]
       d$.game <- base_umpire_game_keys(d)
+      team_game <- base_team_matches(base_umpire_chr(d,"HomeTeam")) | base_team_matches(base_umpire_chr(d,"AwayTeam")) |
+        base_team_matches(base_umpire_chr(d,"PitcherTeam")) | base_team_matches(base_umpire_chr(d,"BatterTeam"))
+      d <- d[d$.game %in% unique(d$.game[team_game]),,drop=FALSE]
     }
     d
   })
@@ -149,6 +189,13 @@ base_umpire_report_server <- function(input,output,session) {
     shiny::updateSelectInput(session,"umpire_game",choices=stats::setNames(games$.game,labels),selected=selected)
   })
   card <- shiny::reactive({shiny::req(input$umpire_game);d<-rows();d<-d[d$.game==input$umpire_game,,drop=FALSE];shiny::req(nrow(d));base_umpire_scorecard_data(d)})
+  output$umpire_misses <- shiny::renderTable({
+    m <- card()$misses
+    data.frame(Pitch=base_umpire_chr(m,"PitchNo"),Inning=paste(base_umpire_chr(m,"Top/Bottom"),base_umpire_chr(m,"Inning")),
+      Pitcher=base_umpire_chr(m,"Pitcher"),Batter=base_umpire_chr(m,"Batter"),
+      Count=paste0(base_umpire_chr(m,"Balls"),"-",base_umpire_chr(m,"Strikes")),Outs=base_umpire_chr(m,"Outs"),
+      Call=m$.miss_type,Favor=m$.favor_side,`Runs later in half`=m$.later_runs,check.names=FALSE)
+  })
   output$umpire_scorecard <- shiny::renderPlot(base_umpire_card_plot(card()),res=120)
   output$umpire_pdf <- shiny::downloadHandler(filename=function() "umpire-scorecard.pdf",content=function(file) {
     grDevices::pdf(file,width=8.5,height=11,useDingbats=FALSE);on.exit(grDevices::dev.off(),add=TRUE)
