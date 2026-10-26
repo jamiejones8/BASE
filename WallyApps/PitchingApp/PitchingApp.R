@@ -3425,9 +3425,20 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
   movement_height <- table_height(as_txst_table(mu_df))
   right_tables <- game_ptpf / row2_right + patchwork::plot_layout(heights=c(game_table_height,season_table_height))
   row1b <- left_tables | right_tables
-  row4 <- (mov | (zR / zL)) + patchwork::plot_layout(widths = c(1, 1))
-  row4 <- row4 & theme(plot.margin = margin(0,0,0,0))
-  
+  # Fixed common canvas: titles share a baseline and legends occupy the gutter.
+  legends <- cowplot::get_legend(mov)
+  clean_panel <- theme(legend.position="none",plot.margin=margin(0,0,0,0),
+    plot.background=element_rect(fill="transparent",color=NA))
+  row4 <- cowplot::ggdraw()+
+    theme(plot.background=element_rect(fill="grey92",color=NA))+
+    cowplot::draw_label("Pitch Movement",x=.23,y=.98,vjust=1,fontface="bold",size=11)+
+    cowplot::draw_label("Locations - vs RHH",x=.81,y=.98,vjust=1,fontface="bold",size=11)+
+    cowplot::draw_plot(mov+labs(title=NULL)+clean_panel,x=0,y=.05,width=.46,height=.88)+
+    cowplot::draw_grob(legends,x=.46,y=.20,width=.16,height=.65)+
+    cowplot::draw_plot(zR+labs(title=NULL)+clean_panel,x=.62,y=.51,width=.38,height=.43)+
+    cowplot::draw_label("Locations - vs LHH",x=.81,y=.49,vjust=1,fontface="bold",size=11)+
+    cowplot::draw_plot(zL+labs(title=NULL)+clean_panel,x=.62,y=.02,width=.38,height=.43)
+
   # --- Row 2 (patchwork-native; prevents tables from disappearing) ---
   row2 <- (row2_left | row2_right) + patchwork::plot_layout(widths = c(1, 1))
   

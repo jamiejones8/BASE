@@ -28,12 +28,10 @@ base_report_opponent_image <- function(matchup) {
   if(!length(url)||is.na(url)||!nzchar(url)) return(NULL)
   image <- tryCatch({
     if(grepl("\\.svg($|\\?)",url,ignore.case=TRUE)) {
-      # NCAA's bgd marks are white on transparency. Give them the team's color
-      # before rasterizing so they remain visible on the white pitching report.
+      # Preserve vector transparency; white-only marks are recolored after rasterization.
       svg <- paste(readLines(url,warn=FALSE),collapse="\n")
       color <- palette$primary
       if(is.null(color)||!grepl("^#[0-9A-Fa-f]{6}$",color)) color <- "#501214"
-      svg <- sub("(<svg[^>]*>)",paste0("\\1<rect width='100%' height='100%' fill='",color,"'/>"),svg)
       tmp <- tempfile(fileext=".png");on.exit(unlink(tmp),add=TRUE)
       if(requireNamespace("rsvg",quietly=TRUE)) rsvg::rsvg_png(charToRaw(svg),tmp,width=512)
       else if(requireNamespace("magick",quietly=TRUE)) {
@@ -42,7 +40,42 @@ base_report_opponent_image <- function(matchup) {
       png::readPNG(tmp)
     } else if(exists("fetch_team_logo",mode="function")) fetch_team_logo(code,url) else NULL
   },error=function(e) NULL)
+  if(!is.null(image)) image <- base_report_logo_cutout(image,palette$primary)
   # Failed network requests remain retryable.
   if(!is.null(image)) assign(code,image,.base_report_logo_cache)
   image
+}
+
+# Remove only a uniform background connected to the image edge. Interior logo
+# details of the same color remain intact. White-only marks use the team color.
+base_report_logo_cutout <- function(image, primary="#501214") {
+  dm <- dim(image)
+  if(length(dm)!=3 || dm[3]<3) return(image)
+  h<-dm[1];w<-dm[2]
+  out<-array(1,c(h,w,4));out[,,1:3]<-image[,,1:3]
+  if(dm[3]>=4) out[,,4]<-image[,,4]
+  corners<-rbind(out[1,1,],out[1,w,],out[h,1,],out[h,w,])
+  if(all(corners[,4]>.95) && max(apply(corners[,1:3,drop=FALSE],2,function(x) diff(range(x))))<.06) {
+    bg<-colMeans(corners[,1:3,drop=FALSE])
+    distance<-pmax(abs(out[,,1]-bg[1]),abs(out[,,2]-bg[2]),abs(out[,,3]-bg[3]))
+    eligible<-distance<.12;seen<-matrix(FALSE,h,w)
+    queue<-integer(h*w);edge<-unique(c(seq_len(h),h*(w-1)+seq_len(h),1+h*(0:(w-1)),h*(1:w)))
+    edge<-edge[eligible[edge]];n<-length(edge);queue[seq_len(n)]<-edge;seen[edge]<-TRUE;i<-1L
+    while(i<=n) {
+      k<-queue[i];r<-(k-1)%%h+1;c<-(k-1)%/%h+1
+      adj<-c(if(r>1) k-1,if(r<h) k+1,if(c>1) k-h,if(c<w) k+h)
+      adj<-adj[eligible[adj]&!seen[adj]]
+      if(length(adj)) {queue[n+seq_along(adj)]<-adj;n<-n+length(adj);seen[adj]<-TRUE}
+      i<-i+1L
+    }
+    out[,,4][seen]<-0
+  }
+  visible<-out[,,4]>.1
+  if(any(visible) && mean(out[,,1][visible]>.88 & out[,,2][visible]>.88 & out[,,3][visible]>.88)>.9) {
+    if(is.null(primary)||!length(primary)||is.na(primary)) primary<-"#501214"
+    rgb<-grDevices::col2rgb(primary)/255
+    for(ch in 1:3) out[,,ch][visible]<-rgb[ch]
+  }
+  rows<-which(rowSums(out[,,4]>.01)>0);cols<-which(colSums(out[,,4]>.01)>0)
+  if(length(rows)&&length(cols)) out[min(rows):max(rows),min(cols):max(cols),,drop=FALSE] else out
 }

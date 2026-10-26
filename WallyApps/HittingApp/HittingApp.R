@@ -6848,14 +6848,19 @@ server <- function(input, output, session){
     opponent <- hitting_team_display_text(opponent)
 
     asset_prefix <- get0("BASE_HITTING_ASSET_PREFIX", inherits = TRUE, ifnotfound = "static")
+    right_src <- paste0(asset_prefix, "/Bobcatlogo.png")
+    if(exists("base_report_opponent_image",mode="function")) {
+      opponent_image <- base_report_opponent_image(base_report_matchup(d,"BatterTeam"))
+      if(!is.null(opponent_image)) right_src <- base64enc::dataURI(data=png::writePNG(opponent_image),mime="image/png")
+    }
     div(
       class = "aar-report-header",
-      tags$img(src = paste0(asset_prefix, "/txstlogo.jpeg"), alt = "Texas State logo"),
+      tags$img(src = paste0(asset_prefix, "/Bobcatlogo.png"), alt = "Texas State Bobcat logo"),
       div(
         div(class = "aar-report-title", paste(player_name, "After Action Report")),
         div(class = "aar-report-meta", paste(c(date_label, opponent)[nzchar(c(date_label, opponent))], collapse = "  •  "))
       ),
-      tags$img(src = paste0(asset_prefix, "/Bobcatlogo.png"), alt = "Texas State Bobcat logo")
+      tags$img(src = right_src, alt = "Opponent logo")
     )
   })
   

@@ -62,3 +62,11 @@ h$GameUID <- "game";h$GameUID[1]<-""
 stopifnot(length(unique(base_umpire_game_keys(h)))==1)
 # Both plot point layers retain every miss, not just the three impact summaries.
 stopifnot(sum(hc$misses$.miss_type=="Ball called strike")+sum(hc$misses$.miss_type=="Strike called ball")==39)
+# Edge backgrounds disappear without deleting enclosed logo-colored details.
+mark <- array(0,c(9,9,4));mark[,,4]<-1
+mark[3:7,3:7,1:3]<-1;mark[5,5,1:3]<-0
+cut <- base_report_logo_cutout(mark,"#123456")
+stopifnot(identical(dim(cut),c(5L,5L,4L)),cut[3,3,4]==1)
+transparent <- mark;transparent[1:2,,4]<-0
+stopifnot(dim(base_report_logo_cutout(transparent))[3]==4)
+cat("Logo background removal and enclosed-detail preservation checks passed.\n")
