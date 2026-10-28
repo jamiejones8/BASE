@@ -7725,7 +7725,6 @@ server <- function(input, output, session){
   prepare_bullpen_report_data <- function(d) {
     d <- sanitize_bullpen_dataset(order_bullpen_rows(d))
     if (!nrow(d)) return(d)
-    d$HoverKey <- paste0("pitch:",if("row_id" %in% names(d)) d$row_id else if("PitchUID" %in% names(d)) d$PitchUID else seq_len(nrow(d)))
     d <- d %>%
       dplyr::mutate(
         PitchType_plot = as.character(PitchType),
@@ -7884,7 +7883,6 @@ server <- function(input, output, session){
         type = "scatter", mode = "markers",
         marker = list(size = 8, opacity = 0.35, color = col),
         text = ~HoverMovement,
-        customdata = ~HoverKey,
         hovertemplate = "%{text}<extra></extra>",
         name = lv,
         showlegend = TRUE
@@ -7895,16 +7893,13 @@ server <- function(input, output, session){
       dplyr::summarise(HB = mean(HB, na.rm = TRUE), IVB = mean(IVB, na.rm = TRUE), Velo = mean(Velo, na.rm = TRUE), RPM = mean(RPM, na.rm = TRUE), .groups = "drop")
     for (i in seq_len(nrow(avg))) {
       row <- avg[i, ]
-      average_label <- sprintf("%s Average<br>Velo: %.1f mph<br>iVB: %.1f in<br>HB: %.1f in<br>Spin: %.0f RPM",
-        row$PitchType_plot,row$Velo,row$IVB,row$HB,row$RPM)
       p <- p %>% add_trace(
         data = row,
         x = ~HB, y = ~IVB,
         type = "scatter", mode = "markers",
         marker = list(size = 16, opacity = 1, color = pitch_colors[[row$PitchType_plot[[1]]]] %||% "#808080", line = list(color = "black", width = 0.7)),
-        text = average_label,
-        customdata = paste0("avg:",row$PitchType_plot),
-        hovertemplate = paste0(average_label,"<extra></extra>"),
+        text = ~paste0(PitchType_plot, " Avg<br>Velo: ", sprintf("%.1f", Velo), "<br>iVB: ", sprintf("%.1f", IVB), "<br>HB: ", sprintf("%.1f", HB), "<br>RPM: ", sprintf("%.0f", RPM)),
+        hovertemplate = "%{text}<extra></extra>",
         showlegend = FALSE,
         inherit = FALSE
       )
@@ -7912,13 +7907,13 @@ server <- function(input, output, session){
     p %>% layout(
       title = list(text = title_text, x = 0.5),
       margin = list(t = 70, r = 20, b = 40, l = 60),
-      xaxis = list(title = "Horizontal Break (in)", range = c(-30, 30), dtick = 10, constrain = "domain", zeroline = FALSE, fixedrange = FALSE),
-      yaxis = list(title = "Induced Vertical Break (in)", range = c(-30, 30), dtick = 10, constrain = "domain", zeroline = FALSE, fixedrange = FALSE, scaleanchor = "x", scaleratio = 1),
+      xaxis = list(title = "Horizontal Break (in)", range = c(-30, 30), dtick = 10, constrain = "domain", zeroline = FALSE, fixedrange = TRUE),
+      yaxis = list(title = "Induced Vertical Break (in)", range = c(-30, 30), dtick = 10, constrain = "domain", zeroline = FALSE, fixedrange = TRUE, scaleanchor = "x", scaleratio = 1),
       shapes = list(
         list(type = "line", x0 = -30, x1 = 30, y0 = 0, y1 = 0, line = list(dash = "dot", width = 1, color = "black")),
         list(type = "line", x0 = 0, x1 = 0, y0 = -30, y1 = 30, line = list(dash = "dot", width = 1, color = "black"))
       )
-    ) %>% base_link_pitch_hover("bullpen-metrics")
+    )
   }
 
   build_bullpen_accum_release_plotly <- function(d) {
@@ -7933,20 +7928,16 @@ server <- function(input, output, session){
       p <- p %>% plotly::add_trace(data=group,x=~RelSideNum,y=~RelHt,
         type="scatter",mode="markers",name=pt,
         marker=list(size=7,opacity=.35,color=color),
-        customdata=~HoverKey,
         text=~paste0(PitchType_plot,"<br>Release side: ",round(RelSideNum,2)," ft<br>Release height: ",round(RelHt,2)," ft"),
         hovertemplate="%{text}<extra></extra>")
-      average_label <- sprintf("%s Average<br>Release side: %.2f ft<br>Release height: %.2f ft",
-        pt,mean(group$RelSideNum),mean(group$RelHt))
       p <- p %>% plotly::add_trace(x=mean(group$RelSideNum),y=mean(group$RelHt),
-        type="scatter",mode="markers",name=paste(pt,"Average"),showlegend=FALSE,
-        text=average_label,hovertemplate=paste0(average_label,"<extra></extra>"),customdata=paste0("avg:",pt),
+        type="scatter",mode="markers",name=paste(pt,"average"),showlegend=FALSE,
         marker=list(size=15,color=color,line=list(color="black",width=.7)),inherit=FALSE)
     }
     p %>% plotly::layout(title=list(text="Bullpen Release Points",x=.5),
       margin=list(t=70,r=20,b=40,l=60),
       xaxis=list(title="Release Side (ft)",range=c(-5,5),constrain="domain"),
-      yaxis=list(title="Release Height (ft)",range=c(0,8),constrain="domain",scaleanchor="x",scaleratio=1)) %>% base_link_pitch_hover("bullpen-metrics")
+      yaxis=list(title="Release Height (ft)",range=c(0,8),constrain="domain",scaleanchor="x",scaleratio=1))
   }
 
   build_bullpen_numbered_movement_gg <- function(d, title_text = "Movement Plot") {
@@ -8194,11 +8185,7 @@ server <- function(input, output, session){
   })
 
   bullpen_report_page_count <- reactive({
-    # Counting pages must not construct every plot/table grob. The PDF builder
-    # will compose those pages once when the preview is actually requested.
-    d <- prepare_bullpen_report_data(bullpen_report_data())
-    if (!nrow(d)) return(1L)
-    1L + length(split_bullpen_log_pages(format_bullpen_pitch_log(d)))
+    max(1L, length(bullpen_report_pages()))
   })
 
   output$bullpen_report_preview_ui <- renderUI({
@@ -8210,33 +8197,25 @@ server <- function(input, output, session){
     }))
   })
 
-  bullpen_report_pdf_path <- reactiveVal(NULL)
-  session$onSessionEnded(function() {
-    old <- isolate(bullpen_report_pdf_path())
+  bullpen_report_pdf_cache <- reactiveVal(NULL)
+  observeEvent(list(input$bullpen_report_pitcher, input$bullpen_report_game), {
+    old <- bullpen_report_pdf_cache()
     if (!is.null(old) && file.exists(old)) unlink(old)
-  })
-  # Build only when a visible preview requests the PDF. An observer here also
-  # rendered reports when hidden report selectors initialized or changed.
-  bullpen_report_pdf_cache <- reactive({
-    req(input$bullpen_report_pitcher, input$bullpen_report_game)
-    old <- isolate(bullpen_report_pdf_path())
-    if (!is.null(old) && file.exists(old)) unlink(old)
-    isolate(bullpen_report_pdf_path(NULL))
+    bullpen_report_pdf_cache(NULL)
+    if (is.null(input$bullpen_report_pitcher) || !nzchar(input$bullpen_report_pitcher) ||
+        is.null(input$bullpen_report_game) || !nzchar(input$bullpen_report_game)) {
+      return()
+    }
     d <- tryCatch(bullpen_report_data(), error = function(e) NULL)
-    if (is.null(d) || !nrow(d)) return(NULL)
+    if (is.null(d) || !nrow(d)) return()
     tmp_pdf <- tempfile(fileext = ".pdf")
-    tryCatch({
+    try({
       render_bullpen_report_pdf(d, input$bullpen_report_pitcher, bullpen_report_date(), tmp_pdf)
-      isolate(bullpen_report_pdf_path(tmp_pdf))
-      tmp_pdf
-    }, error = function(e) {
-      unlink(tmp_pdf)
-      NULL
-    })
-  })
+      bullpen_report_pdf_cache(tmp_pdf)
+    }, silent = TRUE)
+  }, ignoreInit = TRUE)
 
   observe({
-    req(identical(input$bullpen_report_tabs, "Builder"))
     n_pages <- bullpen_report_page_count()
     for (i in seq_len(n_pages)) {
       local({
@@ -13642,8 +13621,8 @@ server <- function(input, output, session){
     n <- nrow(d)
     out <- rep(NA_character_, n)
     take <- function(col) {
-      if (!col %in% names(d) || !anyNA(out)) return()
-      vals <- pitch_metric_pitch_type(d[[col]])
+      if (!col %in% names(d)) return()
+      vals <- vapply(d[[col]], pitch_metric_pitch_type, character(1))
       ok <- is.na(out) & !is.na(vals) & nzchar(vals)
       out[ok] <<- vals[ok]
     }
@@ -14366,12 +14345,12 @@ function(el,x){
       xaxis = list(
         title = "Horizontal Break (in, hitter view)", range = c(-mv_lim, mv_lim),
         autorange = FALSE, dtick = 3, tickformat = ".0f", zeroline = FALSE,
-        fixedrange = FALSE, constrain = "domain", constraintoward = "center"
+        fixedrange = TRUE, constrain = "domain", constraintoward = "center"
       ),
       yaxis = list(
         title = "Induced Vertical Break (in)", range = c(-mv_lim, mv_lim),
         autorange = FALSE, dtick = 3, tickformat = ".0f", zeroline = FALSE,
-        fixedrange = FALSE, scaleanchor = "x", scaleratio = 1,
+        fixedrange = TRUE, scaleanchor = "x", scaleratio = 1,
         constrain = "domain", constraintoward = "center"
       ),
       legend = list(
@@ -14458,7 +14437,6 @@ function(el,x){
             color = ~PitchType_plot, colors = pitch_colors,
             marker = list(size = 16, opacity = 1, line = list(color = "black", width = 0.6)),
             text = ~label,
-            customdata = paste0("avg:",row$PitchType_plot),
             hoverinfo = "text",
             showlegend = FALSE,
             inherit = FALSE
@@ -14490,13 +14468,13 @@ function(el,x){
         xaxis = list(
           title = "Horizontal Break (in)",
           range = c(-mv_lim, mv_lim), autorange = FALSE, dtick = 3, tickformat = ".0f",
-          zeroline = FALSE, fixedrange = FALSE,
+          zeroline = FALSE, fixedrange = TRUE,
           constrain = "domain", constraintoward = "center"
         ),
         yaxis = list(
           title = "Induced Vertical Break (in)",
           range = c(-mv_lim, mv_lim), autorange = FALSE, dtick = 3, tickformat = ".0f",
-          zeroline = FALSE, fixedrange = FALSE, scaleanchor = "x", scaleratio = 1,
+          zeroline = FALSE, fixedrange = TRUE, scaleanchor = "x", scaleratio = 1,
           constrain = "domain", constraintoward = "center"
         ),
         shapes = shp
@@ -14504,7 +14482,7 @@ function(el,x){
     
     p <- plotly::event_register(p, "plotly_selected")
     p <- plotly::event_register(p, "plotly_click")
-    base_link_pitch_hover(p,"pitch-metrics")
+    p
   })
   
   output$extension_plot <- renderPlotly({
@@ -14531,7 +14509,6 @@ function(el,x){
           color = ~PitchType_plot, colors = pitch_colors,
           marker = list(size = 6, opacity = 0.35),
           text = ~HoverExtension,
-          customdata = ~row_id_chr,
           hovertemplate = "%{text}<extra></extra>",
           showlegend = FALSE
         )
@@ -14547,8 +14524,7 @@ function(el,x){
             type = "scatter", mode = "markers",
             color = ~PitchType_plot, colors = pitch_colors,
             marker = list(size = 16, opacity = 1, line = list(color = "black", width = 0.6)),
-            text = sprintf("%s Average<br>Release side: %.2f ft<br>Extension: %.2f ft",row$PitchType_plot,row$RelSide,row$Extension),
-            customdata = paste0("avg:",row$PitchType_plot),
+            text = ~paste0(PitchType_plot, " avg extension"),
             hoverinfo = "text",
             showlegend = FALSE,
             inherit = FALSE
@@ -14596,10 +14572,10 @@ function(el,x){
     p %>% layout(
       title = list(text = paste0(input$PitcherInput, ": Extension (Bird's Eye)"), x = 0.5),
       margin = list(t = 60, r = 10, b = 40, l = 50),
-      xaxis = list(title = "Release Side (ft)", range = c(-4, 4), fixedrange = FALSE, zeroline = FALSE),
-      yaxis = list(title = "Extension (ft)", range = c(0, 8), fixedrange = FALSE, zeroline = FALSE, automargin = TRUE),
+      xaxis = list(title = "Release Side (ft)", range = c(-4, 4), fixedrange = TRUE, zeroline = FALSE),
+      yaxis = list(title = "Extension (ft)", range = c(0, 8), fixedrange = TRUE, zeroline = FALSE, automargin = TRUE),
       shapes = c(rubber, home_plate)
-    ) %>% base_link_pitch_hover("pitch-metrics")
+    )
   })
   
   output$release_plot <- renderPlotly({
@@ -14626,7 +14602,6 @@ function(el,x){
           color = ~PitchType_plot, colors = pitch_colors,
           marker = list(size = 6, opacity = 0.35),
           text = ~HoverRelease,
-          customdata = ~row_id_chr,
           hovertemplate = "%{text}<extra></extra>",
           showlegend = FALSE
         )
@@ -14642,8 +14617,7 @@ function(el,x){
             type = "scatter", mode = "markers",
             color = ~PitchType_plot, colors = pitch_colors,
             marker = list(size = 16, opacity = 1, line = list(color = "black", width = 0.6)),
-            text = sprintf("%s Average<br>Release side: %.2f ft<br>Release height: %.2f ft",row$PitchType_plot,row$RelSide,row$RelHeight),
-            customdata = paste0("avg:",row$PitchType_plot),
+            text = ~paste0(PitchType_plot, " avg release"),
             hoverinfo = "text",
             showlegend = FALSE,
             inherit = FALSE
@@ -14695,10 +14669,10 @@ function(el,x){
     p %>% layout(
       title = list(text = paste0(input$PitcherInput, ": Release (Catcher POV)"), x = 0.5),
       margin = list(t = 60, r = 10, b = 40, l = 50),
-      xaxis = list(title = "Release Side (ft)", range = c(4, -4), fixedrange = FALSE, zeroline = FALSE),
-      yaxis = list(title = "Release Height (ft)", range = c(0, 7), fixedrange = FALSE, zeroline = FALSE, automargin = TRUE),
+      xaxis = list(title = "Release Side (ft)", range = c(4, -4), fixedrange = TRUE, zeroline = FALSE),
+      yaxis = list(title = "Release Height (ft)", range = c(0, 7), fixedrange = TRUE, zeroline = FALSE, automargin = TRUE),
       shapes = mound_shapes
-    ) %>% base_link_pitch_hover("pitch-metrics")
+    )
   })
 
   output$pitch_metrics_debug <- renderText({
