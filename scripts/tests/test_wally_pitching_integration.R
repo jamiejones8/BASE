@@ -224,7 +224,7 @@ expected_tabs <- c(
 bp_html <- as.character(htmltools::renderTags(workspace$base_pitching_bullpen_postgame_ui)$html)
 stopifnot(grepl("bullpen_report_pitcher",bp_html,fixed=TRUE),grepl("Recent",bp_html,fixed=TRUE),
           grepl("Builder",bp_html,fixed=TRUE),!grepl("bullpen_report_game",html,fixed=TRUE),
-          grepl("bullpen_accum_games",html,fixed=TRUE))
+          grepl("bullpen_accum_games",html,fixed=TRUE),grepl("bullpen_accum_release",html,fixed=TRUE))
 team_html <- as.character(htmltools::renderTags(workspace$base_pitching_team_postgame_ui)$html)
 stopifnot(grepl("AAR Builder",team_html,fixed=TRUE),grepl("Recent AARs",team_html,fixed=TRUE),
           !grepl('data-value="Team Report"',html,fixed=TRUE))
@@ -299,6 +299,23 @@ workspace$BASE_PITCHING_RELOAD <- function() {
   updated
 }
 shiny::testServer(workspace$server, {
+  # Postgame picker must arrive with options even when its UI mounts late.
+  bp <- workspace$df[1:3,]
+  bp$is_bullpen <- TRUE
+  bp$Pitcher <- "Late Mounted Bullpen Pitcher"
+  bp$RelSide <- c(1.5,1.6,1.7); bp$RelHeight <- c(5.8,5.9,6)
+  old_rows <- rv$df
+  rv$df <- bp
+  session$flushReact()
+  picker_html <- output$bullpen_report_pitcher_ui$html
+  stopifnot(grepl("Late Mounted Bullpen Pitcher",picker_html,fixed=TRUE))
+  movement <- plotly::plotly_build(build_bullpen_accum_movement_plotly(bp,"Movement"))
+  stopifnot(identical(movement$x$layout$xaxis$range,c(-30,30)),
+            identical(movement$x$layout$yaxis$range,c(-30,30)))
+  release <- plotly::plotly_build(build_bullpen_accum_release_plotly(bp))
+  stopifnot(length(release$x$data)>0,all(is.finite(release$x$data[[1]]$x)))
+  rv$df <- old_rows
+
   values <- comparison_summary(workspace$df)
   stopifnot(is.finite(values$`K%`),is.finite(values$`Strike%`))
   session$flushReact()

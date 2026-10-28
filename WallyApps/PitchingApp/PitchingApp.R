@@ -6453,7 +6453,7 @@ if (isTRUE(get0("BASE_PITCHING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))
 }
 
 base_pitching_bullpen_postgame_ui <- tagList(
-  selectInput("bullpen_report_pitcher", "Pitcher", choices = character(0)),
+  uiOutput("bullpen_report_pitcher_ui"),
   navset_tab(id="bullpen_report_tabs",
     nav_panel("Recent", uiOutput("bullpen_recent_sessions")),
     nav_panel("Builder", selectInput("bullpen_report_game", "Bullpen Session", choices=character(0)),
@@ -6712,7 +6712,6 @@ ui <- base_pitching_page(
   ),
   
   navset_tab(id="pitching_workspace_tab", selected="Performance",
-    nav_panel("Comparisons", base_comparison_ui("pitching_comparisons")),
     nav_panel(
       id = "main_tabs",
       title = "Performance",
@@ -6788,6 +6787,7 @@ ui <- base_pitching_page(
         )
       )
     ),
+    nav_panel("Comparisons", base_comparison_ui("pitching_comparisons")),
     nav_panel(
       title = "Pitch Metrics",
       navset_tab(
@@ -6837,7 +6837,10 @@ ui <- base_pitching_page(
               multiple = TRUE
             )
           ),
-          withSpinner(plotlyOutput("bullpen_accum_movement", height = "650px", width = "100%"), type = 4, color = "#501214"),
+          fluidRow(
+            column(6, withSpinner(plotlyOutput("bullpen_accum_movement", height = "450px", width = "100%"), type = 4, color = "#501214")),
+            column(6, withSpinner(plotlyOutput("bullpen_accum_release", height = "450px", width = "100%"), type = 4, color = "#501214"))
+          ),
           div(class = "table-title mt-3 mb-1", "Pitch Metrics"),
           withSpinner(DTOutput("bullpen_accum_metrics"), type = 4, color = "#501214")
         )
@@ -7904,13 +7907,37 @@ server <- function(input, output, session){
     p %>% layout(
       title = list(text = title_text, x = 0.5),
       margin = list(t = 70, r = 20, b = 40, l = 60),
-      xaxis = list(title = "Horizontal Break (in)", range = c(-25, 25), dtick = 3, zeroline = FALSE, fixedrange = TRUE),
-      yaxis = list(title = "Induced Vertical Break (in)", range = c(-25, 25), dtick = 3, zeroline = FALSE, fixedrange = TRUE, scaleanchor = "x", scaleratio = 1),
+      xaxis = list(title = "Horizontal Break (in)", range = c(-30, 30), dtick = 10, constrain = "domain", zeroline = FALSE, fixedrange = TRUE),
+      yaxis = list(title = "Induced Vertical Break (in)", range = c(-30, 30), dtick = 10, constrain = "domain", zeroline = FALSE, fixedrange = TRUE, scaleanchor = "x", scaleratio = 1),
       shapes = list(
-        list(type = "line", x0 = -25, x1 = 25, y0 = 0, y1 = 0, line = list(dash = "dot", width = 1, color = "black")),
-        list(type = "line", x0 = 0, x1 = 0, y0 = -25, y1 = 25, line = list(dash = "dot", width = 1, color = "black"))
+        list(type = "line", x0 = -30, x1 = 30, y0 = 0, y1 = 0, line = list(dash = "dot", width = 1, color = "black")),
+        list(type = "line", x0 = 0, x1 = 0, y0 = -30, y1 = 30, line = list(dash = "dot", width = 1, color = "black"))
       )
     )
+  }
+
+  build_bullpen_accum_release_plotly <- function(d) {
+    validate(need(!is.null(d) && nrow(d)>0,"No bullpen data for this pitcher."))
+    d <- prepare_bullpen_report_data(d)
+    d <- d %>% filter(is.finite(RelSideNum),is.finite(RelHt))
+    validate(need(nrow(d)>0,"No release measurements for the selected sessions."))
+    p <- plotly::plot_ly()
+    for (pt in unique(d$PitchType_plot)) {
+      group <- d[d$PitchType_plot == pt,]
+      color <- pitch_colors[[pt]] %||% "#808080"
+      p <- p %>% plotly::add_trace(data=group,x=~RelSideNum,y=~RelHt,
+        type="scatter",mode="markers",name=pt,
+        marker=list(size=7,opacity=.35,color=color),
+        text=~paste0(PitchType_plot,"<br>Release side: ",round(RelSideNum,2)," ft<br>Release height: ",round(RelHt,2)," ft"),
+        hovertemplate="%{text}<extra></extra>")
+      p <- p %>% plotly::add_trace(x=mean(group$RelSideNum),y=mean(group$RelHt),
+        type="scatter",mode="markers",name=paste(pt,"average"),showlegend=FALSE,
+        marker=list(size=15,color=color,line=list(color="black",width=.7)),inherit=FALSE)
+    }
+    p %>% plotly::layout(title=list(text="Bullpen Release Points",x=.5),
+      margin=list(t=70,r=20,b=40,l=60),
+      xaxis=list(title="Release Side (ft)",range=c(-5,5),constrain="domain"),
+      yaxis=list(title="Release Height (ft)",range=c(0,8),constrain="domain",scaleanchor="x",scaleratio=1))
   }
 
   build_bullpen_numbered_movement_gg <- function(d, title_text = "Movement Plot") {
@@ -8090,16 +8117,24 @@ server <- function(input, output, session){
     build_bullpen_accum_movement_plotly(bullpen_accum_data(), paste0(input$PitcherInput, ": Bullpen Movement"))
   })
 
+  output$bullpen_accum_release <- renderPlotly({
+    build_bullpen_accum_release_plotly(bullpen_accum_data())
+  })
+
   output$bullpen_accum_metrics <- DT::renderDT({
     tbl <- format_bullpen_summary(bullpen_accum_data(), include_total = FALSE, report = FALSE)
     DT::datatable(tbl, rownames = FALSE, options = list(dom = "t", paging = FALSE, ordering = FALSE, autoWidth = TRUE), class = "stripe")
   })
 
-  observe({
-    players <- sort(unique(bullpens_live_df()$Pitcher))
+  # Render choices with the late-mounted Postgame controls, rather than sending
+  # an update message before the browser has created the select input.
+  output$bullpen_report_pitcher_ui <- renderUI({
+    players <- sort(unique(stats::na.omit(as.character(bullpens_live_df()$Pitcher))))
+    players <- players[nzchar(trimws(players))]
     current <- isolate(input$bullpen_report_pitcher)
-    updateSelectInput(session, "bullpen_report_pitcher", choices=players,
-      selected=if(length(current) && current %in% players) current else head(players,1))
+    if (!length(players)) return(div("No bullpen pitchers available in the stored bullpen data."))
+    selectInput("bullpen_report_pitcher", "Pitcher", choices=players,
+      selected=if(length(current) && current %in% players) current else players[1])
   })
   bullpen_report_sessions <- reactive({
     req(input$bullpen_report_pitcher)

@@ -27,3 +27,9 @@ stopifnot(base_movement_trend_favorable("Fastball","HB",-3),
  base_movement_trend_favorable("Changeup","Spin",-100),
  base_movement_trend_favorable("Cutter","IVB",2))
 cat("Comparison selectors, pooled stats, arrows, lazy D1 reads and trend rules passed.\n")
+# Rolling rates pool observations instead of averaging unequal game denominators.
+rolling_fixture <- data.frame(GameID=c("a","b","b","b","c"),
+ Date=c("2026-01-01",rep("2026-01-02",3),"2026-01-03"),value=c(0,1,1,1,0))
+rolled <- base_comparison_rolling_series(rolling_fixture,"AVG",summary_fun,2)
+stopifnot(isTRUE(all.equal(rolled$value,c(0,.75,.75))),grepl("Trailing 2 games",rolled$label[3]))
+cat("Trailing-window denominator weighting passed.\n")

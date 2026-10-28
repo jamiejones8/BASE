@@ -1864,7 +1864,6 @@ ui <- base_hitting_page(
     selectInput("PitcherHand", "Pitcher Handedness", choices = c("All","LHP","RHP"), selected = "All")
   ),
   navset_tab(id="hitting_workspace_tab", selected="Performance",
-    nav_panel("Comparisons", base_comparison_ui("hitting_comparisons")),
     nav_panel(
       title = "Performance",
       div(
@@ -1907,6 +1906,7 @@ ui <- base_hitting_page(
         withSpinner(plotOutput("perf_time_series", height = "520px"), type = 4, color = "#501214")
       ))
     ),
+    nav_panel("Comparisons", base_comparison_ui("hitting_comparisons")),
     nav_panel(
       title = "Lineup Builder",
       div(
