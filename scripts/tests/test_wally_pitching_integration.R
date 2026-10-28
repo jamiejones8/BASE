@@ -219,8 +219,12 @@ if (!grepl("grid-template-columns: repeat(2, minmax(0, 1fr))", style_html, fixed
 expected_tabs <- c(
   "Performance", "Pitch Metrics", "Season Summary", "Pitch Decay",
   "Locations", "Whiffs / Chases / Called Strikes / Barrels", "Stuff+",
-  "Bullpens", "Leaderboard", "Team Trends"
+  "Bullpens", "Comparisons", "Leaderboard", "Team Trends"
 )
+bp_html <- as.character(htmltools::renderTags(workspace$base_pitching_bullpen_postgame_ui)$html)
+stopifnot(grepl("bullpen_report_pitcher",bp_html,fixed=TRUE),grepl("Recent",bp_html,fixed=TRUE),
+          grepl("Builder",bp_html,fixed=TRUE),!grepl("bullpen_report_game",html,fixed=TRUE),
+          grepl("bullpen_accum_games",html,fixed=TRUE))
 team_html <- as.character(htmltools::renderTags(workspace$base_pitching_team_postgame_ui)$html)
 stopifnot(grepl("AAR Builder",team_html,fixed=TRUE),grepl("Recent AARs",team_html,fixed=TRUE),
           !grepl('data-value="Team Report"',html,fixed=TRUE))
@@ -295,6 +299,8 @@ workspace$BASE_PITCHING_RELOAD <- function() {
   updated
 }
 shiny::testServer(workspace$server, {
+  values <- comparison_summary(workspace$df)
+  stopifnot(is.finite(values$`K%`),is.finite(values$`Strike%`))
   session$flushReact()
   refresh_probe$signature <- "saved-corrections"
   session$elapse(1600)

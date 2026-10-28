@@ -981,6 +981,10 @@ base_team_pitching_workspace_server <- function(input, output, session) {
     tags$div(class="base-pitching-workspace base-postgame-aar",
       workspace$head_css, workspace$base_pitching_team_postgame_ui)
   })
+  output$base_postgame_bullpens <- shiny::renderUI({
+    tags$div(class="base-pitching-workspace base-postgame-aar", workspace$head_css,
+      workspace$base_pitching_bullpen_postgame_ui)
+  })
   workspace$server(input, output, session)
   shinyjs::hide("base-pitching-loading")
   invisible(workspace)

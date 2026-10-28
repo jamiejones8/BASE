@@ -1863,7 +1863,8 @@ ui <- base_hitting_page(
     ),
     selectInput("PitcherHand", "Pitcher Handedness", choices = c("All","LHP","RHP"), selected = "All")
   ),
-  navset_tab(
+  navset_tab(id="hitting_workspace_tab", selected="Performance",
+    nav_panel("Comparisons", base_comparison_ui("hitting_comparisons")),
     nav_panel(
       title = "Performance",
       div(
@@ -4820,6 +4821,12 @@ plot_sd_zone_points <- function(d, title = NULL){
 
 # -------------------- Server --------------------
 server <- function(input, output, session){
+  base_comparison_server("hitting_comparisons", reactive(txst_df), SEASON_CHOICES, "Batter",
+    summarize=function(d) as.list(summarize_overall(d)[1,,drop=FALSE]),
+    percentile=hitting_d1_percentile, metrics=setdiff(performance_table_metrics,"PA"),
+    lower_better=hitting_d1_lower_better,
+    active=function() identical(input$hitting_workspace_tab,"Comparisons"))
+
   
   observe({
     d <- dat_filt()

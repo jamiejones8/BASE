@@ -6452,6 +6452,13 @@ if (isTRUE(get0("BASE_PITCHING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))
   base_pitching_page <- page_sidebar
 }
 
+base_pitching_bullpen_postgame_ui <- tagList(
+  selectInput("bullpen_report_pitcher", "Pitcher", choices = character(0)),
+  navset_tab(id="bullpen_report_tabs",
+    nav_panel("Recent", uiOutput("bullpen_recent_sessions")),
+    nav_panel("Builder", selectInput("bullpen_report_game", "Bullpen Session", choices=character(0)),
+      downloadButton("bullpen_report_pdf", "Download Bullpen PDF"), uiOutput("bullpen_report_preview_ui"))))
+
 base_pitching_team_postgame_ui <- base_team_report_ui("pitch_team", "team_game", games_txst, "team_report_preview", "team_report_dl")
 
 base_pitching_postgame_ui <- tagList(
@@ -6704,7 +6711,8 @@ ui <- base_pitching_page(
                 options = list(`actions-box` = TRUE), multiple = TRUE)
   ),
   
-  navset_tab(
+  navset_tab(id="pitching_workspace_tab", selected="Performance",
+    nav_panel("Comparisons", base_comparison_ui("pitching_comparisons")),
     nav_panel(
       id = "main_tabs",
       title = "Performance",
@@ -6815,6 +6823,23 @@ ui <- base_pitching_page(
             type = 4,
             color = "#501214"
           )
+        ),
+        nav_panel(
+          title = "Bullpens",
+          div(
+            class = "mb-3",
+            pickerInput(
+              "bullpen_accum_games",
+              "Bullpen Sessions",
+              choices = character(0),
+              selected = character(0),
+              options = list(`actions-box` = TRUE),
+              multiple = TRUE
+            )
+          ),
+          withSpinner(plotlyOutput("bullpen_accum_movement", height = "650px", width = "100%"), type = 4, color = "#501214"),
+          div(class = "table-title mt-3 mb-1", "Pitch Metrics"),
+          withSpinner(DTOutput("bullpen_accum_metrics"), type = 4, color = "#501214")
         )
       )
     ),
@@ -6991,43 +7016,9 @@ ui <- base_pitching_page(
     if (!isTRUE(get0("BASE_PITCHING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))) {
       nav_panel("AAR", base_pitching_postgame_ui)
     },
-    nav_panel(
-      title = "Bullpens",
-      value = "bullpens",
-      navset_tab(
-        id = "bullpen_tabs",
-        nav_panel(
-          title = "Accumulating",
-          div(
-            class = "mb-3",
-            pickerInput(
-              "bullpen_accum_games",
-              "Bullpen Sessions",
-              choices = character(0),
-              selected = character(0),
-              options = list(`actions-box` = TRUE),
-              multiple = TRUE
-            )
-          ),
-          withSpinner(plotlyOutput("bullpen_accum_movement", height = "650px", width = "100%"), type = 4, color = "#501214"),
-          div(class = "table-title mt-3 mb-1", "Pitch Metrics"),
-          withSpinner(DTOutput("bullpen_accum_metrics"), type = 4, color = "#501214")
-        ),
-        nav_panel(
-          title = "Reports",
-          sidebarLayout(
-            sidebarPanel(
-              selectInput("bullpen_report_game", "Bullpen Session:", choices = character(0), selectize = FALSE),
-              downloadButton("bullpen_report_pdf", "Download Bullpen PDF")
-            ),
-            mainPanel(
-              div(class = "table-title mb-1", "Bullpen Report"),
-              uiOutput("bullpen_report_preview_ui")
-            )
-          )
-        )
-      )
-    ),
+    if (!isTRUE(get0("BASE_PITCHING_EMBEDDED", inherits=FALSE, ifnotfound=FALSE))) {
+      nav_panel("Bullpen Reports", base_pitching_bullpen_postgame_ui)
+    },
     nav_panel(
       title = "Leaderboard",
       div(
@@ -8082,9 +8073,6 @@ server <- function(input, output, session){
     if (!length(keep_accum)) keep_accum <- sessions
     shinyWidgets::updatePickerInput(session, "bullpen_accum_games", choices = as_named_choices(sessions), selected = keep_accum)
 
-    cur_report <- isolate(input$bullpen_report_game) %||% NA_character_
-    sel_report <- if (!is.na(cur_report) && cur_report %in% sessions) cur_report else if (length(sessions)) sessions[[1]] else character(0)
-    updateSelectInput(session, "bullpen_report_game", choices = as_named_choices(sessions), selected = sel_report)
   }, ignoreInit = FALSE)
 
   bullpen_accum_data <- reactive({
@@ -8107,9 +8095,41 @@ server <- function(input, output, session){
     DT::datatable(tbl, rownames = FALSE, options = list(dom = "t", paging = FALSE, ordering = FALSE, autoWidth = TRUE), class = "stripe")
   })
 
+  observe({
+    players <- sort(unique(bullpens_live_df()$Pitcher))
+    current <- isolate(input$bullpen_report_pitcher)
+    updateSelectInput(session, "bullpen_report_pitcher", choices=players,
+      selected=if(length(current) && current %in% players) current else head(players,1))
+  })
+  bullpen_report_sessions <- reactive({
+    req(input$bullpen_report_pitcher)
+    d <- bullpens_live_df() %>% filter(Pitcher == input$bullpen_report_pitcher)
+    d %>% group_by(CustomGameID_BP) %>% summarise(date=bullpen_report_date_value(pick(everything())),.groups="drop") %>% arrange(desc(date))
+  })
+  observeEvent(bullpen_report_sessions(), {
+    choices <- bullpen_report_sessions()$CustomGameID_BP
+    current <- isolate(input$bullpen_report_game)
+    updateSelectInput(session,"bullpen_report_game",choices=as_named_choices(choices),
+      selected=if(length(current) && current %in% choices) current else head(choices,1))
+  })
+  output$bullpen_recent_sessions <- renderUI({
+    choices <- head(bullpen_report_sessions()$CustomGameID_BP,10)
+    if(!length(choices)) return(div("No bullpen sessions available."))
+    tagList(lapply(seq_along(choices),function(i) actionButton(paste0("bullpen_recent_",i),choices[i],class="btn-outline-primary m-2")))
+  })
+  for (i in seq_len(10)) local({
+    idx <- i
+    observeEvent(input[[paste0("bullpen_recent_",idx)]], {
+      choices <- bullpen_report_sessions()$CustomGameID_BP
+      req(length(choices)>=idx)
+      updateSelectInput(session,"bullpen_report_game",selected=choices[idx])
+      bslib::nav_select("bullpen_report_tabs","Builder",session=session)
+    })
+  })
+
   bullpen_report_data <- reactive({
-    req(input$PitcherInput, input$bullpen_report_game)
-    d <- bullpens_live_df() %>% dplyr::filter(Pitcher == input$PitcherInput, CustomGameID_BP == input$bullpen_report_game)
+    req(input$bullpen_report_pitcher, input$bullpen_report_game)
+    d <- bullpens_live_df() %>% dplyr::filter(Pitcher == input$bullpen_report_pitcher, CustomGameID_BP == input$bullpen_report_game)
     validate(need(nrow(d) > 0, "No bullpen data for that report."))
     order_bullpen_rows(d)
   })
@@ -8119,12 +8139,12 @@ server <- function(input, output, session){
   })
 
   bullpen_report_pages <- reactive({
-    if (is.null(input$PitcherInput) || !nzchar(input$PitcherInput) ||
+    if (is.null(input$bullpen_report_pitcher) || !nzchar(input$bullpen_report_pitcher) ||
         is.null(input$bullpen_report_game) || !nzchar(input$bullpen_report_game)) {
       return(list())
     }
     tryCatch(
-      compose_bullpen_report_pages(bullpen_report_data(), input$PitcherInput, bullpen_report_date()),
+      compose_bullpen_report_pages(bullpen_report_data(), input$bullpen_report_pitcher, bullpen_report_date()),
       error = function(e) list()
     )
   })
@@ -8134,7 +8154,7 @@ server <- function(input, output, session){
   })
 
   output$bullpen_report_preview_ui <- renderUI({
-    if (!length(bullpen_sessions_for_pitcher())) {
+    if (!nrow(bullpen_report_sessions())) {
       return(div(class = "text-muted", "No Bullpen data for this pitcher"))
     }
     do.call(tagList, lapply(seq_len(bullpen_report_page_count()), function(i) {
@@ -8143,11 +8163,11 @@ server <- function(input, output, session){
   })
 
   bullpen_report_pdf_cache <- reactiveVal(NULL)
-  observeEvent(list(input$PitcherInput, input$bullpen_report_game), {
+  observeEvent(list(input$bullpen_report_pitcher, input$bullpen_report_game), {
     old <- bullpen_report_pdf_cache()
     if (!is.null(old) && file.exists(old)) unlink(old)
     bullpen_report_pdf_cache(NULL)
-    if (is.null(input$PitcherInput) || !nzchar(input$PitcherInput) ||
+    if (is.null(input$bullpen_report_pitcher) || !nzchar(input$bullpen_report_pitcher) ||
         is.null(input$bullpen_report_game) || !nzchar(input$bullpen_report_game)) {
       return()
     }
@@ -8155,7 +8175,7 @@ server <- function(input, output, session){
     if (is.null(d) || !nrow(d)) return()
     tmp_pdf <- tempfile(fileext = ".pdf")
     try({
-      render_bullpen_report_pdf(d, input$PitcherInput, bullpen_report_date(), tmp_pdf)
+      render_bullpen_report_pdf(d, input$bullpen_report_pitcher, bullpen_report_date(), tmp_pdf)
       bullpen_report_pdf_cache(tmp_pdf)
     }, silent = TRUE)
   }, ignoreInit = TRUE)
@@ -8175,7 +8195,7 @@ server <- function(input, output, session){
             dev.off()
             list(src = tmp, contentType = "image/png", width = "100%")
           }
-          if (is.null(input$PitcherInput) || !nzchar(input$PitcherInput) ||
+          if (is.null(input$bullpen_report_pitcher) || !nzchar(input$bullpen_report_pitcher) ||
               is.null(input$bullpen_report_game) || !nzchar(input$bullpen_report_game)) {
             return(blank_png())
           }
@@ -8206,10 +8226,10 @@ server <- function(input, output, session){
     filename = function() {
       report_date <- bullpen_report_date()
       date_stub <- if (!is.na(report_date)) format(report_date, "%Y%m%d") else "undated"
-      paste0("Bullpen_", gsub("\\s+", "_", input$PitcherInput %||% "Pitcher"), "_", date_stub, ".pdf")
+      paste0("Bullpen_", gsub("\\s+", "_", input$bullpen_report_pitcher %||% "Pitcher"), "_", date_stub, ".pdf")
     },
     content = function(file) {
-      render_bullpen_report_pdf(bullpen_report_data(), input$PitcherInput, bullpen_report_date(), file)
+      render_bullpen_report_pdf(bullpen_report_data(), input$bullpen_report_pitcher, bullpen_report_date(), file)
     }
   )
 
@@ -11937,7 +11957,7 @@ server <- function(input, output, session){
       pitch_metric_percentile(value,cfg$metric,lower_better=cfg$lower_better)
     },team_rows$label,team_rows$value)
     team_rows$display <- ifelse(grepl("%",team_rows$label),sprintf("%.1f%%",100*team_rows$value),sprintf("%.1f",team_rows$value))
-    grid_core <- gridExtra::arrangeGrob(base_team_rankings_grob(team_rows),grid_with_spacers(blocks),ncol=2,widths=c(.27,.73))
+    grid_core <- gridExtra::arrangeGrob(base_team_rankings_grob(team_rows, "All Pitching Staffs"),grid_with_spacers(blocks),ncol=2,widths=c(.27,.73))
     body_cells <- rep(list(grid::nullGrob()), 9)
     body_cells[[5]] <- grid_core
     grid_body <- grid::grobTree(
@@ -19862,6 +19882,23 @@ function(el,x){
       )
     )
   }
+
+  comparison_metrics <- c("BAA","SLG","OPS","WHIP","K/9","BB/9","H/9","FIP","wOBA","wOBAcon",
+    "K%","BB%","BB+HBP%","Barrel%","GB%","pRV","CSW%","Whiff%","IZWhiff%","Chase%",
+    "Strike%","Zone%","FPS%","E&A%","Pre2k Zone%","2k Zone%","Put Away%","1-1 Win%","Avg Velo")
+  comparison_summary <- function(d) {
+    if(!nrow(d)) return(setNames(as.list(rep(NA_real_,length(comparison_metrics))),comparison_metrics))
+    d$PitchTypeMetric <- pitch_metric_pitch_type_vec(d)
+    d <- ensure_counts(ensure_pa(d))
+    vals <- staff_percentile_values(d)
+    vals$label[vals$label == "Heater Velocity"] <- "Avg Velo"
+    as.list(setNames(vals$value,vals$label))
+  }
+  base_comparison_server("pitching_comparisons", reactive(rv$df), SEASON_CHOICES, "Pitcher",
+    summarize=comparison_summary, percentile=function(value,metric) pitching_cell_percentiles(value,metric)[1],
+    metrics=comparison_metrics,
+    lower_better=comparison_metrics[vapply(comparison_metrics,function(m) isTRUE(pitching_metric_config(m)$lower_better),logical(1))],
+    active=function() identical(input$pitching_workspace_tab,"Comparisons"))
 
   team_staff_percentile_data <- reactive({
     vals <- staff_percentile_values(team_trends_data())

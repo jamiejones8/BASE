@@ -8,6 +8,9 @@ page <- as.character(htmltools::renderTags(postgame_reports_workspace_ui())$html
 stopifnot(regexpr('data-value="Team Reports"',page,fixed=TRUE)[1] >
             regexpr('data-value="Catching AAR"',page,fixed=TRUE)[1],
   grepl('base_postgame_pitching_team',page,fixed=TRUE),grepl('base_postgame_hitting_team',page,fixed=TRUE))
+stopifnot(regexpr('data-value="Bullpen Reports"',page,fixed=TRUE)[1] >
+            regexpr('data-value="Team Reports"',page,fixed=TRUE)[1],
+          grepl('base_postgame_bullpens',page,fixed=TRUE))
 choices <- c('Oct 14, 2026 Scrimmage'='latest','Oct 3, 2026 vs Opponent'='older')
 ui <- base_team_report_ui('test_team','test_game',choices,'test_preview','test_download')
 html <- as.character(htmltools::renderTags(ui)$html)

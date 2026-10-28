@@ -4284,7 +4284,8 @@ postgame_reports_workspace_ui <- function() {
         bslib::nav_panel("Umpire Scorecard", base_umpire_report_ui()),
         bslib::nav_panel("Team Reports", bslib::navset_tab(id="base_team_report_tabs",
           bslib::nav_panel("Pitching", shiny::uiOutput("base_postgame_pitching_team")),
-          bslib::nav_panel("Hitting", shiny::uiOutput("base_postgame_hitting_team"))))
+          bslib::nav_panel("Hitting", shiny::uiOutput("base_postgame_hitting_team")))),
+        bslib::nav_panel("Bullpen Reports", shiny::uiOutput("base_postgame_bullpens"))
       )
     ),
     tags$div(class = "hub-footer", base_brand_footer())
@@ -5379,6 +5380,7 @@ server <- function(input, output, session) {
         (identical(input$base_nav, "tab_postgame_reports") &&
            (is.null(input$base_postgame_report_tabs) ||
               identical(input$base_postgame_report_tabs, "Pitching AAR") ||
+              identical(input$base_postgame_report_tabs, "Bullpen Reports") ||
               (identical(input$base_postgame_report_tabs,"Team Reports") &&
                 (is.null(input$base_team_report_tabs) || identical(input$base_team_report_tabs,"Pitching")))))
     }

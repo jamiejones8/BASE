@@ -64,6 +64,13 @@ base_bounded_logo_grob <- function(image,x=.98,y=.98) {
     just=c("right","top"),interpolate=TRUE)
 }
 
+base_movement_trend_favorable <- function(pitch_type, metric, delta) {
+  lower <- (metric == "HB" && pitch_type == "Fastball") ||
+    (metric == "IVB" && pitch_type %in% c("Sinker", "Slider", "Curveball", "Sweeper", "Changeup", "Splitter")) ||
+    (metric == "Spin" && pitch_type %in% c("Changeup", "Splitter"))
+  if (lower) delta < 0 else delta > 0
+}
+
 base_movement_report_table <- function(df) {
   trends <- attr(df,"movement_trends")
   tbl <- gridExtra::tableGrob(df,rows=NULL,theme=gridExtra::ttheme_minimal(base_size=9,
@@ -77,7 +84,7 @@ base_movement_report_table <- function(df) {
     index <- which(tbl$layout$name=="core-fg" & tbl$layout$l==col & tbl$layout$t==i+1)
     if(!length(index)) next
     value <- as.character(df[i,col]);change<-formatC(abs(delta),format="f",digits=digits)
-    color <- if(delta>0) "#25813E" else "#C83232"
+    color <- if(base_movement_trend_favorable(as.character(df$PitchType[i]), colnames(trends)[j], delta)) "#25813E" else "#C83232"
     main<-grid::textGrob(value,gp=grid::gpar(fontsize=8))
     small<-grid::textGrob(change,gp=grid::gpar(fontsize=6,col=color))
     total<-grid::grobWidth(main)+grid::grobWidth(small)+grid::unit(9,"pt")
@@ -93,14 +100,14 @@ base_movement_report_table <- function(df) {
   tbl
 }
 
-base_team_rankings_grob <- function(rows) {
+base_team_rankings_grob <- function(rows, population = "All Offenses") {
   n<-nrow(rows)
   grobs<-list(grid::textGrob("Team Rankings",x=.04,y=.97,just="left",gp=grid::gpar(fontface="bold",fontsize=12,col="#501214")),
-    grid::textGrob("D1 percentiles | All players",x=.04,y=.93,just="left",gp=grid::gpar(fontsize=7,col="#555555")))
+    grid::textGrob(paste("D1 Percentiles |", population),x=.04,y=.93,just="left",gp=grid::gpar(fontsize=7,col="#555555")))
   if(!n) return(do.call(grid::grobTree,grobs))
   for(i in seq_len(n)) {
     y<-.86-(i-1)*min(.065,.78/n);p<-rows$percentile[i]
-    color<-if(!is.finite(p)) "#BFC9CA" else if(p>=75) "#DC735F" else if(p>=40) "#AAC6CB" else "#5D7EBC"
+    color<-if(!is.finite(p)) "#BFC9CA" else if(p>=75) "#488E3A" else if(p>=50) "#87B78D" else if(p>=25) "#E38484" else "#D94343"
     x<-.38+.39*ifelse(is.finite(p),p/100,0)
     grobs<-c(grobs,list(
       grid::textGrob(rows$label[i],x=.04,y=y,just="left",gp=grid::gpar(fontsize=7)),
