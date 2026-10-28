@@ -33,13 +33,13 @@ base_comparison_ui <- function(id) {
     n <- function(x) ns(paste0(key,"_",x))
     shiny::tagList(
       shiny::fluidRow(
-        shiny::column(6,shiny::selectInput(n("season_left"),"Left season",choices=NULL),
-          shiny::selectInput(n("player_left"),"Player / team",choices=NULL)),
-        shiny::column(6,if(opponent) shiny::selectInput(n("team"),"D1 opponent",choices=NULL) else shiny::tagList(
-          shiny::selectInput(n("season_right"),"Right season",choices=NULL),
-          shiny::selectInput(n("player_right"),"Player / team",choices=NULL)))),
+        shiny::column(6,shiny::uiOutput(n("season_left_ui")),
+          shiny::uiOutput(n("player_left_ui"))),
+        shiny::column(6,if(opponent) shiny::uiOutput(n("team_ui")) else shiny::tagList(
+          shiny::uiOutput(n("season_right_ui")),
+          shiny::uiOutput(n("player_right_ui"))))),
       shiny::fluidRow(
-        shiny::column(8,shiny::selectInput(n("metric"),"Time-series statistic",choices=NULL)),
+        shiny::column(8,shiny::uiOutput(n("metric_ui"))),
         shiny::column(4,shiny::numericInput(n("window"),"Rolling window (games)",value=5,min=2,max=30,step=1))),
       shiny::uiOutput(n("headers")),
       shiny::fluidRow(shiny::column(6,plotly::plotlyOutput(n("plot_left"),height="320px")),
@@ -89,34 +89,39 @@ base_comparison_server <- function(id, rows, seasons, player_column, summarize, 
       shiny::req(active(),identical(input$tab,"opponents"))
       d1_loader(team_column)
     })
-    shiny::observeEvent(opponents(), {
+    output$opponents_team_ui <- shiny::renderUI({
       codes <- opponents(); codes <- codes[!is.na(codes) & nzchar(codes)]
       labels <- paste(base_team_display_name(codes),paste0("(",codes,")"))
-      shiny::updateSelectInput(session,"opponents_team",choices=stats::setNames(codes,labels))
+      current <- shiny::isolate(input$opponents_team)
+      shiny::selectInput(session$ns("opponents_team"),"D1 opponent",choices=stats::setNames(codes,labels),
+        selected=if(length(current) && current %in% codes) current else head(codes,1))
     })
     for(key in c("local","opponents")) local({
       k <- key
       getinput <- function(n) input[[paste0(k,"_",n)]]
       for(side in if(k == "opponents") "left" else c("left","right")) local({
         s <- side
-        shiny::observe({
+        output[[paste0(k,"_season_",s,"_ui")]] <- shiny::renderUI({
           d <- local_rows(); col <- intersect(c("SeasonGroup","SeasonTag"),names(d))[1]
           available <- if(is.na(col)) character() else unique(as.character(d[[col]]))
           choices <- seasons[seasons %in% available]
           current <- shiny::isolate(getinput(paste0("season_",s)))
-          shiny::updateSelectInput(session,paste0(k,"_season_",s),choices=choices,
+          shiny::selectInput(session$ns(paste0(k,"_season_",s)),paste(if(s == "left") "Left" else "Right","season"),choices=choices,
             selected=if(length(current) && current %in% choices) current else tail(unname(choices),1))
         })
-        shiny::observe({
+        output[[paste0(k,"_player_",s,"_ui")]] <- shiny::renderUI({
           shiny::req(getinput(paste0("season_",s)))
           d <- season_rows(getinput(paste0("season_",s)))
           choices <- c("Team Total",sort(unique(stats::na.omit(as.character(d[[player_column]])))))
           current <- shiny::isolate(getinput(paste0("player_",s)))
-          shiny::updateSelectInput(session,paste0(k,"_player_",s),choices=choices,
+          shiny::selectInput(session$ns(paste0(k,"_player_",s)),"Player / team",choices=choices,
             selected=if(length(current) && current %in% choices) current else "Team Total")
         })
       })
-      shiny::updateSelectInput(session,paste0(k,"_metric"),choices=metrics,selected=metrics[1])
+      output[[paste0(k,"_metric_ui")]] <- shiny::renderUI({
+        shiny::selectInput(session$ns(paste0(k,"_metric")),"Time-series statistic",choices=metrics,
+          selected=shiny::isolate(getinput("metric")) %||% metrics[1])
+      })
       selected_rows <- function(side) {
         shiny::req(active(),identical(input$tab,k))
         if(k == "opponents" && side == "right") {
@@ -203,4 +208,11 @@ base_comparison_server <- function(id, rows, seasons, player_column, summarize, 
     })
     invisible(list(local_rows=local_rows))
   })
+}
+
+# Client-side linking keeps hover responsive without re-rendering Shiny plots.
+base_link_pitch_hover <- function(plot, group) {
+  htmlwidgets::onRender(plot,
+    paste(readLines(base_project_path("R/plots/linked_pitch_hover.js"),warn=FALSE),collapse="\n"),
+    data=list(group=group))
 }

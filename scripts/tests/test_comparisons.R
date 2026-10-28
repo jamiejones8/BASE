@@ -9,6 +9,13 @@ summary_fun <- function(d) list(AVG=mean(d$value))
 args <- list(rows=reactive(fixture),seasons=c("2026 Season"="S26","2026 Fall"="F26"),player_column="Batter",
  summarize=summary_fun,percentile=function(v,m) v*100,metrics="AVG",lower_better=character(),d1_loader=loader)
 testServer(base_comparison_server,args=args,{
+ # Controls must contain their choices when first rendered, without update messages.
+ season_html <- output$local_season_left_ui$html
+ metric_html <- output$local_metric_ui$html
+ stopifnot(grepl('value="S26"',season_html,fixed=TRUE),grepl('value="AVG"',metric_html,fixed=TRUE),calls==0L)
+ session$setInputs(local_season_left="S26")
+ stopifnot(grepl('Team Total',output$local_player_left_ui$html,fixed=TRUE),
+           grepl('value="B"',output$local_player_left_ui$html,fixed=TRUE))
  session$setInputs(tab="local",local_season_left="S26",local_player_left="Team Total",local_season_right="F26",local_player_right="A",local_metric="AVG")
  stopifnot(calls==0L)
  html <- output$local_rankings$html

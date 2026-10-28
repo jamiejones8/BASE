@@ -314,7 +314,17 @@ shiny::testServer(workspace$server, {
             identical(movement$x$layout$yaxis$range,c(-30,30)))
   release <- plotly::plotly_build(build_bullpen_accum_release_plotly(bp))
   stopifnot(length(release$x$data)>0,all(is.finite(release$x$data[[1]]$x)))
+  movement_averages <- Filter(function(t) any(grepl("^avg:",unlist(t$customdata))),movement$x$data)
+  release_averages <- Filter(function(t) any(grepl("^avg:",unlist(t$customdata))),release$x$data)
+  stopifnot(length(movement_averages)>0,length(release_averages)>0,
+    all(vapply(movement_averages,function(t) grepl("Average",t$hovertemplate) && !grepl("%{text}",t$hovertemplate,fixed=TRUE),logical(1))),
+    all(vapply(release_averages,function(t) grepl("Release height",t$hovertemplate),logical(1))))
+  stopifnot(length(movement$jsHooks$render)>0,length(release$jsHooks$render)>0)
+
   rv$df <- old_rows
+  session$flushReact()
+  stopifnot(grepl('value="S26"',output[["pitching_comparisons-local_season_left_ui"]]$html,fixed=TRUE),
+            grepl('value="K%"',output[["pitching_comparisons-local_metric_ui"]]$html,fixed=TRUE))
 
   values <- comparison_summary(workspace$df)
   stopifnot(is.finite(values$`K%`),is.finite(values$`Strike%`))
