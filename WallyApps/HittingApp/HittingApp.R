@@ -5399,7 +5399,7 @@ server <- function(input, output, session){
           )
         )
       )
-      # Natural column widths match the longest displayed values.
+      tbl_g$widths <- grid::unit(c(0.71, 0.29), "null")
       tbl_g$heights <- grid::unit(rep(1, length(tbl_g$heights)), "null")
       # align Hitter column center, Value column right
       core_idx <- which(tbl_g$layout$name == "core-fg")
@@ -5466,7 +5466,6 @@ server <- function(input, output, session){
           }
         }
       }
-      tbl_g <- base_compact_table_widths(tbl_g)
       gridExtra::arrangeGrob(title_g, tbl_g, ncol = 1, heights = c(0.14, 0.86))
     }
 
@@ -5632,7 +5631,7 @@ server <- function(input, output, session){
         )
       )
     )
-    # Use natural text widths for the name and statistic columns.
+    table_g$widths <- grid::unit(c(1.65, rep(1, length(HITTING_PDF_STAT_METRICS))), "null")
     row_height <- min(0.34, 6.55 / length(table_g$heights))
     table_height <- row_height * length(table_g$heights)
     table_g$heights <- grid::unit(rep(row_height, length(table_g$heights)), "in")

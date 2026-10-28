@@ -11806,7 +11806,8 @@ server <- function(input, output, session){
           )
         )
       )
-      # Keep measured text widths, with only the table theme padding.
+      value_share <- if (identical(title, "Avg Velo")) 0.38 else 0.29
+      tbl_g$widths <- grid::unit(c(1 - value_share, value_share), "null")
       tbl_g$heights <- grid::unit(rep(1, length(tbl_g$heights)), "null")
       # align Pitcher column center, Value column right
       core_idx <- which(tbl_g$layout$name == "core-fg")
@@ -11885,7 +11886,6 @@ server <- function(input, output, session){
           }
         }
       }
-      tbl_g <- base_compact_table_widths(tbl_g)
       gridExtra::arrangeGrob(title_g, tbl_g, ncol = 1, heights = c(0.14, 0.86))
     }
     
