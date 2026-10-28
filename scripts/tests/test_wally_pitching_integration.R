@@ -468,6 +468,10 @@ shiny::testServer(workspace$server, {
   invisible(output$pitch_decay_velocity)
   invisible(output$pitch_decay_single_velocity)
 
+  all_team_before <- leaderboard_source(TRUE)
+  excluded_players(unique(as.character(all_team_before$Pitcher))[1])
+  stopifnot(identical(all_team_before,leaderboard_source(TRUE)),nrow(leaderboard_data())<nrow(all_team_before))
+  excluded_players(character())
   leaderboard_rows <- leaderboard_summary(leaderboard_data())
   if (!nrow(leaderboard_rows)) fail("Pitching leaderboard returned no fixture rows.")
   render_leaderboard_pdf(results_leaderboard_pdf, "results", leaderboard_rows)
@@ -562,3 +566,17 @@ rays <- workspace$arm_angle_segments(slot_fixture)
 expected <- atan2(slot_fixture$RelHeight-(74-10)/12,abs(slot_fixture$RelSide))*180/pi
 actual <- atan2(rays$yend,abs(rays$xend))*180/pi
 stopifnot(isTRUE(all.equal(actual,expected[match(rays$PitchType,slot_fixture$PitchType)])))
+trend_season <- aar_render_payload$game
+trend_season$RelSpeed <- as.numeric(trend_season$RelSpeed)-1.5
+trend_season$SpinRate <- as.numeric(trend_season$SpinRate)-100
+trend_season$InducedVertBreak <- as.numeric(trend_season$InducedVertBreak)-2.2
+trend_season$HorzBreak <- as.numeric(trend_season$HorzBreak)+3.1
+trend_table <- workspace$build_movement_usage_table(aar_render_payload$game,trend_season)
+stopifnot(identical(names(trend_table)[2:5],c('Velo (Max)','Spin','IVB','HB')))
+delta <- attr(trend_table,'movement_trends')
+stopifnot(all(abs(sweep(delta,2,c(1.5,100,2.2,-3.1)))<1e-8,na.rm=TRUE))
+for(shape in list(c(400,100,4),c(100,400,4))) {
+ logo <- base_bounded_logo_grob(array(1,shape))
+ stopifnot(grid::convertWidth(logo$width,'in',valueOnly=TRUE)<=.62,
+           grid::convertHeight(logo$height,'in',valueOnly=TRUE)<=.62)
+}

@@ -134,13 +134,16 @@ base_team_season_import_paths <- function(existing_only = FALSE, root = base_tea
 }
 
 base_read_trackman_import <- function(path) {
-  readr::read_csv(
+  rows <- readr::read_csv(
     path,
     col_types = readr::cols(.default = readr::col_character()),
     progress = FALSE,
     show_col_types = FALSE
   ) %>%
     tibble::as_tibble()
+  # Empty spreadsheet padding is not a TrackMan event. Keep every nonempty row.
+  nonempty <- Reduce(`|`, lapply(rows,function(x) !is.na(x) & nzchar(trimws(as.character(x)))))
+  rows[nonempty,,drop=FALSE]
 }
 
 base_parse_trackman_dates <- function(values) {

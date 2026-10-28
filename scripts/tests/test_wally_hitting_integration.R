@@ -548,6 +548,10 @@ shiny::testServer(workspace$server, {
   invisible(output$leaderboard_team_table)
 
   # Team Total includes only our hitters and leaves independent workspaces alone.
+  all_team_before <- leaderboard_source(TRUE)
+  excluded_players(unique(as.character(all_team_before$Batter))[1])
+  stopifnot(identical(all_team_before,leaderboard_source(TRUE)),nrow(leaderboard_data())<nrow(all_team_before))
+  excluded_players(character())
   leader_before <- output$hit_leaderboard_table
   lineup_before <- output$lineup_builder_ui
   session$setInputs(Hitter="Team Total",PitcherHand="All")

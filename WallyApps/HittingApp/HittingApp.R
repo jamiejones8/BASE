@@ -4924,10 +4924,10 @@ server <- function(input, output, session){
     excluded_players(input$hit_excluded_players %||% character())
     removeModal()
   })
-  leaderboard_data <- reactive({
+  leaderboard_source <- function(include_all_players=FALSE) {
     d <- txst_df
     if (is.null(d) || !nrow(d)) return(d)
-    d <- d[!as.character(d$Batter) %in% excluded_players(), , drop = FALSE]
+    if(!include_all_players) d <- d[!as.character(d$Batter) %in% excluded_players(), , drop = FALSE]
 
 
     # Season filter
@@ -4960,7 +4960,8 @@ server <- function(input, output, session){
 
     # Deduplicate exact event identities without collapsing separate games.
     dedupe_hitting_events(d)
-  })
+  }
+  leaderboard_data <- reactive(leaderboard_source())
 
   leaderboard_summary <- function(d){
     if (is.null(d) || !nrow(d)) return(tibble::tibble())
@@ -5231,6 +5232,16 @@ server <- function(input, output, session){
     )
   })
 
+  hitting_team_rankings_grob <- function() {
+    stats <- summarize_overall(leaderboard_source(TRUE))
+    metrics <- unique(c(unname(HITTING_PDF_LEADERBOARD_METRICS),unname(HITTING_PDF_STAT_METRICS)))
+    rows <- data.frame(label=metrics,value=vapply(metrics,function(m) as.numeric(stats[[m]][1]),numeric(1)))
+    rows$percentile <- mapply(hitting_d1_percentile,rows$value,rows$label)
+    rows$display <- ifelse(grepl("%",rows$label),sprintf("%.1f%%",100*rows$value),
+      ifelse(rows$label %in% c("MaxEV","90th EV"),sprintf("%.1f",rows$value),sprintf("%.3f",rows$value)))
+    base_team_rankings_grob(rows)
+  }
+
   render_leaderboard_pdf <- function(outfile, data_df) {
     maroon <- "#501214"
     gold   <- "#B4975A"
@@ -5388,7 +5399,7 @@ server <- function(input, output, session){
           )
         )
       )
-      tbl_g$widths <- grid::unit(c(0.71, 0.29), "null")
+      # Natural column widths match the longest displayed values.
       tbl_g$heights <- grid::unit(rep(1, length(tbl_g$heights)), "null")
       # align Hitter column center, Value column right
       core_idx <- which(tbl_g$layout$name == "core-fg")
@@ -5455,6 +5466,7 @@ server <- function(input, output, session){
           }
         }
       }
+      tbl_g <- base_compact_table_widths(tbl_g)
       gridExtra::arrangeGrob(title_g, tbl_g, ncol = 1, heights = c(0.14, 0.86))
     }
 
@@ -5494,7 +5506,7 @@ server <- function(input, output, session){
                              widths = widths, heights = heights)
     }
 
-    grid_core <- grid_with_spacers(blocks)
+    grid_core <- gridExtra::arrangeGrob(hitting_team_rankings_grob(),grid_with_spacers(blocks),ncol=2,widths=c(.27,.73))
     body_cells <- rep(list(grid::nullGrob()), 9)
     body_cells[[5]] <- grid_core
     grid_body <- grid::grobTree(
@@ -5620,7 +5632,7 @@ server <- function(input, output, session){
         )
       )
     )
-    table_g$widths <- grid::unit(c(1.65, rep(1, length(HITTING_PDF_STAT_METRICS))), "null")
+    # Use natural text widths for the name and statistic columns.
     row_height <- min(0.34, 6.55 / length(table_g$heights))
     table_height <- row_height * length(table_g$heights)
     table_g$heights <- grid::unit(rep(row_height, length(table_g$heights)), "in")
@@ -5647,7 +5659,7 @@ server <- function(input, output, session){
     )
     body_g <- grid::grobTree(
       grid::rectGrob(gp = grid::gpar(fill = cream, col = NA)),
-      table_panel
+      gridExtra::arrangeGrob(hitting_team_rankings_grob(),table_panel,ncol=2,widths=c(.27,.73))
     )
 
     grDevices::pdf(outfile, width = 11, height = 8.5, useDingbats = FALSE)

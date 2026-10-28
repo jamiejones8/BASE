@@ -55,3 +55,70 @@ base_titled_report_table <- function(tbl, title) {
   wrapper <- grid::grobTree(fitted, vp=grid::viewport(y=1,just='top',height=sum(tg$heights)))
   cowplot::ggdraw() + cowplot::draw_grob(wrapper)
 }
+
+# Identical physical bounding boxes prevent tall opponent marks crossing the header.
+base_bounded_logo_grob <- function(image,x=.98,y=.98) {
+  aspect <- dim(image)[2]/dim(image)[1]
+  width <- min(.62,.62*aspect);height<-width/aspect
+  grid::rasterGrob(image,x=x,y=y,width=grid::unit(width,"in"),height=grid::unit(height,"in"),
+    just=c("right","top"),interpolate=TRUE)
+}
+
+base_movement_report_table <- function(df) {
+  trends <- attr(df,"movement_trends")
+  tbl <- gridExtra::tableGrob(df,rows=NULL,theme=gridExtra::ttheme_minimal(base_size=9,
+    padding=grid::unit(c(5,5),"pt"),core=list(bg_params=list(fill=rep(c("white","#F8F3EA"),length.out=nrow(df)),col="#D0D0D0"))))
+  if(is.null(trends)) return(tbl)
+  for(j in seq_len(ncol(trends))) for(i in seq_len(nrow(df))) {
+    delta <- trends[i,j];if(!is.finite(delta)) next
+    digits <- if(colnames(trends)[j]=="Spin") 0 else 1
+    delta <- round(delta,digits);if(delta==0) next
+    col <- match(colnames(trends)[j],names(df))
+    index <- which(tbl$layout$name=="core-fg" & tbl$layout$l==col & tbl$layout$t==i+1)
+    if(!length(index)) next
+    value <- as.character(df[i,col]);change<-formatC(abs(delta),format="f",digits=digits)
+    color <- if(delta>0) "#25813E" else "#C83232"
+    main<-grid::textGrob(value,gp=grid::gpar(fontsize=8))
+    small<-grid::textGrob(change,gp=grid::gpar(fontsize=6,col=color))
+    total<-grid::grobWidth(main)+grid::grobWidth(small)+grid::unit(9,"pt")
+    start<-(grid::unit(1,"npc")-total)/2
+    main<-grid::editGrob(main,x=start,just="left")
+    tx<-start+grid::grobWidth(main)+grid::unit(4,"pt")
+    triangle<-grid::polygonGrob(x=tx+grid::unit(c(-2.5,2.5,0),"pt"),
+      y=grid::unit(.5,"npc")+grid::unit(if(delta>0)c(-2,-2,2) else c(2,2,-2),"pt"),gp=grid::gpar(fill=color,col=NA))
+    small<-grid::editGrob(small,x=tx+grid::unit(4,"pt"),just="left")
+    tbl$grobs[[index]]<-grid::grobTree(main,triangle,small)
+    tbl$widths[col]<-grid::unit.pmax(tbl$widths[col],total+grid::unit(5,"pt"))
+  }
+  tbl
+}
+
+base_team_rankings_grob <- function(rows) {
+  n<-nrow(rows)
+  grobs<-list(grid::textGrob("Team Rankings",x=.04,y=.97,just="left",gp=grid::gpar(fontface="bold",fontsize=12,col="#501214")),
+    grid::textGrob("D1 percentiles | All players",x=.04,y=.93,just="left",gp=grid::gpar(fontsize=7,col="#555555")))
+  if(!n) return(do.call(grid::grobTree,grobs))
+  for(i in seq_len(n)) {
+    y<-.86-(i-1)*min(.065,.78/n);p<-rows$percentile[i]
+    color<-if(!is.finite(p)) "#BFC9CA" else if(p>=75) "#DC735F" else if(p>=40) "#AAC6CB" else "#5D7EBC"
+    x<-.38+.39*ifelse(is.finite(p),p/100,0)
+    grobs<-c(grobs,list(
+      grid::textGrob(rows$label[i],x=.04,y=y,just="left",gp=grid::gpar(fontsize=7)),
+      grid::segmentsGrob(x0=.38,x1=.77,y0=y,y1=y,gp=grid::gpar(col="#D6E5E7",lwd=9)),
+      grid::segmentsGrob(x0=.38,x1=x,y0=y,y1=y,gp=grid::gpar(col=color,lwd=9)),
+      grid::segmentsGrob(x0=.575,x1=.575,y0=y-.012,y1=y+.012,gp=grid::gpar(col="white",lwd=1)),
+      grid::circleGrob(x=x,y=y,r=grid::unit(6,"pt"),gp=grid::gpar(fill=color,col=NA)),
+      grid::textGrob(if(is.finite(p)) round(p) else "--",x=x,y=y,gp=grid::gpar(fontsize=6,col="white",fontface="bold")),
+      grid::textGrob(if(is.finite(rows$value[i])) rows$display[i] else "--",x=.97,y=y,just="right",gp=grid::gpar(fontsize=7))
+    ))
+  }
+  do.call(grid::grobTree,grobs)
+}
+
+base_compact_table_widths <- function(tbl,padding=8) {
+  for(col in seq_along(tbl$widths)) {
+    cells <- which(tbl$layout$l==col & tbl$layout$name %in% c("core-fg","colhead-fg"))
+    if(length(cells)) tbl$widths[col] <- do.call(grid::unit.pmax,lapply(tbl$grobs[cells],grid::grobWidth))+grid::unit(padding,"pt")
+  }
+  tbl
+}

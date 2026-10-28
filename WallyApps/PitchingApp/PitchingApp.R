@@ -1617,7 +1617,7 @@ team_statline_bits <- function(d) {
 }
 
 # ---------- MOVEMENT & USAGE TABLE  ----------
-build_movement_usage_table <- function(game_p) {
+build_movement_usage_table <- function(game_p, season_p = NULL) {
   p <- tibble::as_tibble(game_p)
   
   # Early out
@@ -1664,6 +1664,7 @@ build_movement_usage_table <- function(game_p) {
   tot_L <- sum(p$BatterSide == "L", na.rm = TRUE)
   tot_R <- sum(p$BatterSide == "R", na.rm = TRUE)
   
+  if(!"SpinRate" %in% names(p)) p$SpinRate <- NA_real_
   # Summarise per pitch type
   by_pt <- p %>%
     dplyr::group_by(PitchType) %>%
@@ -1674,6 +1675,7 @@ build_movement_usage_table <- function(game_p) {
       n_L   = sum(BatterSide == "L", na.rm = TRUE),
       n_R   = sum(BatterSide == "R", na.rm = TRUE),
       Velo  = mean(suppressWarnings(as.numeric(RelSpeed)),           na.rm = TRUE),
+      Spin  = mean(suppressWarnings(as.numeric(SpinRate)), na.rm=TRUE),
       IVB   = mean(suppressWarnings(as.numeric(InducedVertBreak)),   na.rm = TRUE),
       HB    = mean(suppressWarnings(as.numeric(HorzBreak)),          na.rm = TRUE),
       .groups = "drop"
@@ -1730,7 +1732,7 @@ build_movement_usage_table <- function(game_p) {
       `vLHH %`    = ifelse(is.finite(`vLHH %`),    scales::percent(`vLHH %`,    accuracy = 0.1), "—"),
       `vRHH %`    = ifelse(is.finite(`vRHH %`),    scales::percent(`vRHH %`,    accuracy = 0.1), "—")
     ) %>%
-    dplyr::select(PitchType, `Velo (Max)`, IVB, HB, `Usage%`, `FP Usage%`, `2K Usage%`, `vLHH %`, `vRHH %`)
+    dplyr::select(PitchType, `Velo (Max)`, Spin, IVB, HB, `Usage%`, `FP Usage%`, `2K Usage%`, `vLHH %`, `vRHH %`)
   
   
   # Debug check: column sums for L/R (should be ~100% when finite)
@@ -1739,7 +1741,19 @@ build_movement_usage_table <- function(game_p) {
     sR <- sum(suppressWarnings(readr::parse_number(out$`vRHH %`)), na.rm = TRUE)
   }
   
-  as.data.frame(out)
+  out$Spin <- round(out$Spin)
+  result <- as.data.frame(out)
+  trends <- matrix(NA_real_,nrow(result),4,dimnames=list(NULL,c("Velo (Max)","Spin","IVB","HB")))
+  for(j in seq_len(4)) {
+    field <- c("RelSpeed","SpinRate","InducedVertBreak","HorzBreak")[j]
+    if(!is.null(season_p) && field %in% names(season_p)) for(i in seq_len(nrow(result))) {
+      game_values <- suppressWarnings(as.numeric(p[[field]][p$PitchType==result$PitchType[i]]))
+      season_values <- suppressWarnings(as.numeric(season_p[[field]][as.character(season_p$PitchType)==result$PitchType[i]]))
+      if(any(is.finite(game_values)) && any(is.finite(season_values))) trends[i,j] <- mean(game_values,na.rm=TRUE)-mean(season_values,na.rm=TRUE)
+    }
+  }
+  attr(result,"movement_trends") <- trends
+  result
 }
 
 # ===========================================
@@ -2981,6 +2995,7 @@ safe_tbl_plot <- function(obj, title = "Table", season_col_label = "Season") {
     if (title == "Process Metrics") txst_process_table(obj, season_col_label = season_col_label)
     else if (title == "Count Breakdown") txst_count_breakdown_table(obj)
     else if (grepl("Pitch Type Performance$", title)) txst_ptperf_table(obj)
+    else if (!is.null(attr(obj,"movement_trends"))) base_movement_report_table(obj)
     else as_txst_table(obj)
   } else obj
   base_titled_report_table(tbl, title)
@@ -3378,7 +3393,7 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
   )
   
   mu_df <- tryCatch(
-    build_movement_usage_table(game_p),
+    build_movement_usage_table(game_p, season_p),
     error = function(e) {
       warning("[AAR] build_movement_usage_table failed: ", conditionMessage(e))
       data.frame(Status = paste("Unavailable:", conditionMessage(e)))
@@ -3422,7 +3437,7 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
   season_table_height <- table_height(txst_ptperf_table(ptpf_df))
   band_height <- max(game_table_height+season_table_height,
     table_height(as_txst_table(release_df))+table_height(txst_process_table(proc_df,season_col_label_local)))
-  movement_height <- table_height(as_txst_table(mu_df))
+  movement_height <- table_height(base_movement_report_table(mu_df))
   right_tables <- game_ptpf / row2_right + patchwork::plot_layout(heights=c(game_table_height,season_table_height))
   row1b <- left_tables | right_tables
   # Fixed common canvas: titles share a baseline and legends occupy the gutter.
@@ -3476,8 +3491,7 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
     ext <- tolower(tools::file_ext(txst_path))
     img <- if (ext == "png") png::readPNG(txst_path) else if (ext %in% c("jpg","jpeg") && requireNamespace("jpeg", quietly = TRUE)) jpeg::readJPEG(txst_path) else NULL
     if (!is.null(img)) {
-      txst_grob <- grid::rasterGrob(img, x=.98, y=.98, width=grid::unit(.10,"npc"),
-                                    just=c("right","top"), interpolate=TRUE)
+      txst_grob <- base_bounded_logo_grob(img,x=.98,y=.98)
       h <- dim(img)[1]; w <- dim(img)[2]
       if (is.finite(h) && is.finite(w) && h > 0) txst_asp <- w / h
     }
@@ -3485,8 +3499,8 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
   
   matchup <- if (exists("base_report_matchup",mode="function")) base_report_matchup(game_raw,"PitcherTeam") else NULL
   opponent_image <- if (!is.null(matchup)) base_report_opponent_image(matchup) else NULL
-  if (!is.null(opponent_image) && !is.null(txst_grob)) txst_grob <- grid::editGrob(txst_grob,x=grid::unit(.80,"npc"),width=grid::unit(.075,"npc"))
-  opponent_grob <- if (!is.null(opponent_image)) grid::rasterGrob(opponent_image,x=.98,y=.98,width=grid::unit(.10,"npc"),just=c("right","top"),interpolate=TRUE) else NULL
+  if (!is.null(opponent_image) && !is.null(txst_grob)) txst_grob <- grid::editGrob(txst_grob,x=grid::unit(.80,"npc"))
+  opponent_grob <- if (!is.null(opponent_image)) base_bounded_logo_grob(opponent_image,x=.98,y=.98) else NULL
   cowplot::ggdraw() +
     { if (!is.null(wm_grob)) cowplot::draw_grob(wm_grob, x = 0.5, y = 0.5, width = 1, height = 1) } +
     cowplot::draw_plot(final, x = 0, y = 0, width = 1, height = 1) +
@@ -11309,10 +11323,10 @@ server <- function(input, output, session){
     excluded_players(input$pitch_excluded_players %||% character())
     removeModal()
   })
-  leaderboard_data <- reactive({
+  leaderboard_source <- function(include_all_players=FALSE) {
     d <- txst_df
     if (is.null(d) || !nrow(d)) return(d)
-    d <- d[!as.character(d$Pitcher) %in% excluded_players(), , drop = FALSE]
+    if(!include_all_players) d <- d[!as.character(d$Pitcher) %in% excluded_players(), , drop = FALSE]
 
 
     # Filter out "Bad data" pitch types (keep leaderboard + exports aligned)
@@ -11371,7 +11385,7 @@ server <- function(input, output, session){
 
     # Minimum PA filter (per pitcher)
     min_pa <- input$leader_min_pa %||% 0
-    if (is.numeric(min_pa) && min_pa > 0) {
+    if (!include_all_players && is.numeric(min_pa) && min_pa > 0) {
       tmp <- ensure_pa(d)
       pa_counts <- tmp %>%
         dplyr::group_by(Pitcher, PA_ID) %>%
@@ -11382,7 +11396,8 @@ server <- function(input, output, session){
       d <- d %>% dplyr::filter(Pitcher %in% keep)
     }
     d
-  })
+  }
+  leaderboard_data <- reactive(leaderboard_source())
   
   # ---- Leaderboard summary (numeric, for exports) ----
   leaderboard_summary <- function(d) {
@@ -11791,8 +11806,7 @@ server <- function(input, output, session){
           )
         )
       )
-      value_share <- if (identical(title, "Avg Velo")) 0.38 else 0.29
-      tbl_g$widths <- grid::unit(c(1 - value_share, value_share), "null")
+      # Keep measured text widths, with only the table theme padding.
       tbl_g$heights <- grid::unit(rep(1, length(tbl_g$heights)), "null")
       # align Pitcher column center, Value column right
       core_idx <- which(tbl_g$layout$name == "core-fg")
@@ -11871,6 +11885,7 @@ server <- function(input, output, session){
           }
         }
       }
+      tbl_g <- base_compact_table_widths(tbl_g)
       gridExtra::arrangeGrob(title_g, tbl_g, ncol = 1, heights = c(0.14, 0.86))
     }
     
@@ -11914,7 +11929,15 @@ server <- function(input, output, session){
                              widths = widths, heights = heights)
     }
     
-    grid_core <- grid_with_spacers(blocks)
+    vals <- staff_percentile_values(leaderboard_source(TRUE))
+    labels <- c("K%","BB%","Barrel%","Whiff%","CSW%","Avg Velo","Strike%","Zone%","Pre2k Zone%","FPS%","E&A%","Put Away%")
+    team_rows <- data.frame(label=labels,value=vals$value[match(ifelse(labels=="Avg Velo","Heater Velocity",labels),vals$label)])
+    team_rows$percentile <- mapply(function(label,value) {
+      cfg <- pitching_metric_config(label)
+      pitch_metric_percentile(value,cfg$metric,lower_better=cfg$lower_better)
+    },team_rows$label,team_rows$value)
+    team_rows$display <- ifelse(grepl("%",team_rows$label),sprintf("%.1f%%",100*team_rows$value),sprintf("%.1f",team_rows$value))
+    grid_core <- gridExtra::arrangeGrob(base_team_rankings_grob(team_rows),grid_with_spacers(blocks),ncol=2,widths=c(.27,.73))
     body_cells <- rep(list(grid::nullGrob()), 9)
     body_cells[[5]] <- grid_core
     grid_body <- grid::grobTree(

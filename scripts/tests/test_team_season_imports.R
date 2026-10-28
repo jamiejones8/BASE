@@ -86,6 +86,8 @@ bullpen$Date <- "09/15/2025"
 bullpen_path <- file.path(scratch, "bullpen.csv")
 readr::write_csv(bullpen, bullpen_path)
 bullpen_first <- base_import_trackman_game(bullpen_path, "BP", root = scratch)
+# Comma-only spreadsheet padding in a saved source must not block valid imports.
+cat(paste(rep("",ncol(bullpen)),collapse=","),"\n",file=bullpen_first$destination,append=TRUE,sep="")
 bullpen_second <- base_import_trackman_game(bullpen_path, "BP", root = scratch)
 if (!identical(basename(bullpen_first$destination), "Bullpens - cleaned.csv") ||
     bullpen_first$inserted_rows != 3L || bullpen_first$total_rows != 3L ||
