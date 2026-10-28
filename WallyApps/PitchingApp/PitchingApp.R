@@ -8194,7 +8194,11 @@ server <- function(input, output, session){
   })
 
   bullpen_report_page_count <- reactive({
-    max(1L, length(bullpen_report_pages()))
+    # Counting pages must not construct every plot/table grob. The PDF builder
+    # will compose those pages once when the preview is actually requested.
+    d <- prepare_bullpen_report_data(bullpen_report_data())
+    if (!nrow(d)) return(1L)
+    1L + length(split_bullpen_log_pages(format_bullpen_pitch_log(d)))
   })
 
   output$bullpen_report_preview_ui <- renderUI({
@@ -8206,25 +8210,33 @@ server <- function(input, output, session){
     }))
   })
 
-  bullpen_report_pdf_cache <- reactiveVal(NULL)
-  observeEvent(list(input$bullpen_report_pitcher, input$bullpen_report_game), {
-    old <- bullpen_report_pdf_cache()
+  bullpen_report_pdf_path <- reactiveVal(NULL)
+  session$onSessionEnded(function() {
+    old <- isolate(bullpen_report_pdf_path())
     if (!is.null(old) && file.exists(old)) unlink(old)
-    bullpen_report_pdf_cache(NULL)
-    if (is.null(input$bullpen_report_pitcher) || !nzchar(input$bullpen_report_pitcher) ||
-        is.null(input$bullpen_report_game) || !nzchar(input$bullpen_report_game)) {
-      return()
-    }
+  })
+  # Build only when a visible preview requests the PDF. An observer here also
+  # rendered reports when hidden report selectors initialized or changed.
+  bullpen_report_pdf_cache <- reactive({
+    req(input$bullpen_report_pitcher, input$bullpen_report_game)
+    old <- isolate(bullpen_report_pdf_path())
+    if (!is.null(old) && file.exists(old)) unlink(old)
+    isolate(bullpen_report_pdf_path(NULL))
     d <- tryCatch(bullpen_report_data(), error = function(e) NULL)
-    if (is.null(d) || !nrow(d)) return()
+    if (is.null(d) || !nrow(d)) return(NULL)
     tmp_pdf <- tempfile(fileext = ".pdf")
-    try({
+    tryCatch({
       render_bullpen_report_pdf(d, input$bullpen_report_pitcher, bullpen_report_date(), tmp_pdf)
-      bullpen_report_pdf_cache(tmp_pdf)
-    }, silent = TRUE)
-  }, ignoreInit = TRUE)
+      isolate(bullpen_report_pdf_path(tmp_pdf))
+      tmp_pdf
+    }, error = function(e) {
+      unlink(tmp_pdf)
+      NULL
+    })
+  })
 
   observe({
+    req(identical(input$bullpen_report_tabs, "Builder"))
     n_pages <- bullpen_report_page_count()
     for (i in seq_len(n_pages)) {
       local({
@@ -13630,8 +13642,8 @@ server <- function(input, output, session){
     n <- nrow(d)
     out <- rep(NA_character_, n)
     take <- function(col) {
-      if (!col %in% names(d)) return()
-      vals <- vapply(d[[col]], pitch_metric_pitch_type, character(1))
+      if (!col %in% names(d) || !anyNA(out)) return()
+      vals <- pitch_metric_pitch_type(d[[col]])
       ok <- is.na(out) & !is.na(vals) & nzchar(vals)
       out[ok] <<- vals[ok]
     }

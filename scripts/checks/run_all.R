@@ -21,6 +21,7 @@ checks <- list(
   c("Rscript", "scripts/tests/test_player_health_imports.R"),
   c("Rscript", "scripts/tests/test_password_gate.R"),
   c("Rscript", "scripts/tests/test_wally_pitching_integration.R"),
+  c("Rscript", "scripts/tests/test_pitching_load_performance.R"),
   c("Rscript", "scripts/tests/test_wally_hitting_integration.R"),
   c("Rscript", "scripts/tests/test_leaderboards_hitting_integrity.R"),
   c("Rscript", "scripts/tests/test_wally_defense_integration.R"),
