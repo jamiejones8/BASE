@@ -7837,6 +7837,9 @@ server <- function(input, output, session){
         out[, 11:12, drop = FALSE]
       )
     }
+    total <- out$`Pitch Type` == "Total"
+    blank_columns <- setdiff(names(out), c("Pitch Type", "#", "Zone%", "Rel Ht", "Rel Side", "Extension"))
+    out[total, blank_columns] <- ""
     out
   }
 
@@ -8121,7 +8124,7 @@ server <- function(input, output, session){
   })
 
   output$bullpen_accum_metrics <- DT::renderDT({
-    tbl <- format_bullpen_summary(bullpen_accum_data(), include_total = FALSE, report = FALSE)
+    tbl <- format_bullpen_summary(bullpen_accum_data(), include_total = TRUE, report = FALSE)
     DT::datatable(tbl, rownames = FALSE, options = list(dom = "t", paging = FALSE, ordering = FALSE, autoWidth = TRUE), class = "stripe")
   })
 
@@ -8151,18 +8154,64 @@ server <- function(input, output, session){
   })
   bullpen_recent_sessions <- reactive({
     bullpens_live_df() %>% group_by(Pitcher,CustomGameID_BP) %>%
-      summarise(date=bullpen_report_date_value(pick(everything())),.groups="drop") %>%
+      summarise(date=bullpen_report_date_value(pick(everything())),Pitches=n(),.groups="drop") %>%
       arrange(desc(date),Pitcher,CustomGameID_BP) %>% slice_head(n=20)
   })
   output$bullpen_recent_sessions <- renderUI({
     recent <- bullpen_recent_sessions()
     if(!nrow(recent)) return(div("No bullpen sessions available."))
-    tagList(lapply(seq_len(nrow(recent)),function(i) {
-      div(class="mb-2",tags$button(type="button",class="btn btn-outline-primary",
-        onclick=sprintf("Shiny.setInputValue('bullpen_open_session', %s, {priority:'event'});",
-          jsonlite::toJSON(recent$CustomGameID_BP[i],auto_unbox=TRUE)),
-        paste(recent$Pitcher[i],format(recent$date[i],"%b %d, %Y"),sep=" — ")))
-    }))
+    row_style <- "display:grid;grid-template-columns:1.5fr 1fr .5fr .8fr .8fr;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e5e5;"
+    tagList(
+      div(style=paste0(row_style,"font-weight:700;"),div("Name"),div("Date"),div("Pitches"),div("Preview"),div("Download")),
+      lapply(seq_len(nrow(recent)),function(i) {
+        div(style=row_style,
+          div(style="font-weight:700;",name_display(recent$Pitcher[i])),
+          div(if(is.na(recent$date[i])) "Unknown date" else format(recent$date[i],"%B %d, %Y")),
+          div(recent$Pitches[i]),
+          actionButton(paste0("bullpen_recent_preview_",i),"Preview",class="btn-sm"),
+          downloadButton(paste0("bullpen_recent_download_",i),"Download",class="btn-sm"))
+      }))
+  })
+  bullpen_recent_preview <- reactiveVal(NULL)
+  bullpen_recent_preview_pages <- reactive({
+    selected <- bullpen_recent_preview()
+    req(!is.null(selected))
+    d <- bullpens_live_df() %>% filter(Pitcher == selected$Pitcher[[1]], CustomGameID_BP == selected$CustomGameID_BP[[1]])
+    compose_bullpen_report_pages(order_bullpen_rows(d), selected$Pitcher[[1]], selected$date[[1]])
+  })
+  output$bullpen_recent_preview_ui <- renderUI({
+    pages <- bullpen_recent_preview_pages()
+    tagList(lapply(seq_along(pages),function(i) plotOutput(paste0("bullpen_recent_page_",i),height="1100px")))
+  })
+  observeEvent(bullpen_recent_preview_pages(), {
+    for(i in seq_along(bullpen_recent_preview_pages())) local({
+      page <- i
+      output[[paste0("bullpen_recent_page_",page)]] <- renderPlot({
+        print(bullpen_recent_preview_pages()[[page]])
+      },width=850,height=1100,res=110)
+    })
+  })
+  for(i in seq_len(20)) local({
+    idx <- i
+    observeEvent(input[[paste0("bullpen_recent_preview_",idx)]], {
+      rows <- bullpen_recent_sessions()
+      req(nrow(rows)>=idx)
+      bullpen_recent_preview(rows[idx,])
+      showModal(modalDialog(title=paste("Bullpen Preview:",name_display(rows$Pitcher[idx])),
+        div(class="base-report-preview base-report-preview-portrait",uiOutput("bullpen_recent_preview_ui")),
+        easyClose=TRUE,size="l",footer=modalButton("Close")))
+    },ignoreInit=TRUE)
+    output[[paste0("bullpen_recent_download_",idx)]] <- downloadHandler(
+      filename=function(){
+        rows <- bullpen_recent_sessions();req(nrow(rows)>=idx)
+        paste0("Bullpen_",gsub("[^A-Za-z0-9_-]","_",rows$Pitcher[idx]),"_",
+          if(is.na(rows$date[idx])) "undated" else format(rows$date[idx],"%Y%m%d"),".pdf")
+      },
+      content=function(file){
+        rows <- bullpen_recent_sessions();req(nrow(rows)>=idx)
+        d <- bullpens_live_df() %>% filter(Pitcher == rows$Pitcher[idx],CustomGameID_BP == rows$CustomGameID_BP[idx])
+        render_bullpen_report_pdf(order_bullpen_rows(d),rows$Pitcher[idx],rows$date[idx],file)
+      })
   })
   observeEvent(input$bullpen_open_session, {
     recent <- bullpen_recent_sessions()
