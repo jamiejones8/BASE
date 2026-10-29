@@ -44,3 +44,16 @@ assert.equal(reopened[2028].SP[1],'nolan');
 assert.equal(reopened[2030].Closer[0],'nolan');
 assert.ok(!reopened[2030].SP.includes('nolan'));
 console.log('DH exclusions, handedness, fixed pitching slots, future arrivals, eligibility, reload, and forward-only changes passed.');
+// Positional needs use projected eligibility and count multi-role players once per category.
+const utility=player('utility',['C','SS','2B','OF','LHP'],1,2027,{bats:'S',throws:'L'});
+const needs=[utility,utility,player('corner',['1B','3B'],1,2027,{bats:'R'}),
+ player('grad',['C'],5),player('arrival',['C'],1,2028,{bats:'L'}),
+ player('departed',['OF'],1,2027,{removedFrom:2028}),
+ player('unsigned',['C'],1,2028,{status:'Recruiting'}),player('arm',['RHP'],1,2027,{bats:'R'})];
+const counts=Object.fromEntries(M.positionalBreakdown(needs,2028).map(x=>[x.label,x.count]));
+assert.deepEqual(counts,{Total:4,C:2,OF:1,MIF:1,CIF:1,LHP:1,RHP:1,LHH:2,RHH:2});
+assert.deepEqual(M.positionalBreakdown([],2028).map(x=>x.target),[34,3,6,4,4,8,8,6,6]);
+assert.equal(M.signingClass({entryYear:2028}),2027);
+assert.equal(M.signingClass({entryYear:'2029'}),2028);
+assert.equal(needs[4].entryYear,2028);
+console.log('Positional counts, two-way/switch hitters, future eligibility, and signing classes passed.');

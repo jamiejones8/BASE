@@ -32,6 +32,16 @@ function budgetCard(y){
  const label=summary.budget===null?'Set a total budget to see available room':summary.budget===0?(summary.used>0?'Allocations exceed the $0 budget':'0% of Budget Used'):`${Math.round(summary.percent)}% of Budget Used`;
  track.setAttribute('aria-valuetext',label);card.append(track,el('div','budget-caption',label));return card;
 }
+function rosterSummary(y){
+ const row=el('div','roster-summary'),card=el('section','budget-card positional-card');
+ card.setAttribute('aria-label',`${y} Positional Breakdown`);card.append(el('div','eyebrow','Positional Breakdown'));
+ const grid=el('div','positional-grid');
+ for(const {label,target,count} of M.positionalBreakdown(all(),y)){
+  const item=el('div','positional-count'),number=el('strong',y>currentYear&&count<target?'roster-shortage':'',String(count));
+  item.append(el('span','position-label',`${label}: `),number,el('span','',`/${target}`));grid.append(item);
+ }
+ card.append(grid);row.append(budgetCard(y),card);return row;
+}
 function fundingOutlook(){
  const table=el('table','funding-outlook');const head=el('tr');['Season','Budget','Used','Incoming class','Remaining'].forEach(t=>head.append(el('th','',t)));const thead=el('thead');thead.append(head);table.append(thead);const body=el('tbody');
  for(let y=currentYear;y<currentYear+5;y++){const s=M.budgetSummary(state.funding,all(),y),row=el('tr',y===year?'selected-season':'');[String(y),money(s.budget),money(s.used),money(s.incoming),money(s.remaining)].forEach((v,i)=>row.append(el('td',i===4&&s.remaining!==null&&s.remaining<0?'over-budget':'',v)));body.append(row);}table.append(body);return table;
@@ -135,7 +145,7 @@ function profileForm(existing){
  function input(label,key,type,options,value){const l=el('label','',label),e=el(options?'select':'input');if(options)options.forEach(([v,t])=>{const o=el('option','',t);o.value=v;e.append(o);});else{e.type=type;e.required=true;e.maxLength=60;}e.value=value??'';l.append(e);form.append(l);inputs[key]=e;}
  input('First name','first','text',null,existing?.first);input('Last name','last','text',null,existing?.last);
  if(isCurrent){inputs.first.readOnly=true;inputs.last.readOnly=true;}
- input('Signing / entry season','entryYear',null,Array.from({length:5},(_,i)=>[currentYear+i,currentYear+i]),existing?.entryYear||signingYear);
+ input('Roster entry season','entryYear',null,Array.from({length:5},(_,i)=>[currentYear+i,currentYear+i]),existing?.entryYear||(signingYear+1));
  input('Class on arrival','entryClass',null,CLASSES.map((c,i)=>[i+1,c]),existing?.entryClass||1);
  input('Bats','bats',null,[['','Unknown'],['R','Right'],['L','Left'],['S','Switch']],existing?.bats||'');
  input('Throws','throws',null,[['','Unknown'],['R','Right'],['L','Left']],existing?.throws||'');
@@ -160,8 +170,8 @@ function profileForm(existing){
 function recruitsView(root){
  root.append(button('← Back to depth chart',()=>{page='field';render();},'back'));
  const head=el('div','section-heading');head.append(el('div','', 'RECRUITING PIPELINE'),button('Create player profile',()=>profileForm(),'primary'));root.append(head);
- const tabs=el('nav','years');for(let y=currentYear;y<currentYear+4;y++)tabs.append(button(String(y),()=>{signingYear=y;render();},signingYear===y?'active':''));root.append(tabs);
- const list=all().filter(p=>p.recruit&&p.entryYear===signingYear&&(!p.removedFrom||signingYear<p.removedFrom));root.append(el('h2','',`${signingYear} signing class`),el('p','muted','Recruiting stays here. Offered, Committed and Signed players project into future seasons from their entry year.'));
+ const tabs=el('nav','years');for(let y=currentYear-1;y<currentYear+4;y++)tabs.append(button(String(y),()=>{signingYear=y;render();},signingYear===y?'active':''));root.append(tabs);
+ const list=all().filter(p=>p.recruit&&M.signingClass(p)===signingYear&&(!p.removedFrom||Number(p.entryYear)<p.removedFrom));root.append(el('h2','',`${signingYear} signing class`),el('p','muted',`Roster entry: ${signingYear+1} season. Offered, Committed and Signed players project into that season based on eligibility.`));
  if(!list.length){const empty=el('div','empty-recruits');empty.append(el('h2','','Build the next class'),el('p','muted','No player profiles yet.'),button('Create player profile',()=>profileForm(),'primary'));root.append(empty);}
  list.forEach(p=>{const row=el('div','recruit-row');row.append(el('strong',M.nameClass(p),`${p.first} ${p.last}`),el('span','',`${CLASSES[p.entryClass-1]} · ${p.positions.join(' / ')} · Offer ${money(Number(p.offerPackage||0))}/yr`),el('span',`badge ${p.status.toLowerCase()}`,p.status),el('div','profile-actions'));const actions=row.lastChild;actions.append(button('Edit profile',()=>profileForm(p)),button('Remove…',()=>removalDialog(p)));root.append(row);});
 }
@@ -267,7 +277,7 @@ function render(){
  if(currentYear>2027){const history=el('select','history-select');history.setAttribute('aria-label','Past season');history.append(el('option','','Past seasons…'));for(let y=2027;y<currentYear;y++){const o=el('option','',String(y));o.value=y;history.append(o);}history.onchange=()=>{if(Number(history.value)){year=Number(history.value);page='field';selected=null;render();}};root.append(history);}
  const legend=el('div','legend');CLASSES.forEach((c,i)=>legend.append(el('span',`legend-chip class-${i+1}`,c)));legend.append(el('span','legend-chip name-left','Left: red'),el('span','legend-chip name-switch','Switch hitter: green'));legend.append(el('span','legend-chip status-offered','Offered'),el('span','legend-chip status-committed','Committed'));root.append(legend);
  const navigation=el('nav','roster-navigation');navigation.setAttribute('aria-label','Roster tools');navigation.append(button('View Recruiting Classes',()=>{page='recruits';render();},'primary'),button('Scholarships and NIL',()=>{page='finance';selected=null;render();},'primary'),button('Manage Roster',()=>{page='roster';render();}));root.append(navigation);
- if(page==='field'){const heading=el('div','section-heading');heading.append(el('h2','',`${year} depth chart`),el('span','muted',`${active().length} projected players · Five-year planning model`));root.append(heading,el('p','intro','DH excludes field starters. Saving carries this season’s roles and depth order forward until eligibility ends.'));root.append(budgetCard(year));fieldView(root);}else if(page==='finance')financeView(root);else if(page==='roster')rosterView(root);else recruitsView(root);
+ if(page==='field'){const heading=el('div','section-heading');heading.append(el('h2','',`${year} depth chart`),el('span','muted',`${active().length} projected players · Five-year planning model`));root.append(heading,el('p','intro','DH excludes field starters. Saving carries this season’s roles and depth order forward until eligibility ends.'));root.append(rosterSummary(year));fieldView(root);}else if(page==='finance')financeView(root);else if(page==='roster')rosterView(root);else recruitsView(root);
  const nextView=`${page}:${year}:${signingYear}`;if(viewKey!==nextView){window.scrollTo(0,0);viewKey=nextView;}
 }
 function save(){if(pending)return;const invalid=document.querySelector('#studio input:invalid');if(invalid){invalid.reportValidity();return;}if(page==='field'){state.planEdits[mode][year]=true;carryForward();battingOrder();}pending=true;savedVersion=version;render();Shiny.setInputValue('save_state',JSON.parse(JSON.stringify(state)),{priority:'event'});}

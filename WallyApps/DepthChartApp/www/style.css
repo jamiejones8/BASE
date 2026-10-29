@@ -15,3 +15,11 @@
 
 /* Keep the batter's eye visible above the center-field depth stack. */
 .field .pos-CF{top:7%}.field .pos-CF .depth-list{max-height:110px}
+
+.roster-summary{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0 22px;max-width:1200px}
+.roster-summary .budget-card{margin:0;max-width:none;min-width:0;padding:20px}
+.roster-summary .budget-stats{gap:18px;justify-content:space-between}
+.roster-summary .budget-stats strong{font-size:clamp(16px,1.6vw,22px)}
+.positional-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px 12px;margin-top:20px;font-size:16px;font-variant-numeric:tabular-nums}
+.position-label{font-weight:600}.roster-shortage{color:#c62828}
+@media(max-width:800px){.roster-summary{grid-template-columns:1fr}.positional-grid{font-size:15px}}

@@ -121,6 +121,19 @@ function budgetSummary(funding,players,y){
   percent:budget>0?used/budget*100:null,
   incoming:unique.filter(p=>p.recruit&&Number(p.entryYear)===Number(y)).reduce((n,p)=>n+Math.round(allocation(funding,p,y)*100),0)/100};
 }
+// Count each eligible player once per category; multi-position players can fill multiple needs.
+function positionalBreakdown(players,y){
+ const unique=[...new Map(players.filter(p=>active(p,y)).map(p=>[p.id,p])).values()];
+ const has=(p,positions)=>p.positions.some(pos=>positions.includes(pos));
+ const hitters=p=>has(p,[...defense,'DH','INF','OF','MIF','CIF']);
+ const groups=[['Total',34,()=>true],['C',3,p=>has(p,['C'])],
+  ['OF',6,p=>has(p,['OF','LF','CF','RF'])],['MIF',4,p=>has(p,['MIF','INF','SS','2B'])],
+  ['CIF',4,p=>has(p,['CIF','INF','1B','3B'])],
+  ['LHP',8,p=>eligible(p,'SP')&&throwingHand(p)==='L'],['RHP',8,p=>eligible(p,'SP')&&throwingHand(p)==='R'],
+  ['LHH',6,p=>hitters(p)&&['L','S'].includes(p.bats)],['RHH',6,p=>hitters(p)&&['R','S'].includes(p.bats)]];
+ return groups.map(([label,target,matches])=>({label,target,count:unique.filter(matches).length}));
+}
+const signingClass=p=>Number(p.entryYear)-1;
 function compactMoney(value){
  const n=Number(value);
  if(n>=1e6)return '$'+Number((n/1e6).toFixed(1))+'m';
@@ -133,6 +146,6 @@ function armPoint(p,y){
  const x=(p.throws==='L'?-1:1)*(has(p.releaseSideFt)&&p.releaseSideFt!==0?Math.abs(p.releaseSideFt):1.5),anchorY=(p.heightIn-10)/12;
  return {id:p.id,x,y:p.releaseHeightFt,anchorY,angle:Math.atan2(p.releaseHeightFt-anchorY,Math.abs(x))*180/Math.PI,classYear:grade(p,y),status:p.status};
 }
-const api={positions,defense,arms,limits,labels,grade,active,eligible,throwingHand,reliefGroup,nameClass,lineup,dhCandidates,initial,normalize,project,forward,removeFrom,categories,budgetCategory,budgetBreakdown,amountAt,allocation,budgetSummary,compactMoney,armPoint,reorderDepth,moveDepth};
+const api={positionalBreakdown,signingClass,positions,defense,arms,limits,labels,grade,active,eligible,throwingHand,reliefGroup,nameClass,lineup,dhCandidates,initial,normalize,project,forward,removeFrom,categories,budgetCategory,budgetBreakdown,amountAt,allocation,budgetSummary,compactMoney,armPoint,reorderDepth,moveDepth};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RosterModel=api;
 })(typeof window!=='undefined'?window:globalThis);
