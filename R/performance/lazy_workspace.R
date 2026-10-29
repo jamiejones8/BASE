@@ -76,19 +76,26 @@ base_prune_cache_env <- function(values, order, limit, max_bytes = Inf) {
   if (is.na(limit) || limit < 1L) stop("Cache limit must be a positive integer.")
   if (is.na(max_bytes) || max_bytes <= 0) stop("Cache byte limit must be positive.")
 
-  cache_bytes <- function() {
-    keys <- intersect(order, ls(values, all.names = TRUE))
-    if (!length(keys)) return(0)
-    sum(vapply(keys, function(key) as.numeric(object.size(get(key, envir = values, inherits = FALSE))), numeric(1)))
-  }
+  # Measure each value once per insertion instead of rescanning the entire
+  # cache after every eviction. Count-only caches need no size traversal.
+  sizes <- if (is.finite(max_bytes)) {
+    vapply(order, function(key) {
+      if (!exists(key, envir = values, inherits = FALSE)) return(0)
+      as.numeric(object.size(get(key, envir = values, inherits = FALSE)))
+    }, numeric(1))
+  } else rep(0, length(order))
+  total_bytes <- sum(sizes)
 
-  # Retain the newest value even when a single item exceeds the target. That
-  # keeps the current request usable while preventing accumulation around it.
-  while (length(order) > 1L && (length(order) > limit || cache_bytes() > max_bytes)) {
-    evict <- order[[1]]
-    if (exists(evict, envir = values, inherits = FALSE)) rm(list = evict, envir = values)
-    order <- order[-1]
+  # Retain the newest value even when a single item exceeds the target.
+  evicted <- 0L
+  while (length(order) - evicted > 1L &&
+         (length(order) - evicted > limit || total_bytes > max_bytes)) {
+    evicted <- evicted + 1L
+    key <- order[[evicted]]
+    if (exists(key, envir = values, inherits = FALSE)) rm(list = key, envir = values)
+    total_bytes <- total_bytes - sizes[[evicted]]
   }
+  if (evicted) order <- order[-seq_len(evicted)]
   order
 }
 
@@ -154,4 +161,21 @@ base_lazy_workspace_server <- function(input, session, tab_value, initialize,
   )
   assign(id, handle, envir = registry)
   invisible(handle)
+}
+
+# Preserve the runtime column discovery contract while scanning identifiers once,
+# rather than running one regular expression over every source line per column.
+base_referenced_columns <- function(available, source_lines) {
+  tokens <- unique(unlist(regmatches(
+    source_lines, gregexpr("[[:alnum:]_.]+", source_lines, perl = TRUE)
+  ), use.names = FALSE))
+  ordinary <- grepl("^[[:alnum:]_.]+$", available, perl = TRUE)
+  matched <- available %in% tokens
+  # Names containing spaces, slashes, or punctuation retain the original matcher.
+  for (i in which(!ordinary)) {
+    pattern <- paste0("(?<![[:alnum:]_.])\\Q", available[[i]],
+                      "\\E(?![[:alnum:]_.])")
+    matched[[i]] <- any(grepl(pattern, source_lines, perl = TRUE))
+  }
+  available[matched]
 }

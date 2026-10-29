@@ -91,6 +91,7 @@ base_load_defense_team <- function(team) {
   team <- as.character(team)[[1]]
   if (!nzchar(team) || is.null(base_defense_dataset)) return(tibble::tibble())
   if (exists(team, envir = .base_defense_cache, inherits = FALSE)) {
+    .base_defense_cache_order <<- c(setdiff(.base_defense_cache_order, team), team)
     return(get(team, envir = .base_defense_cache, inherits = FALSE))
   }
 

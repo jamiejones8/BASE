@@ -3187,18 +3187,13 @@ read_season_runtime_data <- function(path) {
   dataset <- arrow::open_dataset(path, format = "parquet")
   available <- names(dataset$schema)
   r_files <- list.files(
-    ".", pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE
+    base_bootstrap_root, pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE
   )
   source_lines <- unlist(lapply(r_files, function(file) {
     tryCatch(readLines(file, warn = FALSE), error = function(e) character())
   }), use.names = FALSE)
 
-  referenced <- available[vapply(available, function(column) {
-    pattern <- paste0(
-      "(?<![[:alnum:]_.])\\Q", column, "\\E(?![[:alnum:]_.])"
-    )
-    any(grepl(pattern, source_lines, perl = TRUE))
-  }, logical(1))]
+  referenced <- base_referenced_columns(available, source_lines)
 
   core_columns <- c(
     "PitchUID", "GameID", "GameUID", "Date", "LocalDateTime", "UTCDateTime",
@@ -4198,7 +4193,8 @@ home_quick_link <- function(label, description, target, image = NULL) {
     `data-target` = target,
     `aria-label` = paste(label, description, if (!enabled) "Coming soon" else ""),
     if (has_image) {
-      tags$img(class = "home-quick-image", src = image, alt = "", `aria-hidden` = "true")
+      tags$img(class = "home-quick-image", src = image, alt = "",
+               loading = "lazy", decoding = "async", `aria-hidden` = "true")
     },
     tags$span(class = "home-quick-shade", `aria-hidden` = "true"),
     tags$span(

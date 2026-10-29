@@ -62,6 +62,7 @@ base_load_pitcher_rows <- function(team, pitcher) {
   pitcher <- as.character(pitcher)[[1]]
   key <- paste(team, pitcher, sep = "\u001f")
   if (exists(key, envir = .base_pitcher_cache, inherits = FALSE)) {
+    .base_pitcher_cache_order <<- c(setdiff(.base_pitcher_cache_order, key), key)
     return(get(key, envir = .base_pitcher_cache, inherits = FALSE))
   }
   if (is.null(base_pitcher_dataset)) return(tibble::tibble())
@@ -272,6 +273,7 @@ base_load_hitter_rows <- function(team, hitter) {
   hitter <- as.character(hitter)[[1]]
   key <- paste(team, hitter, sep = "\u001f")
   if (exists(key, envir = .base_hitter_cache, inherits = FALSE)) {
+    .base_hitter_cache_order <<- c(setdiff(.base_hitter_cache_order, key), key)
     return(get(key, envir = .base_hitter_cache, inherits = FALSE))
   }
   if (is.null(base_pitcher_dataset)) return(tibble::tibble())

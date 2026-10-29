@@ -99,3 +99,33 @@ shiny::testServer(
 )
 
 cat("Lazy workspace and bounded cache tests passed.\n")
+
+# Column projection must remain identical to the original boundary matcher,
+# including quoted names and avoiding partial matches such as Pitcher/PitcherId.
+source_lines <- c('rows$PitcherId', 'select(rows, `Top/Bottom`, `Exit Speed`)',
+                  'rows$.private', '# SpinRate is referenced', 'fooRelSpeedbar')
+columns <- c('Pitcher', 'PitcherId', 'Top/Bottom', 'Exit Speed', '.private',
+             'SpinRate', 'RelSpeed', 'Missing')
+legacy_columns <- function(columns, lines) {
+  columns[vapply(columns, function(column) {
+    any(grepl(paste0('(?<![[:alnum:]_.])\\Q', column,
+                     '\\E(?![[:alnum:]_.])'), lines, perl = TRUE))
+  }, logical(1))]
+}
+if (!identical(base_referenced_columns(columns, source_lines),
+               legacy_columns(columns, source_lines))) {
+  fail('Optimized source discovery changed selected season columns.')
+}
+if (length(base_referenced_columns(columns, character()))) {
+  fail('Empty sources must not select runtime columns.')
+}
+
+# Multiple evictions must satisfy both limits and preserve the newest value.
+prune_values <- new.env(parent = emptyenv())
+for (key in letters[1:4]) assign(key, raw(1024), envir = prune_values)
+pruned <- base_prune_cache_env(prune_values, letters[1:4], 3L, 2200)
+if (!identical(pruned, c('c', 'd')) ||
+    !identical(sort(ls(prune_values)), c('c', 'd'))) {
+  fail('Cache pruning did not satisfy combined byte and entry limits.')
+}
+cat('Runtime column projection and multi-eviction checks passed.\n')

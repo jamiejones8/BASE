@@ -108,3 +108,32 @@ Deployment-grade before/after measurements must still be captured with the
 production dependency image and mounted 2026 runtime. The important metrics
 are process startup time, first Home render, first workspace open, repeat
 workspace open, selected-player query time, and per-session memory.
+
+## October 2026 maintenance pass
+
+Season Parquet column discovery now indexes source identifiers in one pass.
+Column names containing punctuation still use the original boundary matcher,
+so projection retains the existing selection contract. Source discovery uses
+the application root instead of depending on the process working directory.
+A local comparison over 92,421 source lines and the Cape file's 199 columns
+selected identical columns in 0.367 seconds versus 1.019 seconds previously.
+This measures column discovery only, not total page load time.
+
+Pitcher, hitter, and defensive-team cache hits now update recency, allowing
+frequently used selections to survive eviction. Shared byte-limit pruning
+measures retained values once per insertion instead of repeatedly traversing
+them after each eviction. The newest oversized selection remains available.
+Home navigation images use native lazy loading and asynchronous decoding.
+
+Regression coverage is in `scripts/tests/test_lazy_workspace.R` and
+`scripts/tests/test_runtime_cache_recency.R`. The production national runtime
+partitions require the Railway volume; local startup checks do not establish
+production load times or peak memory usage.
+
+Validation passed locally: startup smoke test, workspace hierarchy, lazy
+workspace/cache checks, real loader cache-recency checks, Cape memory-efficiency
+checks, schedule/configuration service checks, Pitching/Hitting/Defense
+integration checks, scouting lazy-report checks, leaderboard hitting integrity,
+and all 11 deployment checks. Player Health integration could not complete:
+`callr` and `valdr` are unavailable and its home-directory configuration write
+is blocked in this environment. Player Health code was not changed.
