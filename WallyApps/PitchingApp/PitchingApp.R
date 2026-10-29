@@ -6453,10 +6453,9 @@ if (isTRUE(get0("BASE_PITCHING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))
 }
 
 base_pitching_bullpen_postgame_ui <- tagList(
-  uiOutput("bullpen_report_pitcher_ui"),
   navset_tab(id="bullpen_report_tabs",
-    nav_panel("Recent", uiOutput("bullpen_recent_sessions")),
-    nav_panel("Builder", selectInput("bullpen_report_game", "Bullpen Session", choices=character(0)),
+    nav_panel("Recent Bullpens", uiOutput("bullpen_recent_sessions")),
+    nav_panel("Builder", uiOutput("bullpen_report_pitcher_ui"), uiOutput("bullpen_report_game_ui"),
       downloadButton("bullpen_report_pdf", "Download Bullpen PDF"), uiOutput("bullpen_report_preview_ui"))))
 
 base_pitching_team_postgame_ui <- base_team_report_ui("pitch_team", "team_game", games_txst, "team_report_preview", "team_report_dl")
@@ -8126,12 +8125,14 @@ server <- function(input, output, session){
     DT::datatable(tbl, rownames = FALSE, options = list(dom = "t", paging = FALSE, ordering = FALSE, autoWidth = TRUE), class = "stripe")
   })
 
+  bullpen_open_request <- reactiveVal(NULL)
   # Render choices with the late-mounted Postgame controls, rather than sending
   # an update message before the browser has created the select input.
   output$bullpen_report_pitcher_ui <- renderUI({
     players <- sort(unique(stats::na.omit(as.character(bullpens_live_df()$Pitcher))))
     players <- players[nzchar(trimws(players))]
-    current <- isolate(input$bullpen_report_pitcher)
+    requested <- bullpen_open_request()
+    current <- if(!is.null(requested)) requested$Pitcher else isolate(input$bullpen_report_pitcher)
     if (!length(players)) return(div("No bullpen pitchers available in the stored bullpen data."))
     selectInput("bullpen_report_pitcher", "Pitcher", choices=players,
       selected=if(length(current) && current %in% players) current else players[1])
@@ -8141,25 +8142,34 @@ server <- function(input, output, session){
     d <- bullpens_live_df() %>% filter(Pitcher == input$bullpen_report_pitcher)
     d %>% group_by(CustomGameID_BP) %>% summarise(date=bullpen_report_date_value(pick(everything())),.groups="drop") %>% arrange(desc(date))
   })
-  observeEvent(bullpen_report_sessions(), {
+  output$bullpen_report_game_ui <- renderUI({
     choices <- bullpen_report_sessions()$CustomGameID_BP
-    current <- isolate(input$bullpen_report_game)
-    updateSelectInput(session,"bullpen_report_game",choices=as_named_choices(choices),
+    requested <- bullpen_open_request()
+    current <- if(!is.null(requested) && identical(requested$Pitcher,input$bullpen_report_pitcher)) requested$CustomGameID_BP else isolate(input$bullpen_report_game)
+    selectInput("bullpen_report_game","Bullpen Session",choices=as_named_choices(choices),
       selected=if(length(current) && current %in% choices) current else head(choices,1))
   })
-  output$bullpen_recent_sessions <- renderUI({
-    choices <- head(bullpen_report_sessions()$CustomGameID_BP,10)
-    if(!length(choices)) return(div("No bullpen sessions available."))
-    tagList(lapply(seq_along(choices),function(i) actionButton(paste0("bullpen_recent_",i),choices[i],class="btn-outline-primary m-2")))
+  bullpen_recent_sessions <- reactive({
+    bullpens_live_df() %>% group_by(Pitcher,CustomGameID_BP) %>%
+      summarise(date=bullpen_report_date_value(pick(everything())),.groups="drop") %>%
+      arrange(desc(date),Pitcher,CustomGameID_BP) %>% slice_head(n=20)
   })
-  for (i in seq_len(10)) local({
-    idx <- i
-    observeEvent(input[[paste0("bullpen_recent_",idx)]], {
-      choices <- bullpen_report_sessions()$CustomGameID_BP
-      req(length(choices)>=idx)
-      updateSelectInput(session,"bullpen_report_game",selected=choices[idx])
-      bslib::nav_select("bullpen_report_tabs","Builder",session=session)
-    })
+  output$bullpen_recent_sessions <- renderUI({
+    recent <- bullpen_recent_sessions()
+    if(!nrow(recent)) return(div("No bullpen sessions available."))
+    tagList(lapply(seq_len(nrow(recent)),function(i) {
+      div(class="mb-2",tags$button(type="button",class="btn btn-outline-primary",
+        onclick=sprintf("Shiny.setInputValue('bullpen_open_session', %s, {priority:'event'});",
+          jsonlite::toJSON(recent$CustomGameID_BP[i],auto_unbox=TRUE)),
+        paste(recent$Pitcher[i],format(recent$date[i],"%b %d, %Y"),sep=" — ")))
+    }))
+  })
+  observeEvent(input$bullpen_open_session, {
+    recent <- bullpen_recent_sessions()
+    selected <- recent[recent$CustomGameID_BP == input$bullpen_open_session,,drop=FALSE]
+    req(nrow(selected)==1L)
+    bullpen_open_request(list(Pitcher=selected$Pitcher[[1]],CustomGameID_BP=selected$CustomGameID_BP[[1]]))
+    bslib::nav_select("bullpen_report_tabs","Builder",session=session)
   })
 
   bullpen_report_data <- reactive({

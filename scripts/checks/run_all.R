@@ -17,6 +17,7 @@ checks <- list(
   c("Rscript", "scripts/tests/test_homebase_page.R"),
   c("Rscript", "scripts/tests/test_pitch_retags.R"),
   c("Rscript", "scripts/tests/test_team_season_imports.R"),
+  c("Rscript", "scripts/tests/test_bullpen_recent_reports.R"),
   c("Rscript", "scripts/tests/test_full_csv_replacement.R"),
   c("Rscript", "scripts/tests/test_player_health_imports.R"),
   c("Rscript", "scripts/tests/test_password_gate.R"),

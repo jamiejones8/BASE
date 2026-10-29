@@ -44,7 +44,7 @@ base_pitching_supplement_candidates <- function() {
     file.path(root, unname(BASE_WALLY_PITCHING_LEGACY_DATA_FILES)),
     names(BASE_WALLY_PITCHING_LEGACY_DATA_FILES)
   )
-  legacy_paths[["BP"]] <- TEAM_CONFIG$data$bullpen_file
+  legacy_paths[["BP"]] <- base_team_season_import_path("BP")
   c(
     legacy_paths,
     base_team_season_import_paths(existing_only = FALSE)

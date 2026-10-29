@@ -387,6 +387,16 @@ TEAM_CONFIG <- list(
   )
 )
 
+# The bundled CSV is a seed, not durable storage in a deployed container.
+base_resolve_bullpen_storage <- function(configured, persistent_root = if(dir.exists("/base-data")) "/base-data/app_state/team-season-imports" else NULL,
+                                         bundled = base_project_path("WallyApps","PitchingApp","data","Bullpens - cleaned.csv")) {
+  if (!is.null(persistent_root) && identical(normalizePath(configured,mustWork=FALSE),normalizePath(bundled,mustWork=FALSE))) {
+    return(file.path(persistent_root,"Bullpens - cleaned.csv"))
+  }
+  configured
+}
+TEAM_CONFIG$data$bullpen_file <- base_resolve_bullpen_storage(TEAM_CONFIG$data$bullpen_file)
+
 base_team_matches <- function(x) {
   x <- as.character(x)
   pattern <- TEAM_CONFIG$data_pattern

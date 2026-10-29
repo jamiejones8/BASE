@@ -314,6 +314,25 @@ shiny::testServer(workspace$server, {
             identical(movement$x$layout$yaxis$range,c(-30,30)))
   release <- plotly::plotly_build(build_bullpen_accum_release_plotly(bp))
   stopifnot(length(release$x$data)>0,all(is.finite(release$x$data[[1]]$x)))
+  other_bp <- bp
+  other_bp$Pitcher <- "Other Bullpen Pitcher"
+  other_bp$Date <- as.Date("2026-10-27")
+  other_bp$row_id <- other_bp$row_id + 10000L
+  if("pitch_uid" %in% names(other_bp)) other_bp$pitch_uid <- paste0("other-",other_bp$pitch_uid)
+  rv$df <- dplyr::bind_rows(bp,other_bp)
+  session$flushReact()
+  recent <- bullpen_recent_sessions()
+  recent_html <- output$bullpen_recent_sessions$html
+  stopifnot(grepl("Other Bullpen Pitcher",recent_html),grepl("Late Mounted Bullpen Pitcher",recent_html))
+  target <- recent$CustomGameID_BP[recent$Pitcher == "Other Bullpen Pitcher"][1]
+  session$setInputs(bullpen_open_session=target)
+  stopifnot(identical(bullpen_open_request()$CustomGameID_BP,target),
+    grepl('value="Other Bullpen Pitcher" selected',output$bullpen_report_pitcher_ui$html,fixed=TRUE))
+  session$setInputs(bullpen_report_pitcher="Other Bullpen Pitcher")
+  stopifnot(grepl(target,output$bullpen_report_game_ui$html,fixed=TRUE))
+  session$setInputs(bullpen_report_game=target)
+  stopifnot(all(bullpen_report_data()$Pitcher == "Other Bullpen Pitcher"))
+  session$setInputs(bullpen_report_pitcher=NULL,bullpen_report_game=NULL)
   rv$df <- old_rows
 
   values <- comparison_summary(workspace$df)

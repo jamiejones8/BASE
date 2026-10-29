@@ -99,7 +99,9 @@ base_team_season_import_path <- function(target_id, root = NULL) {
     if (identical(target$id, "BP")) {
       configured <- tryCatch(TEAM_CONFIG$data$bullpen_file, error = function(e) NULL)
       if (!is.null(configured) && length(configured) && nzchar(configured[[1]])) {
-        return(normalizePath(configured[[1]], winslash = "/", mustWork = FALSE))
+        destination <- normalizePath(configured[[1]], winslash = "/", mustWork = FALSE)
+        if (startsWith(destination,"/base-data/")) base_initialize_bullpen_storage(destination)
+        return(destination)
       }
       return(normalizePath(
         base_project_path("WallyApps", "PitchingApp", "data", target$filename),
@@ -632,4 +634,33 @@ base_save_trackman_manual_edit <- function(rows, target_id, fingerprint, root = 
     total_rows = nrow(rows),
     fingerprint = base_trackman_csv_fingerprint(path)
   )
+}
+
+# One-time, restart-safe migration: retain saved edits and only add missing IDs.
+# The marker prevents intentionally deleted pitches being restored on later deploys.
+base_initialize_bullpen_storage <- function(destination,
+    seed = base_project_path("WallyApps","PitchingApp","data","Bullpens - cleaned.csv")) {
+  marker <- file.path(dirname(destination),".bullpen-persistent-migration-v1")
+  if(file.exists(marker) && file.exists(destination)) return(invisible(destination))
+  dir.create(dirname(destination),recursive=TRUE,showWarnings=FALSE)
+  lock <- file.path(dirname(destination),".BP-write.lock")
+  if(!dir.create(lock,showWarnings=FALSE)) stop("Bullpen storage is being updated; please retry.",call.=FALSE)
+  on.exit(unlink(lock,recursive=TRUE),add=TRUE)
+  if(file.exists(marker) && file.exists(destination)) return(invisible(destination))
+  current <- if(file.exists(destination)) base_read_trackman_import(destination) else tibble::tibble()
+  legacy <- if(file.exists(seed)) base_read_trackman_import(seed) else tibble::tibble()
+  if(!nrow(current) && !nrow(legacy)) stop("No bullpen seed or persistent data is available.",call.=FALSE)
+  current_keys <- if(nrow(current)) base_trackman_event_key(current) else character()
+  legacy_keys <- if(nrow(legacy)) base_trackman_event_key(legacy) else character()
+  if(any(is.na(c(current_keys,legacy_keys)) | !nzchar(c(current_keys,legacy_keys)))) {
+    stop("Bullpen migration found rows without stable identity; no data was changed.",call.=FALSE)
+  }
+  added <- legacy[!duplicated(legacy_keys) & !legacy_keys %in% current_keys,,drop=FALSE]
+  combined <- dplyr::bind_rows(current,added)
+  if(!file.exists(destination) || nrow(added)) {
+    if(file.exists(destination)) base_backup_source_csv(destination)
+    base_atomic_write_trackman_csv(combined,destination)
+  }
+  if(!file.create(marker)) stop("Could not record the bullpen storage migration.",call.=FALSE)
+  invisible(destination)
 }

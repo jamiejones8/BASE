@@ -224,3 +224,22 @@ if (!all(positioning$PitchUID %in% future_positioning$PitchUID) ||
 }
 
 cat("Team TrackMan import tests passed: season/catcher/positioning volume loading, bullpen append, safe CSV editing, deduplication, schema evolution, and validation.\n")
+
+# Persistent bullpen migration keeps saved edits, adds missing seed events once,
+# survives redeployment, and does not resurrect deliberately removed rows.
+seed_path <- file.path(scratch,"seed-bullpens.csv")
+storage <- file.path(scratch,"volume","Bullpens - cleaned.csv")
+readr::write_csv(game,seed_path)
+dir.create(dirname(storage))
+existing <- game[1,,drop=FALSE];existing$Pitcher <- "Corrected Pitcher"
+readr::write_csv(existing,storage)
+base_initialize_bullpen_storage(storage,seed_path)
+migrated <- base_read_trackman_import(storage)
+stopifnot(nrow(migrated)==3L,migrated$Pitcher[1]=="Corrected Pitcher")
+base_atomic_write_trackman_csv(migrated[1:2,],storage)
+base_initialize_bullpen_storage(storage,seed_path)
+stopifnot(nrow(base_read_trackman_import(storage))==2L)
+bundled <- base_project_path("WallyApps","PitchingApp","data","Bullpens - cleaned.csv")
+stopifnot(identical(base_resolve_bullpen_storage(bundled,dirname(storage)),storage),
+          identical(base_resolve_bullpen_storage(storage,dirname(storage)),storage))
+cat("Persistent bullpen migration and redeployment preservation passed.\n")
