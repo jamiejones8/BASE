@@ -79,7 +79,7 @@ shiny::testServer(workspace$server, {
   if (!all(fixture_files %in% available)) {
     fail("ScoutingApp is not reading its BASE-configured data directory.")
   }
-  session$setInputs(csv_files = fixture_files[[1]])
+  session$setInputs(csv_files = fixture_files[[1]], hitter_team = season_fixture$BatterTeam[[1]])
   session$flushReact()
   hitter_rows <- std_all()
   pitcher_rows <- pitcher_std_all()
@@ -99,17 +99,17 @@ shiny::testServer(workspace$server, {
   season_teams()
   if (length(loads)) fail("Pitch data loaded before any season players were selected.")
   original_team <- season_fixture$BatterTeam[[1]]
-  hitter_team <- "OTHER_TEAM"
+  selected_hitter_team <- "OTHER_TEAM"
   hitter <- season_fixture$Batter[[1]]
   pitcher <- season_fixture$Pitcher[[1]]
-  session$setInputs(base_scouting_team = hitter_team)
+  session$setInputs(base_scouting_team = selected_hitter_team)
   session$flushReact()
   session$setInputs(scout_season_hitters = hitter, scout_season_pitchers = pitcher)
   session$flushReact()
   hitter_rows <- std_all()
   pitcher_rows <- pitcher_std_all()
-  expected_hitter <- season_fixture[season_fixture$BatterTeam == hitter_team & season_fixture$Batter == hitter, ]
-  expected_pitcher <- season_fixture[season_fixture$PitcherTeam == hitter_team & season_fixture$Pitcher == pitcher, ]
+  expected_hitter <- season_fixture[season_fixture$BatterTeam == selected_hitter_team & season_fixture$Batter == hitter, ]
+  expected_pitcher <- season_fixture[season_fixture$PitcherTeam == selected_hitter_team & season_fixture$Pitcher == pitcher, ]
   if (!setequal(hitter_rows$PitchUID, expected_hitter$PitchUID)) fail("Season hitter query is incomplete or includes another player/team.")
   if (!setequal(pitcher_rows$PitchUID, expected_pitcher$PitchUID)) fail("Season pitcher query is incomplete or includes another player/team.")
   if (!identical(matchup_hitters_raw()$PitchUID, season_hitter_rows()$PitchUID) ||

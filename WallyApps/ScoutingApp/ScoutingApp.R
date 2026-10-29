@@ -5491,7 +5491,6 @@ server <- function(input, output, session, initial_source = "season"){
   
   # Filter batting teams before deriving player menus or report statistics.
   hitter_source_rows <- reactive({
-    req("hitter" %in% active_roles())
     if (identical(input$main_tab, "matchup_grid")) return(matchup_hitters_raw())
     if (season_mode()) season_hitter_rows() else df_all()
   })
