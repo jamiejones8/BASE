@@ -5000,6 +5000,7 @@ ui <- base_scouting_page(
   scouting_title,
   base_scouting_layout(
   sidebarPanel(width = 3,
+               uiOutput("hitter_team_ui"),
                if (!is.null(SCOUTING_SEASON_SOURCE)) tagList(
                  base_scouting_source_input("scout_data_source"),
                  conditionalPanel(
@@ -5488,8 +5489,44 @@ server <- function(input, output, session, initial_source = "season"){
     out
   })
   
+  # Filter batting teams before deriving player menus or report statistics.
+  hitter_source_rows <- reactive({
+    req("hitter" %in% active_roles())
+    if (identical(input$main_tab, "matchup_grid")) return(matchup_hitters_raw())
+    if (season_mode()) season_hitter_rows() else df_all()
+  })
+  hitter_teams <- reactive({
+    d <- hitter_source_rows()
+    shiny::validate(shiny::need("BatterTeam" %in% names(d),
+      "Hitter data must include BatterTeam to identify the batting team."))
+    teams <- sort(unique(trimws(as.character(d$BatterTeam))))
+    teams[!is.na(teams) & nzchar(teams)]
+  })
+  hitter_team <- reactive({
+    teams <- hitter_teams()
+    selected <- input$hitter_team %||% ""
+    if (selected %in% teams) return(selected)
+    id <- input$scout_data_source %||% initial_source
+    if (id %in% c("S26", "F26", "PS27", "S27") && TEAM_CONFIG$data_code %in% teams)
+      return(TEAM_CONFIG$data_code)
+    if (length(teams) == 1L) return(teams[[1]])
+    ""
+  })
+  output$hitter_team_ui <- renderUI({
+    req("hitter" %in% active_roles())
+    teams <- hitter_teams()
+    selectInput("hitter_team", "Batting team (hitter reports)",
+      choices = c("Choose a batting team" = "", stats::setNames(teams, scouting_team_display_name(teams))),
+      selected = isolate(hitter_team()))
+  })
+  filter_hitter_team <- function(d) {
+    team <- hitter_team()
+    shiny::validate(shiny::need(nzchar(team), "Choose a batting team to load hitters."))
+    d[!is.na(d$BatterTeam) & trimws(as.character(d$BatterTeam)) == team, , drop = FALSE]
+  }
+
   std_all <- reactive({
-    d_raw <- if (season_mode()) season_hitter_rows() else df_all()
+    d_raw <- filter_hitter_team(hitter_source_rows())
     tryCatch(std_cols(d_raw), error = function(e){
       message("[std_cols ERROR] ", conditionMessage(e))
       shiny::validate(shiny::need(FALSE, paste("Column standardization error:", conditionMessage(e))))
@@ -5539,7 +5576,7 @@ server <- function(input, output, session, initial_source = "season"){
   })
 
   matchup_hitters_std <- reactive({
-    d_raw <- matchup_hitters_raw()
+    d_raw <- filter_hitter_team(matchup_hitters_raw())
     tryCatch(
       std_cols(d_raw),
       error = function(e){
@@ -5602,7 +5639,7 @@ server <- function(input, output, session, initial_source = "season"){
   observeEvent(matchup_hitter_choices(), {
     choices <- matchup_hitter_choices()
     req(length(choices) > 0)
-    selected <- apply_matchup_order(choices, input$matchup_hitter_order)
+    selected <- apply_matchup_order(choices, input$matchup_hitter_order %||% character())
     updateSelectizeInput(
       session,
       "matchup_hitter_order",
@@ -5645,7 +5682,7 @@ server <- function(input, output, session, initial_source = "season"){
         "matchup_hitter_order",
         "Hitters (sorted by PA, top to bottom, max 15):",
         choices = choices,
-        selected = apply_matchup_order(choices, NULL),
+        selected = character(0),
         multiple = TRUE,
         options = list(
           plugins = list("drag_drop", "remove_button"),
@@ -5654,7 +5691,7 @@ server <- function(input, output, session, initial_source = "season"){
           placeholder = "Select up to 15 hitters"
         )
       ),
-      helpText("The list auto-sorts by PA when the data loads. Drag names to change the row order.")
+      helpText("Choose hitters from the selected batting team, then drag names to change the row order.")
     )
   })
 
@@ -5670,7 +5707,7 @@ server <- function(input, output, session, initial_source = "season"){
 
   matchup_grid_bundle <- reactive({
     req(matchup_hitter_summary(), matchup_pitcher_summary())
-    hitter_order <- apply_matchup_order(matchup_hitter_choices(), input$matchup_hitter_order)
+    hitter_order <- apply_matchup_order(matchup_hitter_choices(), input$matchup_hitter_order %||% character())
     pitcher_order <- apply_matchup_order(matchup_pitcher_choices(), input$matchup_pitcher_order)
     build_matchup_grid(
       matchup_hitter_summary(),
@@ -5702,7 +5739,7 @@ server <- function(input, output, session, initial_source = "season"){
         "hitter_order",
         "Type a hitter name, select, then drag to order:",
         choices = hitters,
-        selected = if (season_mode()) hitters else character(0),
+        selected = character(0),
         multiple = TRUE,
         options = list(
           plugins = list("drag_drop", "remove_button"),
@@ -5773,7 +5810,7 @@ server <- function(input, output, session, initial_source = "season"){
         )
       )
     }
-    hitter_order <- apply_matchup_order(matchup_hitter_choices(), input$matchup_hitter_order)
+    hitter_order <- apply_matchup_order(matchup_hitter_choices(), input$matchup_hitter_order %||% character())
     pitcher_order <- apply_matchup_order(matchup_pitcher_choices(), input$matchup_pitcher_order)
     if (!length(hitter_order) || !length(pitcher_order)) {
       return(
