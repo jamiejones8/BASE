@@ -955,7 +955,7 @@ table tbody td[style*="background-color"] {
 .home-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
 .home-section-heading h2 { margin: 5px 0 0; color: var(--base-ink); font-family: var(--base-font-display); font-size: 29px; font-weight: 600; }
 .home-data-status { padding: 8px 12px; border: 1px solid var(--base-border); border-radius: 999px; background: rgba(255,255,255,0.70); color: var(--base-muted); font-size: 11px; font-weight: 600; }
-.home-quick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.home-quick-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .home-quick-link {
   position: relative;
   display: block;
@@ -1831,7 +1831,10 @@ table tbody td[style*="background-color"] {
    Responsive behavior
    -------------------------------------------------------------------------- */
 @media (min-width: 992px) and (max-width: 1399px) {
-  .home-quick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .home-quick-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* Fill the final row of the ten-card directory with two wider cards. */
+  .home-quick-grid > :nth-child(9):nth-last-child(2),
+  .home-quick-grid > :nth-child(10):last-child { grid-column: span 2; }
 }
 
 @media (max-width: 991px) {
