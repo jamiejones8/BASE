@@ -3,3 +3,59 @@ DateTime,Opponent,Venue,IsHome,OppAbbr,TeamWins,TeamLosses,OppWins,OppLosses
 2026-10-18 6:00 PM,TCU,"Fort Worth, Texas",false,TCU_HFG,0,0,0,0
 2026-10-31 6:00 PM,Baylor,"San Marcos, Texas",true,BAY_BEA,0,0,0,0
 2026-11-01 6:00 PM,Baylor,"Waco, Texas",false,BAY_BEA,0,0,0,0
+2027-02-19 6:00 PM,Oakland,Bobcat Ballpark,true,OAK_GOL,0,0,0,0
+2027-02-20 3:00 PM,Oakland,Bobcat Ballpark,true,OAK_GOL,0,0,0,0
+2027-02-21 1:00 PM,Oakland,Bobcat Ballpark,true,OAK_GOL,0,0,0,0
+2027-02-24 6:00 PM,Oklahoma State,"Frisco, TX",false,OKL_COW,0,0,0,0
+2027-02-26 6:00 PM,Texas Tech,"Round Rock, TX",false,TEX_RAI,0,0,0,0
+2027-02-27 3:00 PM,Alabama,"Round Rock, TX",false,ALA_CRI,0,0,0,0
+2027-02-28 1:00 PM,Louisiana Tech,"Round Rock, TX",false,LOU_BUL,0,0,0,0
+2027-03-02 6:00 PM,Prairie View A&M,Bobcat Ballpark,true,PRA_PAN,0,0,0,0
+2027-03-03 6:00 PM,Texas A&M-Corpus Christi,Bobcat Ballpark,true,TEX_ISL,0,0,0,0
+2027-03-05 6:00 PM,Army,Bobcat Ballpark,true,ARM_BLA,0,0,0,0
+2027-03-06 3:00 PM,Army,Bobcat Ballpark,true,ARM_BLA,0,0,0,0
+2027-03-07 1:00 PM,Army,Bobcat Ballpark,true,ARM_BLA,0,0,0,0
+2027-03-09 6:00 PM,Baylor,"Waco, TX",false,BAY_BEA,0,0,0,0
+2027-03-12 6:00 PM,Tulane,"New Orleans, LA",false,TUL_GRE,0,0,0,0
+2027-03-13 3:00 PM,Tulane,"New Orleans, LA",false,TUL_GRE,0,0,0,0
+2027-03-14 1:00 PM,Tulane,"New Orleans, LA",false,TUL_GRE,0,0,0,0
+2027-03-16 6:00 PM,Texas A&M,"College Station, TX",false,TEX_AGG,0,0,0,0
+2027-03-19 6:00 PM,Rice,Bobcat Ballpark,true,RIC_OWL,0,0,0,0
+2027-03-20 3:00 PM,Rice,Bobcat Ballpark,true,RIC_OWL,0,0,0,0
+2027-03-21 1:00 PM,Rice,Bobcat Ballpark,true,RIC_OWL,0,0,0,0
+2027-03-23 6:00 PM,Texas,Bobcat Ballpark,true,TEX_LON,0,0,0,0
+2027-03-25 6:00 PM,UTRGV,"Edinburg, TX",false,UTR_VAQ,0,0,0,0
+2027-03-26 6:00 PM,UTRGV,"Edinburg, TX",false,UTR_VAQ,0,0,0,0
+2027-03-27 3:00 PM,UTRGV,"Edinburg, TX",false,UTR_VAQ,0,0,0,0
+2027-03-30 6:00 PM,UTSA,Bobcat Ballpark,true,UTS_ROA,0,0,0,0
+2027-04-02 6:00 PM,North Florida,Bobcat Ballpark,true,NOF_OSP,0,0,0,0
+2027-04-03 3:00 PM,North Florida,Bobcat Ballpark,true,NOF_OSP,0,0,0,0
+2027-04-04 1:00 PM,North Florida,Bobcat Ballpark,true,NOF_OSP,0,0,0,0
+2027-04-06 6:00 PM,UIW,Bobcat Ballpark,true,IWC,0,0,0,0
+2027-04-09 6:00 PM,Gonzaga,Bobcat Ballpark,true,GON_BUL,0,0,0,0
+2027-04-10 3:00 PM,Gonzaga,Bobcat Ballpark,true,GON_BUL,0,0,0,0
+2027-04-11 1:00 PM,Gonzaga,Bobcat Ballpark,true,GON_BUL,0,0,0,0
+2027-04-13 6:00 PM,UTSA,"San Antonio, TX",false,UTS_ROA,0,0,0,0
+2027-04-16 6:00 PM,San Diego State,"San Diego, CA",false,SAN_AZT,0,0,0,0
+2027-04-17 3:00 PM,San Diego State,"San Diego, CA",false,SAN_AZT,0,0,0,0
+2027-04-18 1:00 PM,San Diego State,"San Diego, CA",false,SAN_AZT,0,0,0,0
+2027-04-20 6:00 PM,Texas,"Austin, TX",false,TEX_LON,0,0,0,0
+2027-04-23 6:00 PM,Fresno State,Bobcat Ballpark,true,FRE_BUL,0,0,0,0
+2027-04-24 3:00 PM,Fresno State,Bobcat Ballpark,true,FRE_BUL,0,0,0,0
+2027-04-25 1:00 PM,Fresno State,Bobcat Ballpark,true,FRE_BUL,0,0,0,0
+2027-04-27 6:00 PM,Texas A&M,Bobcat Ballpark,true,TEX_AGG,0,0,0,0
+2027-04-30 6:00 PM,UC Davis,Bobcat Ballpark,true,CAL_AGO,0,0,0,0
+2027-05-01 3:00 PM,UC Davis,Bobcat Ballpark,true,CAL_AGO,0,0,0,0
+2027-05-02 1:00 PM,UC Davis,Bobcat Ballpark,true,CAL_AGO,0,0,0,0
+2027-05-04 6:00 PM,Baylor,Bobcat Ballpark,true,BAY_BEA,0,0,0,0
+2027-05-07 6:00 PM,Oregon State,"Corvallis, OR",false,ORE_BEA,0,0,0,0
+2027-05-08 3:00 PM,Oregon State,"Corvallis, OR",false,ORE_BEA,0,0,0,0
+2027-05-09 1:00 PM,Oregon State,"Corvallis, OR",false,ORE_BEA,0,0,0,0
+2027-05-11 6:00 PM,HCU,Bobcat Ballpark,true,HBU_HUS,0,0,0,0
+2027-05-14 6:00 PM,DBU,Bobcat Ballpark,true,DAL_PAT,0,0,0,0
+2027-05-15 3:00 PM,DBU,Bobcat Ballpark,true,DAL_PAT,0,0,0,0
+2027-05-16 1:00 PM,DBU,Bobcat Ballpark,true,DAL_PAT,0,0,0,0
+2027-05-18 6:00 PM,Houston,Bobcat Ballpark,true,HOU_COU,0,0,0,0
+2027-05-20 6:00 PM,Washington State,"Pullman, WA",false,WAS_COU,0,0,0,0
+2027-05-21 6:00 PM,Washington State,"Pullman, WA",false,WAS_COU,0,0,0,0
+2027-05-22 3:00 PM,Washington State,"Pullman, WA",false,WAS_COU,0,0,0,0
