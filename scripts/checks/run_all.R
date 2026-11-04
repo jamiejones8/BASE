@@ -12,6 +12,7 @@ checks <- list(
   c("python3", "scripts/checks/check_app_workspaces.py"),
   c("python3", "scripts/checks/check_wally_feature_register.py"),
   c("Rscript", "scripts/tests/test_services.R"),
+  c("Rscript", "scripts/tests/test_schedule.R"),
   c("Rscript", "scripts/tests/test_lazy_workspace.R"),
   c("Rscript", "scripts/tests/test_memory_efficiency.R"),
   c("Rscript", "scripts/tests/test_homebase_page.R"),

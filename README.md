@@ -126,8 +126,9 @@ another import or editor session after it was opened.
 - `config/texas_state_roster_2027.csv` drives the home roster using the Texas
   State 2026 fall roster for the upcoming 2027 season.
 - `config/texas_state_schedule_2027.csv` drives the upcoming schedule and the
-  next-game card on the home page. It begins with the October 2026 fall
-  scrimmages for the upcoming 2027 season.
+  next-game card on the home page. It includes the fall 2026 scrimmages and
+  the supplied 2027 schedule through the Pac-12 tournament. Upcoming start
+  times are estimates in Central time, including the converted western trips.
 
 ## Repository layout
 
@@ -201,9 +202,19 @@ The roster CSV requires these columns:
 
 ## College schedule format
 
-The schedule CSV requires `DateTime`, `Opponent`, and `Venue`. It may also
-contain `IsHome`, `OppAbbr`, `TeamWins`, `TeamLosses`, `OppWins`, and
-`OppLosses`. `DateTime` is interpreted using `BASE_SCHEDULE_TIMEZONE`.
+The schedule CSV requires `DateTime`, `Opponent`, and `Venue`. `DateTime` is
+interpreted using `BASE_SCHEDULE_TIMEZONE` (default `America/Chicago`), so western
+game times should already be converted to Central time. The next-game card shows
+the timezone abbreviation and labels starts with `TimeIsEstimated=TRUE` as estimates.
+
+Use `IsHomeAway` with `TRUE`/`HOME`, `FALSE`/`AWAY`, or `NEUTRAL`. The older
+`IsHome` header and the legacy spelling `NUETRAL` are also accepted. Neutral
+games show a Neutral badge and VS. `OppAbbr` uses the `team_abbr` code in
+`data/reference/NcaaColors.csv` to resolve the opponent logo. Optional `Event`
+and `EventLogo` columns add the event name and logo alongside the matchup;
+bundled event logos live in `www/events/`. Leave the opponent code empty when
+the opponent is TBD. Optional record columns are `TeamWins`, `TeamLosses`,
+`OppWins`, and `OppLosses`.
 
 For normal college deployments, set `BASE_STATS_API_ENABLED=false`. The MLB
 Stats API adapter remains available for leagues and teams represented by that

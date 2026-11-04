@@ -5517,7 +5517,7 @@ server <- function(input, output, session) {
             tags$div(class = "home-game-kicker", "Next game"),
             tags$div(class = "home-calendar-mark", tags$span(format(Sys.Date(), "%b")), tags$strong("—")),
             tags$h2("Schedule pending"),
-            tags$p("Upcoming matchup details will appear here automatically as soon as a future game is added to the team schedule."),
+            tags$p(base_schedule_empty_message()),
             tags$div(
               class = "home-schedule-status",
               tags$span(class = "home-status-dot"),
@@ -5537,6 +5537,9 @@ server <- function(input, output, session) {
     opp_losses <- ng$opp_losses %||% 0L
     opp_abbr   <- ng$opp_abbr   %||% "OPP"
     is_home    <- ng$is_home    %||% TRUE
+    is_neutral <- isTRUE(ng$is_neutral)
+    event      <- ng$event      %||% ""
+    event_logo <- ng$event_logo %||% ""
     ms         <- if (!is.null(ng) && !is.na(ng$ms)) ng$ms else (as.numeric(Sys.time()) + 86400) * 1000
 
     countdown_segments <- list(
@@ -5558,10 +5561,20 @@ server <- function(input, output, session) {
             class = "home-game-card-header",
             tags$div(
               tags$div(class = "home-game-kicker", "Next game"),
-              tags$div(class = "home-game-date", time_str)
+              tags$div(class = "home-game-date", time_str),
+              if (isTRUE(ng$time_is_estimated)) {
+                tags$div(class = "home-game-time-note", "Estimated start time")
+              }
             ),
-            tags$span(class = "home-game-location-badge", if (isTRUE(is_home)) "Home" else "Away")
+            tags$span(class = "home-game-location-badge", if (is_neutral) "Neutral" else if (isTRUE(is_home)) "Home" else "Away")
           ),
+          if (nzchar(event)) {
+            tags$div(
+              class = "home-game-event",
+              if (nzchar(event_logo)) tags$img(src = event_logo, alt = paste(event, "logo")),
+              tags$strong(event)
+            )
+          },
           tags$div(
             class = "home-matchup",
             tags$div(
@@ -5572,14 +5585,16 @@ server <- function(input, output, session) {
                 tags$small(paste0(wins, "–", losses))
               )
             ),
-            tags$div(class = "home-matchup-versus", if (isTRUE(is_home)) "VS" else "AT"),
+            tags$div(class = "home-matchup-versus", if (is_neutral || isTRUE(is_home)) "VS" else "AT"),
             tags$div(
               class = "home-matchup-team opponent",
               tags$div(
                 tags$strong(opponent),
                 tags$small(paste0(opp_wins, "–", opp_losses))
               ),
-              tags$img(src = opponent_logo(opp_abbr), alt = paste(opponent, "logo"))
+              if (!identical(opp_abbr, "OPP")) {
+                tags$img(src = opponent_logo(opp_abbr), alt = paste(opponent, "logo"))
+              }
             )
           ),
           tags$div(class = "home-game-venue", tags$span("Venue"), tags$strong(venue)),

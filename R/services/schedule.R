@@ -27,7 +27,7 @@ parse_base_schedule_times <- function(schedule) {
   as.POSIXct(parsed, tz = TEAM_CONFIG$schedule_timezone)
 }
 
-read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file) {
+read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file, now = Sys.time()) {
   if (!nzchar(path) || !file.exists(path)) return(NULL)
 
   schedule <- tryCatch(
@@ -51,7 +51,7 @@ read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file) 
     active_rows <- !tolower(trimws(as.character(schedule$Status))) %in%
       c("cancelled", "canceled", "final", "completed", "postponed")
   }
-  upcoming <- which(active_rows & !is.na(game_times) & game_times >= Sys.time())
+  upcoming <- which(active_rows & !is.na(game_times) & game_times >= now)
   if (!length(upcoming)) return(NULL)
   i <- upcoming[which.min(game_times[upcoming])]
 
@@ -70,13 +70,24 @@ read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file) 
     else default
   }
   game_time <- game_times[i]
+  # Accept both schedule headers, including the spelling in older uploads.
+  location <- toupper(trimws(as.character(value_or(
+    "IsHomeAway", value_or("IsHome", "TRUE")
+  ))))
+  is_neutral <- location %in% c("NEUTRAL", "NUETRAL", "N")
+  is_home <- !is_neutral && !location %in%
+    c("FALSE", "F", "0", "NO", "AWAY", "A")
 
   list(
     opponent = as.character(schedule$Opponent[i]),
     venue = as.character(value_or("Venue", "Venue TBD")),
-    is_home = bool_or("IsHome", TRUE),
+    is_home = is_home,
+    is_neutral = is_neutral,
+    event = as.character(value_or("Event", "")),
+    event_logo = as.character(value_or("EventLogo", "")),
+    time_is_estimated = bool_or("TimeIsEstimated", FALSE),
     datetime = game_time,
-    time_str = format(game_time, "%A, %B %d · %I:%M %p"),
+    time_str = format(game_time, "%A, %B %d · %I:%M %p %Z"),
     ms = as.numeric(game_time) * 1000,
     wins = as.integer(value_or("TeamWins", 0L)),
     losses = as.integer(value_or("TeamLosses", 0L)),
@@ -171,4 +182,9 @@ fetch_next_team_game <- function() {
   }
 
   NULL
+}
+
+base_schedule_empty_message <- function(path = TEAM_CONFIG$data$schedule_file) {
+  if (!nzchar(path) || !file.exists(path)) return("The configured schedule file is missing. Add the upcoming season schedule to show the next game.")
+  "The configured schedule has no upcoming playable game. Add or update the upcoming season schedule to show the next matchup."
 }
