@@ -32,31 +32,31 @@ DateTime,Opponent,Venue,IsHomeAway,OppAbbr,TeamWins,TeamLosses,OppWins,OppLosses
 2027-04-03 14:00:00,North Florida,Bobcat Ballpark,TRUE,NOF_OSP,0,0,0,0,,,TRUE
 2027-04-04 13:00:00,North Florida,Bobcat Ballpark,TRUE,NOF_OSP,0,0,0,0,,,TRUE
 2027-04-06 18:00:00,UIW,Bobcat Ballpark,TRUE,IWC,0,0,0,0,,,TRUE
-2027-04-09 18:00:00,Gonzaga,Bobcat Ballpark,TRUE,GON_BUL,0,0,0,0,,,TRUE
-2027-04-10 14:00:00,Gonzaga,Bobcat Ballpark,TRUE,GON_BUL,0,0,0,0,,,TRUE
-2027-04-11 13:00:00,Gonzaga,Bobcat Ballpark,TRUE,GON_BUL,0,0,0,0,,,TRUE
+2027-04-09 18:00:00,Gonzaga,Bobcat Ballpark,TRUE,GON_BUL,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-04-10 14:00:00,Gonzaga,Bobcat Ballpark,TRUE,GON_BUL,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-04-11 13:00:00,Gonzaga,Bobcat Ballpark,TRUE,GON_BUL,0,0,0,0, Pac-12 Conference Game,,TRUE
 2027-04-13 18:00:00,UTSA,UTSA Baseball Field,FALSE,UTS_ROA,0,0,0,0,,,TRUE
-2027-04-16 20:00:00,San Diego State,Tony Gwynn Stadium,FALSE,SAN_AZT,0,0,0,0,,,TRUE
-2027-04-17 16:00:00,San Diego State,Tony Gwynn Stadium,FALSE,SAN_AZT,0,0,0,0,,,TRUE
-2027-04-18 15:00:00,San Diego State,Tony Gwynn Stadium,FALSE,SAN_AZT,0,0,0,0,,,TRUE
+2027-04-16 20:00:00,San Diego State,Tony Gwynn Stadium,FALSE,SAN_AZT,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-04-17 16:00:00,San Diego State,Tony Gwynn Stadium,FALSE,SAN_AZT,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-04-18 15:00:00,San Diego State,Tony Gwynn Stadium,FALSE,SAN_AZT,0,0,0,0, Pac-12 Conference Game,,TRUE
 2027-04-20 18:00:00,Texas,UFCU Disch Falk Field,FALSE,TEX_LON,0,0,0,0,,,TRUE
-2027-04-23 18:00:00,Fresno State,Bobcat Ballpark,TRUE,FRE_BUL,0,0,0,0,,,TRUE
-2027-04-24 14:00:00,Fresno State,Bobcat Ballpark,TRUE,FRE_BUL,0,0,0,0,,,TRUE
-2027-04-25 13:00:00,Fresno State,Bobcat Ballpark,TRUE,FRE_BUL,0,0,0,0,,,TRUE
+2027-04-23 18:00:00,Fresno State,Bobcat Ballpark,TRUE,FRE_BUL,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-04-24 14:00:00,Fresno State,Bobcat Ballpark,TRUE,FRE_BUL,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-04-25 13:00:00,Fresno State,Bobcat Ballpark,TRUE,FRE_BUL,0,0,0,0,Pac-12 Conference Game ,,TRUE
 2027-04-27 18:00:00,Texas A&M,Bobcat Ballpark,TRUE,TEX_AGG,0,0,0,0,,,TRUE
 2027-04-30 18:00:00,UC Davis,Bobcat Ballpark,TRUE,CAL_AGO,0,0,0,0,,,TRUE
 2027-05-01 14:00:00,UC Davis,Bobcat Ballpark,TRUE,CAL_AGO,0,0,0,0,,,TRUE
 2027-05-02 13:00:00,UC Davis,Bobcat Ballpark,TRUE,CAL_AGO,0,0,0,0,,,TRUE
 2027-05-04 18:00:00,Baylor,Baylor Ballpark,FALSE,BAY_BEA,0,0,0,0,,,TRUE
-2027-05-07 20:00:00,Oregon State,Goss Stadium,FALSE,ORE_BEA,0,0,0,0,,,TRUE
-2027-05-08 16:00:00,Oregon State,Goss Stadium,FALSE,ORE_BEA,0,0,0,0,,,TRUE
-2027-05-09 15:00:00,Oregon State,Goss Stadium,FALSE,ORE_BEA,0,0,0,0,,,TRUE
+2027-05-07 20:00:00,Oregon State,Goss Stadium,FALSE,ORE_BEA,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-05-08 16:00:00,Oregon State,Goss Stadium,FALSE,ORE_BEA,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-05-09 15:00:00,Oregon State,Goss Stadium,FALSE,ORE_BEA,0,0,0,0, Pac-12 Conference Game,,TRUE
 2027-05-11 18:00:00,Houston Christian,Bobcat Ballpark,TRUE,HBU_HUS,0,0,0,0,,,TRUE
-2027-05-14 18:00:00,Dallas Baptist,Bobcat Ballpark,TRUE,DAL_PAT,0,0,0,0,,,TRUE
-2027-05-15 14:00:00,Dallas Baptist,Bobcat Ballpark,TRUE,DAL_PAT,0,0,0,0,,,TRUE
-2027-05-16 13:00:00,Dallas Baptist,Bobcat Ballpark,TRUE,DAL_PAT,0,0,0,0,,,TRUE
+2027-05-14 18:00:00,Dallas Baptist,Bobcat Ballpark,TRUE,DAL_PAT,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-05-15 14:00:00,Dallas Baptist,Bobcat Ballpark,TRUE,DAL_PAT,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-05-16 13:00:00,Dallas Baptist,Bobcat Ballpark,TRUE,DAL_PAT,0,0,0,0, Pac-12 Conference Game,,TRUE
 2027-05-18 18:00:00,Houston,Bobcat Ballpark,TRUE,HOU_COU,0,0,0,0,,,TRUE
-2027-05-20 20:00:00,Washington State,Bailey-Brayton Field,FALSE,WAS_COU,0,0,0,0,,,TRUE
-2027-05-21 16:00:00,Washington State,Bailey-Brayton Field,FALSE,WAS_COU,0,0,0,0,,,TRUE
-2027-05-22 15:00:00,Washington State,Bailey-Brayton Field,FALSE,WAS_COU,0,0,0,0,,,TRUE
+2027-05-20 20:00:00,Washington State,Bailey-Brayton Field,FALSE,WAS_COU,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-05-21 16:00:00,Washington State,Bailey-Brayton Field,FALSE,WAS_COU,0,0,0,0, Pac-12 Conference Game,,TRUE
+2027-05-22 15:00:00,Washington State,Bailey-Brayton Field,FALSE,WAS_COU,0,0,0,0, Pac-12 Conference Game,,TRUE
 2027-05-25 16:00:00,TBD,Hillsboro Ballpark,NEUTRAL,,0,0,0,0,Pac-12 Conference Tournament,pac12logo.webp,TRUE
