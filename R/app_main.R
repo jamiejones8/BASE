@@ -5449,19 +5449,25 @@ server <- function(input, output, session) {
   output$hub_header_ui <- renderUI({ NULL })
   output$page_content  <- renderUI({ NULL })
 
-  # Reactive next game (re-fetches every 30 min)
-  next_game_reactive <- reactivePoll(
+  # Read the countdown and Next 4 from the same ordered schedule snapshot.
+  next_games_reactive <- reactivePoll(
     intervalMillis = 1800000,
     session        = session,
     checkFunc      = function() Sys.time(),
     valueFunc      = function() {
-      tryCatch(fetch_next_team_game(), error = function(e) NULL)
+      tryCatch({
+        games <- read_upcoming_games_from_schedule(limit = 4L)
+        if (length(games)) return(games)
+        game <- fetch_next_team_game()
+        if (is.null(game)) list() else list(game)
+      }, error = function(e) list())
     }
   )
 
   # Scoreboard hero
   output$scoreboard_hero <- renderUI({
-    ng <- next_game_reactive()
+    upcoming_games <- next_games_reactive()
+    ng <- if (length(upcoming_games)) upcoming_games[[1]] else NULL
     conference_logo <- base_conference_logo_url()
 
     team_identity <- tags$div(
@@ -5503,6 +5509,48 @@ server <- function(input, output, session) {
           )
         )
       )
+    )
+
+    team_identity <- tags$div(
+      class = "home-hero-left",
+      team_identity,
+      if (length(upcoming_games)) {
+        tags$section(
+          class = "home-next-four",
+          `aria-label` = "Next four games",
+          tags$h2("Next 4"),
+          tags$div(
+            class = "home-next-four-grid",
+            role = "list",
+            lapply(upcoming_games, function(game) {
+              tags$article(
+                class = "home-upcoming-game",
+                role = "listitem",
+                tags$time(
+                  datetime = format(game$datetime, "%Y-%m-%dT%H:%M:%S%z"),
+                  format(game$datetime, "%a, %b %d")
+                ),
+                tags$div(
+                  class = "home-upcoming-marks",
+                  if (!identical(game$opp_abbr, "OPP")) {
+                    tags$img(src = opponent_logo(game$opp_abbr), alt = paste(game$opponent, "logo"))
+                  },
+                  if (nzchar(game$event_logo)) {
+                    tags$img(
+                      src = game$event_logo,
+                      alt = paste(game$event, "logo"),
+                      class = "home-upcoming-event-logo",
+                      title = game$event
+                    )
+                  }
+                ),
+                tags$strong(game$opponent),
+                tags$span(class = "home-upcoming-venue", title = game$venue, game$venue)
+              )
+            })
+          )
+        )
+      }
     )
 
     if (is.null(ng)) {

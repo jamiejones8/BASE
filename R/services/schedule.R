@@ -27,8 +27,9 @@ parse_base_schedule_times <- function(schedule) {
   as.POSIXct(parsed, tz = TEAM_CONFIG$schedule_timezone)
 }
 
-read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file, now = Sys.time()) {
-  if (!nzchar(path) || !file.exists(path)) return(NULL)
+read_upcoming_games_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file,
+                                              now = Sys.time(), limit = 4L) {
+  if (!nzchar(path) || !file.exists(path)) return(list())
 
   schedule <- tryCatch(
     readr::read_csv(path, show_col_types = FALSE),
@@ -37,12 +38,12 @@ read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file, 
       NULL
     }
   )
-  if (is.null(schedule)) return(NULL)
+  if (is.null(schedule)) return(list())
 
   has_datetime <- "DateTime" %in% names(schedule) || "Date" %in% names(schedule)
   if (!has_datetime || !"Opponent" %in% names(schedule)) {
     message("BASE_SCHEDULE_FILE must contain Opponent plus DateTime or Date/Time columns")
-    return(NULL)
+    return(list())
   }
 
   game_times <- parse_base_schedule_times(schedule)
@@ -52,49 +53,61 @@ read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file, 
       c("cancelled", "canceled", "final", "completed", "postponed")
   }
   upcoming <- which(active_rows & !is.na(game_times) & game_times >= now)
-  if (!length(upcoming)) return(NULL)
-  i <- upcoming[which.min(game_times[upcoming])]
+  upcoming <- head(upcoming[order(game_times[upcoming])], limit)
+  if (!length(upcoming)) return(list())
 
-  value_or <- function(column, default) {
-    if (!column %in% names(schedule) || is.na(schedule[[column]][i]) ||
-        !nzchar(trimws(as.character(schedule[[column]][i])))) {
-      default
-    } else {
-      schedule[[column]][i]
+  lapply(upcoming, function(i) {
+    value_or <- function(column, default) {
+      if (!column %in% names(schedule) || is.na(schedule[[column]][i]) ||
+          !nzchar(trimws(as.character(schedule[[column]][i])))) {
+        default
+      } else {
+        schedule[[column]][i]
+      }
     }
-  }
-  bool_or <- function(column, default = TRUE) {
-    value <- tolower(trimws(as.character(value_or(column, default))))
-    if (value %in% c("true", "t", "1", "yes", "home", "h")) TRUE
-    else if (value %in% c("false", "f", "0", "no", "away", "a")) FALSE
-    else default
-  }
-  game_time <- game_times[i]
-  # Accept both schedule headers, including the spelling in older uploads.
-  location <- toupper(trimws(as.character(value_or(
-    "IsHomeAway", value_or("IsHome", "TRUE")
-  ))))
-  is_neutral <- location %in% c("NEUTRAL", "NUETRAL", "N")
-  is_home <- !is_neutral && !location %in%
-    c("FALSE", "F", "0", "NO", "AWAY", "A")
+    bool_or <- function(column, default = TRUE) {
+      value <- tolower(trimws(as.character(value_or(column, default))))
+      if (value %in% c("true", "t", "1", "yes", "home", "h")) TRUE
+      else if (value %in% c("false", "f", "0", "no", "away", "a")) FALSE
+      else default
+    }
+    game_time <- game_times[i]
+    # Accept both schedule headers, including the spelling in older uploads.
+    location <- toupper(trimws(as.character(value_or(
+      "IsHomeAway", value_or("IsHome", "TRUE")
+    ))))
+    is_neutral <- location %in% c("NEUTRAL", "NUETRAL", "N")
+    is_home <- !is_neutral && !location %in%
+      c("FALSE", "F", "0", "NO", "AWAY", "A")
+    event <- trimws(as.character(value_or("Event", "")))
+    event_logo <- as.character(value_or("EventLogo", ""))
+    if (!nzchar(event_logo) && grepl("^Pac[- ]?12\\b", event, ignore.case = TRUE)) {
+      event_logo <- "pac12logo.webp"
+    }
 
-  list(
-    opponent = as.character(schedule$Opponent[i]),
-    venue = as.character(value_or("Venue", "Venue TBD")),
-    is_home = is_home,
-    is_neutral = is_neutral,
-    event = as.character(value_or("Event", "")),
-    event_logo = as.character(value_or("EventLogo", "")),
-    time_is_estimated = bool_or("TimeIsEstimated", FALSE),
-    datetime = game_time,
-    time_str = format(game_time, "%A, %B %d · %I:%M %p %Z"),
-    ms = as.numeric(game_time) * 1000,
-    wins = as.integer(value_or("TeamWins", 0L)),
-    losses = as.integer(value_or("TeamLosses", 0L)),
-    opp_wins = as.integer(value_or("OppWins", 0L)),
-    opp_losses = as.integer(value_or("OppLosses", 0L)),
-    opp_abbr = as.character(value_or("OppAbbr", "OPP"))
-  )
+    list(
+      opponent = as.character(schedule$Opponent[i]),
+      venue = as.character(value_or("Venue", "Venue TBD")),
+      is_home = is_home,
+      is_neutral = is_neutral,
+      event = event,
+      event_logo = event_logo,
+      time_is_estimated = bool_or("TimeIsEstimated", FALSE),
+      datetime = game_time,
+      time_str = format(game_time, "%A, %B %d · %I:%M %p %Z"),
+      ms = as.numeric(game_time) * 1000,
+      wins = as.integer(value_or("TeamWins", 0L)),
+      losses = as.integer(value_or("TeamLosses", 0L)),
+      opp_wins = as.integer(value_or("OppWins", 0L)),
+      opp_losses = as.integer(value_or("OppLosses", 0L)),
+      opp_abbr = as.character(value_or("OppAbbr", "OPP"))
+    )
+  })
+}
+
+read_next_game_from_schedule <- function(path = TEAM_CONFIG$data$schedule_file, now = Sys.time()) {
+  games <- read_upcoming_games_from_schedule(path, now, limit = 1L)
+  if (length(games)) games[[1]] else NULL
 }
 
 fetch_next_team_game <- function() {
