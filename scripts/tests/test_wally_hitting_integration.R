@@ -384,6 +384,13 @@ shiny::testServer(workspace$server, {
   session$flushReact()
   filtered <- dat_filt()
   if (!nrow(filtered)) fail("Hitting Performance filter returned no fixture rows.")
+  session$setInputs(`hitting_development-season`="S26",`hitting_development-player`=hitter,
+    `hitting_development-stat1`="K%",`hitting_development-rolling_window`=2)
+  session$setInputs(`hitting_development-goal1`="18%")
+  dev_plan<-hitting_development$plan()
+  stopifnot(nrow(dev_plan$objectives[[1]]$series)>0,isTRUE(dev_plan$objectives[[1]]$lower_better),
+    dev_plan$objectives[[1]]$target==.18,is.finite(dev_plan$objectives[[1]]$average))
+
   perf_summary <- workspace$summarize_overall(filtered)
   if (!is.finite(perf_summary$xwOBAcon)) {
     fail("Fixture contact is still missing expected wOBA after loading the model.")

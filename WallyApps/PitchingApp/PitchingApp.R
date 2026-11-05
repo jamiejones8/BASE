@@ -20066,6 +20066,11 @@ function(el,x){
       spec<-performance_percentile_specs[performance_percentile_specs$label==metric,,drop=FALSE]
       if(!nrow(spec)) return(NA_real_)
       pitch_metric_percentile(value,spec$metric[1],lower_better=spec$lower_better[1])
+    },average=function(metric) {
+      if(metric=="xwOBA") mean(development_xwoba_reference$value,na.rm=TRUE) else perf_ts_d1_ref(metric)
+    },lower_better=function(metric) {
+      spec<-performance_percentile_specs[performance_percentile_specs$label==metric,,drop=FALSE]
+      if(nrow(spec)) isTRUE(spec$lower_better[1]) else isTRUE(pitching_metric_config(metric)$lower_better)
     })
 
   team_staff_percentile_data <- reactive({

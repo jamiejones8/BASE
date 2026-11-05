@@ -4827,7 +4827,9 @@ plot_sd_zone_points <- function(d, title = NULL){
 server <- function(input, output, session){
   hitting_development <- development_server("hitting_development",reactive(txst_df),"Batter",SEASON_CHOICES,
     summarize=function(d) as.list(summarize_overall(d)[1,,drop=FALSE]),
-    percentile=hitting_d1_percentile,mode="hitting")
+    percentile=hitting_d1_percentile,mode="hitting",
+    average=function(metric) {value<-unname(hitting_d1_average_lookup()[metric]);if(length(value)==1) value else NA_real_},
+    lower_better=function(metric) metric %in% hitting_d1_lower_better)
 
   base_comparison_server("hitting_comparisons", reactive(txst_df), SEASON_CHOICES, "Batter",
     summarize=function(d) as.list(summarize_overall(d)[1,,drop=FALSE]),

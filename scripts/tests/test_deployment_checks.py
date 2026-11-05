@@ -125,6 +125,8 @@ class DeploymentChecks(unittest.TestCase):
                 self.assertIn(f"!{directory}/**", rules, filename)
         for path in (
             "WallyApps/shared/development_goals.R",
+            "WallyApps/shared/development_series.R",
+            "WallyApps/shared/assets/portrait-brady-boles-mask.png",
             "WallyApps/shared/portraits.csv",
             "WallyApps/shared/assets/development-ballpark-duotone.png",
             "WallyApps/PitchingApp/helpers/situations.R",

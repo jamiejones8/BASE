@@ -397,6 +397,12 @@ shiny::testServer(workspace$server, {
     fail("Pitching handedness Performance table is not Total, left, right.")
   }
   invisible(output$performance_table)
+  session$setInputs(`pitching_development-season`="S26",`pitching_development-player`=pitcher,
+    `pitching_development-stat1`="K%",`pitching_development-rolling_window`=2)
+  session$setInputs(`pitching_development-goal1`="25%")
+  dev_plan<-pitching_development$plan()
+  stopifnot(nrow(dev_plan$objectives[[1]]$series)>0,!dev_plan$objectives[[1]]$lower_better,
+    dev_plan$objectives[[1]]$target==.25,dev_plan$objectives[[1]]$average==workspace$D1_PCT_AVG[["K%"]])
   session$setInputs(perf_split = "situation", leader_situation = "Total")
   situation_perf <- attr(performance_table_data(), "raw_df")
   stopifnot(identical(situation_perf$Situation, c("Total", workspace$PITCHING_SITUATIONS)),

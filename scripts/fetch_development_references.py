@@ -47,4 +47,5 @@ with (ASSETS.parent / "portraits.csv").open("w", newline="") as f:
     writer = csv.DictWriter(f, fieldnames=["Name", "File", "SourceURL"], lineterminator="\n")
     writer.writeheader()
     writer.writerows(records)
-print(f"Saved {len(records)} official portrait references.")
+subprocess.run(["Rscript", str(ROOT / "scripts/build_development_portrait_masks.R")], cwd=ROOT, check=True)
+print(f"Saved {len(records)} official portrait references and transparent masks.")

@@ -14,18 +14,32 @@ preserves Objective 1. A player or season change clears the draft so one player'
 instructions cannot accidentally be exported under another name. Drafts are
 session-local and are not saved to a shared server file.
 
+Charts plot one point per completed PA in season order, with a configurable
+rolling window (default 25 PAs). The owning app recalculates its native metrics
+from all pitches in each PA window, retaining swing/contact denominators.
+Before the window fills, use the available completed PAs. D1 reference lines
+reuse each Performance page's benchmarks (pitcher xwOBA uses its qualified-player
+reference mean). Green segments begin/end at the exact numeric goal crossing,
+with the appropriate higher/lower direction. A numeric chart-goal override
+handles written goals containing multiple numbers.
+
 The browser preview and PDF share the same renderer in
 `WallyApps/shared/development_goals.R`. Single objectives are centered; two use
 equal widths and margins. Empty drills are omitted. Text wraps and scales within
 the boxes, with limits disclosed if entered text would become illegible.
-The PDFs use the official roster headshot on the left and percentile rankings on
-the right. Missing photos use initials, and unavailable values/ranks display N/A.
+The PDFs use original-photo cutouts on the left, PA charts in the center and
+one column of red/blue percentile rankings at the far right. Each rounded text
+box sits directly on the photograph; there is no large white goal panel. Missing photos use initials, and unavailable values/ranks display N/A.
 
 Portrait sources are recorded in `WallyApps/shared/portraits.csv`; run
 `python3 scripts/fetch_development_references.py` to refresh them from the official
 [TXST roster](https://txst.com/sports/baseball/roster). Refreshing requires curl,
 R, and magick because SIDEARM sometimes serves WebP bytes under JPEG URLs.
 The app itself reads the normalized JPEGs without a runtime download.
+`build_development_portrait_masks.R` removes the edge-connected backdrop and
+feathers the alpha edge; alpha masks preserve every original RGB byte. Faces
+are never generated or retouched. The runtime applies the small masks to native
+rasters, keeping its bounded image cache small.
 
 The supplied ballpark photograph was treated with the built-in image tool using
 the prompt saved beside `assets/development-ballpark-duotone.png`. The renderer

@@ -1,6 +1,7 @@
 # Shared Shiny editor and vector PDF renderer for Hitting/Pitching Development Goals.
 development_source_paths <- unlist(lapply(sys.frames(),function(frame) if(is.character(frame$ofile)) frame$ofile else NULL),use.names=FALSE)
 development_root <- normalizePath(dirname(tail(development_source_paths[basename(development_source_paths)=="development_goals.R"],1)),mustWork=TRUE)
+source(file.path(development_root,"development_series.R"),local=TRUE)
 development_portraits <- read.csv(file.path(development_root,"portraits.csv"),stringsAsFactors=FALSE)
 development_name <- function(x) {
   if(length(x)!=1 || is.na(x)) return("")
@@ -51,6 +52,7 @@ development_ui <- function(id,seasons) {
     shiny::selectInput(ns(paste0("stat",i)),"Season stat",choices=character()),
     shiny::uiOutput(ns(paste0("current",i))),
     shiny::textInput(ns(paste0("goal",i)),"Goal",placeholder="Enter your target",width="100%"),
+    shiny::numericInput(ns(paste0("target",i)),"Numeric chart goal (optional; percentages as 35 for 35%)",value=NA_real_,step=.1,width="100%"),
     shiny::tags$h4("Supporting actions"),
     shiny::div(class="development-supports",lapply(1:3,function(j) shiny::textAreaInput(ns(paste0("support",i,"_",j)),paste("Action",j),rows=2,width="100%"))),
     shiny::tags$details(shiny::tags$summary("Drills · optional, up to 5"),
@@ -68,9 +70,10 @@ development_ui <- function(id,seasons) {
     .development-preview img{width:100%;height:auto;border:1px solid #c6a66b;border-radius:8px}
     .development-page .btn{background:#501214;color:#e6cc92;border-color:#c6a66b}
   ")),shiny::div(class="development-page",
-    shiny::tags$h2("Development Goals"),shiny::tags$p("Build a season-based development plan. The preview and PDF use the same layout."),
+    shiny::tags$h2("Development Goals"),shiny::tags$p("Build a season-based development plan. The preview and PDF use the same layout. Charts use completed PAs; early points use the available history until the rolling window fills."),
     shiny::div(class="development-controls",shiny::selectInput(ns("season"),"Season",choices=seasons,selected=if("S26" %in% seasons) "S26" else unname(seasons[1])),
-      shiny::selectInput(ns("player"),"Player",choices=character())),
+      shiny::selectInput(ns("player"),"Player",choices=character()),
+      shiny::numericInput(ns("rolling_window"),"Rolling window (PAs)",value=25,min=1,max=500,step=1)),
     shiny::div(style="display:none",shiny::textOutput(ns("two"))),
     shiny::div(class="development-toolbar",
       shiny::uiOutput(ns("export_control"))),
@@ -84,11 +87,12 @@ development_payload_errors <- function(plan) {
   for(i in seq_along(plan$objectives)) {
     o<-plan$objectives[[i]]
     if(any(!nzchar(trimws(c(o$title,o$metric,o$goal,o$supports))))) errors<-c(errors,paste0("Complete Objective ",i,", its goal, and all three supporting actions."))
+    if(nzchar(o$goal) && !is.null(o$target) && !is.finite(o$target)) errors<-c(errors,paste0("Objective ",i,": enter one numeric goal, or fill Numeric chart goal."))
     if(nchar(o$title)>100 || nchar(o$goal)>100 || any(nchar(o$supports)>180) || any(nchar(o$drills)>120)) errors<-c(errors,"Shorten the objective/goal to 100 characters, actions to 180, and drills to 120 so every box remains legible.")
   }
   unique(errors)
 }
-development_server <- function(id,rows,player_column,seasons,summarize,percentile,mode) shiny::moduleServer(id,function(input,output,session) {
+development_server <- function(id,rows,player_column,seasons,summarize,percentile,mode,average=function(metric) NA_real_,lower_better=function(metric) FALSE) shiny::moduleServer(id,function(input,output,session) {
   two<-shiny::reactiveVal(FALSE)
   shiny::observeEvent(input$add,two(TRUE));shiny::observeEvent(input$remove,two(FALSE))
   output$two<-shiny::renderText(if(two()) "true" else "false")
@@ -106,10 +110,16 @@ development_server <- function(id,rows,player_column,seasons,summarize,percentil
     current<-shiny::isolate(input$player)
     shiny::updateSelectInput(session,"player",choices=stats::setNames(players,vapply(players,development_name,character(1))),selected=if(length(current)==1 && current %in% players) current else head(players,1))
   })
-  stats<-shiny::reactive({
+  player_rows<-shiny::reactive({
     d<-season_rows();shiny::req(input$player)
     d<-d[!is.na(d[[player_column]]) & d[[player_column]]==input$player,,drop=FALSE]
-    shiny::req(nrow(d));summarize(d)
+    shiny::req(nrow(d));d
+  })
+  stats<-shiny::reactive(summarize(player_rows()))
+  rolling<-shiny::reactive({
+    window<-as.integer(input$rolling_window %||% 25)
+    shiny::validate(shiny::need(is.finite(window) && window>=1 && window<=500,"Choose a rolling window from 1 to 500 PAs."))
+    development_rolling_values(player_rows(),window,summarize,mode)
   })
   shiny::observe({
     values<-stats();choices<-names(values)
@@ -122,6 +132,7 @@ development_server <- function(id,rows,player_column,seasons,summarize,percentil
   # adding/removing the second objective never rebuilds the first editor.
   shiny::observeEvent(list(input$player,input$season),{
     for(i in 1:2) {
+      shiny::updateNumericInput(session,paste0("target",i),value=NA_real_)
       for(field in c("title","goal")) shiny::updateTextInput(session,paste0(field,i),value="")
       for(j in 1:3) shiny::updateTextAreaInput(session,paste0("support",i,"_",j),value="")
       for(j in 1:5) shiny::updateTextAreaInput(session,paste0("drill",i,"_",j),value="")
@@ -139,11 +150,15 @@ development_server <- function(id,rows,player_column,seasons,summarize,percentil
     rankings$percentile<-mapply(percentile,rankings$value,rankings$metric)
     objectives<-lapply(seq_len(if(two()) 2 else 1),function(i) {
       metric<-input[[paste0("stat",i)]] %||% "K%"
-      list(title=input[[paste0("title",i)]] %||% "",metric=metric,current=development_format(values[[metric]],metric),
+      series<-rolling()
+      series<-if(metric %in% names(series)) data.frame(PAIndex=series$PAIndex,Value=as.numeric(series[[metric]])) else data.frame(PAIndex=integer(),Value=numeric())
+      list(series=series,average=as.numeric(average(metric)),lower_better=isTRUE(lower_better(metric)),
+        target=development_goal_target(input[[paste0("goal",i)]] %||% "",metric,input[[paste0("target",i)]] %||% NA_real_),
+        title=input[[paste0("title",i)]] %||% "",metric=metric,current=development_format(values[[metric]],metric),
         goal=input[[paste0("goal",i)]] %||% "",supports=vapply(1:3,function(j) input[[paste0("support",i,"_",j)]] %||% "",character(1)),
         drills=Filter(nzchar,vapply(1:5,function(j) trimws(input[[paste0("drill",i,"_",j)]] %||% ""),character(1))))
     })
-    list(player=development_name(input$player),season=names(seasons)[match(input$season,seasons)],mode=mode,
+    list(rolling_window=as.integer(input$rolling_window %||% 25),player=development_name(input$player),season=names(seasons)[match(input$season,seasons)],mode=mode,
       portrait=development_portrait(input$player),rankings=rankings,objectives=objectives)
   })
   output$status<-shiny::renderUI({
@@ -168,7 +183,7 @@ development_server <- function(id,rows,player_column,seasons,summarize,percentil
     p<-plan();shiny::validate(shiny::need(!length(development_payload_errors(p)),"Complete all required goal fields before exporting."))
     development_pdf(file,p)
   })
-  list(plan=plan,stats=stats,two=two)
+  list(plan=plan,stats=stats,two=two,rolling=rolling)
 })
 
 .development_image_cache<-new.env(parent=emptyenv())
@@ -177,6 +192,16 @@ development_image <- function(path,opacity=1) {
   key<-paste(path,opacity)
   if(exists(key,.development_image_cache,inherits=FALSE)) return(get(key,.development_image_cache))
   x<-if(grepl("[.]png$",path,ignore.case=TRUE)) png::readPNG(path,native=opacity==1) else jpeg::readJPEG(path,native=opacity==1)
+  if(opacity==1 && grepl("^portrait-.*[.]jpg$",basename(path))) {
+    mask_path<-sub("[.]jpg$","-mask.png",path)
+    if(file.exists(mask_path)) {
+      alpha<-png::readPNG(mask_path)
+      stopifnot(identical(dim(alpha),dim(x)))
+      rgba<-writeBin(as.integer(x),raw(),size=4L,endian="little")
+      rgba[seq.int(4L,length(rgba),by=4L)]<-as.raw(round(t(alpha)*255))
+      x[]<-readBin(rgba,"integer",n=length(x),size=4L,endian="little")
+    }
+  }
   if(opacity<1) {
     rgba<-array(1,c(dim(x)[1:2],4));rgba[,,1:3]<-x[,,1:3];rgba[,,4]<-if(dim(x)[3]==4) x[,,4]*opacity else opacity;x<-rgba
   }
@@ -197,6 +222,7 @@ development_draw <- function(plan) {
   maroon<-"#501214";gold<-"#c8a76c";cream<-"#fff6e4"
   grid::grid.newpage();grid::pushViewport(grid::viewport(xscale=c(0,1100),yscale=c(0,700)));on.exit(grid::popViewport())
   rect<-function(x,y,w,h,fill=cream,col=gold) grid::grid.rect(x,y,w,h,default.units="native",just=c("left","bottom"),gp=grid::gpar(fill=fill,col=col,lwd=1.1))
+  box<-function(x,y,w,h,fill=cream,col=gold) grid::grid.roundrect(x+w/2,y+h/2,w,h,r=grid::unit(5,"points"),default.units="native",gp=grid::gpar(fill=fill,col=col,lwd=1.1))
   text<-function(label,x,y,size=12,col=maroon,bold=FALSE,just="centre") grid::grid.text(iconv(label,to="ASCII//TRANSLIT",sub="?"),x,y,default.units="native",just=just,gp=grid::gpar(col=col,fontsize=size,fontfamily="Helvetica",fontface=if(bold) "bold" else "plain"))
   fit<-function(label,x,y,w,h,size=13,col=maroon,bold=TRUE) {
     label<-iconv(gsub("[\r\n]+"," ",label),to="ASCII//TRANSLIT",sub="?")
@@ -228,41 +254,52 @@ development_draw <- function(plan) {
   if(!is.null(logo)) grid::grid.raster(logo,x=550,y=680,width=34,height=34,default.units="native")
   text(toupper(plan$player),550,630,33,cream,TRUE)
   text(paste(toupper(plan$mode),"DEVELOPMENT GOALS",toupper(plan$season),sep="   |   "),550,604,11,cream,TRUE)
-  rect(30,365,250,220,grDevices::adjustcolor(cream,alpha.f=.97))
   portrait<-development_image(plan$portrait)
   if(!is.null(portrait)) {
-    ratio<-dim(portrait)[2]/dim(portrait)[1];h<-205;w<-h*ratio
-    if(w>232) {w<-232;h<-w/ratio}
-    grid::grid.raster(portrait,x=155,y=475,width=w,height=h,default.units="native",interpolate=TRUE)
-  } else text(paste(substr(strsplit(plan$player," +")[[1]],1,1),collapse=""),155,475,60,gold,TRUE)
-  rect(300,365,770,220,grDevices::adjustcolor(cream,alpha.f=.97))
-  text("D1 PERCENTILE RANKINGS",320,567,12,maroon,TRUE,just="left")
-  text("POOR     50th     GREAT",1050,567,9,maroon,FALSE,just="right")
+    ratio<-dim(portrait)[2]/dim(portrait)[1];h<-278;w<-h*ratio
+    if(w>245) {w<-245;h<-w/ratio}
+    grid::grid.raster(portrait,x=150,y=465,width=w,height=h,default.units="native",interpolate=TRUE)
+  } else text(paste(substr(strsplit(plan$player," +")[[1]],1,1),collapse=""),150,475,60,gold,TRUE)
+  # Charts occupy the center; percentile rankings remain one column at far right.
+  count<-length(plan$objectives);height<-(245-(count-1)*8)/count
+  for(i in seq_len(count)) {
+    y<-350+(count-i)*(height+8)
+    box(280,y,510,height,grDevices::adjustcolor(cream,alpha.f=.92))
+    grid::pushViewport(grid::viewport(x=535,y=y+height/2,width=500,height=height-4,default.units="native"))
+    grid::grid.draw(ggplot2::ggplotGrob(development_chart(plan$objectives[[i]],i,plan$rolling_window %||% 25)))
+    grid::popViewport()
+  }
+  shadow_text<-function(label,x,y,size=10,just="left",bold=TRUE) {
+    for(dx in c(-.5,.5)) for(dy in c(-.5,.5)) text(label,x+dx,y+dy,size,maroon,bold,just)
+    text(label,x,y,size,cream,bold,just)
+  }
+  shadow_text("D1 PERCENTILE RANKINGS",820,590,11)
+  text("POOR",893,579,6.5,"#5D7EBC",TRUE,just="left");text("AVG",950,579,6.5,cream,TRUE);text("GREAT",1008,579,6.5,"#E33434",TRUE,just="right")
   rankings<-plan$rankings
   for(i in seq_len(nrow(rankings))) {
-    col<-(i-1)%/%6;row<-(i-1)%%6;x<-320+col*375;y<-541-row*29
+    x<-820;y<-565-(i-1)*20
     pct<-rankings$percentile[i];value<-rankings$value[i]
-    text(rankings$label[i],x,y,11,maroon,TRUE,just="left")
-    rect(x+85,y-3,180,6,"#dfd0b2",NA)
-    grid::grid.segments(x+175,y-8,x+175,y+8,default.units="native",gp=grid::gpar(col=gold,lwd=1))
+    shadow_text(rankings$label[i],x,y,9)
+    rect(x+73,y-2.5,115,5,"#D8E8E9",NA)
+    grid::grid.segments(x+130.5,y-6,x+130.5,y+6,default.units="native",gp=grid::gpar(col="#ffffff",lwd=.7))
     if(is.finite(pct)) {
-      p<-max(1,min(99,pct));rect(x+85,y-3,180*p/100,6,gold,NA)
-      grid::grid.circle(x+85+180*p/100,y,r=10,default.units="native",gp=grid::gpar(fill=maroon,col=gold))
-      text(round(pct),x+85+180*p/100,y,8,cream,TRUE)
-    } else text("N/A",x+175,y,8,maroon)
-    text(development_format(value,rankings$metric[i]),x+342,y,11,maroon,TRUE,just="right")
+      position<-max(1,min(99,pct));color<-development_percentile_color(pct)
+      rect(x+73,y-2.5,115*position/100,5,color,NA)
+      grid::grid.circle(x+73+115*position/100,y,r=7.5,default.units="native",gp=grid::gpar(fill=color,col=NA))
+      text(round(pct),x+73+115*position/100,y,6.5,"#ffffff",TRUE)
+    } else text("N/A",x+130.5,y,7,cream)
+    shadow_text(development_format(value,rankings$metric[i]),1067,y,9,just="right")
   }
   n<-length(plan$objectives)
   for(i in seq_len(n)) {
     o<-plan$objectives[[i]];x<-if(n==1) 170 else 30+(i-1)*535;w<-if(n==1) 760 else 505
-    rect(x,49,w,299,grDevices::adjustcolor(cream,alpha.f=.97))
-    rect(x,310,w,38,maroon,gold);fit(paste0("OBJECTIVE ",i,"  ",if(nzchar(o$title)) o$title else "Your development objective"),x,310,w,38,16,gold)
+    box(x,302,w,36,maroon,gold);fit(paste0("OBJECTIVE ",i,"  ",if(nzchar(o$title)) o$title else "Your development objective"),x,302,w,36,16,gold)
     cw<-(w-75)/2
-    rect(x+15,246,cw,54);text(paste(plan$season,o$metric),x+15+cw/2,286,10,maroon,TRUE);fit(o$current,x+15,247,cw,32,25)
+    box(x+15,246,cw,54);text(paste(plan$season,o$metric),x+15+cw/2,286,10,maroon,TRUE);fit(o$current,x+15,247,cw,32,25)
     grid::grid.segments(x+w/2-12,268,x+w/2+12,268,default.units="native",arrow=grid::arrow(length=grid::unit(.10,"inches"),type="closed"),gp=grid::gpar(col=gold,fill=gold,lwd=2))
-    rect(x+w-cw-15,246,cw,54);text("GOAL",x+w-cw/2-15,286,10,maroon,TRUE);fit(if(nzchar(o$goal)) o$goal else "Your target",x+w-cw-15,247,cw,32,23)
+    box(x+w-cw-15,246,cw,54);text("GOAL",x+w-cw/2-15,286,10,maroon,TRUE);fit(if(nzchar(o$goal)) o$goal else "Your target",x+w-cw-15,247,cw,32,23)
     sw<-(w-40)/3
-    for(j in 1:3) {sx<-x+10+(j-1)*(sw+10);rect(sx,166,sw,68,maroon,gold);fit(if(nzchar(o$supports[j])) o$supports[j] else paste("Supporting action",j),sx,166,sw,68,13,gold)}
+    for(j in 1:3) {sx<-x+10+(j-1)*(sw+10);box(sx,166,sw,68,maroon,gold);fit(if(nzchar(o$supports[j])) o$supports[j] else paste("Supporting action",j),sx,166,sw,68,13,gold)}
     drills<-o$drills
     if(length(drills)) {
       cols<-if(n==1) length(drills) else min(3,length(drills));rows<-ceiling(length(drills)/cols)
@@ -270,10 +307,10 @@ development_draw <- function(plan) {
       for(j in seq_along(drills)) {
         count<-min(cols,length(drills)-(j-1)%/%cols*cols);offset<-(w-(count*dw+(count-1)*8))/2
         dx<-x+offset+(j-1)%%cols*(dw+8);dy<-if(rows==1) 66 else 104-(j-1)%/%cols*40
-        rect(dx,dy,dw,dh);fit(drills[j],dx,dy,dw,dh,12)
+        box(dx,dy,dw,dh);fit(drills[j],dx,dy,dw,dh,12)
       }
     }
   }
   text("C O M P E T E     A T T I T U D E     T O U G H N E S S     S E L F L E S S",550,30,9,gold,TRUE)
-  if(any(!is.finite(rankings$percentile))) text("N/A: season value or D1 reference unavailable",1065,353,7,cream,FALSE,just="right")
+  if(any(!is.finite(rankings$percentile))) text("N/A: season value or D1 reference unavailable",1065,346,7,cream,FALSE,just="right")
 }
