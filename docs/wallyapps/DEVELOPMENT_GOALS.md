@@ -14,10 +14,11 @@ preserves Objective 1. A player or season change clears the draft so one player'
 instructions cannot accidentally be exported under another name. Drafts are
 session-local and are not saved to a shared server file.
 
-Charts plot one point per completed PA in season order, with a configurable
-rolling window (default 25 PAs). The owning app recalculates its native metrics
-from all pitches in each PA window, retaining swing/contact denominators.
-Before the window fills, use the available completed PAs. D1 reference lines
+Charts plot the season-to-date value after each game, ordered by date and game
+start time. Doubleheader games remain separate points, labeled G1/G2. The owning
+app recalculates its native metrics from all recorded pitches through each game,
+retaining its PA/swing/contact rules rather than averaging game percentages.
+The x-axis shows game dates. D1 reference lines
 reuse each Performance page's benchmarks (pitcher xwOBA uses its qualified-player
 reference mean). Green segments begin/end at the exact numeric goal crossing,
 with the appropriate higher/lower direction. A numeric chart-goal override
@@ -27,7 +28,7 @@ The browser preview and PDF share the same renderer in
 `WallyApps/shared/development_goals.R`. Single objectives are centered; two use
 equal widths and margins. Empty drills are omitted. Text wraps and scales within
 the boxes, with limits disclosed if entered text would become illegible.
-The PDFs use original-photo cutouts on the left, PA charts in the center and
+The PDFs use original-photo cutouts on the left, game-by-game charts in the center and
 one column of red/blue percentile rankings at the far right. Each rounded text
 box sits directly on the photograph; there is no large white goal panel. Missing photos use initials, and unavailable values/ranks display N/A.
 With two objectives, their charts sit side by side at half width, with wrapped

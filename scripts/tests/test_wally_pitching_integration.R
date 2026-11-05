@@ -398,11 +398,12 @@ shiny::testServer(workspace$server, {
   }
   invisible(output$performance_table)
   session$setInputs(`pitching_development-season`="S26",`pitching_development-player`=pitcher,
-    `pitching_development-stat1`="K%",`pitching_development-rolling_window`=2)
+    `pitching_development-stat1`="K%")
   session$setInputs(`pitching_development-goal1`="25%")
   dev_plan<-pitching_development$plan()
-  stopifnot(nrow(dev_plan$objectives[[1]]$series)>0,!dev_plan$objectives[[1]]$lower_better,
-    dev_plan$objectives[[1]]$target==.25,dev_plan$objectives[[1]]$average==workspace$D1_PCT_AVG[["K%"]])
+  stopifnot(nrow(dev_plan$objectives[[1]]$series)>0,"GameIndex" %in% names(dev_plan$objectives[[1]]$series),!dev_plan$objectives[[1]]$lower_better,
+    dev_plan$objectives[[1]]$target==.25,dev_plan$objectives[[1]]$average==workspace$D1_PCT_AVG[["K%"]],
+    isTRUE(all.equal(tail(dev_plan$objectives[[1]]$series$Value,1),pitching_development$stats()[["K%"]])))
   session$setInputs(perf_split = "situation", leader_situation = "Total")
   situation_perf <- attr(performance_table_data(), "raw_df")
   stopifnot(identical(situation_perf$Situation, c("Total", workspace$PITCHING_SITUATIONS)),

@@ -70,10 +70,9 @@ development_ui <- function(id,seasons) {
     .development-preview img{width:100%;height:auto;border:1px solid #c6a66b;border-radius:8px}
     .development-page .btn{background:#501214;color:#e6cc92;border-color:#c6a66b}
   ")),shiny::div(class="development-page",
-    shiny::tags$h2("Development Goals"),shiny::tags$p("Build a season-based development plan. The preview and PDF use the same layout. Charts use completed PAs; early points use the available history until the rolling window fills."),
+    shiny::tags$h2("Development Goals"),shiny::tags$p("Build a season-based development plan. The preview and PDF use the same layout. Charts show season-to-date stats after each game, with separate points for doubleheaders."),
     shiny::div(class="development-controls",shiny::selectInput(ns("season"),"Season",choices=seasons,selected=if("S26" %in% seasons) "S26" else unname(seasons[1])),
-      shiny::selectInput(ns("player"),"Player",choices=character()),
-      shiny::numericInput(ns("rolling_window"),"Rolling window (PAs)",value=25,min=1,max=500,step=1)),
+      shiny::selectInput(ns("player"),"Player",choices=character())),
     shiny::div(style="display:none",shiny::textOutput(ns("two"))),
     shiny::div(class="development-toolbar",
       shiny::uiOutput(ns("export_control"))),
@@ -116,11 +115,7 @@ development_server <- function(id,rows,player_column,seasons,summarize,percentil
     shiny::req(nrow(d));d
   })
   stats<-shiny::reactive(summarize(player_rows()))
-  rolling<-shiny::reactive({
-    window<-as.integer(input$rolling_window %||% 25)
-    shiny::validate(shiny::need(is.finite(window) && window>=1 && window<=500,"Choose a rolling window from 1 to 500 PAs."))
-    development_rolling_values(player_rows(),window,summarize,mode)
-  })
+  game_series<-shiny::reactive(development_game_values(player_rows(),summarize,mode))
   shiny::observe({
     values<-stats();choices<-names(values)
     for(i in 1:2) {
@@ -150,15 +145,15 @@ development_server <- function(id,rows,player_column,seasons,summarize,percentil
     rankings$percentile<-mapply(percentile,rankings$value,rankings$metric)
     objectives<-lapply(seq_len(if(two()) 2 else 1),function(i) {
       metric<-input[[paste0("stat",i)]] %||% "K%"
-      series<-rolling()
-      series<-if(metric %in% names(series)) data.frame(PAIndex=series$PAIndex,Value=as.numeric(series[[metric]])) else data.frame(PAIndex=integer(),Value=numeric())
+      series<-game_series()
+      series<-if(metric %in% names(series)) data.frame(GameIndex=series$GameIndex,GameLabel=series$GameLabel,Value=as.numeric(series[[metric]])) else data.frame(GameIndex=integer(),GameLabel=character(),Value=numeric())
       list(series=series,average=as.numeric(average(metric)),lower_better=isTRUE(lower_better(metric)),
         target=development_goal_target(input[[paste0("goal",i)]] %||% "",metric,input[[paste0("target",i)]] %||% NA_real_),
         title=input[[paste0("title",i)]] %||% "",metric=metric,current=development_format(values[[metric]],metric),
         goal=input[[paste0("goal",i)]] %||% "",supports=vapply(1:3,function(j) input[[paste0("support",i,"_",j)]] %||% "",character(1)),
         drills=Filter(nzchar,vapply(1:5,function(j) trimws(input[[paste0("drill",i,"_",j)]] %||% ""),character(1))))
     })
-    list(rolling_window=as.integer(input$rolling_window %||% 25),player=development_name(input$player),season=names(seasons)[match(input$season,seasons)],mode=mode,
+    list(player=development_name(input$player),season=names(seasons)[match(input$season,seasons)],mode=mode,
       portrait=development_portrait(input$player),rankings=rankings,objectives=objectives)
   })
   output$status<-shiny::renderUI({
@@ -183,7 +178,7 @@ development_server <- function(id,rows,player_column,seasons,summarize,percentil
     p<-plan();shiny::validate(shiny::need(!length(development_payload_errors(p)),"Complete all required goal fields before exporting."))
     development_pdf(file,p)
   })
-  list(plan=plan,stats=stats,two=two,rolling=rolling)
+  list(plan=plan,stats=stats,two=two,game_series=game_series)
 })
 
 .development_image_cache<-new.env(parent=emptyenv())
@@ -266,7 +261,7 @@ development_draw <- function(plan) {
     x<-280+(i-1)*(chart_width+12)
     box(x,350,chart_width,245,grDevices::adjustcolor(cream,alpha.f=.92))
     grid::pushViewport(grid::viewport(x=x+chart_width/2,y=472.5,width=chart_width-10,height=241,default.units="native"))
-    grid::grid.draw(ggplot2::ggplotGrob(development_chart(plan$objectives[[i]],i,plan$rolling_window %||% 25,narrow=count==2)))
+    grid::grid.draw(ggplot2::ggplotGrob(development_chart(plan$objectives[[i]],i,narrow=count==2)))
     grid::popViewport()
   }
   text("D1 PERCENTILE RANKINGS",820,590,11,"#ffffff",TRUE,just="left")
