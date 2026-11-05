@@ -77,3 +77,12 @@ WallyApps/JucoStatsApp/data/*
 # Roster Studio source, assets, and the supplied saved roster snapshot.
 !WallyApps/DepthChartApp/
 !WallyApps/DepthChartApp/**
+
+# Development Goals renderer/assets and situational score references.
+!WallyApps/shared/
+!WallyApps/shared/**
+!WallyApps/PitchingApp/helpers/
+!WallyApps/PitchingApp/helpers/**
+!WallyApps/PitchingApp/reference/
+!WallyApps/PitchingApp/reference/**
+output/

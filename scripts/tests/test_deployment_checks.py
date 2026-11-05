@@ -114,6 +114,25 @@ class DeploymentChecks(unittest.TestCase):
             for rule in required:
                 self.assertIn(rule, ignore_rules, filename)
 
+    def test_development_goals_resources_enter_upload_and_image(self):
+        for filename in (".railwayignore", ".dockerignore"):
+            rules = (ROOT / filename).read_text(encoding="utf-8")
+            for directory in (
+                "WallyApps/shared", "WallyApps/PitchingApp/helpers",
+                "WallyApps/PitchingApp/reference",
+            ):
+                self.assertIn(f"!{directory}/", rules, filename)
+                self.assertIn(f"!{directory}/**", rules, filename)
+        for path in (
+            "WallyApps/shared/development_goals.R",
+            "WallyApps/shared/portraits.csv",
+            "WallyApps/shared/assets/development-ballpark-duotone.png",
+            "WallyApps/PitchingApp/helpers/situations.R",
+            "WallyApps/PitchingApp/reference/pa_scores_2026.csv",
+            "WallyApps/PitchingApp/reference/d1_pitching_xwoba_percentiles.csv",
+        ):
+            self.assertTrue((ROOT / path).is_file(), path)
+
     def test_player_health_checks_valdr_not_its_internal_keyring_import(self):
         integration = (
             ROOT / "R" / "integrations" / "player_health_workspace.R"
