@@ -162,6 +162,7 @@
     ],
     "team_pitching": [
       "texas_state_internal_pitch_events",
+      "ncaa_d1_pitch_events_2026",
       "reference_metrics"
     ],
     "team_hitting": [

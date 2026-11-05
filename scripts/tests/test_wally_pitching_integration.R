@@ -397,6 +397,86 @@ shiny::testServer(workspace$server, {
     fail("Pitching handedness Performance table is not Total, left, right.")
   }
   invisible(output$performance_table)
+  session$setInputs(perf_split = "situation", leader_situation = "Total")
+  situation_perf <- attr(performance_table_data(), "raw_df")
+  stopifnot(identical(situation_perf$Situation, c("Total", workspace$PITCHING_SITUATIONS)),
+    situation_perf$`Pitches (#)`[1] == nrow(dataFilter()),
+    all(situation_perf$`Pitches (#)` >= 0), all(!is.na(situation_perf$PA)))
+  for (metric in intersect(c("BAA", "SLG", "OPS", "WHIP", "K%", "BB%", "Strike%", "wOBA"), names(perf_raw))) {
+    stopifnot(identical(situation_perf[[metric]][1], perf_raw[[metric]][1]))
+  }
+  if (situation_perf$`Pitches (#)`[situation_perf$Situation == "Clean inning"] == situation_perf$`Pitches (#)`[1])
+    stopifnot(situation_perf$IP[1] == situation_perf$IP[situation_perf$Situation == "Clean inning"])
+  invisible(output$performance_table)
+  percentile_rows <- performance_percentile_data()
+  stopifnot(isTRUE(all.equal(unname(percentile_rows$value[percentile_rows$label == "BAA"]),
+    as.numeric(situation_perf$BAA[1]), tolerance = 1e-12)))
+  for (situation in workspace$PITCHING_SITUATIONS) {
+    session$setInputs(leader_situation = situation)
+    selected <- leaderboard_data()
+    stopifnot(all(workspace$pitching_situation_mask(selected, situation)))
+    tables <- leaderboard_tables()
+    if (nrow(selected)) {
+      stopifnot(!is.null(tables), nrow(tables$formatted) > 0)
+      exported <- leaderboard_summary(selected)
+      stopifnot(setequal(exported$Pitcher, tables$numeric$Pitcher))
+    } else stopifnot(is.null(tables))
+  }
+  # A PA straddling the light boundary contributes pitch rates to both rows,
+  # but its K/PA/IP outcome only to Night. Full-PA FPS/E&A and counts survive.
+  original_rows <- rv$df
+  sunset <- workspace$pitching_sunset_utc(as.Date("2026-06-21"), 29.88, -97.94)
+  sm <- read.csv(file.path(workspace$app_dir, "reference", "venue_locations.csv"))
+  sm <- sm[sm$city == "San Marcos, TX", ]
+  cutoff <- as.numeric(workspace$pitching_sunset_utc(as.Date("2026-06-21"), sm$latitude, sm$longitude)) - 1800
+  crossing <- workspace$df[rep(1, 3), ]
+  crossing$row_id <- 100001:100003
+  crossing$PitchUID <- crossing$pitch_uid <- paste0("crossing-", 1:3)
+  crossing$Pitcher <- pitcher
+  crossing$GameUID <- crossing$GameID <- crossing$CustomGameID <- "sunset-crossing"
+  crossing$Inning <- crossing$PAofInning <- 1L
+  crossing$PitchofPA <- crossing$PitchNo <- 1:3
+  crossing$`Top/Bottom` <- "Top"
+  crossing$PitcherTeam <- crossing$HomeTeam <- "TEX_BOB"
+  crossing$AwayTeam <- "OPP"
+  crossing$Date <- as.Date("2026-06-21")
+  crossing$Stadium <- "TexasStateUniversity"
+  crossing$UTCDateTime <- as.POSIXct(c(cutoff - 60, cutoff - 10, cutoff + 10), origin = "1970-01-01", tz = "UTC")
+  crossing$PitchCall <- c("StrikeCalled", "StrikeCalled", "StrikeSwinging")
+  crossing$KorBB <- c("Undefined", "Undefined", "Strikeout")
+  crossing$PlayResult <- "Undefined"
+  crossing$OutsOnPlay <- crossing$RunsScored <- crossing$Balls <- 0
+  crossing$Strikes <- 0:2
+  rv$df <- crossing
+  annotated <- with_situations(crossing)
+  day <- annotated[workspace$pitching_situation_mask(annotated, "Day"), ]
+  night <- annotated[workspace$pitching_situation_mask(annotated, "Night"), ]
+  day$.sit_stats <- night$.sit_stats <- TRUE
+  d_stats <- staff_percentile_values(day)
+  n_stats <- staff_percentile_values(night)
+  stopifnot(attr(d_stats, "counts")[["PA"]] == 0, attr(d_stats, "counts")[["Pitches"]] == 2,
+    attr(n_stats, "counts")[["PA"]] == 1, attr(n_stats, "counts")[["Outs"]] == 1,
+    n_stats$value[n_stats$label == "FPS%"] == 1, n_stats$value[n_stats$label == "E&A%"] == 1,
+    n_stats$value[n_stats$label == "Put Away%"] == 1)
+  night_with_outs <- night
+  night_with_outs$OutsOnPlay <- 1
+  stopifnot(attr(staff_percentile_values(night_with_outs), "counts")[["Outs"]] == 1)
+  day_export <- leaderboard_summary(day)
+  stopifnot(all(day_export$PA == 0))
+  empty_pa_pdf <- tempfile(fileext = ".pdf")
+  render_leaderboard_pdf(empty_pa_pdf, "results", day_export)
+  stopifnot(file.exists(empty_pa_pdf), file.info(empty_pa_pdf)$size > 1000)
+  unlink(empty_pa_pdf)
+  # The staff footer must also avoid treating an unfinished Day PA as an out/PA.
+  original_staff <- workspace$txst_df
+  workspace$txst_df <- crossing
+  session$setInputs(leader_situation = "Day")
+  day_tables <- leaderboard_tables()
+  stopifnot(nrow(day_tables$numeric) == 1, all(day_tables$numeric$PA == 0),
+    day_tables$totals$PA == 0, day_tables$totals$IP == "0.0")
+  workspace$txst_df <- original_staff
+  rv$df <- original_rows
+  session$setInputs(perf_split = "hand", leader_situation = "Total")
   splits <- season_summary_split_summary(dataFilter())
   if (!identical(splits$Split, c("Total", "v LHH", "v RHH"))) {
     fail("Season Summary handedness table is not Total, left, right.")

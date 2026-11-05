@@ -47,6 +47,45 @@ The integrated Pitching workspace no longer blends these rows with the shared
 BASE startup partition or NCAA master. Duplicate pitch IDs across the folder
 files are still removed, and each row retains its source filename.
 
+## Situational pitching
+
+Performance offers **Situational**, with Total followed by clean/mid-inning,
+inning bands, PA-start score bands, Save Situations, Home/Away, and Day/Night.
+The leaderboard's Situation selector applies the same masks before minimum-PA
+qualification, table totals, and PDF exports. Save Situations means inning 7+
+with a 1–3 run lead, so it overlaps Tight Lead.
+
+Classify unfiltered game context before selecting pitchers or batter hands.
+An appearance beginning with pitch 1 of PA 1 is clean; later entries stay mid
+inning until the next half-inning. Deduplicate pitch events and accumulate runs
+from both halves to get each PA's starting score. A missing half, PA, pitch
+or run value, or a half without a recorded third out, invalidates subsequent
+score reconstruction until an explicit HomeScoreBefore/AwayScoreBefore
+snapshot anchors it. The embedded workspace
+reads matching games from the Hitting CSVs and can query a compact projection
+from the mounted NCAA master to fill context gaps. Those context rows never
+contribute to performance statistics. Missing context remains unclassified, with coverage disclosed.
+
+Day/Night uses each pitch's UTC instant, or venue-local wall clock when UTC
+is absent. A pitch at least 30 minutes before sunset is Day; later pitches are
+Night. A PA crossing the cutoff assigns its outcome to the terminal pitch's
+side while retaining the full-PA count, FPS, and E&A context. Unknown venues
+or timestamps are excluded from Day/Night, rather than assumed to be day.
+
+`WallyApps/PitchingApp/reference/venue_locations.csv` maps the observed stadium
+aliases and supplied schedule venues to local areas and IANA timezones. Area
+coordinates come from the [2025 Census Gazetteer](https://www.census.gov/geographies/reference-files/2025/geo/gazetter-file.html).
+Sunset is calculated offline using [USNO solar coordinates](https://aa.usno.navy.mil/faq/sun_approx)
+and [NOAA's apparent-sunset horizon](https://gml.noaa.gov/grad/solcalc/solareqns.PDF).
+San Marcos is the fallback for known TXST home games and scrimmages; a mapped
+stadium or neutral venue takes precedence. Extend the alias reference for new
+road venues. No live weather or geocoding API is required.
+
+`scripts/tests/test_pitching_situations.R` covers classification boundaries,
+missing context, doubleheaders, duplicate exports, DST, and venue-local time.
+The Pitching integration test exercises all 15 leaderboard filters, Total
+parity, and a PA crossing the Day/Night boundary.
+
 ## Navigation and appearance
 
 The compatibility `navbarPage` still owns routing, but its global navbar is

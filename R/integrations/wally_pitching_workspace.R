@@ -29,6 +29,65 @@ BASE_WALLY_PITCHING_REQUIRED_PACKAGES <- c(
 
 .base_team_pitching_cache <- new.env(parent = emptyenv())
 .base_wally_pitching_state <- new.env(parent = emptyenv())
+.base_pitching_situation_context_cache <- new.env(parent = emptyenv())
+
+# Only compact game context is read from the national source. Performance rows
+# remain the selected internal pitches; opponent pitches never enter their stats.
+base_pitching_situation_context <- function(rows) {
+  master <- TEAM_CONFIG$data$ncaa_d1_master_file
+  has_master <- nzchar(master) && file.exists(master) && !base_is_lfs_pointer(master)
+  hitting <- file.path(base_project_path("WallyApps", "HittingApp", "data"),
+    c("2025 Season -cleaned.csv", "2025 Fall -cleaned.csv", "2026 Squads - cleaned.csv", "2026 Season - cleaned.csv"))
+  hitting <- hitting[file.exists(hitting)]
+  paths <- c(hitting, if (has_master) master)
+  if (!length(paths)) return(NULL)
+  id_columns <- intersect(c("GameUID", "GameID"), names(rows))
+  ids <- unique(na.omit(unlist(lapply(rows[id_columns], as.character))))
+  ids <- ids[nzchar(ids) & !ids %in% c("NA", "Undefined")]
+  values_for <- function(column) {
+    value <- trimws(as.character(rows[[column]]))
+    unique(value[!is.na(value) & nzchar(value) & !tolower(value) %in% c("na", "null", "undefined")])
+  }
+  if (!length(ids)) return(NULL)
+  info <- file.info(paths)
+  key <- paste(paste(paths, info$size, as.numeric(info$mtime), collapse = "|"), paste(sort(ids), collapse = "|"), sep = "\037")
+  if (exists("signature", .base_pitching_situation_context_cache, inherits = FALSE) &&
+      identical(.base_pitching_situation_context_cache$signature, key))
+    return(.base_pitching_situation_context_cache$rows)
+  fields <- c("GameUID", "GameID", "PitchUID", "Pitcher", "PitcherTeam", "BatterTeam",
+    "Inning", "Top/Bottom", "InningTopBot", "PAofInning", "PitchofPA", "PitchNo",
+    "PitchCall", "KorBB", "PlayResult", "Strikes", "OutsOnPlay", "Outs", "RunsScored", "HomeScoreBefore", "AwayScoreBefore",
+    "HomeTeam", "AwayTeam", "Stadium", "Date", "Time", "UTCDateTime", "LocalDateTime", "UTCDate", "UTCTime")
+  frames <- lapply(hitting, function(path) tryCatch({
+    columns <- intersect(fields, names(readr::read_csv(path, n_max = 0, show_col_types = FALSE)))
+    spec <- do.call(readr::cols_only, stats::setNames(rep(list(readr::col_character()), length(columns)), columns))
+    data <- readr::read_csv(path, col_types = spec, show_col_types = FALSE)
+    keep <- rep(FALSE, nrow(data))
+    for (column in intersect(id_columns, names(data))) keep <- keep | (!is.na(data[[column]]) & data[[column]] %in% values_for(column))
+    data[keep, , drop = FALSE]
+  }, error = function(e) { message("Situational hitting context unavailable: ", conditionMessage(e)); NULL }))
+  if (has_master) {
+    national <- tryCatch({
+      dataset <- arrow::open_dataset(master, format = "parquet")
+      available <- names(dataset$schema)
+      lapply(intersect(id_columns, available), function(column) {
+        values <- values_for(column)
+        dataset %>% dplyr::filter(.data[[column]] %in% values) %>%
+          dplyr::select(dplyr::all_of(intersect(fields, available))) %>% dplyr::collect()
+      })
+    }, error = function(e) { message("Situational national context unavailable: ", conditionMessage(e)); list() })
+    frames <- c(frames, national)
+  }
+  frames <- lapply(Filter(function(x) !is.null(x) && nrow(x), frames), function(x) {
+    for (col in names(x)) if (inherits(x[[col]], "POSIXt")) x[[col]] <- format(x[[col]], "%Y-%m-%dT%H:%M:%OS6Z", tz = "UTC")
+    x[] <- lapply(x, as.character)
+    x
+  })
+  result <- dplyr::distinct(dplyr::bind_rows(frames))
+  .base_pitching_situation_context_cache$signature <- key
+  .base_pitching_situation_context_cache$rows <- result
+  result
+}
 
 BASE_WALLY_PITCHING_LEGACY_DATA_FILES <- c(
   S25 = "2025 Season -cleaned.csv",
@@ -881,6 +940,8 @@ base_wally_pitching_environment <- function(team_rows) {
   workspace <- new.env(parent = globalenv())
   workspace$BASE_PITCHING_APP_DIR <- dirname(BASE_WALLY_PITCHING_FILE)
   workspace$BASE_PITCHING_DATA <- team_rows
+  workspace$BASE_PITCHING_CONTEXT_LOADER <- base_pitching_situation_context
+  workspace$BASE_PITCHING_SCHEDULE_PATH <- TEAM_CONFIG$data$schedule_file
   workspace$BASE_PITCHING_SOURCE_SIGNATURE <- function() {
     paths <- base_pitching_supplement_paths()
     info <- file.info(paths)

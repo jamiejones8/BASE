@@ -66,6 +66,12 @@ load_wally_baseline_app <- function(app_name) {
   if (dir.exists(source_www)) {
     file.copy(source_www, sandbox, recursive = TRUE, copy.mode = FALSE, copy.date = FALSE)
   }
+  if (identical(app_name, "PitchingApp")) {
+    for (directory in c("helpers", "reference")) {
+      file.copy(file.path(source_app_dir, directory), sandbox,
+                recursive = TRUE, copy.mode = FALSE, copy.date = FALSE)
+    }
+  }
 
   old_wd <- setwd(sandbox)
   old_data_dir <- Sys.getenv("DATA_DIR", unset = NA_character_)

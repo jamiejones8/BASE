@@ -456,6 +456,10 @@ ensure_counts <- function(d) {
   if ("PitchCall" %in% names(d)) {
     d$StrikesPre <- compute_strikes_before(d)
   }
+  if (all(c(".sit_stats", ".sit_strikes_pre", ".sit_balls_pre") %in% names(d))) {
+    d$StrikesPre <- d$.sit_strikes_pre
+    d$BallsPre <- d$.sit_balls_pre
+  }
   d
 }
 
@@ -957,6 +961,12 @@ calc_ea_success <- function(n_pitches, strikes_first3, early_bip, any_hbp, any_b
 
 calc_ea_pa_summary <- function(d, pa_cols = "PA_ID") {
   d <- tibble::as_tibble(d)
+  if (".sit_stats" %in% names(d)) {
+    p <- pitching_situation_pa_last(d, pa_cols)
+    out <- p[, pa_cols, drop = FALSE]
+    for (col in c("n_pitches", "strikes_first3", "early_bip", "any_hbp", "any_barrel")) out[[col]] <- p[[paste0(".sit_", col)]]
+    return(out)
+  }
   if (!nrow(d)) return(tibble::tibble())
   if (!all(pa_cols %in% names(d)) || !"PitchNum" %in% names(d)) d <- ensure_pa(d)
   if (!all(pa_cols %in% names(d))) return(tibble::tibble())
@@ -1042,6 +1052,7 @@ calc_ea_rate_from_pa <- function(pa) {
 
 # Put Away% helpers: ensure last pitch per PA is correctly identified
 calc_is_k_pitch <- function(d, pa_id_col = "PA_ID", pitchnum_col = "PitchNum") {
+  if (all(c(".sit_stats", ".sit_is_k") %in% names(d))) return(d$.sit_is_k %in% TRUE)
   d <- tibble::as_tibble(d)
   if (!nrow(d)) return(logical(0))
   if (!pa_id_col %in% names(d)) {
@@ -1869,7 +1880,7 @@ compute_fip_xfip_grouped <- function(pa, grp) {
   outs_play <- ifelse(grepl("double\\s*play", pr, ignore.case = TRUE), 2L, outs_play)
   outs_play <- ifelse(grepl("\\bout\\b",      pr, ignore.case = TRUE) & !outc$K, pmax(outs_play, 1L), outs_play)
   
-  outs_total <- outs_play + as.integer(outc$K)
+  outs_total <- pmax(outs_play, as.integer(outc$K))
   IP <- outs_total / 3
   
   HR <- as.integer(outc$HR)
@@ -3313,7 +3324,7 @@ compose_AAR_plot <- function(game_p, season_p, pitcher_name, game_label, arm_ang
                         !grepl("(?i)strike.?out|\\bK\\b", pa_last_rows$PlayResult),
                       pmax(outs_play, 1L), outs_play)
   
-  outs_total <- sum(outs_play, na.rm = TRUE) + k_n
+  outs_total <- sum(pmax(outs_play, as.integer(pa_outcome_cols(pa_last_rows)$K)), na.rm = TRUE)
   ip_chr     <- sprintf("%d.%d", floor(outs_total/3), outs_total %% 3)
   
   # --- Robust date string (THIS game only; never season_p) ---
@@ -4398,6 +4409,8 @@ data_dir <- Sys.getenv("DATA_DIR", unset = "")
 app_file <- tryCatch(sys.frames()[[1]]$ofile, error = function(e) NULL)
 app_dir <- get0("BASE_PITCHING_APP_DIR",inherits=FALSE,ifnotfound=NULL)
 if (is.null(app_dir)) app_dir <- if (!is.null(app_file) && nzchar(app_file)) dirname(normalizePath(app_file)) else getwd()
+
+source(file.path(app_dir, "helpers", "situations.R"), local = TRUE)
 
 as_abs <- function(p) {
   if (!nzchar(p)) return("")
@@ -6719,7 +6732,7 @@ ui <- base_pitching_page(
         shinyWidgets::radioGroupButtons(
           inputId  = "perf_split",
           label    = "Split performance by",
-          choices  = c("Batter Handedness" = "hand", "Pitch Type" = "ptype"),
+          choices  = c("Batter Handedness" = "hand", "Pitch Type" = "ptype", "Situational" = "situation"),
           selected = "hand",
           justified = TRUE,
           size      = "sm"
@@ -6735,7 +6748,8 @@ ui <- base_pitching_page(
           ),
           tags$small("Results, miss quality, contact management, and execution in one view")
         ),
-        withSpinner(DTOutput("performance_table"), type = 4, color = "#501214")
+        withSpinner(DTOutput("performance_table"), type = 4, color = "#501214"),
+        uiOutput("performance_situation_note")
       ),
       div(
         class = "base-pitching-performance-insights",
@@ -7023,6 +7037,9 @@ ui <- base_pitching_page(
     },
     nav_panel(
       title = "Leaderboard",
+      div(class = "mb-2", selectInput("leader_situation", "Situation",
+        choices = c("Total", PITCHING_SITUATIONS), selected = "Total", width = "260px"),
+        uiOutput("leader_situation_note")),
       div(
         class = "mb-2",
         fluidRow(
@@ -9153,7 +9170,7 @@ server <- function(input, output, session){
     outs_play <- ifelse(grepl("(?i)double ?play", pr), 2L, outs_play)
     outs_play <- ifelse(grepl("(?i)\\bout\\b", pr) & !is_k, pmax(outs_play, 1L), outs_play)
     
-    outs_total <- sum(outs_play, na.rm = TRUE) + sum(is_k, na.rm = TRUE)
+    outs_total <- sum(pmax(outs_play, as.integer(is_k)), na.rm = TRUE)
     ip_chr <- sprintf("%d.%d", floor(outs_total/3), outs_total %% 3)
     
     H  <- sum(is_1b | is_2b | is_3b | is_hr, na.rm = TRUE)
@@ -9489,7 +9506,7 @@ server <- function(input, output, session){
     outs_play <- ifelse(grepl("double\\s*play", pr, ignore.case = TRUE), 2L, outs_play)
     outs_play <- ifelse(grepl("\\bout\\b", pr, ignore.case = TRUE) & !outc$K, pmax(outs_play, 1L), outs_play)
 
-    outs_total <- sum(outs_play, na.rm = TRUE) + sum(as.integer(outc$K), na.rm = TRUE)
+    outs_total <- sum(pmax(outs_play, as.integer(outc$K)), na.rm = TRUE)
     ip_chr <- sprintf("%d.%d", floor(outs_total / 3), outs_total %% 3)
     ip_val <- outs_total / 3
 
@@ -11421,6 +11438,34 @@ server <- function(input, output, session){
     dplyr::bind_rows(rows, after_rows)
   }
 
+  situation_context <- reactive({
+    rows <- rv$df
+    if (is.null(rows) || !nrow(rows)) return(rows)
+    loader <- get0("BASE_PITCHING_CONTEXT_LOADER", mode = "function", inherits = TRUE)
+    context <- if (is.function(loader)) loader(rows) else NULL
+    venues <- utils::read.csv(file.path(app_dir, "reference", "venue_locations.csv"), stringsAsFactors = FALSE)
+    schedule_path <- get0("BASE_PITCHING_SCHEDULE_PATH", inherits = TRUE, ifnotfound = file.path(app_dir, "..", "..", "config", "texas_state_schedule_2027.csv"))
+    schedule <- if (file.exists(schedule_path)) readr::read_csv(schedule_path, show_col_types = FALSE) else NULL
+    pitching_situation_pa_metadata(pitching_annotate_situations(rows, context, venues, schedule))
+  })
+  with_situations <- function(d) {
+    if (is.null(d) || !nrow(d)) return(d)
+    context <- situation_context()
+    columns <- grep("^[.]sit_", names(context), value = TRUE)
+    at <- match(d$row_id, context$row_id)
+    for (col in columns) d[[col]] <- context[[col]][at]
+    d
+  }
+  situational_performance_table <- function(d) pitching_situational_table(d, staff_percentile_values)
+  output$performance_situation_note <- renderUI({
+    if (!identical(input$perf_split, "situation")) return(NULL)
+    tags$p(class = "text-muted small", pitching_situation_coverage_note(with_situations(dataFilter())))
+  })
+  output$leader_situation_note <- renderUI({
+    if (identical(input$leader_situation %||% "Total", "Total")) return(NULL)
+    tags$p(class = "text-muted small", pitching_situation_coverage_note(with_situations(txst_df)))
+  })
+
   # ---- Leaderboard (all TXST pitchers; independent of sidebar) ----
   observeEvent(input$pitch_exclude_open, {
     players <- sort(unique(as.character(txst_df$Pitcher)))
@@ -11497,10 +11542,16 @@ server <- function(input, output, session){
     if ("pitch_uid" %in% names(d)) d <- d %>% dplyr::distinct(pitch_uid, .keep_all = TRUE)
     if ("row_id"   %in% names(d)) d <- d %>% dplyr::distinct(row_id,   .keep_all = TRUE)
 
+    situation <- input$leader_situation %||% "Total"
+    if (!identical(situation, "Total")) {
+      d <- with_situations(d)
+      d <- d[pitching_situation_mask(d, situation), , drop = FALSE]
+      d$.sit_stats <- TRUE
+    }
     # Minimum PA filter (per pitcher)
     min_pa <- input$leader_min_pa %||% 0
     if (!include_all_players && is.numeric(min_pa) && min_pa > 0) {
-      tmp <- ensure_pa(d)
+      tmp <- pitching_situation_pa_last(ensure_pa(d))
       pa_counts <- tmp %>%
         dplyr::group_by(Pitcher, PA_ID) %>%
         dplyr::summarise(.groups = "drop") %>%
@@ -11624,17 +11675,13 @@ server <- function(input, output, session){
     pa_first <- p %>% dplyr::group_by(PA_ID_LB) %>% dplyr::slice_head(n = 1) %>% dplyr::ungroup()
     pa_group <- pa_first %>% dplyr::transmute(PA_ID_LB, grp = .data$Pitcher)
     
-    fps_pa <- p %>%
-      dplyr::group_by(PA_ID_LB) %>%
-      dplyr::summarise(fp_strike = any(FirstPitch %in% TRUE & IsStrike %in% TRUE, na.rm = TRUE),
-                       .groups = "drop") %>%
+    fps_pa <- pitching_situation_fps(p, "PA_ID_LB") %>%
       dplyr::left_join(pa_group, by = "PA_ID_LB")
     
     ea_pa <- calc_ea_pa_summary(p_flags, "PA_ID_LB") %>%
       dplyr::left_join(pa_group, by = "PA_ID_LB")
     
-    pa_last <- p %>% dplyr::group_by(PA_ID_LB) %>% dplyr::slice_tail(n = 1) %>% dplyr::ungroup()
-    pa_last <- p %>% dplyr::group_by(PA_ID_LB) %>% dplyr::slice_tail(n = 1) %>% dplyr::ungroup()
+    pa_last <- pitching_situation_pa_last(p, "PA_ID_LB")
     pa_out <- pa_last %>%
       dplyr::mutate(grp = pa_group$grp[match(PA_ID_LB, pa_group$PA_ID_LB)]) %>%
       {
@@ -11724,7 +11771,7 @@ server <- function(input, output, session){
       dplyr::left_join(fbsi, by = "grp") %>%
       dplyr::left_join(max_velo, by = "grp") %>%
       dplyr::left_join(sd_tbl, by = c("grp" = "Pitcher")) %>%
-      dplyr::mutate(Pitcher = grp) %>%
+      dplyr::mutate(Pitcher = grp, PA = if (".sit_stats" %in% names(p)) dplyr::coalesce(as.integer(PA), 0L) else PA) %>%
       dplyr::select(
         Pitcher, PA, Kp, BBp, Barrel_pct, AvgVelo, AvgVelo_fmt, MaxVelocity,
         Whiff_pct, CSW_pct, Strike_pct, Zone_pct, Pre2kZone_pct, TwoKZone_pct, PutAway_pct, ShutDown_pct, FPS, EA
@@ -11803,7 +11850,7 @@ server <- function(input, output, session){
       ok <- is.finite(v_num)
       df <- df[ok, , drop = FALSE]
       v_num <- v_num[ok]
-      if (!nrow(df)) return(data.frame(Pitcher = character(0), Value = character(0)))
+      if (!nrow(df)) return(list(display = data.frame(Pitcher = rep(" ", 10), Value = rep(" ", 10)), values = numeric(0)))
       ord <- order(if (higher) -v_num else v_num, df$Pitcher, na.last = TRUE)
       df <- df[ord, , drop = FALSE]
       df <- head(df, 10)
@@ -12075,7 +12122,7 @@ server <- function(input, output, session){
                      gp = grid::gpar(col = "#E8DCC3", fontsize = 7.5, fontface = "bold")),
       grid::textGrob(header_title, x = 0.5, y = 0.56,
                      gp = grid::gpar(col = gold, fontsize = 21, fontface = "bold")),
-      grid::textGrob(paste0("Updated ", date_str), x = 0.5, y = 0.25,
+      grid::textGrob(paste0("Updated ", date_str, if (!identical(input$leader_situation %||% "Total", "Total")) paste0(" | ", input$leader_situation) else ""), x = 0.5, y = 0.25,
                      gp = grid::gpar(col = "white", fontsize = 9.5))
     )
     
@@ -16117,7 +16164,7 @@ function(el,x){
         outs_play <- ifelse(grepl("(?i)triple ?play", pr), 3L, outs_play)
         outs_play <- ifelse(grepl("(?i)double ?play", pr), 2L, outs_play)
         outs_play <- ifelse(grepl("(?i)\\bout\\b", pr) & !outc$K, pmax(outs_play, 1L), outs_play)
-        outs_total <- outs_play + as.integer(outc$K)
+        outs_total <- pmax(outs_play, as.integer(outc$K))
         
         tibble::tibble(
           grp  = .$grp,
@@ -18960,6 +19007,7 @@ function(el,x){
         dplyr::filter(.data$BatterSideStd %in% input$BatterHand)
     }
     
+    if (identical(input$perf_split, "situation")) return(situational_performance_table(with_situations(p)))
     p0 <- p
     p <- prepare_aar_flags(p)
     
@@ -19249,7 +19297,7 @@ function(el,x){
         outs_play <- ifelse(grepl("(?i)triple ?play", pr), 3L, outs_play)
         outs_play <- ifelse(grepl("(?i)double ?play", pr), 2L, outs_play)
         outs_play <- ifelse(grepl("(?i)\\bout\\b", pr) & !outc$K, pmax(outs_play, 1L), outs_play)
-        outs_total <- outs_play + as.integer(outc$K)
+        outs_total <- pmax(outs_play, as.integer(outc$K))
         
         tibble::tibble(
           PA_ID = .$PA_ID,
@@ -19446,7 +19494,7 @@ function(el,x){
         outs_play <- ifelse(grepl("(?i)double ?play", pr), 2L, outs_play)
         outs_play <- ifelse(grepl("(?i)\\bout\\b", pr) & !outc$K, pmax(outs_play, 1L), outs_play)
         
-        outs_total <- sum(outs_play, na.rm = TRUE) + sum(as.integer(outc$K), na.rm = TRUE)
+        outs_total <- sum(pmax(outs_play, as.integer(outc$K)), na.rm = TRUE)
         
         # FPS% (PA-level)
         fps_paT <- p_all %>%
@@ -19619,7 +19667,7 @@ function(el,x){
         outs_play_ip <- ifelse(grepl("(?i)triple ?play", pr_ip), 3L, outs_play_ip)
         outs_play_ip <- ifelse(grepl("(?i)double ?play", pr_ip), 2L, outs_play_ip)
         outs_play_ip <- ifelse(grepl("(?i)\\bout\\b", pr_ip) & !outc_ip$K, pmax(outs_play_ip, 1L), outs_play_ip)
-        outs_total <- sum(outs_play_ip, na.rm = TRUE) + sum(as.integer(outc_ip$K), na.rm = TRUE)
+        outs_total <- sum(pmax(outs_play_ip, as.integer(outc_ip$K)), na.rm = TRUE)
         
         # FPS% (PA-level)
         fps_paT <- p_all %>%
@@ -19870,10 +19918,7 @@ function(el,x){
     gb <- sdiv(sum(p_flags$.gb, na.rm = TRUE), sum(p_flags$.bip_la, na.rm = TRUE))
     win11 <- sdiv(sum(p_flags$.at_11 & p_flags$.win_11, na.rm = TRUE), sum(p_flags$.at_11, na.rm = TRUE))
 
-    pa_last <- p_flags %>%
-      dplyr::group_by(PA_ID_STAFF) %>%
-      dplyr::slice_tail(n = 1) %>%
-      dplyr::ungroup()
+    pa_last <- pitching_situation_pa_last(p_flags, "PA_ID_STAFF")
     outc <- pa_outcome_cols(pa_last)
     pr <- outc$PR_txt
     kb <- as.character(pa_last$KorBB %||% "")
@@ -19894,7 +19939,7 @@ function(el,x){
     outs_play <- ifelse(grepl("(?i)triple ?play", pr), 3L, outs_play)
     outs_play <- ifelse(grepl("(?i)double ?play", pr), 2L, outs_play)
     outs_play <- ifelse(grepl("(?i)\\bout\\b", pr) & !outc$K, pmax(outs_play, 1L), outs_play)
-    outs_total <- sum(outs_play, na.rm = TRUE) + k
+    outs_total <- sum(pmax(outs_play, as.numeric(outc$K)), na.rm = TRUE)
     ip <- outs_total / 3
 
     wob <- compute_woba_grouped(pa_last, rep("STAFF", pa_n))
@@ -19902,9 +19947,7 @@ function(el,x){
     woba <- wob$wOBA[1]
     wobacon <- wob$wOBAcon[1]
 
-    fps_pa <- p_flags %>%
-      dplyr::group_by(PA_ID_STAFF) %>%
-      dplyr::summarise(fp_strike = any(FirstPitch %in% TRUE & IsStrike %in% TRUE, na.rm = TRUE), .groups = "drop")
+    fps_pa <- pitching_situation_fps(p_flags, "PA_ID_STAFF")
     fps <- sdiv(sum(fps_pa$fp_strike, na.rm = TRUE), nrow(fps_pa))
     ea_pa <- calc_ea_pa_summary(p_flags, "PA_ID_STAFF")
     ea <- calc_ea_rate_from_pa(ea_pa)
@@ -19929,7 +19972,7 @@ function(el,x){
     if (!is.finite(heater_velocity)) heater_velocity <- NA_real_
     if (!is.finite(heater_extension)) heater_extension <- NA_real_
 
-    tibble::tibble(
+    result <- tibble::tibble(
       label = c(
         "BAA","SLG","OPS","WHIP","K/9","BB/9","H/9",
         "FIP","wOBA","wOBAcon","K%","BB%","BB+HBP%","Barrel%","GB%",
@@ -19975,6 +20018,8 @@ function(el,x){
         heater_extension
       )
     )
+    attr(result, "counts") <- c(PA = pa_n, Outs = outs_total, Pitches = n_all)
+    result
   }
 
   comparison_metrics <- c("BAA","SLG","OPS","WHIP","K/9","BB/9","H/9","FIP","wOBA","wOBAcon",
@@ -20051,9 +20096,9 @@ function(el,x){
     if (is.null(raw_df) || !nrow(raw_df)) raw_df <- out_df
     if (is.null(raw_df) || !nrow(raw_df)) return(tibble::tibble())
 
-    label_col <- intersect(c("Batter", "Pitch type"), names(raw_df))[1]
+    label_col <- intersect(c("Situation", "Batter", "Pitch type"), names(raw_df))[1]
     total_row <- if (!is.na(label_col)) {
-      raw_df[trimws(as.character(raw_df[[label_col]])) == "TOTAL", , drop = FALSE]
+      raw_df[toupper(trimws(as.character(raw_df[[label_col]]))) == "TOTAL", , drop = FALSE]
     } else {
       raw_df[0, , drop = FALSE]
     }
@@ -20108,7 +20153,7 @@ function(el,x){
     if (is.null(out_df) || !nrow(out_df)) out_df <- data.frame(Status = "No data")
 
     identity_cols <- intersect(
-      c("Batter", "IP", "PA", "Pitch type", "Pitches (#)"),
+      c("Situation", "Batter", "IP", "PA", "Pitch type", "Pitches (#)"),
       names(out_df)
     )
     display_groups <- list(
@@ -20390,16 +20435,13 @@ function(el,x){
     pa_first <- p %>% dplyr::group_by(PA_ID_LB) %>% dplyr::slice_head(n = 1) %>% dplyr::ungroup()
     pa_group <- pa_first %>% dplyr::transmute(PA_ID_LB, grp = .data$Pitcher)
 
-    fps_pa <- p %>%
-      dplyr::group_by(PA_ID_LB) %>%
-      dplyr::summarise(fp_strike = any(FirstPitch %in% TRUE & IsStrike %in% TRUE, na.rm = TRUE),
-                       .groups = "drop") %>%
+    fps_pa <- pitching_situation_fps(p, "PA_ID_LB") %>%
       dplyr::left_join(pa_group, by = "PA_ID_LB")
 
     ea_pa <- calc_ea_pa_summary(p_flags, "PA_ID_LB") %>%
       dplyr::left_join(pa_group, by = "PA_ID_LB")
 
-    pa_last <- p %>% dplyr::group_by(PA_ID_LB) %>% dplyr::slice_tail(n = 1) %>% dplyr::ungroup()
+    pa_last <- pitching_situation_pa_last(p, "PA_ID_LB")
     pa_out <- pa_last %>%
       dplyr::mutate(grp = pa_group$grp[match(PA_ID_LB, pa_group$PA_ID_LB)]) %>%
       {
@@ -20490,7 +20532,8 @@ function(el,x){
       dplyr::left_join(sd_tbl, by = c("grp" = "Pitcher")) %>%
       dplyr::mutate(
         Pitcher = grp,
-        PA      = ifelse(is.finite(PA), as.integer(PA), NA_integer_),
+        PA      = if (".sit_stats" %in% names(p)) dplyr::coalesce(as.integer(PA), 0L) else ifelse(is.finite(PA), as.integer(PA), NA_integer_),
+        Outs = if (".sit_stats" %in% names(p)) dplyr::coalesce(Outs, 0) else Outs,
         IP = Outs / 3,
         KBBp = Kp - BBp,
         BAA     = sdiv(H, AB),
@@ -20598,7 +20641,7 @@ function(el,x){
       p_all <- p
       if (!"PA_ID" %in% names(p_all)) p_all <- ensure_pa(p_all)
       # Totals should reflect unique PAs across all pitchers (not summed by pitcher)
-      pa_n_total <- length(unique(p_all$PA_ID))
+      pa_n_total <- nrow(pitching_situation_pa_last(p_all))
       # pitch-level totals from p_flags
       n_all <- nrow(p_flags)
       strike  <- sdiv(sum(p_flags$.strike, na.rm = TRUE), n_all)
@@ -20623,7 +20666,7 @@ function(el,x){
       
       # PA-level totals
       # Use pitcher-unique PA IDs for totals as well
-      pa_lastT <- p_all %>% dplyr::group_by(PA_ID) %>% dplyr::slice_tail(n = 1) %>% dplyr::ungroup()
+      pa_lastT <- pitching_situation_pa_last(p_all)
       outc     <- pa_outcome_cols(pa_lastT)
       pr       <- outc$PR_txt
       kb       <- as.character(pa_lastT$KorBB %||% "")
@@ -20637,9 +20680,7 @@ function(el,x){
       outs_play <- ifelse(grepl("(?i)\\bout\\b", pr) & !outc$K, pmax(outs_play, 1L), outs_play)
       outs_total <- sum(pmax(outs_play, as.integer(outc$K)), na.rm = TRUE)
       
-      fps_paT <- p_all %>%
-        dplyr::group_by(PA_ID) %>%
-        dplyr::summarise(fp_strike = any(FirstPitch %in% TRUE & IsStrike %in% TRUE, na.rm = TRUE), .groups = "drop")
+      fps_paT <- pitching_situation_fps(p_all, "PA_ID")
       FPS <- mean(fps_paT$fp_strike, na.rm = TRUE)
       
       ea_paT <- calc_ea_pa_summary(
@@ -20796,7 +20837,7 @@ function(el,x){
   })
   
   output$pitch_trout_pdf <- downloadHandler(
-    filename = function() paste0("Trout_Stat_Sheet_Pitching_", format(Sys.Date(), "%Y%m%d"), ".pdf"),
+    filename = function() paste0("Trout_Stat_Sheet_Pitching", pitching_situation_file_suffix(input$leader_situation), "_", format(Sys.Date(), "%Y%m%d"), ".pdf"),
     content = function(file) {
       tables <- leaderboard_tables()
       shiny::validate(shiny::need(!is.null(tables), "No pitchers match the leaderboard filters."))
@@ -20808,7 +20849,7 @@ function(el,x){
 
   output$leader_results_pdf <- downloadHandler(
     filename = function() {
-      paste0("Staff_Leaderboard_Results_", format(Sys.Date(), "%Y%m%d"), ".pdf")
+      paste0("Staff_Leaderboard_Results", pitching_situation_file_suffix(input$leader_situation), "_", format(Sys.Date(), "%Y%m%d"), ".pdf")
     },
     content = function(file) {
       d <- leaderboard_data()
@@ -20819,7 +20860,7 @@ function(el,x){
   
   output$leader_process_pdf <- downloadHandler(
     filename = function() {
-      paste0("Staff_Leaderboard_Process_", format(Sys.Date(), "%Y%m%d"), ".pdf")
+      paste0("Staff_Leaderboard_Process", pitching_situation_file_suffix(input$leader_situation), "_", format(Sys.Date(), "%Y%m%d"), ".pdf")
     },
     content = function(file) {
       d <- leaderboard_data()

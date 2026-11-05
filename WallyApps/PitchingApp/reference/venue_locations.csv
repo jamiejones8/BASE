@@ -1,0 +1,42 @@
+city,latitude,longitude,timezone,aliases
+"San Marcos, TX",29.87361,-97.936725,America/Chicago,"TexasStateUniversity|Bobcat Ballpark|Irvine-Rasmussen Ballpark|San Marcos, Texas"
+"Fort Worth, TX",32.781954,-97.348573,America/Chicago,"TCU|Lupton Stadium|Fort Worth, Texas"
+"Waco, TX",31.557994,-97.18975,America/Chicago,"Baylor|Baylor Ballpark|Waco, Texas"
+"Monroe, LA",32.518986,-92.07718,America/Chicago,WarHawkField|Warhawk Field
+"Conway, SC",33.834533,-79.049173,America/New_York,SpringsBrooksStadium|Springs Brooks Stadium
+"Hattiesburg, MS",31.307305,-89.317434,America/Chicago,HillDensonField|Pete Taylor Park
+"Panthersville, GA",33.70832,-84.274474,America/New_York,GeorgiaState|Georgia State Baseball Complex
+"Jonesboro, AR",35.819755,-90.679033,America/Chicago,KellField|Tomlinson Stadium
+"Troy, AL",31.80196,-85.96713,America/Chicago,RiddlePaceField|Riddle-Pace Field
+"College Station, TX",30.58516,-96.29636,America/Chicago,Olsen|Olsen Field at Blue Bell Park
+"Miami, FL",25.775163,-80.208615,America/New_York,FIUBaseballStadium|FIU Baseball Stadium
+"Lafayette, LA",30.2056,-92.028058,America/Chicago,LouisianaLafayette|M. L. Tigue Moore Field
+"Buies Creek, NC",35.40785,-78.743178,America/New_York,JimPerry|Jim Perry Stadium
+"Mobile, AL",30.668246,-88.107853,America/Chicago,USouthAlabama|Stanky Field
+"Statesboro, GA",32.437726,-81.775637,America/New_York,GeorgiaSouthern|J. I. Clements Stadium
+"Arlington, TX",32.700708,-97.124691,America/Chicago,Arlington|Globe Life Field
+"Boone, NC",36.213842,-81.665197,America/New_York,JimBettieSmith|Jim and Bettie Smith Stadium
+"Montgomery, AL",32.348503,-86.267307,America/Chicago,Riverwalk|Riverwalk Stadium
+"San Antonio, TX",29.462809,-98.524635,America/Chicago,UTSanAntonio|UTSA Baseball Field|Roadrunner Field|Sullivan Field
+"Austin, TX",30.298622,-97.754134,America/Chicago,Texas|UFCU Disch Falk Field|UFCU Disch-Falk Field
+"Frisco, TX",33.155427,-96.822596,America/Chicago,Frisco Park|Riders Field
+"Round Rock, TX",30.526146,-97.663532,America/Chicago,Dell Diamond
+"New Orleans, LA",30.05342,-89.934502,America/Chicago,Greer Field at Turchin Stadium|Turchin Stadium
+"Edinburg, TX",26.318374,-98.15348,America/Chicago,UTRGV Baseball Stadium
+"San Diego, CA",32.830391,-117.120923,America/Los_Angeles,Tony Gwynn Stadium
+"Corvallis, OR",44.569949,-123.278285,America/Los_Angeles,Goss Stadium|Goss Stadium at Coleman Field
+"Pullman, WA",46.733126,-117.168277,America/Los_Angeles,Bailey-Brayton Field
+"Hillsboro, OR",45.526798,-122.935395,America/Los_Angeles,Hillsboro Ballpark|Hillsboro Stadium
+"Fresno, CA",36.782684,-119.793359,America/Los_Angeles,Pete Beiden Field|Bob Bennett Stadium
+"Spokane, WA",47.666935,-117.433322,America/Los_Angeles,Patterson Baseball Complex
+"Houston, TX",29.785743,-95.388806,America/Chicago,UofHouston|Schroeder Park|Reckling Park|Husky Field
+"Springfield, MO",37.194157,-93.292642,America/Chicago,Hammons|Hammons Field
+"Ruston, LA",32.532986,-92.635327,America/Chicago,JCLoveFieldatPatPattersonPark|J.C. Love Field
+"Lake Charles, LA",30.19902,-93.210835,America/Chicago,JoeMillerBallpark|Joe Miller Ballpark
+"Manhattan, KS",39.188307,-96.605864,America/Chicago,KansasState|Tointon Family Stadium
+"Kennesaw, GA",34.027202,-84.61709,America/New_York,KennesawState|Stillwell Stadium
+"Stillwater, OK",36.131496,-97.074464,America/Chicago,OKState|O'Brate Stadium
+"Charlotte, NC",35.209045,-80.83099,America/New_York,UNCCharlotte|Robert and Mariam Hayes Stadium
+"Morgantown, WV",39.637487,-79.946856,America/New_York,WestVirginia|Monongalia County Ballpark
+"Provo, UT",40.245312,-111.645057,America/Denver,BrighamYoung|Larry H. Miller Field
+"Salt Lake City, UT",40.776928,-111.930991,America/Denver,AmericaFirstBallpark|Smith's Ballpark
