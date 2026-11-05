@@ -30,6 +30,10 @@ the boxes, with limits disclosed if entered text would become illegible.
 The PDFs use original-photo cutouts on the left, PA charts in the center and
 one column of red/blue percentile rankings at the far right. Each rounded text
 box sits directly on the photograph; there is no large white goal panel. Missing photos use initials, and unavailable values/ranks display N/A.
+With two objectives, their charts sit side by side at half width, with wrapped
+benchmark captions. The larger player name is bold gold. Percentile labels and
+values are bold white without outlines. A maroon footer matches the top bar;
+its bold white values statement has gold C, A, T and S initials.
 
 Portrait sources are recorded in `WallyApps/shared/portraits.csv`; run
 `python3 scripts/fetch_development_references.py` to refresh them from the official
@@ -42,7 +46,8 @@ are never generated or retouched. The runtime applies the small masks to native
 rasters, keeping its bounded image cache small.
 
 The supplied ballpark photograph was treated with the built-in image tool using
-the prompt saved beside `assets/development-ballpark-duotone.png`. The renderer
+the prompt saved beside `assets/development-ballpark-maroon.png`. The monochrome
+treatment uses only maroon shades, without a gold/sepia tint. The renderer
 places that image at exactly 90% opacity. Maroon, gold, cream panels and the
 existing bobcat logo follow the provided goal-graphic references. Text, stat
 values, bars and borders remain vector elements in the PDF.

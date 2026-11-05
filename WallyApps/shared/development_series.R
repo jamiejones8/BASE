@@ -99,7 +99,7 @@ development_percentile_color <- function(pct) {
     if(pct>=60) "#D39383" else if(pct>=40) "#AAC6CB" else if(pct>=25) "#8CAAD2" else "#5D7EBC"
 }
 
-development_chart <- function(objective,index,window) {
+development_chart <- function(objective,index,window,narrow=FALSE) {
   series<-objective$series
   if(is.null(series)) series<-data.frame(PAIndex=integer(),Value=numeric())
   finite<-series[is.finite(series$Value),,drop=FALSE]
@@ -111,7 +111,10 @@ development_chart <- function(objective,index,window) {
   segments<-development_goal_segments(series,target,isTRUE(objective$lower_better))
   subtitle<-paste0(if(is.finite(average)) paste0("D1 avg ",development_format(average,objective$metric),"   ·   ") else "D1 average unavailable   ·   ",
     if(is.finite(target)) paste0("Goal ",development_format(target,objective$metric),"   ·   Green = goal met") else "Enter a numeric goal to highlight progress")
-  subtitle<-paste0(subtitle,"   ·   ",nrow(series)," completed PAs")
+  if(narrow) subtitle<-paste0(if(is.finite(average)) paste0("D1 avg ",development_format(average,objective$metric)) else "D1 average unavailable",
+    if(is.finite(target)) paste0("   ·   Goal ",development_format(target,objective$metric)) else "   ·   Enter a numeric goal",
+    "\nGreen = goal met   ·   ",nrow(series)," completed PAs")
+  else subtitle<-paste0(subtitle,"   ·   ",nrow(series)," completed PAs")
   plot<-ggplot2::ggplot()+ggplot2::geom_blank(data=finite,ggplot2::aes(PAIndex,Value))
   if(is.finite(average)) plot<-plot+ggplot2::geom_hline(yintercept=average,linetype="dashed",color="grey40",linewidth=.45)
   if(is.finite(target)) plot<-plot+ggplot2::geom_hline(yintercept=target,linetype="dotted",color="#B4975A",linewidth=.35)

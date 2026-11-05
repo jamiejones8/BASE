@@ -1,0 +1,6 @@
+Use case: style-transfer
+Asset type: background photograph for the Development Goals PDF.
+Input image: edit target, the existing ballpark photograph.
+Primary request: recolor the entire photograph as a monochrome maroon image, like a black-and-white photo rendered only in shades of maroon. Remove every gold, yellow, orange, tan and sepia hue.
+Color palette: deep maroon shadows #210709, Texas State maroon #501214 midtones, subdued lighter maroon highlights near #874B50. Keep the sky and highlights muted enough for bold white text to remain legible. No bright white highlights.
+Constraints: change only color and tonal treatment. Preserve the exact ballpark scene, field, players, structures, scoreboard, sky, composition and framing. Keep the landscape 4:3 aspect ratio. Do not add/remove objects, introduce text, add a graphic overlay, or add a border. This is a background asset only, without any player portrait, charts, titles or UI.

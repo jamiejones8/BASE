@@ -246,13 +246,13 @@ development_draw <- function(plan) {
     text(paste(lines,collapse="\n"),x+w/2,y+h/2,pt,col,bold)
   }
   rect(0,0,1100,700,maroon,NA)
-  background<-development_image(file.path(development_root,"assets","development-ballpark-duotone.png"),.9)
+  background<-development_image(file.path(development_root,"assets","development-ballpark-maroon.png"),.9)
   if(!is.null(background)) grid::grid.raster(background,x=550,y=350,width=1100,height=1100*dim(background)[1]/dim(background)[2],default.units="native",interpolate=TRUE)
-  rect(15,15,1070,670,NA,gold);rect(0,660,1100,40,maroon,NA)
+  rect(15,15,1070,670,NA,gold);rect(0,660,1100,40,maroon,NA);rect(0,0,1100,40,maroon,NA)
   text("T E X A S   S T A T E",230,680,17,gold,TRUE);text("B A S E B A L L",875,680,17,gold,TRUE)
   logo<-development_image(file.path(development_root,"assets","bobcat.png"))
   if(!is.null(logo)) grid::grid.raster(logo,x=550,y=680,width=34,height=34,default.units="native")
-  text(toupper(plan$player),550,630,33,cream,TRUE)
+  fit(toupper(plan$player),30,602,1040,64,46,gold)
   text(paste(toupper(plan$mode),"DEVELOPMENT GOALS",toupper(plan$season),sep="   |   "),550,604,11,cream,TRUE)
   portrait<-development_image(plan$portrait)
   if(!is.null(portrait)) {
@@ -261,25 +261,21 @@ development_draw <- function(plan) {
     grid::grid.raster(portrait,x=150,y=465,width=w,height=h,default.units="native",interpolate=TRUE)
   } else text(paste(substr(strsplit(plan$player," +")[[1]],1,1),collapse=""),150,475,60,gold,TRUE)
   # Charts occupy the center; percentile rankings remain one column at far right.
-  count<-length(plan$objectives);height<-(245-(count-1)*8)/count
+  count<-length(plan$objectives);chart_width<-(510-(count-1)*12)/count
   for(i in seq_len(count)) {
-    y<-350+(count-i)*(height+8)
-    box(280,y,510,height,grDevices::adjustcolor(cream,alpha.f=.92))
-    grid::pushViewport(grid::viewport(x=535,y=y+height/2,width=500,height=height-4,default.units="native"))
-    grid::grid.draw(ggplot2::ggplotGrob(development_chart(plan$objectives[[i]],i,plan$rolling_window %||% 25)))
+    x<-280+(i-1)*(chart_width+12)
+    box(x,350,chart_width,245,grDevices::adjustcolor(cream,alpha.f=.92))
+    grid::pushViewport(grid::viewport(x=x+chart_width/2,y=472.5,width=chart_width-10,height=241,default.units="native"))
+    grid::grid.draw(ggplot2::ggplotGrob(development_chart(plan$objectives[[i]],i,plan$rolling_window %||% 25,narrow=count==2)))
     grid::popViewport()
   }
-  shadow_text<-function(label,x,y,size=10,just="left",bold=TRUE) {
-    for(dx in c(-.5,.5)) for(dy in c(-.5,.5)) text(label,x+dx,y+dy,size,maroon,bold,just)
-    text(label,x,y,size,cream,bold,just)
-  }
-  shadow_text("D1 PERCENTILE RANKINGS",820,590,11)
-  text("POOR",893,579,6.5,"#5D7EBC",TRUE,just="left");text("AVG",950,579,6.5,cream,TRUE);text("GREAT",1008,579,6.5,"#E33434",TRUE,just="right")
+  text("D1 PERCENTILE RANKINGS",820,590,11,"#ffffff",TRUE,just="left")
+  text("POOR",893,579,6.5,"#ffffff",TRUE,just="left");text("AVG",950,579,6.5,"#ffffff",TRUE);text("GREAT",1008,579,6.5,"#ffffff",TRUE,just="right")
   rankings<-plan$rankings
   for(i in seq_len(nrow(rankings))) {
     x<-820;y<-565-(i-1)*20
     pct<-rankings$percentile[i];value<-rankings$value[i]
-    shadow_text(rankings$label[i],x,y,9)
+    text(rankings$label[i],x,y,9,"#ffffff",TRUE,just="left")
     rect(x+73,y-2.5,115,5,"#D8E8E9",NA)
     grid::grid.segments(x+130.5,y-6,x+130.5,y+6,default.units="native",gp=grid::gpar(col="#ffffff",lwd=.7))
     if(is.finite(pct)) {
@@ -287,8 +283,8 @@ development_draw <- function(plan) {
       rect(x+73,y-2.5,115*position/100,5,color,NA)
       grid::grid.circle(x+73+115*position/100,y,r=7.5,default.units="native",gp=grid::gpar(fill=color,col=NA))
       text(round(pct),x+73+115*position/100,y,6.5,"#ffffff",TRUE)
-    } else text("N/A",x+130.5,y,7,cream)
-    shadow_text(development_format(value,rankings$metric[i]),1067,y,9,just="right")
+    } else text("N/A",x+130.5,y,7,"#ffffff",TRUE)
+    text(development_format(value,rankings$metric[i]),1067,y,9,"#ffffff",TRUE,just="right")
   }
   n<-length(plan$objectives)
   for(i in seq_len(n)) {
@@ -311,6 +307,15 @@ development_draw <- function(plan) {
       }
     }
   }
-  text("C O M P E T E     A T T I T U D E     T O U G H N E S S     S E L F L E S S",550,30,9,gold,TRUE)
-  if(any(!is.finite(rankings$percentile))) text("N/A: season value or D1 reference unavailable",1065,346,7,cream,FALSE,just="right")
+  # Measure each word so its gold initial and white remainder form one centered line.
+  words<-c("COMPETE","ATTITUDE","TOUGHNESS","SELFLESS");footer_size<-14;gap<-32
+  word_width<-function(label) grid::convertWidth(grid::grobWidth(grid::textGrob(label,gp=grid::gpar(fontsize=footer_size,fontfamily="Helvetica",fontface="bold"))),"points",valueOnly=TRUE)
+  widths<-vapply(words,word_width,numeric(1));cursor<-(1100-sum(widths)-gap*(length(words)-1))/2
+  for(j in seq_along(words)) {
+    initial<-substr(words[j],1,1)
+    text(initial,cursor,20,footer_size,gold,TRUE,just="left")
+    text(substring(words[j],2),cursor+word_width(initial),20,footer_size,"#ffffff",TRUE,just="left")
+    cursor<-cursor+widths[j]+gap
+  }
+  if(any(!is.finite(rankings$percentile))) text("N/A: season value or D1 reference unavailable",1065,346,7,"#ffffff",TRUE,just="right")
 }

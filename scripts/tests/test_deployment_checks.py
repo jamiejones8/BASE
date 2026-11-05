@@ -128,7 +128,7 @@ class DeploymentChecks(unittest.TestCase):
             "WallyApps/shared/development_series.R",
             "WallyApps/shared/assets/portrait-brady-boles-mask.png",
             "WallyApps/shared/portraits.csv",
-            "WallyApps/shared/assets/development-ballpark-duotone.png",
+            "WallyApps/shared/assets/development-ballpark-maroon.png",
             "WallyApps/PitchingApp/helpers/situations.R",
             "WallyApps/PitchingApp/reference/pa_scores_2026.csv",
             "WallyApps/PitchingApp/reference/d1_pitching_xwoba_percentiles.csv",
