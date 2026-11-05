@@ -940,6 +940,7 @@ base_wally_pitching_environment <- function(team_rows) {
   workspace <- new.env(parent = globalenv())
   workspace$BASE_PITCHING_APP_DIR <- dirname(BASE_WALLY_PITCHING_FILE)
   workspace$BASE_PITCHING_DATA <- team_rows
+  workspace$BASE_PITCHING_XWOBA_GRID_PATH <- TEAM_CONFIG$data$xwoba_grid_file
   workspace$BASE_PITCHING_CONTEXT_LOADER <- base_pitching_situation_context
   workspace$BASE_PITCHING_SCHEDULE_PATH <- TEAM_CONFIG$data$schedule_file
   workspace$BASE_PITCHING_SOURCE_SIGNATURE <- function() {

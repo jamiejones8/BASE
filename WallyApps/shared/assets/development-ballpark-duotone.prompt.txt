@@ -1,0 +1,3 @@
+Built-in image_gen edit of the supplied Irvine-Rassmussen Ballpark photograph.
+
+Use case: style-transfer. Change color treatment only to Texas State dark maroon (#501214) and warm gold (#c8a76c), with tonal blends between those colors. Preserve the ballpark, field geometry, players, fencing, sky, scoreboard, camera angle and composition. Keep photographic detail with subdued tonal contrast for foreground cream information panels. No added text, logos, border, graphics, or layout. Preserve the whole 4:3 photograph. The PDF renderer applies exactly 90% opacity.

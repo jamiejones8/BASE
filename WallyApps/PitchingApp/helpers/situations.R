@@ -133,7 +133,7 @@ pitching_sit_locations <- function(d, venues, schedule = NULL) {
   venues[index, c("city", "latitude", "longitude", "timezone"), drop = FALSE]
 }
 
-pitching_annotate_situations <- function(rows, context = NULL, venues, schedule = NULL) {
+pitching_annotate_situations <- function(rows, context = NULL, venues, schedule = NULL, score_snapshots = NULL) {
   rows <- tibble::as_tibble(rows)
   n <- nrow(rows)
   if (!n) return(rows)
@@ -168,6 +168,16 @@ pitching_annotate_situations <- function(rows, context = NULL, venues, schedule 
   all <- all[order(all$.sit_game, all$.sit_half_order, all$.sit_pa, all$.sit_pn, na.last = TRUE), ]
   all$.sit_entry <- NA_character_
   all$.sit_lead <- NA_real_
+  all$.sit_home_score <- all$.sit_away_score <- NA_real_
+  if(!is.null(score_snapshots) && nrow(score_snapshots)) {
+    snapshot_key<-paste(score_snapshots$GameID,score_snapshots$TopBottom,score_snapshots$Inning,score_snapshots$PAofInning,sep="\037")
+    at<-match(paste(all$.sit_game,all$.sit_half,all$.sit_inning,all$.sit_pa,sep="\037"),snapshot_key)
+    use<-which(!is.na(at) & !is.finite(pitching_sit_num(all,"HomeScoreBefore")) & !is.finite(pitching_sit_num(all,"AwayScoreBefore")))
+    if(!"HomeScoreBefore" %in% names(all)) all$HomeScoreBefore<-NA_real_
+    if(!"AwayScoreBefore" %in% names(all)) all$AwayScoreBefore<-NA_real_
+    all$HomeScoreBefore[use]<-score_snapshots$HomeScoreBefore[at[use]]
+    all$AwayScoreBefore[use]<-score_snapshots$AwayScoreBefore[at[use]]
+  }
   all$.sit_terminal <- FALSE
   all$.sit_terminal <- pitching_sit_chr(all, "PitchCall") %in% c("InPlay", "InPlayOut", "InPlayNoOut", "Walk", "HitByPitch") |
     grepl("^(strikeout|k|walk|bb|ibb|hbp)$", tolower(pitching_sit_chr(all, "KorBB"))) |
@@ -204,7 +214,10 @@ pitching_annotate_situations <- function(rows, context = NULL, venues, schedule 
       hs <- pitching_sit_num(all[j[1], ], "HomeScoreBefore")
       as <- pitching_sit_num(all[j[1], ], "AwayScoreBefore")
       if (is.finite(hs) && is.finite(as)) { home_runs <- hs; away_runs <- as; valid_score <- TRUE }
-      if (valid_score) all$.sit_lead[j] <- if (half %% 2 == 1) home_runs - away_runs else away_runs - home_runs
+      if (valid_score) {
+        all$.sit_lead[j] <- if (half %% 2 == 1) home_runs - away_runs else away_runs - home_runs
+        all$.sit_home_score[j]<-home_runs;all$.sit_away_score[j]<-away_runs
+      }
       for (k in j) {
         pitcher <- all$.sit_pitcher[k]
         change <- new_half || is.na(prior_pitcher) || is.na(pitcher) || pitcher != prior_pitcher
@@ -230,6 +243,8 @@ pitching_annotate_situations <- function(rows, context = NULL, venues, schedule 
   rows$.sit_pa_key <- all$.sit_pa_key[match_rows]
   rows$.sit_entry <- all$.sit_entry[match_rows]
   rows$.sit_lead <- all$.sit_lead[match_rows]
+  rows$.sit_home_score<-all$.sit_home_score[match_rows]
+  rows$.sit_away_score<-all$.sit_away_score[match_rows]
   rows$.sit_terminal <- all$.sit_terminal[match_rows] %in% TRUE
   rows$.sit_phase <- ifelse(pitching_sit_num(rows, "Inning") %in% 1:3, "Early innings",
     ifelse(pitching_sit_num(rows, "Inning") %in% 4:6, "Mid innings",

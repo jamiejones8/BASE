@@ -1,0 +1,15 @@
+{
+  "source": "D1 Pitching:Hitting File.parquet",
+  "source_bytes": 1055457360,
+  "full_game_context_pitches": 24095,
+  "score_pa_snapshots": 5658,
+  "score_games": 76,
+  "qualified_pitchers": 3437,
+  "minimum_pa": 50,
+  "xwoba_weights": {
+    "BB": 0.69,
+    "HBP": 0.72
+  },
+  "expected_contact_grid": "models/shared/xwoba_grid.rds",
+  "created": "2026-11-05"
+}

@@ -288,7 +288,7 @@ for (marker in c(
   }
 }
 expected_tabs <- c(
-  "Performance", "Lineup Builder", "Damage Heat Map", "Whiff Zones",
+  "Development Goals", "Performance", "Lineup Builder", "Damage Heat Map", "Whiff Zones",
   "Leaderboard", "Swing Decisions",
   "Ball Flight", "Contact Point"
 )

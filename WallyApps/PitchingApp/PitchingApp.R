@@ -4411,6 +4411,7 @@ app_dir <- get0("BASE_PITCHING_APP_DIR",inherits=FALSE,ifnotfound=NULL)
 if (is.null(app_dir)) app_dir <- if (!is.null(app_file) && nzchar(app_file)) dirname(normalizePath(app_file)) else getwd()
 
 source(file.path(app_dir, "helpers", "situations.R"), local = TRUE)
+source(file.path(app_dir, "..", "shared", "development_goals.R"), local = TRUE)
 
 as_abs <- function(p) {
   if (!nzchar(p)) return("")
@@ -6801,6 +6802,7 @@ ui <- base_pitching_page(
       )
     ),
     nav_panel("Comparisons", base_comparison_ui("pitching_comparisons")),
+    nav_panel("Development Goals", development_ui("pitching_development", SEASON_CHOICES)),
     nav_panel(
       title = "Pitch Metrics",
       navset_tab(
@@ -11446,7 +11448,9 @@ server <- function(input, output, session){
     venues <- utils::read.csv(file.path(app_dir, "reference", "venue_locations.csv"), stringsAsFactors = FALSE)
     schedule_path <- get0("BASE_PITCHING_SCHEDULE_PATH", inherits = TRUE, ifnotfound = file.path(app_dir, "..", "..", "config", "texas_state_schedule_2027.csv"))
     schedule <- if (file.exists(schedule_path)) readr::read_csv(schedule_path, show_col_types = FALSE) else NULL
-    pitching_situation_pa_metadata(pitching_annotate_situations(rows, context, venues, schedule))
+    snapshot_path <- file.path(app_dir, "reference", "pa_scores_2026.csv")
+    snapshots <- if(file.exists(snapshot_path)) readr::read_csv(snapshot_path,show_col_types=FALSE) else NULL
+    pitching_situation_pa_metadata(pitching_annotate_situations(rows, context, venues, schedule, snapshots))
   })
   with_situations <- function(d) {
     if (is.null(d) || !nrow(d)) return(d)
@@ -20038,6 +20042,31 @@ function(el,x){
     metrics=comparison_metrics,
     lower_better=comparison_metrics[vapply(comparison_metrics,function(m) isTRUE(pitching_metric_config(m)$lower_better),logical(1))],
     active=function() identical(input$pitching_workspace_tab,"Comparisons"))
+
+  development_xwoba_reference <- readr::read_csv(file.path(app_dir,"reference","d1_pitching_xwoba_percentiles.csv"),show_col_types=FALSE)
+  development_grid_path <- get0("BASE_PITCHING_XWOBA_GRID_PATH",inherits=TRUE,
+    ifnotfound=file.path(app_dir,"..","..","models","shared","xwoba_grid.rds"))
+  development_grid <- tryCatch(readRDS(development_grid_path),error=function(e) NULL)
+  pitching_development <- development_server("pitching_development",reactive(filter_team_or_portal(rv$df,"PitcherTeam")),
+    "Pitcher",SEASON_CHOICES,mode="pitching",
+    summarize=function(d) {
+      values<-staff_percentile_values(d)
+      result<-as.list(stats::setNames(values$value,values$label))
+      last<-pitching_situation_pa_last(ensure_pa(d))
+      expected<-development_xwoba_values(last,development_grid)
+      result$xwOBA<-if(any(is.finite(expected))) mean(expected,na.rm=TRUE) else NA_real_
+      result$PA<-attr(values,"counts")[["PA"]]
+      result
+    },percentile=function(value,metric) {
+      if(!is.finite(value)) return(NA_real_)
+      if(metric=="xwOBA") {
+        pool<-development_xwoba_reference$value
+        return(100*(mean(pool>value)+.5*mean(pool==value)))
+      }
+      spec<-performance_percentile_specs[performance_percentile_specs$label==metric,,drop=FALSE]
+      if(!nrow(spec)) return(NA_real_)
+      pitch_metric_percentile(value,spec$metric[1],lower_better=spec$lower_better[1])
+    })
 
   team_staff_percentile_data <- reactive({
     vals <- staff_percentile_values(team_trends_data())

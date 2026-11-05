@@ -145,3 +145,9 @@ unlink(context_file)
 cat("Read-only full-game context lookup and projection passed.\n")
 
 stopifnot(pitching_situation_file_suffix("Total") == "", pitching_situation_file_suffix("Up 4+") == "_Up_4plus")
+
+# Raw explicit snapshots take precedence over the bundled historical reference.
+override<-fixture[at(13),];override$HomeScoreBefore<-9;override$AwayScoreBefore<-4
+snapshot<-data.frame(GameID=override$GameID,TopBottom=override$`Top/Bottom`,Inning=override$Inning,PAofInning=override$PAofInning,HomeScoreBefore=6,AwayScoreBefore=4)
+override<-pitching_annotate_situations(override,venues=venues,score_snapshots=snapshot)
+stopifnot(override$.sit_lead==5)

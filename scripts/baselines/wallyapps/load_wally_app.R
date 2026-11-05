@@ -73,6 +73,10 @@ load_wally_baseline_app <- function(app_name) {
     }
   }
 
+  if(app_name %in% c("PitchingApp","HittingApp")) {
+    file.copy(file.path(dirname(source_app_dir),"shared"),dirname(sandbox),recursive=TRUE,copy.mode=FALSE,copy.date=FALSE)
+  }
+
   old_wd <- setwd(sandbox)
   old_data_dir <- Sys.getenv("DATA_DIR", unset = NA_character_)
   on.exit({

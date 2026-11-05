@@ -667,6 +667,7 @@ base_wally_hitting_environment <- function(team_rows) {
 
   workspace <- new.env(parent = globalenv())
   workspace$BASE_HITTING_DATA <- team_rows
+  workspace$BASE_HITTING_APP_DIR <- dirname(BASE_WALLY_HITTING_FILE)
   workspace$BASE_HITTING_D1_BENCHMARKS <- base_d1_aar_benchmarks()$hitting
   workspace$BASE_HITTING_TEAM_CODE <- TEAM_CONFIG$data_code
   workspace$BASE_HITTING_EMBEDDED <- TRUE

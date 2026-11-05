@@ -66,6 +66,11 @@ reads matching games from the Hitting CSVs and can query a compact projection
 from the mounted NCAA master to fill context gaps. Those context rows never
 contribute to performance statistics. Missing context remains unclassified, with coverage disclosed.
 
+The bundled `reference/pa_scores_2026.csv` supplies verified PA-start scores from
+the full D1 export when the internal player-filtered CSVs omit earlier PAs.
+This restores historical close-lead/save classifications for relievers such as
+Cade Smith. See [Development Goals](DEVELOPMENT_GOALS.md) for rebuild and provenance.
+
 Day/Night uses each pitch's UTC instant, or venue-local wall clock when UTC
 is absent. A pitch at least 30 minutes before sunset is Day; later pitches are
 Night. A PA crossing the cutoff assigns its outcome to the terminal pitch's

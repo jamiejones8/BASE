@@ -48,6 +48,9 @@ if (!isTRUE(get0("BASE_HITTING_EMBEDDED", inherits = FALSE, ifnotfound = FALSE))
   shiny::addResourcePath("static", normalizePath("www", mustWork = TRUE))
 }
 
+development_app_dir <- get0("BASE_HITTING_APP_DIR",inherits=FALSE,ifnotfound=getwd())
+source(file.path(development_app_dir,"..","shared","development_goals.R"),local=TRUE)
+
 # -------------------- Logos --------------------
 txst_logo   <- "www/txst_logo.png"
 bobcat_logo <- "www/bobcat_watermark.png"
@@ -1907,6 +1910,7 @@ ui <- base_hitting_page(
       ))
     ),
     nav_panel("Comparisons", base_comparison_ui("hitting_comparisons")),
+    nav_panel("Development Goals", development_ui("hitting_development", SEASON_CHOICES)),
     nav_panel(
       title = "Lineup Builder",
       div(
@@ -4821,6 +4825,10 @@ plot_sd_zone_points <- function(d, title = NULL){
 
 # -------------------- Server --------------------
 server <- function(input, output, session){
+  hitting_development <- development_server("hitting_development",reactive(txst_df),"Batter",SEASON_CHOICES,
+    summarize=function(d) as.list(summarize_overall(d)[1,,drop=FALSE]),
+    percentile=hitting_d1_percentile,mode="hitting")
+
   base_comparison_server("hitting_comparisons", reactive(txst_df), SEASON_CHOICES, "Batter",
     summarize=function(d) as.list(summarize_overall(d)[1,,drop=FALSE]),
     percentile=hitting_d1_percentile, metrics=setdiff(performance_table_metrics,"PA"),

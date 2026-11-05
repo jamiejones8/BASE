@@ -217,7 +217,7 @@ if (!grepl("grid-template-columns: repeat(2, minmax(0, 1fr))", style_html, fixed
   fail("Pitching sidebar season controls are missing the aligned checkbox grid.")
 }
 expected_tabs <- c(
-  "Performance", "Pitch Metrics", "Season Summary", "Pitch Decay",
+  "Development Goals", "Performance", "Pitch Metrics", "Season Summary", "Pitch Decay",
   "Locations", "Whiffs / Chases / Called Strikes / Barrels", "Stuff+",
   "Bullpens", "Comparisons", "Leaderboard", "Team Trends"
 )
