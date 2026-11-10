@@ -1,4 +1,5 @@
 .git
+app_state/
 .DS_Store
 **/.DS_Store
 .runtime-builder-deps

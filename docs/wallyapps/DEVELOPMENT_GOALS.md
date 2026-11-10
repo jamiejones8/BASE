@@ -10,9 +10,36 @@ BB/HBP/K treatment as Hitting; its empirical distribution qualifies pitchers at
 Each objective contains a title, a selected season stat/current value, a written
 goal, exactly three supporting actions, and zero to five optional drills. Export
 is available when every required field is complete. Adding/removing Objective 2
-preserves Objective 1. A player or season change clears the draft so one player's
-instructions cannot accidentally be exported under another name. Drafts are
-session-local and are not saved to a shared server file.
+preserves Objective 1. **Save and Generate PDF** validates the plan, generates
+the PDF and commits the goals, actions and drills to persistent storage. Returning
+to a player/baseline season restores that saved plan. **Reload Saved Goals** pulls
+the most recently saved version; concurrent edits are rejected rather than
+silently overwriting another session.
+
+Both apps share the same Build Goals and Track Goals implementation. Saves are
+isolated by team, hitting/pitching mode, player and baseline season in SQLite.
+`BASE_DEVELOPMENT_GOALS_FILE` can override the path; the default is
+`development-goals.sqlite` beside the configured team-season-import directory,
+normally `/base-data/app_state` on Railway or local `app_state/`. It must reside
+on the writable persistent volume to survive redeploys. Local state is excluded
+from Git, Docker and Railway uploads.
+
+Tracking begins with S26 as the baseline and F26 as the tracking season, followed
+by F26 → PS27 → S27 → F27. Plans carry forward until replaced; a newer season's
+plan does not overwrite the historical season. The tracking season defaults to
+the latest season with available team data. Each season compares against the
+immediately preceding season, using native player summaries, not the original
+plan's older baseline. An original baseline snapshot is retained as a fallback
+when that source is unavailable.
+
+The Track Goals table starts with a team total: hit goals divided by all assigned
+goals, counting one-objective plans once. Each player has Goal 1/Goal 2 progress
+bars and one ✅/❌ per assigned goal. Green means the current metric meets the
+target, red means it is farther from the target than last season, and black
+means improving or unchanged. Missing data is labeled explicitly and never
+treated as a zero statistic. Progress is the fraction of the baseline-to-target
+gap closed, clamped to 0–100%. Clicking a player expands current-season,
+game-by-game charts for their assigned objectives.
 
 Charts plot the season-to-date value after each game, ordered by date and game
 start time. Doubleheader games remain separate points, labeled G1/G2. The owning
@@ -77,3 +104,6 @@ fields, one/two-objective transitions, real portrait decoding, xwOBA outcomes,
 and the Cade score regression. The existing Hitting and Pitching integration
 suites verify both new tabs. Browser QA exercises both actual PDF downloads;
 the PDFs are rendered and visually inspected for single/two-column alignment.
+`test_development_tracking.R` covers persistent saves across new sessions,
+revision conflicts, historical carry-forward, both metric directions, missing
+data, one/two-goal team denominators and expandable tracking charts.

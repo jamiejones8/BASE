@@ -2,6 +2,7 @@
 development_source_paths <- unlist(lapply(sys.frames(),function(frame) if(is.character(frame$ofile)) frame$ofile else NULL),use.names=FALSE)
 development_root <- normalizePath(dirname(tail(development_source_paths[basename(development_source_paths)=="development_goals.R"],1)),mustWork=TRUE)
 source(file.path(development_root,"development_series.R"),local=TRUE)
+source(file.path(development_root,"development_tracking.R"),local=TRUE)
 development_portraits <- read.csv(file.path(development_root,"portraits.csv"),stringsAsFactors=FALSE)
 development_name <- function(x) {
   if(length(x)!=1 || is.na(x)) return("")
@@ -69,16 +70,46 @@ development_ui <- function(id,seasons) {
     .development-toolbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:18px 0}
     .development-preview img{width:100%;height:auto;border:1px solid #c6a66b;border-radius:8px}
     .development-page .btn{background:#501214;color:#e6cc92;border-color:#c6a66b}
+    .development-page .tab-content{padding-top:18px}
+    .development-tracking-scroll{overflow-x:auto}
+    .development-tracking-table{width:100%;border-collapse:collapse;background:#fffaf0;font-size:14px}
+    .development-tracking-table th{padding:14px;background:#501214;color:#fff;text-align:left}
+    .development-tracking-table td{padding:16px;vertical-align:top;border-bottom:1px solid #dccbaf}
+    .development-tracking-table th:first-child{width:20%}
+    .development-tracking-table th:nth-child(2),.development-tracking-table th:nth-child(3){width:33%}
+    .development-tracking-table th:last-child{width:14%}
+    .development-tracking-table .development-team-total{background:#eee3cd;font-weight:700}
+    .development-tracked-goal{line-height:1.45}.development-tracked-values{font-size:12px;color:#5e554d;margin:7px 0}
+    .development-tracked-state{font-size:12px;margin-top:5px}
+    .development-progress{height:8px;background:#e5ded1;border-radius:6px;overflow:hidden}
+    .development-progress-fill{height:100%;border-radius:6px}
+    .development-page .development-player-toggle{background:transparent;color:#501214;border:0;padding:0;text-align:left;font-weight:800;text-decoration:underline;cursor:pointer}
+    .development-hit-list{display:flex;gap:12px;flex-wrap:wrap;font-size:18px}
+    .development-hit-list span{white-space:nowrap}.development-hit-number{font-size:11px;color:#5e554d}
+    .development-tracking-detail>td{background:#f6f1e7}
+    .development-tracking-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
+    .development-tracking-note{color:#5e554d;font-size:13px;margin:12px 0}
+    .development-saved-status{padding:10px 0;color:#501214;font-weight:650}
+    .development-no-goal{color:#777}
   ")),shiny::div(class="development-page",
-    shiny::tags$h2("Development Goals"),shiny::tags$p("Build a season-based development plan. The preview and PDF use the same layout. Charts show season-to-date stats after each game, with separate points for doubleheaders."),
-    shiny::div(class="development-controls",shiny::selectInput(ns("season"),"Season",choices=seasons,selected=if("S26" %in% seasons) "S26" else unname(seasons[1])),
-      shiny::selectInput(ns("player"),"Player",choices=character())),
+    shiny::tags$h2("Development Goals"),
     shiny::div(style="display:none",shiny::textOutput(ns("two"))),
-    shiny::div(class="development-toolbar",
-      shiny::uiOutput(ns("export_control"))),
-    shiny::div(class="development-editors",objective(1),shiny::conditionalPanel("output.two === 'true'",ns=ns,objective(2))),
-    shiny::uiOutput(ns("status")),shiny::tags$h3("PDF preview"),
-    shiny::div(class="development-preview",shiny::imageOutput(ns("preview"),height="auto"))))
+    shiny::tabsetPanel(id=ns("goals_tab"),
+      shiny::tabPanel("Build Goals",value="build",
+        shiny::tags$p("Choose a baseline season, then save the plan for the following season. Saved goals carry forward until replaced. Charts show season-to-date stats after each game."),
+        shiny::div(class="development-controls",
+          shiny::selectInput(ns("season"),"Baseline season",choices=development_baseline_seasons(seasons),selected="S26"),
+          shiny::selectInput(ns("player"),"Player",choices=character())),
+        shiny::uiOutput(ns("saved_status")),
+        shiny::div(class="development-toolbar",shiny::uiOutput(ns("export_control")),
+          shiny::actionButton(ns("reload_saved"),"Reload Saved Goals")),
+        shiny::div(class="development-editors",objective(1),shiny::conditionalPanel("output.two === 'true'",ns=ns,objective(2))),
+        shiny::uiOutput(ns("status")),shiny::tags$h3("PDF preview"),
+        shiny::div(class="development-preview",shiny::imageOutput(ns("preview"),height="auto"))),
+      shiny::tabPanel("Track Goals",value="track",
+        shiny::selectInput(ns("tracking_season"),"Tracking season",choices=c("2026 Fall"="F26"),selected="F26"),
+        shiny::uiOutput(ns("tracking_note")),
+        shiny::uiOutput(ns("tracking_table"))))))
 }
 development_payload_errors <- function(plan) {
   errors<-character()
@@ -91,95 +122,7 @@ development_payload_errors <- function(plan) {
   }
   unique(errors)
 }
-development_server <- function(id,rows,player_column,seasons,summarize,percentile,mode,average=function(metric) NA_real_,lower_better=function(metric) FALSE) shiny::moduleServer(id,function(input,output,session) {
-  two<-shiny::reactiveVal(FALSE)
-  shiny::observeEvent(input$add,two(TRUE));shiny::observeEvent(input$remove,two(FALSE))
-  output$two<-shiny::renderText(if(two()) "true" else "false")
-  shiny::outputOptions(output,"two",suspendWhenHidden=FALSE)
-  season_rows<-shiny::reactive({
-    d<-rows();shiny::req(input$season)
-    col<-intersect(c("SeasonTag","SeasonGroup"),names(d))[1]
-    if(!is.na(col)) d<-d[!is.na(d[[col]]) & d[[col]]==input$season,,drop=FALSE]
-    if("is_bullpen" %in% names(d)) d<-d[!d$is_bullpen %in% TRUE,,drop=FALSE]
-    d
-  })
-  shiny::observe({
-    d<-season_rows();players<-sort(unique(as.character(d[[player_column]])))
-    players<-players[!is.na(players) & nzchar(players)]
-    current<-shiny::isolate(input$player)
-    shiny::updateSelectInput(session,"player",choices=stats::setNames(players,vapply(players,development_name,character(1))),selected=if(length(current)==1 && current %in% players) current else head(players,1))
-  })
-  player_rows<-shiny::reactive({
-    d<-season_rows();shiny::req(input$player)
-    d<-d[!is.na(d[[player_column]]) & d[[player_column]]==input$player,,drop=FALSE]
-    shiny::req(nrow(d));d
-  })
-  stats<-shiny::reactive(summarize(player_rows()))
-  game_series<-shiny::reactive(development_game_values(player_rows(),summarize,mode))
-  shiny::observe({
-    values<-stats();choices<-names(values)
-    for(i in 1:2) {
-      selected<-shiny::isolate(input[[paste0("stat",i)]])
-      shiny::updateSelectInput(session,paste0("stat",i),choices=choices,selected=if(length(selected)==1 && selected %in% choices) selected else if("K%" %in% choices) "K%" else choices[1])
-    }
-  })
-  # Plans belong to one player and season. Reset text when that context changes;
-  # adding/removing the second objective never rebuilds the first editor.
-  shiny::observeEvent(list(input$player,input$season),{
-    for(i in 1:2) {
-      shiny::updateNumericInput(session,paste0("target",i),value=NA_real_)
-      for(field in c("title","goal")) shiny::updateTextInput(session,paste0(field,i),value="")
-      for(j in 1:3) shiny::updateTextAreaInput(session,paste0("support",i,"_",j),value="")
-      for(j in 1:5) shiny::updateTextAreaInput(session,paste0("drill",i,"_",j),value="")
-    }
-    two(FALSE)
-  },ignoreInit=TRUE)
-  for(i in 1:2) local({j<-i;output[[paste0("current",j)]]<-shiny::renderUI({
-    metric<-input[[paste0("stat",j)]];shiny::req(metric)
-    shiny::div(class="development-current",paste("Season value:",development_format(stats()[[metric]],metric)))
-  })})
-  plan<-shiny::reactive({
-    values<-stats();specs<-development_specs(mode)
-    rankings<-data.frame(label=names(specs),metric=unname(specs),stringsAsFactors=FALSE)
-    rankings$value<-vapply(rankings$metric,function(m) if(m %in% names(values)) as.numeric(values[[m]]) else NA_real_,numeric(1))
-    rankings$percentile<-mapply(percentile,rankings$value,rankings$metric)
-    objectives<-lapply(seq_len(if(two()) 2 else 1),function(i) {
-      metric<-input[[paste0("stat",i)]] %||% "K%"
-      series<-game_series()
-      series<-if(metric %in% names(series)) data.frame(GameIndex=series$GameIndex,GameLabel=series$GameLabel,Value=as.numeric(series[[metric]])) else data.frame(GameIndex=integer(),GameLabel=character(),Value=numeric())
-      list(series=series,average=as.numeric(average(metric)),lower_better=isTRUE(lower_better(metric)),
-        target=development_goal_target(input[[paste0("goal",i)]] %||% "",metric,input[[paste0("target",i)]] %||% NA_real_),
-        title=input[[paste0("title",i)]] %||% "",metric=metric,current=development_format(values[[metric]],metric),
-        goal=input[[paste0("goal",i)]] %||% "",supports=vapply(1:3,function(j) input[[paste0("support",i,"_",j)]] %||% "",character(1)),
-        drills=Filter(nzchar,vapply(1:5,function(j) trimws(input[[paste0("drill",i,"_",j)]] %||% ""),character(1))))
-    })
-    list(player=development_name(input$player),season=names(seasons)[match(input$season,seasons)],mode=mode,
-      portrait=development_portrait(input$player),rankings=rankings,objectives=objectives)
-  })
-  output$status<-shiny::renderUI({
-    if(!nrow(season_rows())) return(shiny::tags$p("No season data is available for this selection."))
-    p<-plan();errors<-development_payload_errors(p)
-    shiny::tagList(if(length(errors)) shiny::tags$p(class="text-muted",paste(errors,collapse=" ")),
-      if(any(!is.finite(p$rankings$percentile))) shiny::tags$p(class="text-muted","N/A means the season value or a matching D1 percentile reference is unavailable; no ranking is estimated."),
-      if(!nzchar(p$portrait)) shiny::tags$p(class="text-muted","The official roster has no matched headshot for this player; the report uses initials."))
-  })
-  output$export_control<-shiny::renderUI({
-    if(!nrow(season_rows())) return(shiny::tags$button(class="btn",disabled="disabled","Select a season with data"))
-    if(length(development_payload_errors(plan()))) shiny::tags$button(class="btn",disabled="disabled","Complete goals to export PDF")
-    else shiny::downloadButton(session$ns("pdf"),"Export PDF")
-  })
-  output$preview<-shiny::renderImage({
-    p<-plan();file<-tempfile(fileext=".png")
-    grDevices::png(file,width=1650,height=1050,res=108)
-    tryCatch(development_draw(p),finally=grDevices::dev.off())
-    list(src=file,contentType="image/png",alt=paste(p$player,"Development Goals PDF preview"))
-  },deleteFile=TRUE)
-  output$pdf<-shiny::downloadHandler(filename=function() paste0(gsub("[^A-Za-z0-9]+","_",plan()$player),"_Development_Goals.pdf"),content=function(file) {
-    p<-plan();shiny::validate(shiny::need(!length(development_payload_errors(p)),"Complete all required goal fields before exporting."))
-    development_pdf(file,p)
-  })
-  list(plan=plan,stats=stats,two=two,game_series=game_series)
-})
+source(file.path(development_root,"development_server.R"),local=TRUE)
 
 .development_image_cache<-new.env(parent=emptyenv())
 development_image <- function(path,opacity=1) {

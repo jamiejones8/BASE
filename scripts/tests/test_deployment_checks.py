@@ -126,6 +126,8 @@ class DeploymentChecks(unittest.TestCase):
         for path in (
             "WallyApps/shared/development_goals.R",
             "WallyApps/shared/development_series.R",
+            "WallyApps/shared/development_tracking.R",
+            "WallyApps/shared/development_server.R",
             "WallyApps/shared/assets/portrait-brady-boles-mask.png",
             "WallyApps/shared/portraits.csv",
             "WallyApps/shared/assets/development-ballpark-maroon.png",
