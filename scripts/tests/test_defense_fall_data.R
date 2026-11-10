@@ -13,6 +13,56 @@ base_prepare_wally_catching_rows <- function(startup_rows=NULL) {
 base_prepare_catcher_framing_baseline <- function() {
   base_read_defense_csv('tests/fixtures/wallyapps/defense/data/d1_catcher_framing_metrics.csv')
 }
+# Volume uploads can use TrackMan M/D/YY dates while the bundled file uses ISO
+# dates. Exercise both positioning merges, including a fully matched upload.
+local({
+  original_config <- TEAM_CONFIG
+  upload_root <- tempfile('defense-date-imports-')
+  dir.create(upload_root)
+  on.exit({
+    TEAM_CONFIG <<- original_config
+    base_clear_wally_defense_state()
+    unlink(upload_root, recursive = TRUE)
+  })
+  TEAM_CONFIG$data$team_season_import_dir <<- upload_root
+  bundled <- base_read_defense_csv(base_defense_dev_file('2026 Fall Defense.csv'))
+  upload <- bundled[1, , drop = FALSE]
+  expected_date <- as.Date(upload$Date)
+  upload$Date <- format(expected_date, '%m/%d/%y')
+  upload$GameDate <- upload$Date
+  upload$CF_PositionAtReleaseX <- upload$CF_PositionAtReleaseX + 1
+  path <- file.path(upload_root, 'legacy-positioning.csv')
+  readr::write_csv(upload, path)
+  TEAM_CONFIG$data$player_positioning_file <<- path
+
+  # Even zero unmatched rows used to fail bind_rows(Date, character).
+  matched <- base_prepare_wally_defense_rows()
+  i <- match(upload$PitchUID, matched$PitchUID)
+  stopifnot(nrow(matched) == nrow(bundled), inherits(matched$Date, 'Date'),
+            matched$Date[i] == expected_date,
+            matched$CF_PositionAtReleaseX[i] == upload$CF_PositionAtReleaseX)
+
+  new_fall <- upload
+  new_fall$PitchUID <- 'date-import-fall'
+  new_fall$Date <- '10/30/2026'
+  new_fall$GameDate <- new_fall$Date
+  readr::write_csv(dplyr::bind_rows(upload, new_fall), base_positioning_season_paths()[['F26']])
+  future <- upload
+  future$PitchUID <- 'date-import-spring'
+  future$Date <- '2027-02-12'
+  future$GameDate <- future$Date
+  readr::write_csv(future, base_positioning_season_paths()[['S27']])
+
+  workspace <- base_wally_defense_environment()
+  rows <- workspace$BASE_DEFENSE_DATA
+  fall <- rows[rows$PitchUID == 'date-import-fall', , drop = FALSE]
+  spring <- rows[rows$PitchUID == 'date-import-spring', , drop = FALSE]
+  stopifnot(is.function(workspace$server), nrow(workspace$defense_df) > 0L,
+            nrow(rows) == nrow(bundled) + 2L, !anyDuplicated(rows$PitchUID),
+            inherits(rows$Date, 'Date'), inherits(rows$GameDate, 'Date'),
+            nrow(fall) == 1L, fall$Date == as.Date('2026-10-30'), fall$SeasonGroup == 'F26',
+            nrow(spring) == 1L, spring$Date == as.Date('2027-02-12'), spring$SeasonGroup == 'S27')
+})
 workspace <- base_wally_defense_environment()
 positioning <- workspace$BASE_DEFENSE_DATA
 joined <- workspace$raw_df

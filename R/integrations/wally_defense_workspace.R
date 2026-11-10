@@ -150,9 +150,9 @@ base_defense_dev_file <- function(name) {
   base_project_path("WallyApps", "DefenseApp", "data", name)
 }
 
-base_read_defense_csv <- function(path) {
+base_read_defense_csv <- function(path, convert_types = TRUE) {
   if (!file.exists(path)) return(tibble::tibble())
-  readr::read_csv(
+  rows <- readr::read_csv(
     path,
     col_types = readr::cols(.default = readr::col_character()),
     show_col_types = FALSE
@@ -161,8 +161,16 @@ base_read_defense_csv <- function(path) {
       source_file = basename(path), row_in_file = dplyr::row_number(),
       manual_fielded_source = any(tolower(gsub("[^A-Za-z0-9]", "", names(.))) %in%
         c("fieldedby", "fieldedpos", "fieldedposition"))
-    ) %>%
-    readr::type_convert(col_types = readr::cols(.default = readr::col_guess()))
+    )
+  if (convert_types) {
+    rows <- readr::type_convert(rows, col_types = readr::cols(.default = readr::col_guess()))
+  }
+  # Per-file guessing parses ISO dates but leaves TrackMan M/D/YY uploads as
+  # character. Normalize both before positioning merges, even empty subsets.
+  for (column in intersect(c("Date", "GameDate"), names(rows))) {
+    rows[[column]] <- base_parse_trackman_dates(rows[[column]])
+  }
+  rows
 }
 
 # Retain the runtime's contact join while applying uploaded player positions.
@@ -194,13 +202,13 @@ base_merge_defense_positioning <- function(rows, positioning) {
 base_prepare_wally_defense_rows <- function() {
   # The spring 2026 runtime uses incompatible fielding tags. Start with the
   # desktop app's manually tagged fall positioning export instead.
-  rows <- base_read_defense_csv(base_defense_dev_file("2026 Fall Defense.csv"))
+  rows <- base_read_defense_csv(base_defense_dev_file("2026 Fall Defense.csv"), convert_types = FALSE)
   if (nrow(rows)) rows$SeasonGroup <- "F26"
 
   # Keep supporting positioning uploads, but exclude the unusable spring data.
   path <- TEAM_CONFIG$data$player_positioning_file
   if (!is.null(path) && length(path) && file.exists(path)) {
-    uploaded <- base_read_defense_csv(path)
+    uploaded <- base_read_defense_csv(path, convert_types = FALSE)
     if (nrow(uploaded) && "Date" %in% names(uploaded)) {
       dates <- base_parse_trackman_dates(uploaded$Date)
       uploaded <- uploaded[!is.na(dates) & dates >= as.Date("2026-08-01") & dates < as.Date("2027-01-01"), , drop = FALSE]
@@ -209,7 +217,7 @@ base_prepare_wally_defense_rows <- function() {
     }
   }
   for (season in names(base_positioning_season_paths())) {
-    uploaded <- base_read_defense_csv(base_positioning_season_paths()[[season]])
+    uploaded <- base_read_defense_csv(base_positioning_season_paths()[[season]], convert_types = FALSE)
     if (!nrow(uploaded)) next
     uploaded$SeasonGroup <- season
     existing <- if ("SeasonGroup" %in% names(rows)) rows$SeasonGroup == season else rep(FALSE, nrow(rows))
@@ -217,7 +225,9 @@ base_prepare_wally_defense_rows <- function() {
     rows <- dplyr::bind_rows(rows[!existing, , drop = FALSE],
                             base_merge_defense_positioning(rows[existing, , drop = FALSE], uploaded))
   }
-  rows
+  # Guess non-date types once across the full input pool. A blank text column
+  # in one upload must not become logical before it meets populated text.
+  readr::type_convert(rows, col_types = readr::cols(.default = readr::col_guess()))
 }
 
 base_defense_contact_paths <- function() {
