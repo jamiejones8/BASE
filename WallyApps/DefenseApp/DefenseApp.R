@@ -3423,11 +3423,10 @@ prepare_catcher_receiving_rows <- function(d) {
 
   normalize_plate_coord <- function(vec, colname) {
     v <- to_num(vec)
-    q90 <- suppressWarnings(stats::quantile(abs(v), 0.90, na.rm = TRUE))
-    if (!is.finite(q90)) q90 <- 0
+    # TrackMan PlateLocSide/Height and canonical plate_x/z are feet. A wild
+    # pitch or a small catcher/season subset cannot change their units.
     is_inches <- !is.na(colname) && grepl("(?i)inch|_in\\b", colname)
-    looks_inches <- if (!is.na(colname) && grepl("(?i)z|height", colname)) q90 > 6 else q90 > 3.5
-    if (is_inches || looks_inches) v <- v / 12
+    if (is_inches) v <- v / 12
     v
   }
   coalesce_plate <- function(cands) {
@@ -3439,8 +3438,8 @@ prepare_catcher_receiving_rows <- function(d) {
     out
   }
 
-  d$plate_x <- coalesce_plate(c("plate_x", "PlateLocSide", "px", "PlateX", "Plate_X", "PlateLocSideInches"))
-  d$plate_z <- coalesce_plate(c("plate_z", "PlateLocHeight", "pz", "PlateZ", "Plate_Z", "PlateLocHeightInches"))
+  d$plate_x <- coalesce_plate(c("PlateLocSide", "plate_x", "px", "PlateX", "Plate_X", "PlateLocSideInches"))
+  d$plate_z <- coalesce_plate(c("PlateLocHeight", "plate_z", "pz", "PlateZ", "Plate_Z", "PlateLocHeightInches"))
   d$PitchNum <- seq_len(nrow(d))
 
   pt_chr <- dplyr::coalesce(
@@ -3483,8 +3482,6 @@ catcher_framing_subset <- function(d, type = c("ball_to_strike", "strike_to_ball
   pc <- canon_pitch_call(d$pitch_call)
   x_plot <- px[keep]
   z_plot <- pz[keep]
-  if (is.finite(suppressWarnings(max(abs(x_plot), na.rm = TRUE))) && suppressWarnings(max(abs(x_plot), na.rm = TRUE)) > 5) x_plot <- x_plot / 12
-  if (is.finite(suppressWarnings(max(abs(z_plot), na.rm = TRUE))) && suppressWarnings(max(abs(z_plot), na.rm = TRUE)) > 10) z_plot <- z_plot / 12
   d$plot_x <- x_plot
   d$plot_z <- z_plot
 

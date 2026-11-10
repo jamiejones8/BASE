@@ -62,6 +62,14 @@ page without changing their SQLite override layer.
 
 ## Verification
 
+Receiving uses the original TrackMan PlateLocSide/PlateLocHeight values in feet,
+ahead of derived aliases. Explicitly named inch columns convert once. Catcher,
+season or pitch-subset ranges never determine units, and plotting does not
+rescale prepared coordinates. This keeps locations and percentile zone
+classification consistent even when a catcher has a distant wild pitch.
+The test_catcher_location_units.R check covers outliers, small subsets, stale
+derived aliases, repeated preparation, multiple catchers/seasons and inches.
+
 `scripts/tests/test_wally_defense_integration.R` verifies the seven-workflow
 UI contract, embedded shell isolation, fixture standardization, defense
 summary, catcher preparation, season filtering, and catcher selector. The

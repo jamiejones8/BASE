@@ -42,6 +42,7 @@ checks <- list(
   c("Rscript", "scripts/tests/test_comparisons.R"),
   c("Rscript", "scripts/tests/test_defense_fall_data.R"),
   c("Rscript", "scripts/tests/test_defense_pitch_matching.R"),
+  c("Rscript", "scripts/tests/test_catcher_location_units.R"),
   c("Rscript", "scripts/tests/test_scouting_sources.R"),
   c("Rscript", "scripts/tests/test_scouting_upload_dates.R"),
   c("Rscript", "scripts/tests/test_player_health_deployment.R"),
