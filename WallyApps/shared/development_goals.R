@@ -125,7 +125,7 @@ development_ui <- function(id,seasons,mode="pitching") {
     shiny::div(style="display:none",shiny::textOutput(ns("two"))),
     shiny::tabsetPanel(id=ns("goals_tab"),
       shiny::tabPanel("Build Goals",value="build",
-        shiny::tags$p("Choose a baseline season, then save the plan for the following season. Saved goals carry forward until replaced. Charts show season-to-date stats after each game."),
+        shiny::tags$p("Choose a baseline season, then save the plan for the next NCAA season. Saved goals carry forward until replaced. Charts show season-to-date stats after each game."),
         shiny::div(class="development-controls",
           shiny::selectInput(ns("season"),"Baseline season",choices=development_baseline_seasons(seasons),selected="S26"),
           shiny::selectInput(ns("player"),"Player",choices=character())),
@@ -137,7 +137,8 @@ development_ui <- function(id,seasons,mode="pitching") {
         shiny::uiOutput(ns("status")),shiny::tags$h3("PDF preview"),
         shiny::div(class="development-preview",shiny::imageOutput(ns("preview"),height="auto"))),
       shiny::tabPanel("Track Goals",value="track",
-        shiny::selectInput(ns("tracking_season"),"Tracking season",choices=c("2026 Fall"="F26"),selected="F26"),
+        shiny::selectInput(ns("tracking_season"),"NCAA target season",choices=development_tracking_options(seasons,character())$options,
+          selected=development_tracking_options(seasons,character())$default),
         shiny::uiOutput(ns("tracking_note")),
         shiny::uiOutput(ns("tracking_table"))))))
 }

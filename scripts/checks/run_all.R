@@ -28,6 +28,7 @@ checks <- list(
   c("Rscript", "scripts/tests/test_development_goals.R"),
   c("Rscript", "scripts/tests/test_development_series.R"),
   c("Rscript", "scripts/tests/test_development_tracking.R"),
+  c("Rscript", "scripts/tests/test_development_ncaa_tracking.R"),
   c("Rscript", "scripts/tests/test_development_defense.R"),
   c("Rscript", "scripts/tests/test_development_storage.R"),
   c("Rscript", "scripts/tests/test_wally_pitching_integration.R"),

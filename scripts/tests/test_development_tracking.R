@@ -67,7 +67,7 @@ for(mode in c("hitting","pitching")) {
     lower_better=function(metric)if(mode=="hitting")metric=="K%"else metric=="BB%",
     average=function(metric).2)
   shiny::testServer(development_server,args=args,{
-    session$setInputs(season="S26",player="Boles, Brady",stat1="K%",stat2="BB%",tracking_season="F26")
+    session$setInputs(season="S26",player="Boles, Brady",stat1="K%",stat2="BB%",tracking_season="S27")
     session$setInputs(title1="Improve K rate",goal1=if(mode=="hitting")"18%"else"30%",
       support1_2=" \n ",drill1_1="Drill one")
     stopifnot(length(errors())>0)
@@ -84,15 +84,27 @@ for(mode in c("hitting","pitching")) {
       pdftools::pdf_info(file)$pages==1)
     models<-tracking()
     stopifnot(length(models)==1,length(models[[1]]$objectives)==2,
-      models[[1]]$objectives[[1]]$progress$current==if(mode=="hitting").15 else .25)
+      isTRUE(all.equal(models[[1]]$objectives[[1]]$progress$current,if(mode=="hitting").135 else .275)))
+    # Exercise the actual Shiny download callback, including blank middle or
+    # leading action fields, for every supported action count in BOTH apps.
+    for(count in 3:1) {
+      session$setInputs(support1_1=if(count>=2) "Extra action" else "",support1_2="Action one",
+        support1_3=if(count==3) "Third action" else "")
+      stopifnot(!length(errors()),grepl("<a ",output$export_control$html,fixed=TRUE),
+        grepl("Save and Generate PDF",output$export_control$html,fixed=TRUE))
+      exported <- output$pdf
+      saved_download <- development_store_read(module_path,mode)[[1]]
+      stopifnot(file.exists(exported),pdftools::pdf_info(exported)$pages==1L,
+        length(saved_download$objectives[[1]]$supports)==count)
+    }
     session$setInputs(track_player="bradyboles")
     table<-output$tracking_table
     stopifnot(grepl("Team Total",table$html),grepl("tracking_plot1",table$html),grepl("tracking_plot2",table$html))
     invisible(output$tracking_plot1)
-    session$setInputs(tracking_season="PS27")
+    session$setInputs(tracking_season="S26")
     carried<-tracking()[[1]]
-    stopifnot(carried$baseline_season=="F26",
-      carried$objectives[[1]]$progress$baseline==if(mode=="hitting").15 else .25)
+    stopifnot(carried$baseline_season=="S25",carried$objectives[[1]]$progress$baseline==.2,
+      carried$objectives[[1]]$progress$current==.2)
     unlink(file)
   })
   # A fresh Shiny session restores the complete plan from disk.
@@ -100,7 +112,7 @@ for(mode in c("hitting","pitching")) {
   shiny::testServer(development_server,args=args,{
     root_session <- session$rootScope()
     root_session$sendInputMessage <- function(id,message) messages[[id]] <<- message
-    session$setInputs(season="S26",player="Boles, Brady",stat1="K%",stat2="BB%",tracking_season="F26")
+    session$setInputs(season="S26",player="Boles, Brady",stat1="K%",stat2="BB%",tracking_season="S27")
     p<-loaded_record()
     stopifnot(!is.null(p),length(p$objectives)==2,two(),
       identical(p$objectives[[1]]$supports,"Action one"),p$objectives[[2]]$drills[1]=="Drill two",

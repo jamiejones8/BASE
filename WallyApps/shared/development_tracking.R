@@ -18,6 +18,28 @@ development_previous_season <- function(code) {
   if (startsWith(code, "PS")) paste0("F", year - 1L) else if (startsWith(code, "S")) paste0("PS", year) else paste0("S", year)
 }
 
+# A goal set from a regular season or fall targets the following NCAA season;
+# a spring-scrimmage baseline targets that same year's NCAA season.
+development_goal_season <- function(code) {
+  valid <- is.finite(development_season_rank(code))
+  year <- suppressWarnings(as.integer(sub("^[A-Z]+", "", code)))
+  ifelse(valid, paste0("S", year + as.integer(!startsWith(code, "PS"))), NA_character_)
+}
+
+development_tracking_options <- function(seasons, present, plans = list()) {
+  valid <- function(x) x[is.finite(development_season_rank(x)) & development_season_rank(x) >= development_season_rank("S26")]
+  present <- valid(present)
+  regular <- valid(unname(seasons)[grepl("^S[0-9]{2}$", unname(seasons))])
+  present_targets <- ifelse(startsWith(present,"F"),development_goal_season(present),paste0("S",sub("^[A-Z]+","",present)))
+  saved_targets <- valid(vapply(plans,function(p) development_goal_season(p$baseline_season),character(1)))
+  options <- unique(c("S26",regular,present_targets,saved_targets))
+  options <- options[order(development_season_rank(options))]
+  active <- unique(c(present_targets,saved_targets))
+  default <- if(length(active)) tail(active[order(development_season_rank(active))],1) else tail(options,1)
+  baseline <- if(length(present)) tail(present[order(development_season_rank(present))],1) else "S26"
+  list(options=stats::setNames(options,development_season_label(options)),default=unname(default),baseline_default=unname(baseline))
+}
+
 development_season_label <- function(code) {
   year <- suppressWarnings(as.integer(sub("^[A-Z]+", "", code))) + 2000L
   paste(year, ifelse(startsWith(code, "PS"), "Scrimmages", ifelse(startsWith(code, "S"), "Season", "Fall")))
@@ -242,16 +264,51 @@ development_effective_plans <- function(plans, baseline_season) {
   eligible[order(vapply(eligible, function(p) p$player, character(1)))]
 }
 
+development_latest_plans <- function(plans) {
+  if(!length(plans)) return(list())
+  saved <- vapply(plans,function(p) if(length(p$saved_at)==1L) p$saved_at else "",character(1))
+  ranks <- vapply(plans,function(p) development_season_rank(p$baseline_season),numeric(1))
+  plans <- plans[order(saved,ranks,decreasing=TRUE,na.last=TRUE)]
+  plans <- plans[!duplicated(vapply(plans,function(p) p$player_key,character(1)))]
+  plans[order(vapply(plans,function(p) p$player,character(1)))]
+}
+
 development_rows_for_season <- function(rows, season, player_column = NULL, player_key = NULL) {
   column <- intersect(c("SeasonTag", "SeasonGroup"), names(rows))[1]
   if (is.na(column)) return(rows[0, , drop = FALSE])
-  rows <- rows[!is.na(rows[[column]]) & rows[[column]] == season, , drop = FALSE]
+  rows <- rows[!is.na(rows[[column]]) & rows[[column]] %in% season, , drop = FALSE]
   if ("is_bullpen" %in% names(rows)) rows <- rows[!rows$is_bullpen %in% TRUE, , drop = FALSE]
   if (!is.null(player_key)) {
     keys <- vapply(as.character(rows[[player_column]]), function(x) development_name_key(development_name(x)), character(1))
     rows <- rows[!is.na(keys) & keys == player_key, , drop = FALSE]
   }
   rows
+}
+
+development_tracking_period <- function(rows, tracking_season) {
+  if(length(tracking_season)!=1L || !grepl("^S[0-9]{2}$",tracking_season)) stop("Choose an NCAA season for goal tracking.",call.=FALSE)
+  year <- as.integer(sub("^S","",tracking_season))
+  regular <- development_rows_for_season(rows,tracking_season)
+  # Explicit same-team matchups are scrimmages even if a source labels the
+  # file as a regular season. Unknown opponents retain their season label.
+  if(all(c("PitcherTeam","BatterTeam") %in% names(regular))) {
+    team <- function(x) {
+      x <- gsub("[^a-z0-9]","",tolower(trimws(as.character(x))))
+      x[x %in% c("na","undefined","unknown","null")] <- ""
+      x
+    }
+    pitching <- team(regular$PitcherTeam);hitting <- team(regular$BatterTeam)
+    same <- !is.na(pitching) & !is.na(hitting) & nzchar(pitching) & nzchar(hitting) & pitching==hitting
+    regular <- regular[!same,,drop=FALSE]
+  }
+  preseason <- c(paste0("F",year-1L),paste0("PS",year))
+  fallback <- !nrow(regular)
+  current <- if(fallback) development_rows_for_season(rows,preseason) else regular
+  column <- intersect(c("SeasonTag","SeasonGroup"),names(current))[1]
+  sources <- if(is.na(column)) character() else intersect(if(fallback) preseason else tracking_season,unique(as.character(current[[column]])))
+  label <- if(length(sources)) paste(development_season_label(sources),collapse=" + ") else "No data yet"
+  list(rows=current,seasons=if(fallback) preseason else tracking_season,sources=sources,
+    baseline_season=paste0("S",year-1L),fallback=fallback,label=label,tracking_season=tracking_season)
 }
 
 development_goal_progress <- function(baseline, current, target, lower_better) {
@@ -279,12 +336,14 @@ development_goal_progress <- function(baseline, current, target, lower_better) {
   result
 }
 
-development_tracking_models <- function(plans, tracking_season, rows, player_column, summarize) {
-  baseline_season <- development_previous_season(tracking_season)
-  effective <- development_effective_plans(plans, baseline_season)
+development_tracking_models <- function(plans, tracking_season, rows, player_column, summarize,
+    period=development_tracking_period(rows,tracking_season)) {
+  baseline_season <- period$baseline_season
+  effective <- development_latest_plans(plans)
+  baseline_rows <- development_tracking_period(rows,baseline_season)$rows
   lapply(effective, function(p) {
-    before <- development_rows_for_season(rows, baseline_season, player_column, p$player_key)
-    current <- development_rows_for_season(rows, tracking_season, player_column, p$player_key)
+    before <- development_rows_for_season(baseline_rows,baseline_season,player_column,p$player_key)
+    current <- development_rows_for_season(period$rows,period$seasons,player_column,p$player_key)
     before_values <- if (nrow(before)) summarize(before) else list()
     current_values <- if (nrow(current)) summarize(current) else list()
     value <- function(values, metric) {
@@ -293,12 +352,17 @@ development_tracking_models <- function(plans, tracking_season, rows, player_col
     }
     objectives <- lapply(p$objectives, function(o) {
       baseline <- value(before_values, o$metric)
-      if (!is.finite(baseline) && identical(p$baseline_season, baseline_season)) baseline <- o$baseline_value
+      baseline_label <- development_season_label(baseline_season)
+      if (!is.finite(baseline)) {
+        baseline <- o$baseline_value
+        baseline_label <- paste("Saved baseline:",development_season_label(p$baseline_season))
+      }
       progress <- development_goal_progress(baseline, value(current_values, o$metric), o$target, o$lower_better)
+      progress$baseline_label <- baseline_label
       c(o, list(progress = progress))
     })
     list(player = p$player, player_key = p$player_key, plan = p, objectives = objectives,
-         baseline_season = baseline_season, tracking_season = tracking_season)
+         baseline_season = baseline_season, tracking_season = tracking_season,current_label=period$label)
   })
 }
 
@@ -324,7 +388,7 @@ development_tracking_goal_cell <- function(objective) {
       shiny::tags$strong(objective$title),
       shiny::div(paste(objective$metric, "\u00b7", objective$goal))),
     shiny::div(class = "development-tracked-values",
-      paste("Baseline", development_format(p$baseline, objective$metric), "\u2192",
+      paste(p$baseline_label, development_format(p$baseline, objective$metric), "\u2192",
             "Current", development_format(p$current, objective$metric))),
     development_progress_bar(p$progress, paste(objective$title, p$state), p$color),
     shiny::div(class = "development-tracked-state", style = paste0("color:", p$color),

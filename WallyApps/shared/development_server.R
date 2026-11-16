@@ -69,16 +69,9 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
         choices = stats::setNames(players, vapply(players, development_name, character(1))), selected = selected)
     })
     tracking_choices <- shiny::reactive({
-      codes <- unname(development_baseline_seasons(seasons))
       column <- intersect(c("SeasonTag", "SeasonGroup"), names(rows()))[1]
       present <- if (!is.na(column)) unique(as.character(rows()[[column]])) else character()
-      codes <- unique(c(codes, present, vapply(records()$plans, function(p) p$baseline_season, character(1))))
-      codes <- codes[is.finite(development_season_rank(codes)) & development_season_rank(codes) >= development_season_rank("S26")]
-      options <- unique(c("F26", vapply(codes, development_next_season, character(1))))
-      options <- options[order(development_season_rank(options))]
-      available <- intersect(options, present)
-      default <- if (length(available)) tail(available[order(development_season_rank(available))], 1) else "F26"
-      list(options = stats::setNames(options, development_season_label(options)), default = default)
+      development_tracking_options(seasons,present,records()$plans)
     })
     tracking_initialized <- FALSE
     shiny::observe({
@@ -92,7 +85,7 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
     shiny::observe({
       choices <- tracking_choices()
       if (!baseline_initialized) {
-        baseline <- development_previous_season(choices$default)
+        baseline <- choices$baseline_default
         if (baseline %in% unname(development_baseline_seasons(seasons))) {
           shiny::updateSelectInput(session, "season", selected = baseline)
         }
@@ -194,7 +187,7 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
       state <- records()
       if (!is.null(state$error)) return(shiny::div(class = "development-saved-status", paste("Could not load saved goals:", state$error)))
       saved <- loaded_record()
-      label <- paste("Goals for", development_season_label(development_next_season(input$season)))
+      label <- paste("Goals for", development_season_label(development_goal_season(input$season)))
       detail <- if (is.null(saved)) "No saved plan yet." else if (identical(saved$baseline_season, input$season)) {
         paste("Saved", saved$saved_at)
       } else paste("Carried forward from", development_season_label(saved$baseline_season), "\u2014 save to keep this season's plan.")
@@ -243,9 +236,12 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
         })
       })
 
-    tracking <- shiny::reactive({
+    tracking_period <- shiny::reactive({
       shiny::req(input$tracking_season)
-      development_tracking_models(records()$plans, input$tracking_season, rows(), player_column, cached_summary)
+      development_tracking_period(rows(),input$tracking_season)
+    })
+    tracking <- shiny::reactive({
+      development_tracking_models(records()$plans, input$tracking_season, rows(), player_column, cached_summary,tracking_period())
     })
     shiny::observeEvent(input$tracking_season, expanded(NULL))
     shiny::observeEvent(input$track_player, {
@@ -253,10 +249,13 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
     })
     output$tracking_note <- shiny::renderUI({
       shiny::req(input$tracking_season)
+      period <- tracking_period()
       shiny::div(class = "development-tracking-note",
-        paste(development_season_label(development_previous_season(input$tracking_season)), "\u2192",
-              development_season_label(input$tracking_season),
-              "\u00b7 Green: goal hit. Red: farther from the goal. Black: improving or unchanged. Click a player to see trends."),
+        shiny::tags$p(paste("All saved players · latest saved plan per player · NCAA target:",development_season_label(input$tracking_season))),
+        shiny::tags$p(paste("Current stats:",period$label,
+          if(period$fallback) "· Preseason progress until NCAA games begin." else "· NCAA outside competition only.",
+          "Compared with",development_season_label(period$baseline_season),"(saved baseline used when unavailable).")),
+        shiny::tags$p("Green: goal hit. Red: farther from the goal. Black: improving or unchanged. Click a player to see trends."),
         if(identical(mode,"hitting")) shiny::tags$p("Goal-hit progress measures hitting stats. Defensive Goals are saved written coaching plans."))
     })
     output$tracking_table <- shiny::renderUI({
@@ -283,7 +282,8 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
         }))
         row <- shiny::tags$tr(
           shiny::tags$td(shiny::tags$button(type = "button", class = "development-player-toggle",
-            "aria-expanded" = if (open) "true" else "false", onclick = onclick, m$player)),
+            "aria-expanded" = if (open) "true" else "false", onclick = onclick, m$player),
+            shiny::div(class="development-tracked-values",paste("Plan saved from",development_season_label(m$plan$baseline_season)))),
           development_tracking_goal_cell(m$objectives[[1]]),
           development_tracking_goal_cell(if (length(m$objectives) > 1) m$objectives[[2]] else NULL),
           if(identical(mode,"hitting")) {
@@ -296,6 +296,7 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
         defense <- if(identical(mode,"hitting")) m$plan$defense else NULL
         detail <- if (open) shiny::tags$tr(class = "development-tracking-detail", shiny::tags$td(colspan = if(mode=="hitting") 5 else 4,
           shiny::tags$strong(paste(m$player, "\u00b7", development_season_label(input$tracking_season))),
+          shiny::tags$p(paste("Current stats:",m$current_label)),
           shiny::div(class = "development-tracking-charts", lapply(seq_along(m$objectives),
             function(i) shiny::plotOutput(session$ns(paste0("tracking_plot", i)), height = "310px"))),
           if(!is.null(defense)) shiny::div(class="development-defense-details",
@@ -305,7 +306,7 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
         shiny::tagList(row, detail)
       })
       shiny::tagList(
-        if (!length(models)) shiny::tags$p("No saved goals yet for this season. Save a plan in Build Goals to start tracking."),
+        if (!length(models)) shiny::tags$p("No saved goals yet. Save a plan in Build Goals to start tracking."),
         shiny::div(class = "development-tracking-scroll", shiny::tags$table(class = paste("development-tracking-table",if(mode=="hitting") "development-tracking-hitting"),
           shiny::tags$thead(shiny::tags$tr(lapply(c("Player", "Goal 1", "Goal 2", if(mode=="hitting") "Defensive Goals", "Goal hit"), shiny::tags$th))),
           shiny::tags$tbody(total_row, player_rows))))
@@ -317,7 +318,8 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
         shiny::req(length(selected), length(selected[[1]]$objectives) >= j)
         m <- selected[[1]]
         o <- m$objectives[[j]]
-        d <- development_rows_for_season(rows(), input$tracking_season, player_column, m$player_key)
+        period <- tracking_period()
+        d <- development_rows_for_season(period$rows,period$seasons,player_column,m$player_key)
         values <- development_game_values(d, summarize, mode)
         o$series <- if (o$metric %in% names(values)) data.frame(GameIndex = values$GameIndex,
           GameLabel = values$GameLabel, Value = values[[o$metric]]) else data.frame(GameIndex = integer(), GameLabel = character(), Value = numeric())
@@ -328,6 +330,6 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
       }, res = 96)
     })
     list(plan = plan, stats = stats, two = two, game_series = game_series, records = records,
-         loaded_record = loaded_record, tracking = tracking, save_pdf = save_pdf)
+         loaded_record = loaded_record, tracking = tracking, tracking_period=tracking_period,save_pdf = save_pdf)
   })
 }

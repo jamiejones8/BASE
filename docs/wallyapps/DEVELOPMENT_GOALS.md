@@ -43,21 +43,32 @@ Backup failures stop startup. A fresh installation with no database does not see
 an empty file over an existing one. The persistent volume and its backups must be
 retained across redeployments; a source push contains neither of them.
 
-Tracking begins with S26 as the baseline and F26 as the tracking season, followed
-by F26 → PS27 → S27 → F27. Plans carry forward until replaced; a newer season's
-plan does not overwrite the historical season. The tracking season defaults to
-the latest season with available team data. Each season compares against the
-immediately preceding season, using native player summaries, not the original
-plan's older baseline. An original baseline snapshot is retained as a fallback
-when that source is unavailable.
+Track Goals lists every player with saved goals, using their most recently saved
+plan across all baseline seasons. Changing the target season never hides saved
+players. Historical plans remain stored; choosing a new baseline does not delete
+them. The dropdown contains NCAA seasons only (2026 Season, 2027 Season, etc.).
+Goals set from S26, F26 or PS27 all target the 2027 NCAA season and carry forward
+until replaced. The Build Goals baseline selector retains fall and scrimmage
+choices for setting goals.
+
+Before the target NCAA season has outside-competition data, tracking pools the
+preceding fall and that year's spring scrimmages (F26 + PS27 for S27). All raw
+pitches/PAs are summarized together with the owning app's native definitions;
+season percentages are not averaged. Once NCAA competition starts, tracking
+uses only that regular season, including for players who have no NCAA data yet.
+Explicit same-team games and bullpen data cannot trigger that switch. The page
+labels the data currently used, and charts use the same selected rows as totals.
+Progress compares against the preceding NCAA season (S26 for target S27), with
+the saved plan's baseline snapshot used when that player's NCAA baseline is
+unavailable. Missing current data remains N/A, never zero.
 
 The Track Goals table starts with a team total: hit goals divided by all assigned
 goals, counting one-objective plans once. Each player has Goal 1/Goal 2 progress
 bars and one ✅/❌ per assigned goal. Green means the current metric meets the
-target, red means it is farther from the target than last season, and black
+target, red means it is farther from the target than the NCAA baseline, and black
 means improving or unchanged. Missing data is labeled explicitly and never
 treated as a zero statistic. Progress is the fraction of the baseline-to-target
-gap closed, clamped to 0–100%. Clicking a player expands current-season,
+gap closed, clamped to 0–100%. Clicking a player expands the current tracking data's
 game-by-game charts for their assigned objectives.
 
 Charts plot the season-to-date value after each game, ordered by date and game

@@ -19,7 +19,7 @@ args <- list(rows=reactive(rows),player_column="Player",seasons=seasons,
   lower_better=function(metric) metric=="K%")
 plans <- list()
 testServer(development_server,args=args,{
-  session$setInputs(season="S26",player="Boles, Brady",stat1="K%",stat2="BB%",tracking_season="F26")
+  session$setInputs(season="S26",player="Boles, Brady",stat1="K%",stat2="BB%",tracking_season="S27")
   session$setInputs(title1="Improve K rate",goal1="12%",support1_1="H1ActionOne",support1_2="H1ActionTwo",support1_3="H1ActionThree",
     drill1_1="H1DrillOne",drill1_2="H1DrillTwo",drill1_3="H1DrillThree",drill1_4="H1DrillFour",drill1_5="H1DrillFive")
   stopifnot(is.null(plan()$defense),!length(errors()))
