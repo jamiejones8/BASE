@@ -268,6 +268,12 @@ The image starts through `sh start-railway.sh`, which validates the full team
 configuration before starting Shiny. Leave Railway's custom Start Command blank
 to use the image default, or set it to `sh start-railway.sh`. Do not put the model
 validation in a pre-deploy command, where runtime volumes are also unavailable.
+Startup also checks that Development Goals uses the attached persistent volume
+and creates a verified SQLite backup before Shiny opens. Keep the existing volume
+and `BASE_DEVELOPMENT_GOALS_FILE` path across redeploys; saved goals and backups
+are excluded from Git, Docker builds and Railway source uploads. See
+[Development Goals storage](docs/wallyapps/DEVELOPMENT_GOALS.md) for details.
+
 Provide these actual model files on the runtime mount (or configure their
 corresponding `BASE_*_MODEL_FILE` / `BASE_SCOUT_MODELS_FILE` overrides):
 

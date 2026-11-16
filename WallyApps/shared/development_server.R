@@ -1,7 +1,8 @@
 # The same editor, persistence and tracking server powers both applications.
 development_server <- function(id, rows, player_column, seasons, summarize, percentile, mode,
                                average = function(metric) NA_real_,
-                               lower_better = function(metric) FALSE, store_path = NULL) {
+                               lower_better = function(metric) FALSE, store_path = NULL,
+                               player_choices = function(players, season) players) {
   shiny::moduleServer(id, function(input, output, session) {
     if (is.null(store_path)) store_path <- development_store_path()
     team <- development_team_key()
@@ -61,6 +62,7 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
       saved_names <- vapply(saved, function(p) p$player, character(1))
       keys <- vapply(players, function(p) development_name_key(development_name(p)), character(1))
       players <- c(players, saved_names[!vapply(saved_names, development_name_key, character(1)) %in% keys])
+      players <- player_choices(players, input$season)
       current <- shiny::isolate(input$player)
       selected <- if (length(current) == 1 && current %in% players) current else head(players, 1)
       shiny::updateSelectInput(session, "player",
@@ -125,6 +127,14 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
         for (j in 1:5) shiny::updateTextAreaInput(session, paste0("drill", i, "_", j),
           value = if (!is.null(o) && length(o$drills) >= j) o$drills[j] else "")
       }
+      if(identical(mode,"hitting")) {
+        defense <- saved$defense
+        shiny::updateTextAreaInput(session,"defense_goal",value=if(is.null(defense)) "" else defense$goal)
+        for(j in 1:3) shiny::updateTextAreaInput(session,paste0("defense_support",j),
+          value=if(is.null(defense)) "" else defense$supports[j])
+        for(j in 1:5) shiny::updateTextAreaInput(session,paste0("defense_drill",j),
+          value=if(is.null(defense) || length(defense$drills)<j) "" else defense$drills[j])
+      }
       invisible(saved)
     }
     shiny::observeEvent(list(input$player, input$season), load_editor(), ignoreInit = FALSE, priority = 50)
@@ -160,9 +170,16 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
           supports = vapply(1:3, function(j) input[[paste0("support", i, "_", j)]] %||% "", character(1)),
           drills = Filter(nzchar, vapply(1:5, function(j) trimws(input[[paste0("drill", i, "_", j)]] %||% ""), character(1))))
       })
+      defense <- NULL
+      if(identical(mode,"hitting")) {
+        goal <- trimws(input$defense_goal %||% "")
+        supports <- vapply(1:3,function(j) trimws(input[[paste0("defense_support",j)]] %||% ""),character(1))
+        drills <- Filter(nzchar,vapply(1:5,function(j) trimws(input[[paste0("defense_drill",j)]] %||% ""),character(1)))
+        if(any(nzchar(c(goal,supports,drills)))) defense <- list(title="Defensive Goals",goal=goal,supports=supports,drills=drills)
+      }
       list(player = development_name(input$player), player_key = player_key(), baseline_season = input$season,
         season = development_season_label(input$season), mode = mode, portrait = development_portrait(input$player),
-        rankings = rankings, objectives = objectives)
+        rankings = rankings, objectives = objectives, defense = defense)
     })
     errors <- shiny::reactive({
       p <- plan()
@@ -208,6 +225,7 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
       p <- plan()
       development_pdf(file, p)
       record <- list(player = p$player, player_key = p$player_key, mode = mode, baseline_season = p$baseline_season,
+        defense = p$defense,
         objectives = lapply(p$objectives, function(o) o[c("title", "metric", "goal", "target", "target_input", "lower_better", "baseline_value", "supports", "drills")]))
       saved <- development_store_save(store_path, record, expected_revision(), team)
       expected_revision(saved$revision)
@@ -238,18 +256,21 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
       shiny::div(class = "development-tracking-note",
         paste(development_season_label(development_previous_season(input$tracking_season)), "\u2192",
               development_season_label(input$tracking_season),
-              "\u00b7 Green: goal hit. Red: farther from the goal. Black: improving or unchanged. Click a player to see trends."))
+              "\u00b7 Green: goal hit. Red: farther from the goal. Black: improving or unchanged. Click a player to see trends."),
+        if(identical(mode,"hitting")) shiny::tags$p("Goal-hit progress measures hitting stats. Defensive Goals are saved written coaching plans."))
     })
     output$tracking_table <- shiny::renderUI({
       state <- records()
       if (!is.null(state$error)) return(shiny::tags$p(paste("Could not load saved goals:", state$error)))
       models <- tracking()
       totals <- development_tracking_totals(models)
+      defense_count <- sum(vapply(models,function(m) !is.null(m$plan$defense),logical(1)))
       total_row <- shiny::tags$tr(class = "development-team-total",
         shiny::tags$td("Team Total", shiny::div(paste(totals$players, if (totals$players == 1) "player" else "players"))),
         shiny::tags$td(paste(totals$hit, "of", totals$goals, "goals hit"),
           development_progress_bar(totals$fraction, "All team goals hit")),
-        shiny::tags$td("All assigned goals; one-goal plans count once."),
+        shiny::tags$td(if(mode=="hitting") "All stat goals; one-goal plans count once." else "All assigned goals; one-goal plans count once."),
+        if(identical(mode,"hitting")) shiny::tags$td(paste(defense_count,if(defense_count==1L) "defensive plan saved" else "defensive plans saved")),
         shiny::tags$td(sprintf("%.1f%%", 100 * totals$fraction)))
       player_rows <- lapply(models, function(m) {
         open <- identical(expanded(), m$player_key)
@@ -265,17 +286,28 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
             "aria-expanded" = if (open) "true" else "false", onclick = onclick, m$player)),
           development_tracking_goal_cell(m$objectives[[1]]),
           development_tracking_goal_cell(if (length(m$objectives) > 1) m$objectives[[2]] else NULL),
+          if(identical(mode,"hitting")) {
+            defense <- m$plan$defense
+            if(is.null(defense)) shiny::tags$td(class="development-no-goal","\u2014") else
+              shiny::tags$td(class="development-tracked-defense",shiny::tags$strong("Defensive Goals"),
+                shiny::div(defense$goal),shiny::div(paste(length(defense$supports),"actions ·",length(defense$drills),"drills")))
+          },
           shiny::tags$td(hit_list))
-        detail <- if (open) shiny::tags$tr(class = "development-tracking-detail", shiny::tags$td(colspan = 4,
+        defense <- if(identical(mode,"hitting")) m$plan$defense else NULL
+        detail <- if (open) shiny::tags$tr(class = "development-tracking-detail", shiny::tags$td(colspan = if(mode=="hitting") 5 else 4,
           shiny::tags$strong(paste(m$player, "\u00b7", development_season_label(input$tracking_season))),
           shiny::div(class = "development-tracking-charts", lapply(seq_along(m$objectives),
-            function(i) shiny::plotOutput(session$ns(paste0("tracking_plot", i)), height = "310px")))))
+            function(i) shiny::plotOutput(session$ns(paste0("tracking_plot", i)), height = "310px"))),
+          if(!is.null(defense)) shiny::div(class="development-defense-details",
+            shiny::tags$h4("Defensive Goals"),shiny::tags$p(defense$goal),
+            shiny::tags$strong("Supporting actions"),shiny::tags$ul(lapply(defense$supports,shiny::tags$li)),
+            if(length(defense$drills)) shiny::tagList(shiny::tags$strong("Drills"),shiny::tags$ul(lapply(defense$drills,shiny::tags$li))))))
         shiny::tagList(row, detail)
       })
       shiny::tagList(
         if (!length(models)) shiny::tags$p("No saved goals yet for this season. Save a plan in Build Goals to start tracking."),
-        shiny::div(class = "development-tracking-scroll", shiny::tags$table(class = "development-tracking-table",
-          shiny::tags$thead(shiny::tags$tr(lapply(c("Player", "Goal 1", "Goal 2", "Goal hit"), shiny::tags$th))),
+        shiny::div(class = "development-tracking-scroll", shiny::tags$table(class = paste("development-tracking-table",if(mode=="hitting") "development-tracking-hitting"),
+          shiny::tags$thead(shiny::tags$tr(lapply(c("Player", "Goal 1", "Goal 2", if(mode=="hitting") "Defensive Goals", "Goal hit"), shiny::tags$th))),
           shiny::tags$tbody(total_row, player_rows))))
     })
     for (i in 1:2) local({

@@ -23,9 +23,13 @@ checks <- list(
   c("Rscript", "scripts/tests/test_player_health_imports.R"),
   c("Rscript", "scripts/tests/test_password_gate.R"),
   c("Rscript", "scripts/tests/test_pitching_situations.R"),
+  c("Rscript", "scripts/tests/test_pitching_roster_choices.R"),
+  c("Rscript", "scripts/tests/test_roster_release_points.R"),
   c("Rscript", "scripts/tests/test_development_goals.R"),
   c("Rscript", "scripts/tests/test_development_series.R"),
   c("Rscript", "scripts/tests/test_development_tracking.R"),
+  c("Rscript", "scripts/tests/test_development_defense.R"),
+  c("Rscript", "scripts/tests/test_development_storage.R"),
   c("Rscript", "scripts/tests/test_wally_pitching_integration.R"),
   c("Rscript", "scripts/tests/test_wally_hitting_integration.R"),
   c("Rscript", "scripts/tests/test_leaderboards_hitting_integrity.R"),
@@ -50,6 +54,10 @@ checks <- list(
   c("Rscript", "scripts/tests/test_player_health_roster.R"),
   c("Rscript", "scripts/tests/test_app_startup.R")
 )
+
+# The offline parquet builder needs pandas/pyarrow; the deployed R app reads
+# only its bundled CSV. Keep its calculation tests in the local check suite.
+if (!"--build" %in% check_args) checks <- c(checks, list(c("python3", "scripts/tests/test_pitching_team_averages.py")))
 
 for (check in checks) {
   label <- paste(check, collapse = " ")

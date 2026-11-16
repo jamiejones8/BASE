@@ -1,0 +1,13 @@
+{
+  "source": "D1 Pitching:Hitting File.parquet",
+  "source_bytes": 1055457360,
+  "season": 2026,
+  "pitches": 2010425,
+  "plate_appearances": 524110,
+  "teams": 304,
+  "team_filter": "Exact team codes in data/reference/NcaaColors.csv; source Level D1",
+  "averaging": "Equal mean of full team-season metrics, no individual-pitcher qualification or averaging",
+  "pitch_type": "Team totals for each pitch type; PA stats attributed to the final pitch type",
+  "usage": "Pitch-type usage includes zero for represented teams that never threw that pitch",
+  "rows": 243
+}

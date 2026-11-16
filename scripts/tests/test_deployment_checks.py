@@ -128,14 +128,51 @@ class DeploymentChecks(unittest.TestCase):
             "WallyApps/shared/development_series.R",
             "WallyApps/shared/development_tracking.R",
             "WallyApps/shared/development_server.R",
+            "WallyApps/shared/roster_release.R",
             "WallyApps/shared/assets/portrait-brady-boles-mask.png",
             "WallyApps/shared/portraits.csv",
-            "WallyApps/shared/assets/development-ballpark-maroon.png",
+            "WallyApps/shared/assets/development-ballpark-template.png",
             "WallyApps/PitchingApp/helpers/situations.R",
+            "WallyApps/PitchingApp/helpers/team_trends.R",
+            "WallyApps/PitchingApp/reference/d1_team_trend_averages.csv",
+            "WallyApps/DepthChartApp/model.R",
+            "WallyApps/DepthChartApp/data/roster.csv",
+            "WallyApps/DepthChartApp/data/pitcher-measurements.json",
+            "WallyApps/DepthChartApp/data/depth-chart-state.rds",
             "WallyApps/PitchingApp/reference/pa_scores_2026.csv",
             "WallyApps/PitchingApp/reference/d1_pitching_xwoba_percentiles.csv",
         ):
             self.assertTrue((ROOT / path).is_file(), path)
+
+    def test_goals_runtime_data_cannot_enter_a_source_deployment(self):
+        for filename in (".gitignore", ".dockerignore", ".railwayignore"):
+            rules = (ROOT / filename).read_text(encoding="utf-8")
+            self.assertIn("app_state/", rules, filename)
+            self.assertIn("**/development-goals*.sqlite*", rules, filename)
+            self.assertIn("**/development-goals-backups/", rules, filename)
+            # Later source-asset allowlists must not re-include a saved DB.
+            last_include = rules.rfind("\n!")
+            self.assertGreater(rules.rfind("**/development-goals*.sqlite*"), last_include, filename)
+
+    def test_goals_preflight_runs_at_startup_after_volume_attachment(self):
+        startup = (ROOT / "start-railway.sh").read_text(encoding="utf-8")
+        self.assertLess(startup.index("check_team_config.R"), startup.index("check_development_storage.R"))
+        self.assertLess(startup.index("check_development_storage.R"), startup.index("exec R "))
+        self.assertNotIn("check_development_storage.R", (ROOT / "Dockerfile").read_text(encoding="utf-8"))
+
+    def test_goals_preflight_rejects_missing_persistent_volume(self):
+        env = self.env.copy()
+        env["RAILWAY_SERVICE_ID"] = "deployment-fixture"
+        env["RAILWAY_VOLUME_MOUNT_PATH"] = ""
+        database = self.path / "development-goals.sqlite"
+        env["BASE_DEVELOPMENT_GOALS_FILE"] = str(database)
+        result = subprocess.run(
+            ["Rscript", "scripts/checks/check_development_storage.R"],
+            cwd=ROOT, env=env, capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("persistent volume", result.stdout + result.stderr)
+        self.assertFalse(database.exists())
 
     def test_player_health_checks_valdr_not_its_internal_keyring_import(self):
         integration = (

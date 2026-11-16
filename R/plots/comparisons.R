@@ -69,7 +69,8 @@ base_comparison_ui <- function(id) {
 }
 
 base_comparison_server <- function(id, rows, seasons, player_column, summarize, percentile, metrics, lower_better,
-                                   active=function() TRUE, d1_loader=base_comparison_d1) {
+                                   active=function() TRUE, d1_loader=base_comparison_d1,
+                                   player_choices=function(players, season) players) {
   shiny::moduleServer(id,function(input,output,session) {
     team_column <- if(player_column == "Pitcher") "PitcherTeam" else "BatterTeam"
     local_rows <- shiny::reactive({
@@ -110,7 +111,8 @@ base_comparison_server <- function(id, rows, seasons, player_column, summarize, 
         shiny::observe({
           shiny::req(getinput(paste0("season_",s)))
           d <- season_rows(getinput(paste0("season_",s)))
-          choices <- c("Team Total",sort(unique(stats::na.omit(as.character(d[[player_column]])))))
+          players <- sort(unique(stats::na.omit(as.character(d[[player_column]]))))
+          choices <- c("Team Total",player_choices(players,getinput(paste0("season_",s))))
           current <- shiny::isolate(getinput(paste0("player_",s)))
           shiny::updateSelectInput(session,paste0(k,"_player_",s),choices=choices,
             selected=if(length(current) && current %in% choices) current else "Team Total")

@@ -46,6 +46,90 @@ development_store_path <- function() {
   file.path(root, "development-goals.sqlite")
 }
 
+# Resolve missing descendants through their closest existing ancestor. This
+# keeps the original configured path while detecting symlinks outside a volume.
+development_storage_real_path <- function(path) {
+  path <- path.expand(path)
+  if(file.exists(path) || dir.exists(path)) return(normalizePath(path,winslash="/",mustWork=TRUE))
+  parent <- dirname(path)
+  if(identical(parent,path)) stop("Could not resolve goal storage path.",call.=FALSE)
+  file.path(development_storage_real_path(parent),basename(path))
+}
+
+development_storage_is_mount <- function(path, mountinfo = NULL) {
+  if(is.null(mountinfo)) {
+    if(!file.exists("/proc/self/mountinfo")) return(FALSE)
+    mountinfo <- readLines("/proc/self/mountinfo",warn=FALSE)
+  }
+  points <- vapply(strsplit(mountinfo," ",fixed=TRUE),function(fields) if(length(fields)>=5L) fields[5] else "",character(1))
+  for(pair in list(c("\\040"," "),c("\\011","\t"),c("\\134","\\"))) points <- gsub(pair[1],pair[2],points,fixed=TRUE)
+  development_storage_real_path(path) %in% vapply(points[nzchar(points)],development_storage_real_path,character(1))
+}
+
+development_storage_guard <- function(path = development_store_path(),
+    volume = Sys.getenv("RAILWAY_VOLUME_MOUNT_PATH",""),
+    railway = any(nzchar(Sys.getenv(c("RAILWAY_SERVICE_ID","RAILWAY_DEPLOYMENT_ID","RAILWAY_ENVIRONMENT_ID"),""))),
+    mountinfo = NULL) {
+  if(!railway && !nzchar(volume)) return(invisible(development_storage_real_path(path)))
+  if(!nzchar(volume) || !dir.exists(volume) || !development_storage_is_mount(volume,mountinfo)) {
+    stop("Development Goals require the existing Railway persistent volume to be mounted. Refusing temporary goal storage.",call.=FALSE)
+  }
+  root <- development_storage_real_path(volume)
+  actual <- development_storage_real_path(path)
+  if(!startsWith(actual,paste0(sub("/+$","",root),"/"))) {
+    stop("BASE_DEVELOPMENT_GOALS_FILE must remain inside the attached persistent volume: ",root,call.=FALSE)
+  }
+  if(file.access(root,2L)!=0L || (file.exists(path) && file.access(path,2L)!=0L)) {
+    stop("Persistent Development Goals storage is not writable.",call.=FALSE)
+  }
+  parent <- dirname(actual)
+  if(!dir.exists(parent) && !dir.create(parent,recursive=TRUE,showWarnings=FALSE)) stop("Persistent goal storage directory could not be created.",call.=FALSE)
+  probe <- tempfile(pattern=".goal-storage-check-",tmpdir=parent)
+  on.exit(if(file.exists(probe)) unlink(probe),add=TRUE)
+  if(!file.create(probe,showWarnings=FALSE)) stop("Persistent Development Goals storage is not writable.",call.=FALSE)
+  invisible(actual)
+}
+
+# SQLite's online backup API includes committed WAL pages; copying only the
+# .sqlite file can lose recent saves. Never modify or seed the source database.
+development_store_backup <- function(path = development_store_path()) {
+  if(!file.exists(path)) return(NULL)
+  dir <- file.path(dirname(path),"development-goals-backups")
+  if(!dir.exists(dir) && !dir.create(dir,recursive=TRUE,showWarnings=FALSE)) stop("Could not create the Development Goals backup directory.",call.=FALSE)
+  output <- tempfile(pattern=paste0("development-goals-",format(Sys.time(),"%Y%m%dT%H%M%S",tz="UTC"),"-"),tmpdir=dir,fileext=".sqlite")
+  staged <- paste0(output,".pending")
+  on.exit(if(file.exists(staged)) unlink(staged),add=TRUE)
+  from <- development_store_connect(path)
+  from_open <- TRUE
+  on.exit(if(from_open) DBI::dbDisconnect(from),add=TRUE)
+  DBI::dbBegin(from)
+  if(!"development_goals" %in% DBI::dbListTables(from)) stop("The existing goals database is missing its saved-goals table; it was not replaced.",call.=FALSE)
+  rows <- DBI::dbGetQuery(from,"SELECT COUNT(*) AS n FROM development_goals")$n[1]
+  to <- DBI::dbConnect(RSQLite::SQLite(),staged)
+  to_open <- TRUE
+  on.exit(if(to_open) DBI::dbDisconnect(to),add=TRUE)
+  DBI::dbExecute(to,"PRAGMA synchronous=FULL")
+  RSQLite::sqliteCopyDatabase(from,to)
+  check <- DBI::dbGetQuery(to,"PRAGMA integrity_check")[[1]]
+  count <- DBI::dbGetQuery(to,"SELECT COUNT(*) AS n FROM development_goals")$n[1]
+  if(!identical(check,"ok") || count!=rows) stop("The goals backup could not be verified; startup stopped without replacing saved goals.",call.=FALSE)
+  DBI::dbCommit(from)
+  # Close the backup before renaming it. Existing snapshots are never replaced.
+  DBI::dbDisconnect(to);to_open <- FALSE
+  DBI::dbDisconnect(from);from_open <- FALSE
+  if(!file.rename(staged,output)) {
+    if(file.exists(staged)) unlink(staged)
+    stop("The verified goals backup could not be finalized.",call.=FALSE)
+  }
+  list(path=output,rows=rows)
+}
+
+development_store_preflight <- function(path = development_store_path(),...) {
+  development_storage_guard(path,...)
+  backup <- development_store_backup(path)
+  list(path=path,backup=backup)
+}
+
 development_store_connect <- function(path, write = FALSE) {
   if (write && !dir.exists(dirname(path)) && !dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)) {
     stop("The goal storage directory could not be created.", call. = FALSE)
@@ -82,6 +166,10 @@ development_store_read <- function(path, mode, team = development_team_key()) {
       plan$objectives[[j]]$supports <- as.character(unlist(plan$objectives[[j]]$supports))
       plan$objectives[[j]]$drills <- as.character(unlist(plan$objectives[[j]]$drills))
     }
+    if(!is.null(plan$defense)) {
+      plan$defense$supports <- as.character(unlist(plan$defense$supports))
+      plan$defense$drills <- as.character(unlist(plan$defense$drills))
+    }
     plan
   })
 }
@@ -107,6 +195,8 @@ development_store_save <- function(path, plan, expected_revision = 0L, team = de
         any(!nzchar(trimws(c(o$title, o$metric, o$goal, o$supports)))) ||
         length(o$supports) != 3L || length(o$drills) > 5L) stop("Complete the goals and all three actions before saving.", call. = FALSE)
   }
+  defense_errors <- development_defense_errors(plan$defense,plan$mode)
+  if(length(defense_errors)) stop(paste(defense_errors,collapse=" "),call.=FALSE)
   con <- development_store_connect(path, write = TRUE)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   DBI::dbExecute(con, "BEGIN IMMEDIATE")
@@ -122,7 +212,7 @@ development_store_save <- function(path, plan, expected_revision = 0L, team = de
   }
   plan$revision <- revision + 1L
   plan$saved_at <- format(Sys.time(), "%Y-%m-%d %H:%M:%OS6 %Z", tz = "UTC")
-  plan$schema_version <- 1L
+  plan$schema_version <- if(is.null(plan$defense)) 1L else 2L
   payload <- as.character(jsonlite::toJSON(plan, auto_unbox = TRUE, null = "null", na = "null", digits = 16))
   if (nrow(previous)) {
     DBI::dbExecute(con,

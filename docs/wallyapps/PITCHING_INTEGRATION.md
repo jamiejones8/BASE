@@ -122,3 +122,40 @@ reactives. The temporary prepared-data cache is cleared after initialization.
 
 The existing Wally golden suite remains the calculation and rendering parity
 gate for HittingApp, PitchingApp, and DefenseApp.
+
+## Season-specific pitcher choices
+
+Bennett Fryman and Jackson Cotton are hidden from pitcher dropdowns when all
+selected seasons are Fall 2026 or later. Earlier seasons, mixed selections that
+include an earlier season, and all-season selections retain their historical
+availability. This applies to the sidebar, AAR, Stuff+, Team Trends, comparisons
+and pitching Development Goals, including names restored from saved plans.
+Hitting selections, saved plans and recorded pitching statistics are unchanged.
+
+## Team Trends benchmarks and release profiles
+
+Both the game and rolling charts show a dashed **D1 team avg** for each selected
+metric, including pitch-type selections. These use the bundled
+`reference/d1_team_trend_averages.csv`, calculated from full 2026 team totals:
+each represented D1 team contributes one value to the average. Individual pitcher
+qualification/percentiles are not used. Rates are pooled within each team before
+averaging teams. The national parquet is not loaded by the app at runtime.
+Pitch-type usage includes zero for teams that did not throw that pitch. Team
+trend counts are reconstructed in PA/pitch order and restored to their original
+rows, so preparing rows repeatedly cannot shift counts; a terminal strikeout is
+counted once per PA for Put Away%.
+The adjacent JSON records the source, season, team coverage and calculation rule.
+Rebuild with `python3 scripts/build_pitching_team_averages.py --source /path/to/D1.parquet`;
+the offline builder uses pandas, numpy and pyarrow. Its local calculation tests
+run outside the Docker build; the deployment suite validates the bundled reference.
+
+The Release Points chart and table share the **Rosters & Recruiting** imported
+measurements, saved current-player edits, recruiting profiles and departures.
+The roster-season selector uses the same academic-class progression and remaining
+eligibility as the roster client. The chart uses its five class colors, signed
+LHP/RHP sides, shoulder anchors at height minus 10 inches, equal axis units and
+Signed/Offered/Committed line patterns. Missing or zero side defaults to 1.5 feet
+for plotting, without changing the profile. Incomplete measurements are omitted.
+Saved profile changes refresh automatically. This reader never seeds or writes
+roster state; the shared `TXST_DEPTH_STATE` path matches the roster workspace.
+Game Report and Player Report continue to summarize the selected tracked pitches.

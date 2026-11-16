@@ -1910,7 +1910,7 @@ ui <- base_hitting_page(
       ))
     ),
     nav_panel("Comparisons", base_comparison_ui("hitting_comparisons")),
-    nav_panel("Development Goals", development_ui("hitting_development", SEASON_CHOICES)),
+    nav_panel("Development Goals", development_ui("hitting_development", SEASON_CHOICES,mode="hitting")),
     nav_panel(
       title = "Lineup Builder",
       div(

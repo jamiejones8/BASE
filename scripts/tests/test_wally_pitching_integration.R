@@ -356,6 +356,7 @@ shiny::testServer(workspace$server, {
     leader_hand = c("L", "R"),
     pitch_aar_season_groups = "S26",
     aar_pitcher = pitcher,
+    aar_opp = "",
     aar_game = games[[1]]
   )
   session$flushReact()
@@ -530,6 +531,57 @@ shiny::testServer(workspace$server, {
                           wOBA = seq(.2, .7, .1))
   trend <- build_perf_ts_plot_gg(dates, tibble::tibble(), "wOBA", list(), roll = TRUE)
   stopifnot(identical(trend$data$GameIndex, 1:6))
+  dates$GameDate <- as.Date("2026-10-01") + 0:5
+  dates$Kp <- seq(.15, .25, length.out = 6)
+  for (rolling in c(FALSE, TRUE)) {
+    chart <- plotly::plotly_build(build_perf_ts_plot(dates, tibble::tibble(), c("wOBA", "K%"), list(), roll = rolling))$x$data
+    refs <- Filter(function(trace) identical(trace$line$dash, "dash"), chart)
+    stopifnot(length(refs) == 2,
+      all(refs[[1]]$y == workspace$pitching_team_d1_average(workspace$team_d1_reference, "wOBA")$value),
+      all(refs[[2]]$y == 100 * workspace$pitching_team_d1_average(workspace$team_d1_reference, "K%")$value),
+      grepl("team totals", refs[[1]]$text[1], fixed = TRUE))
+  }
+  pitch_dates <- dates
+  pitch_dates$PitchTypeStd <- "Slider"
+  pitch_dates$Whiff_pct <- .3
+  chart <- plotly::plotly_build(build_perf_ts_plot(dates, pitch_dates, character(), list(Slider = "Whiff%")))$x$data
+  stopifnot(all(chart[[2]]$y == 100 * workspace$pitching_team_d1_average(workspace$team_d1_reference, "Whiff%", "Slider")$value))
+  single <- plotly::plotly_build(build_perf_ts_plot(dates[1, ], tibble::tibble(), "K%", list()))$x$data
+  stopifnot(length(single[[2]]$x) == 2, single[[2]]$x[1] != single[[2]]$x[2])
+  session$setInputs(team_release_roster_year = "2027")
+  expected_points <- workspace$roster_release_points(workspace$roster_release_profiles(roster_root), 2027)
+  stopifnot(identical(team_release_points(), expected_points), nrow(team_release_points()) == 16L)
+  invisible(output$team_release_points_plot)
+  invisible(output$team_release_points_table)
+  # The offline team builder and live per-game metrics share one definition.
+  check <- read.csv("tests/fixtures/wallyapps/pitching/team_trend_reference_check.csv", check.names = FALSE)
+  live <- team_ts_data()
+  at <- match(as.character(live$GameDate), check$GameDate)
+  for (stat in names(workspace$PERF_TS_PERF_STATS)) {
+    key <- workspace$PERF_TS_PERF_STATS[[stat]]$key
+    expected <- check[[stat]][at]
+    if (!isTRUE(all.equal(as.numeric(live[[key]]), as.numeric(expected), tolerance = 1e-10))) {
+      fail("Team benchmark builder differs from live Team Trends for ", stat, ": ",
+        paste(live[[key]], collapse = ","), " vs ", paste(expected, collapse = ","))
+    }
+  }
+  # Edits saved by the roster workspace refresh this already-open view.
+  old_roster_path <- Sys.getenv("TXST_DEPTH_STATE", unset = "")
+  roster_path <- tempfile(fileext = ".rds")
+  roster_state <- readRDS(file.path(roster_root, "data", "depth-chart-state.rds"))
+  roster_state$playerDetails[["roster-28"]] <- list(releaseHeightFt = 6.1)
+  saveRDS(roster_state, roster_path)
+  Sys.setenv(TXST_DEPTH_STATE = roster_path)
+  stopifnot(!session$isClosed())
+  session$elapse(2100)
+  stopifnot(team_release_points()$RelHeight[team_release_points()$Pitcher == "Cade Smith"] == 6.1)
+  roster_state$playerDetails[["roster-28"]]$releaseHeightFt <- 5.9
+  saveRDS(roster_state, roster_path)
+  session$elapse(2100)
+  stopifnot(team_release_points()$RelHeight[team_release_points()$Pitcher == "Cade Smith"] == 5.9)
+  if (nzchar(old_roster_path)) Sys.setenv(TXST_DEPTH_STATE = old_roster_path) else Sys.unsetenv("TXST_DEPTH_STATE")
+  session$elapse(2100)
+  unlink(roster_path)
 
   # Align heaters by their sequence within each outing, not overall pitch number.
   heaters <- tibble::tibble(CustomGameID = c(rep("a",4),rep("b",3)),
@@ -709,3 +761,39 @@ for(shape in list(c(400,100,4),c(100,400,4))) {
  stopifnot(grid::convertWidth(logo$width,'in',valueOnly=TRUE)<=.62,
            grid::convertHeight(logo$height,'in',valueOnly=TRUE)<=.62)
 }
+
+# All live pitcher selectors follow the season cutoff, even after an old
+# pitcher was selected; report observers must not overwrite the filtered list.
+original_pitchers <- workspace$txst_pitchers
+retired_pitchers <- c("Bennett Fryman", "Jackson Cotton")
+workspace$txst_pitchers <- unique(c(original_pitchers, retired_pitchers))
+messages <- list()
+shiny::testServer(workspace$server, {
+  session$sendInputMessage <- function(id, message) messages[[id]] <<- message
+  extra <- rv$df[rep(1, 6), , drop = FALSE]
+  extra$Pitcher <- rep(c(retired_pitchers, pitcher), 2)
+  extra$SeasonGroup <- extra$SeasonTag <- rep(c("S26", "F26"), each = 3)
+  extra$PitchUID <- extra$pitch_uid <- paste0("roster-choice-", seq_len(6))
+  extra$row_id <- max(rv$df$row_id) + seq_len(6)
+  rv$df <- dplyr::bind_rows(rv$df, extra)
+  session$setInputs(season_groups = "S26", PitcherInput = retired_pitchers[1],
+    pitch_aar_season_groups = "S26", aar_pitcher = retired_pitchers[1],
+    xrv_game_pitcher = retired_pitchers[1], team_trends_seasons = "S26")
+  for (id in c("PitcherInput", "aar_pitcher", "xrv_game_pitcher")) {
+    stopifnot(grepl("Bennett Fryman", messages[[id]]$options, fixed = TRUE),
+      grepl("Jackson Cotton", messages[[id]]$options, fixed = TRUE))
+  }
+  session$setInputs(season_groups = "F26", pitch_aar_season_groups = "F26", team_trends_seasons = "F26")
+  for (id in c("PitcherInput", "aar_pitcher", "xrv_game_pitcher")) {
+    stopifnot(!grepl("Bennett Fryman|Jackson Cotton", messages[[id]]$options),
+      !messages[[id]]$value %in% retired_pitchers)
+  }
+  stopifnot(!grepl("Bennett Fryman|Jackson Cotton", output$team_release_player_ui$html))
+  session$setInputs(season_groups = "S26", pitch_aar_season_groups = "S26", team_trends_seasons = "S26")
+  for (id in c("PitcherInput", "aar_pitcher", "xrv_game_pitcher")) {
+    stopifnot(grepl("Bennett Fryman", messages[[id]]$options, fixed = TRUE),
+      grepl("Jackson Cotton", messages[[id]]$options, fixed = TRUE))
+  }
+})
+workspace$txst_pitchers <- original_pitchers
+cat("Live pitcher dropdowns preserve history and clear Fall 2026 retired-pitcher selections.\n")

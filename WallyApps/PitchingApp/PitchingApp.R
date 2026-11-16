@@ -240,6 +240,21 @@ SEASON_CHOICES <- c(
   "2027 Season" = "S27"
 )
 
+# Keep former pitchers available for historical selections. Mixed/all-season
+# selections still include history; only wholly Fall 2026+ selections hide them.
+pitching_player_choices <- function(players, seasons = character()) {
+  codes <- toupper(trimws(as.character(seasons)))
+  labels <- match(codes, toupper(names(SEASON_CHOICES)))
+  codes[!is.na(labels)] <- unname(SEASON_CHOICES[labels[!is.na(labels)]])
+  year <- suppressWarnings(as.integer(sub("^[A-Z]+", "", codes)))
+  recent <- grepl("^(PS|SQ|S|F)[0-9]{2}$", codes) &
+    (year > 26L | (year == 26L & startsWith(codes, "F")))
+  if (length(codes) && all(!is.na(recent) & recent)) {
+    players <- players[!name_norm(players) %in% c("bennett fryman", "jackson cotton")]
+  }
+  players
+}
+
 
 # Helper to build visible player choices from a data.frame column
 # Usage: visible_players(df, "player_name")  OR  visible_players(df, "Pitcher")
@@ -4411,7 +4426,10 @@ app_dir <- get0("BASE_PITCHING_APP_DIR",inherits=FALSE,ifnotfound=NULL)
 if (is.null(app_dir)) app_dir <- if (!is.null(app_file) && nzchar(app_file)) dirname(normalizePath(app_file)) else getwd()
 
 source(file.path(app_dir, "helpers", "situations.R"), local = TRUE)
+source(file.path(app_dir, "helpers", "team_trends.R"), local = TRUE)
 source(file.path(app_dir, "..", "shared", "development_goals.R"), local = TRUE)
+source(file.path(app_dir, "..", "shared", "roster_release.R"), local = TRUE)
+team_d1_reference <- readr::read_csv(file.path(app_dir, "reference", "d1_team_trend_averages.csv"), show_col_types = FALSE)
 
 as_abs <- function(p) {
   if (!nzchar(p)) return("")
@@ -6484,8 +6502,7 @@ base_pitching_postgame_ui <- tagList(
         div(
           class = "base-report-controls",
           selectInput("aar_pitcher", "Pitcher:",
-                      choices = as_pitcher_choices(setdiff(txst_pitchers, EXCLUDE_PLAYERS)),
-                      selected = (setdiff(txst_pitchers, EXCLUDE_PLAYERS))[1]),
+                      choices = as_pitcher_choices(pitching_player_choices(setdiff(txst_pitchers, EXCLUDE_PLAYERS), "F26"))),
           selectInput("aar_game", "Game:", choices = NULL, multiple = FALSE, selectize = FALSE),
           textInput("aar_opp", "Opponent label (optional):", placeholder = "vs UTA"),
           downloadButton("aar_dl", "Download AAR PDF")
@@ -6704,7 +6721,7 @@ ui <- base_pitching_page(
   sidebar = sidebar(
     title = "Select Pitcher/Game",
     selectInput("PitcherInput", "Select Pitcher",
-                choices  = as_pitcher_choices(setdiff(txst_pitchers, EXCLUDE_PLAYERS)),
+                choices  = as_pitcher_choices(pitching_player_choices(setdiff(txst_pitchers, EXCLUDE_PLAYERS), initial_pitching$season)),
                 selected = initial_pitching$pitcher,
                 selectize = TRUE
     )
@@ -7144,6 +7161,8 @@ ui <- base_pitching_page(
               strong("Performance Stats by Pitch Type"),
               uiOutput("team_ts_ptype_perf_boxes")
           ),
+          tags$p(class = "text-muted small", paste("Dashed lines:",
+            paste(unique(team_d1_reference$season), collapse = "/"), "D1 team averages, with each team weighted equally.")),
           div(
             class = "base-team-trends-dashboard",
             div(class = "cr-percentile-column", withSpinner(uiOutput("team_staff_percentiles"), type = 4, color = "#501214")),
@@ -7156,8 +7175,12 @@ ui <- base_pitching_page(
         ),
         nav_panel(
           title = "Release Points",
+          selectInput("team_release_roster_year", "Roster season",
+            choices = roster_release_current_year() + 0:4, selected = roster_release_current_year(), width = "180px"),
+          tags$p(class = "text-muted small", "Saved Rosters & Recruiting measurements and profile edits. Solid: Signed · Long dash: Offered · Short dash: Committed."),
           div(class = "table-title release-title mb-0", "Release Points"),
           withSpinner(plotlyOutput("team_release_points_plot", height = "520px", width = "100%"), type = 4, color = "#501214"),
+          uiOutput("team_release_roster_note"),
           withSpinner(DTOutput("team_release_points_table"), type = 4, color = "#501214")
         ),
         nav_panel(
@@ -7382,6 +7405,13 @@ compute_barrel_flag <- function(d) {
 server <- function(input, output, session){
 
   last_pitcher <- reactiveVal(NULL)
+  observe({
+    pitchers <- pitching_player_choices(setdiff(txst_pitchers, EXCLUDE_PLAYERS), input$season_groups)
+    current <- isolate(input$PitcherInput)
+    selected <- if (length(current) == 1L && current %in% pitchers) current else
+      if (initial_pitching$pitcher %in% pitchers) initial_pitching$pitcher else head(pitchers, 1)
+    updateSelectInput(session, "PitcherInput", choices = as_pitcher_choices(pitchers), selected = selected)
+  })
   # Prefer TXST-filtered rows, but fall back to non-bullpen data if TXST filter drops a pitcher.
   get_pitcher_rows <- function() {
     req(input$PitcherInput)
@@ -8384,21 +8414,16 @@ server <- function(input, output, session){
     as.character(choices[[1]])
   })
   
-  # Fill AAR pitcher choices
-  observe({
-    pits <- setdiff(sort(unique(na.omit(txst_df$Pitcher))), EXCLUDE_PLAYERS)
-    if (!length(pits)) pits <- sort(unique(na.omit(rv$df$Pitcher)))
-    updateSelectInput(session, "aar_pitcher", choices = as_pitcher_choices(pits), selected = pits[1])
-  })
-  # Populate AAR pitcher list from your live data (non-bullpen only)
+  # One writer keeps report choices aligned with the report's own season filter.
   observe({
     pitchers <- rv$df %>%
       dplyr::filter(!(is_bullpen %in% TRUE)) %>%
       dplyr::pull(Pitcher) %>% unique() %>% sort()
-    pitchers <- setdiff(pitchers, EXCLUDE_PLAYERS)
+    pitchers <- pitching_player_choices(setdiff(pitchers, EXCLUDE_PLAYERS), aar_season_group_values())
+    current <- isolate(input$aar_pitcher)
     updateSelectInput(session, "aar_pitcher",
                       choices = as_pitcher_choices(pitchers),
-                      selected = if (length(pitchers)) pitchers[[1]] else character(0))
+                      selected = if (length(current) == 1L && current %in% pitchers) current else head(pitchers, 1))
   })
   
   observeEvent(input$aar_pitcher, {
@@ -10104,15 +10129,17 @@ server <- function(input, output, session){
   })
 
   # ---- xRV dropdown wiring (Game Summary) ----
-  observeEvent(rv$df, {
-    pitchers <- setdiff(txst_pitchers, EXCLUDE_PLAYERS)
+  observe({
+    rv$df
+    pitchers <- pitching_player_choices(setdiff(txst_pitchers, EXCLUDE_PLAYERS), input$season_groups)
+    current <- isolate(input$xrv_game_pitcher)
     updateSelectInput(
       session,
       "xrv_game_pitcher",
       choices = as_pitcher_choices(pitchers),
-      selected = if (length(pitchers)) pitchers[[1]] else character(0)
+      selected = if (length(current) == 1L && current %in% pitchers) current else head(pitchers, 1)
     )
-  }, ignoreInit = FALSE)
+  })
 
   observeEvent(input$xrv_game_pitcher, {
     req(input$xrv_game_pitcher)
@@ -11474,6 +11501,7 @@ server <- function(input, output, session){
   observeEvent(input$pitch_exclude_open, {
     players <- sort(unique(as.character(txst_df$Pitcher)))
     players <- players[!is.na(players) & nzchar(players)]
+    players <- pitching_player_choices(players, input$leader_seasons)
     showModal(modalDialog(title = "Exclude players from leaderboard",
       selectizeInput("pitch_excluded_players", "Type player names", choices = players,
         selected = excluded_players(), multiple = TRUE,
@@ -12141,12 +12169,6 @@ server <- function(input, output, session){
   }
   
   
-  # ---- AAR: populate pitcher choices (reuse your canonical list) ----
-  observe({
-    pitchers <- setdiff(sort(unique(txst_df$Pitcher)), EXCLUDE_PLAYERS)
-    if (length(pitchers)) updateSelectInput(session, "aar_pitcher", choices = as_pitcher_choices(pitchers), selected = pitchers[1])
-  })
-
   # ---- AAR: game dropdown respects the report's season selection ----
   observeEvent(list(input$aar_pitcher, aar_season_group_values()), {
     req(input$aar_pitcher)
@@ -17436,6 +17458,7 @@ function(el,x){
 
     p <- prepare_aar_flags(d)
     if (!"PA_ID" %in% names(p)) p <- ensure_pa(p)
+    p <- pitching_team_trend_counts(p)
 
     # GameID (fallbacks)
     if ("CustomGameID" %in% names(p)) {
@@ -17485,7 +17508,7 @@ function(el,x){
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
       base_barrel_evla(evn, lan)
-    is_k_pitch_vec <- calc_is_k_pitch(p)
+    is_k_pitch_vec <- p$.team_pa_last & (pa_outcome_cols(p)$K %in% TRUE)
 
     p_flags <- p %>%
       dplyr::mutate(
@@ -17706,6 +17729,7 @@ function(el,x){
 
     p <- prepare_aar_flags(d)
     if (!"PA_ID" %in% names(p)) p <- ensure_pa(p)
+    p <- pitching_team_trend_counts(p)
 
     # GameID (fallbacks)
     if ("CustomGameID" %in% names(p)) {
@@ -17755,7 +17779,7 @@ function(el,x){
     bip_vec    <- safe_is_bip(pc_vec, p$PlayResult %||% NULL)
     barrel_vec <- bip_vec & is.finite(evn) & is.finite(lan) &
       base_barrel_evla(evn, lan)
-    is_k_pitch_vec <- calc_is_k_pitch(p)
+    is_k_pitch_vec <- p$.team_pa_last & (pa_outcome_cols(p)$K %in% TRUE)
 
     p_flags <- p %>%
       dplyr::mutate(
@@ -18232,7 +18256,7 @@ function(el,x){
     pct_only <- TRUE
     p <- plotly::plot_ly()
 
-    add_series <- function(df, stat_label, meta, color) {
+    add_series <- function(df, stat_label, meta, color, stat, pitch_type = NULL) {
       if (is.null(df) || !nrow(df)) return()
       key <- meta$key
       if (!key %in% names(df)) return()
@@ -18261,13 +18285,25 @@ function(el,x){
           text = hover_txt,
           hoverinfo = "text"
         )
+      benchmark <- pitching_team_d1_average(team_d1_reference, stat, pitch_type)
+      if (!is.null(benchmark)) {
+        ref_value <- benchmark$value * if (meta$type == "pct") 100 else 1
+        x_range <- range(if (use_dates) df_ref$GameDate else df_ref$GameIndex, na.rm = TRUE)
+        if (diff(x_range) == 0) x_range <- x_range + c(-1, 1)
+        ref_label <- if (meta$type == "pct") sprintf("%.1f%%", ref_value) else sprintf("%.3f", ref_value)
+        p <<- p %>% plotly::add_trace(type = "scatter", mode = "lines", x = x_range,
+          y = rep(ref_value, 2), name = paste("D1 team avg", stat_label, sep = " · "),
+          line = list(color = color, dash = "dash", width = 1.8), opacity = .9,
+          text = rep(paste0(benchmark$season, " D1 team average · ", stat_label, ": ", ref_label,
+            "<br>", benchmark$team_n, " team totals · each team weighted equally"), 2), hoverinfo = "text")
+      }
       pct_only <<- pct_only && (meta$type == "pct")
     }
 
     stats_all <- intersect(stats_all %||% character(0), PERF_TS_ALL_STATS)
     for (stat in stats_all) {
       meta <- perf_ts_meta(stat)
-      if (!is.null(meta)) add_series(df_all, stat, meta, PERF_TS_STAT_COLORS[[stat]] %||% "#501214")
+      if (!is.null(meta)) add_series(df_all, stat, meta, PERF_TS_STAT_COLORS[[stat]] %||% "#501214", stat)
     }
 
     if (length(ptype_sel)) {
@@ -18277,7 +18313,7 @@ function(el,x){
         for (stat in stats_vec) {
           meta <- perf_ts_meta(stat)
           if (is.null(meta)) next
-          add_series(df_pt_sub, paste(pt, stat), meta, get_pt_color(pt))
+          add_series(df_pt_sub, paste(pt, stat), meta, get_pt_color(pt), stat, pt)
         }
       }
     }
@@ -18369,51 +18405,24 @@ function(el,x){
     out
   }
 
+  roster_root <- normalizePath(file.path(app_dir, "..", "DepthChartApp"), mustWork = TRUE)
+  team_roster_profiles <- reactivePoll(2000, session,
+    checkFunc = function() roster_release_signature(roster_root),
+    valueFunc = function() roster_release_profiles(roster_root))
   team_release_points <- reactive({
-    summarize_release_points(team_trends_data())
+    year <- input$team_release_roster_year %||% roster_release_current_year()
+    roster_release_points(team_roster_profiles(), as.integer(year))
   })
-
   output$team_release_points_plot <- plotly::renderPlotly({
     pts <- team_release_points()
-    validate(need(!is.null(pts) && nrow(pts) > 0, "No release-point data for this selection."))
-
-    pts <- pts %>%
-      dplyr::mutate(
-        PitcherDisplay = name_display(Pitcher),
-        Class = pitcher_class_2026(Pitcher),
-        Class = factor(Class, levels = c(names(TEAM_CLASS_COLORS), "Unknown"))
-      ) %>%
-      dplyr::filter(is.finite(RelSide), is.finite(RelHeight))
-    validate(need(nrow(pts) > 0, "No finite release-point data for this selection."))
-
-    class_colors <- c(TEAM_CLASS_COLORS, Unknown = "#7A7A7A")
-    plotly::plot_ly(
-      data = pts,
-      x = ~RelSide,
-      y = ~RelHeight,
-      type = "scatter",
-      mode = "markers+text",
-      color = ~Class,
-      colors = unname(class_colors),
-      text = ~PitcherDisplay,
-      textposition = "top center",
-      textfont = list(size = 10, color = "#2A2421"),
-      marker = list(size = 13, opacity = 0.9, line = list(color = "#FFFFFF", width = 1.5)),
-      hovertext = ~paste0(
-        PitcherDisplay,
-        "<br>Class: ", Class,
-        "<br>Release Side: ", sprintf("%.1f ft", RelSide),
-        "<br>Release Height: ", sprintf("%.1f ft", RelHeight)
-      ),
-      hoverinfo = "text"
-    ) %>%
-      plotly::layout(
-        xaxis = list(title = "Release Side (ft)", zeroline = TRUE, zerolinecolor = "#B8B1AA"),
-        yaxis = list(title = "Release Height (ft)"),
-        legend = list(title = list(text = "Class"), orientation = "h", x = 0, y = 1.12),
-        margin = list(t = 72, r = 30, b = 55, l = 65),
-        hovermode = "closest"
-      )
+    validate(need(nrow(pts) > 0, "No complete saved pitcher measurements for this roster season."))
+    roster_release_plot(pts)
+  })
+  output$team_release_roster_note <- renderUI({
+    pts <- team_release_points()
+    tags$p(class = "text-muted small", paste(nrow(pts),
+      "pitchers plotted. Shoulder anchors use height minus 10 inches; equal axis scales preserve inferred arm angles.",
+      "Missing or zero release side uses 1.5 ft. Edit measurements in Rosters & Recruiting and save to update this view."))
   })
 
   team_release_season_points <- reactive({
@@ -18479,7 +18488,7 @@ function(el,x){
     d <- team_trends_data()
     if (is.null(d) || !nrow(d) || !"Pitcher" %in% names(d)) return(div("No pitchers available."))
     pits <- sort(unique(na.omit(as.character(d$Pitcher))))
-    pits <- setdiff(pits, EXCLUDE_PLAYERS)
+    pits <- pitching_player_choices(setdiff(pits, EXCLUDE_PLAYERS), input$team_trends_seasons)
     if (!length(pits)) return(div("No pitchers available."))
     selected <- input$team_release_player
     if (is.null(selected) || !selected %in% pits) selected <- pits[[1]]
@@ -18690,16 +18699,19 @@ function(el,x){
     out <- base %>%
       dplyr::transmute(
         Pitcher = Pitcher,
+        Class = Class,
+        Status = Status,
+        `Height (in)` = HeightIn,
         `Release Height` = RelHeight,
         `Release Side`   = RelSide,
-        Extension        = Extension,
-        `Arm Angle (deg)` = ArmAngle
+        `Arm Angle (deg)` = ArmAngle,
+        Source = Source
       ) %>%
       dplyr::arrange(Pitcher)
 
     dt <- DT::datatable(
       out,
-      escape   = FALSE,
+      escape   = TRUE,
       rownames = FALSE,
       options  = list(
         dom      = 't',
@@ -18709,7 +18721,7 @@ function(el,x){
       ),
       class = "stripe"
     )
-    DT::formatRound(dt, columns = 2:5, digits = 1)
+    DT::formatRound(dt, columns = 4:7, digits = 2)
   })
 
   output$team_release_game_table <- DT::renderDT({
@@ -20041,14 +20053,15 @@ function(el,x){
     summarize=comparison_summary, percentile=function(value,metric) pitching_cell_percentiles(value,metric)[1],
     metrics=comparison_metrics,
     lower_better=comparison_metrics[vapply(comparison_metrics,function(m) isTRUE(pitching_metric_config(m)$lower_better),logical(1))],
-    active=function() identical(input$pitching_workspace_tab,"Comparisons"))
+    active=function() identical(input$pitching_workspace_tab,"Comparisons"),
+    player_choices=pitching_player_choices)
 
   development_xwoba_reference <- readr::read_csv(file.path(app_dir,"reference","d1_pitching_xwoba_percentiles.csv"),show_col_types=FALSE)
   development_grid_path <- get0("BASE_PITCHING_XWOBA_GRID_PATH",inherits=TRUE,
     ifnotfound=file.path(app_dir,"..","..","models","shared","xwoba_grid.rds"))
   development_grid <- tryCatch(readRDS(development_grid_path),error=function(e) NULL)
   pitching_development <- development_server("pitching_development",reactive(filter_team_or_portal(rv$df,"PitcherTeam")),
-    "Pitcher",SEASON_CHOICES,mode="pitching",
+    "Pitcher",SEASON_CHOICES,mode="pitching",player_choices=pitching_player_choices,
     summarize=function(d) {
       values<-staff_percentile_values(d)
       result<-as.list(stats::setNames(values$value,values$label))

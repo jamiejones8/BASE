@@ -4,6 +4,7 @@ set -eu
 # Railway attaches runtime storage before the start command, not during build.
 cd "$(dirname "$0")"
 Rscript scripts/checks/check_team_config.R
+Rscript scripts/checks/check_development_storage.R
 
 # Limit glibc's per-thread allocation arenas so temporary report-generation
 # spikes are more readily returned to the operating system.

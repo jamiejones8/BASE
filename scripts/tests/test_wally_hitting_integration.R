@@ -391,6 +391,11 @@ shiny::testServer(workspace$server, {
   stopifnot(nrow(dev_plan$objectives[[1]]$series)>0,"GameIndex" %in% names(dev_plan$objectives[[1]]$series),isTRUE(dev_plan$objectives[[1]]$lower_better),
     dev_plan$objectives[[1]]$target==.18,is.finite(dev_plan$objectives[[1]]$average),
     isTRUE(all.equal(tail(dev_plan$objectives[[1]]$series$Value,1),hitting_development$stats()[["K%"]])))
+  session$setInputs(`hitting_development-defense_goal`="Improve throwing accuracy",
+    `hitting_development-defense_support1`="Read contact",`hitting_development-defense_support2`="Set the feet",
+    `hitting_development-defense_support3`="Finish the throw",`hitting_development-defense_drill1`="Target throws")
+  stopifnot(hitting_development$plan()$defense$goal=="Improve throwing accuracy",
+    length(hitting_development$plan()$defense$supports)==3L)
 
   perf_summary <- workspace$summarize_overall(filtered)
   if (!is.finite(perf_summary$xwOBAcon)) {

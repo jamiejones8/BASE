@@ -1,10 +1,11 @@
 # Keep the original Roster Studio client and model isolated from BASE's CSS and
 # input IDs. Its save validation, revision checks, and roster logic run unchanged.
 BASE_DEPTH_ROOT <- base_project_path("WallyApps", "DepthChartApp")
+if (!exists("roster_release_state_path", mode = "function")) {
+  base_source("WallyApps/shared/roster_release.R", local = FALSE)
+}
 
-base_rosters_environment <- function(state_path = Sys.getenv("TXST_DEPTH_STATE", unset = file.path(
-    if (dir.exists("/base-data")) "/base-data/app_state" else base_project_path("app_state"),
-    "rosters", "depth-chart-state.rds"))) {
+base_rosters_environment <- function(state_path = roster_release_state_path(BASE_DEPTH_ROOT)) {
   dir.create(dirname(state_path), recursive=TRUE, showWarnings=FALSE)
   if (!file.exists(state_path)) {
     # Seed once, retaining the entire imported state including its revision.

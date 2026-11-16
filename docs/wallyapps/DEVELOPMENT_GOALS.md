@@ -24,6 +24,23 @@ normally `/base-data/app_state` on Railway or local `app_state/`. It must reside
 on the writable persistent volume to survive redeploys. Local state is excluded
 from Git, Docker and Railway uploads.
 
+`start-railway.sh` runs `scripts/checks/check_development_storage.R` after runtime
+storage is attached and before Shiny starts. On Railway, it requires the platform's
+`RAILWAY_VOLUME_MOUNT_PATH` to be an actual mounted, writable volume and the existing
+database path to be inside it. A missing mount or temporary/repository storage path
+stops startup instead of allowing goals to be saved to an ephemeral container.
+The database location is not changed by these checks; keep
+`BASE_DEVELOPMENT_GOALS_FILE` stable across updates.
+
+When the database exists, startup takes a verified SQLite online backup in the
+adjacent `development-goals-backups/` directory, with a unique timestamped filename.
+It includes committed WAL journal pages, preserves every table and saved payload,
+and checks database integrity and goal-record counts before starting the app.
+Snapshots are append-only; old backups and the source database are not replaced.
+Backup failures stop startup. A fresh installation with no database does not seed
+an empty file over an existing one. The persistent volume and its backups must be
+retained across redeployments; a source push contains neither of them.
+
 Tracking begins with S26 as the baseline and F26 as the tracking season, followed
 by F26 → PS27 → S27 → F27. Plans carry forward until replaced; a newer season's
 plan does not overwrite the historical season. The tracking season defaults to
@@ -57,7 +74,7 @@ equal widths and margins. Empty drills are omitted. Text wraps and scales within
 the boxes, with limits disclosed if entered text would become illegible.
 The PDFs use original-photo cutouts on the left, game-by-game charts in the center and
 one column of red/blue percentile rankings at the far right. Each rounded text
-box sits directly on the photograph; there is no large white goal panel. Missing photos use initials, and unavailable values/ranks display N/A.
+box sits directly on the ballpark background; there is no large white goal panel. Missing photos use initials, and unavailable values/ranks display N/A.
 With two objectives, their charts sit side by side at half width, with wrapped
 benchmark captions. The larger player name is bold gold. Percentile labels and
 values are bold white without outlines. A maroon footer matches the top bar;
@@ -73,12 +90,35 @@ feathers the alpha edge; alpha masks preserve every original RGB byte. Faces
 are never generated or retouched. The runtime applies the small masks to native
 rasters, keeping its bounded image cache small.
 
-The supplied ballpark photograph was treated with the built-in image tool using
-the prompt saved beside `assets/development-ballpark-maroon.png`. The monochrome
-treatment uses only maroon shades, without a gold/sepia tint. The renderer
-places that image at exactly 90% opacity. Maroon, gold, cream panels and the
-existing bobcat logo follow the provided goal-graphic references. Text, stat
+Both apps use the supplied Bobcat Ballpark template, copied unchanged to
+`assets/development-ballpark-template.png`. Its maroon background, gold ballpark
+linework and corner logos replace the earlier treated photograph. The renderer
+places it at 90% opacity between the matching top and bottom bars. Text, stat
 values, bars and borders remain vector elements in the PDF.
+
+The editor page in both apps also uses that template through the shared Shiny
+`base-development-assets` resource path. Maroon translucent editor panels keep
+the outline visible; the live PNG preview and exported PDF use the same renderer.
+
+### Hitter Defensive Goals
+
+Hitting has an optional **Defensive Goals** editor below the hitting goal/drill
+editors. It contains one written goal, three required supporting actions and up
+to five optional drills. All defensive boxes use gold backgrounds, maroon text
+and white outlines in both the editor and graphic. A completely empty defensive
+section is omitted and does not block existing hitting-only plans.
+
+With two hitting objectives and a defensive plan, the PDF reserves three equal
+columns: hitting goals 1 and 2 on the left/middle and defense on the right. Every
+action and drill stays inside its goal's column. With one hitting goal, it uses
+the left two thirds while defense retains the right third. Chart captions wrap
+to keep their titles inside the chart viewport.
+
+Defense is saved in the plan's separate `defense` field with schema version 2;
+existing version-1 plans remain valid. It reloads and carries forward with the
+numeric hitting objectives. Track Goals includes the written plan, actions and
+drills when a player is expanded. Automatic goal-hit totals continue to measure
+the numeric stat goals. Pitching keeps its original one/two-objective structure.
 
 ## Full-game score recovery
 

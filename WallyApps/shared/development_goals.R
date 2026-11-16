@@ -43,8 +43,14 @@ development_xwoba_values <- function(last,grid) {
   out[kb %in% c("ibb","intentionalwalk") | grepl("intentional",pr)]<-NA_real_
   out
 }
-development_ui <- function(id,seasons) {
+development_ui <- function(id,seasons,mode="pitching") {
   ns<-shiny::NS(id)
+  assets <- normalizePath(file.path(development_root,"assets"),mustWork=TRUE)
+  if(!identical(unname(shiny::resourcePaths()["base-development-assets"]),assets)) {
+    shiny::addResourcePath("base-development-assets",assets)
+  }
+  background_url <- paste0("base-development-assets/development-ballpark-template.png?v=",
+    as.numeric(file.info(file.path(assets,"development-ballpark-template.png"))$mtime))
   objective<-function(i) shiny::div(class="development-editor",
     shiny::div(class="development-editor-heading",shiny::tags$h3(paste("Objective",i)),
       if(i==1) shiny::conditionalPanel("output.two === 'false'",ns=ns,shiny::actionButton(ns("add"),"+ Add Objective 2"))
@@ -58,13 +64,32 @@ development_ui <- function(id,seasons) {
     shiny::div(class="development-supports",lapply(1:3,function(j) shiny::textAreaInput(ns(paste0("support",i,"_",j)),paste("Action",j),rows=2,width="100%"))),
     shiny::tags$details(shiny::tags$summary("Drills · optional, up to 5"),
       lapply(1:5,function(j) shiny::textAreaInput(ns(paste0("drill",i,"_",j)),paste("Drill",j),rows=2,width="100%"))))
-  shiny::tagList(shiny::tags$style(shiny::HTML("
-    .development-page{padding:18px;background:#f6f1e7;border:1px solid #c6a66b;border-radius:12px}
-    .development-page h2,.development-page h3{color:#501214;font-weight:800}
+  defense <- if(mode=="hitting") shiny::div(class="development-editor development-defense",
+    shiny::tags$h3("Defensive Goals"),
+    shiny::textAreaInput(ns("defense_goal"),"Defensive goal · optional",rows=2,width="100%",
+      placeholder="Write a defensive development goal"),
+    shiny::tags$h4("Supporting actions"),
+    shiny::div(class="development-defense-actions",lapply(1:3,function(j)
+      shiny::textAreaInput(ns(paste0("defense_support",j)),paste("Action",j),rows=2,width="100%"))),
+    shiny::tags$details(shiny::tags$summary("Drills · optional, up to 5"),
+      lapply(1:5,function(j) shiny::textAreaInput(ns(paste0("defense_drill",j)),paste("Drill",j),rows=2,width="100%"))))
+  shiny::tagList(shiny::tags$style(shiny::HTML(paste0("
+    .development-page{padding:18px;background:#501214 url('",background_url,"') center/cover fixed;border:1px solid #c6a66b;border-radius:12px;color:#fff6e4}
+    .development-page h2,.development-page h3,.development-page h4{color:#e6cc92;font-weight:800}
+    .development-page label{color:#fff6e4}
+    .development-page .text-muted,.development-page .development-tracking-note,.development-page .development-saved-status{color:#fff6e4!important}
+    .development-page .nav-tabs>li>a{color:#e6cc92}.development-page .nav-tabs>li.active>a,.development-page .nav-tabs .nav-link.active{color:#501214;background:#fff6e4}
+    .development-page input,.development-page select,.development-page textarea,.development-page .selectize-input{background:#fff6e4;color:#501214;border-color:#c6a66b}
     .development-controls,.development-editors{display:grid;grid-template-columns:repeat(auto-fit,minmax(285px,1fr));gap:20px}
-    .development-editor{padding:18px;background:#fffaf0;border:1px solid #c6a66b;border-radius:8px;min-width:0}
+    .development-editor{padding:18px;background:rgba(80,18,20,.8);border:1px solid #c6a66b;border-radius:8px;min-width:0}
     .development-supports textarea{background:#501214!important;color:#e6cc92!important;border-color:#c6a66b!important}
-    .development-page details{margin-top:15px}.development-page summary{cursor:pointer;font-weight:700;color:#501214;padding:8px 0}
+    .development-page details{margin-top:15px}.development-page summary{cursor:pointer;font-weight:700;color:#e6cc92;padding:8px 0}
+    .development-defense{margin-top:20px;border-color:#fff}
+    .development-defense h3,.development-defense h4,.development-defense label,.development-defense summary{color:#501214;background:#c8a76c;border:1px solid #fff;border-radius:5px;padding:8px}
+    .development-defense textarea{background:#c8a76c!important;color:#501214!important;border:1px solid #fff!important;font-weight:650}
+    .development-defense-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+    .development-defense-details{padding:16px;background:#c8a76c;color:#501214;border:1px solid #fff;border-radius:6px;margin-top:18px}
+    .development-defense-details h4{color:#501214}
     .development-editor-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
     .development-current{padding:10px;background:#eee3cd;color:#501214;font-weight:700;margin-bottom:12px}
     .development-toolbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:18px 0}
@@ -72,12 +97,16 @@ development_ui <- function(id,seasons) {
     .development-page .btn{background:#501214;color:#e6cc92;border-color:#c6a66b}
     .development-page .tab-content{padding-top:18px}
     .development-tracking-scroll{overflow-x:auto}
-    .development-tracking-table{width:100%;border-collapse:collapse;background:#fffaf0;font-size:14px}
+    .development-tracking-table{width:100%;border-collapse:collapse;background:#fffaf0;color:#501214;font-size:14px}
     .development-tracking-table th{padding:14px;background:#501214;color:#fff;text-align:left}
     .development-tracking-table td{padding:16px;vertical-align:top;border-bottom:1px solid #dccbaf}
     .development-tracking-table th:first-child{width:20%}
     .development-tracking-table th:nth-child(2),.development-tracking-table th:nth-child(3){width:33%}
     .development-tracking-table th:last-child{width:14%}
+    .development-tracking-hitting th:first-child{width:17%}
+    .development-tracking-hitting th:nth-child(2),.development-tracking-hitting th:nth-child(3),.development-tracking-hitting th:nth-child(4){width:24%}
+    .development-tracking-hitting th:last-child{width:11%}
+    .development-tracked-defense{background:#c8a76c;color:#501214;border:1px solid #fff}
     .development-tracking-table .development-team-total{background:#eee3cd;font-weight:700}
     .development-tracked-goal{line-height:1.45}.development-tracked-values{font-size:12px;color:#5e554d;margin:7px 0}
     .development-tracked-state{font-size:12px;margin-top:5px}
@@ -91,7 +120,7 @@ development_ui <- function(id,seasons) {
     .development-tracking-note{color:#5e554d;font-size:13px;margin:12px 0}
     .development-saved-status{padding:10px 0;color:#501214;font-weight:650}
     .development-no-goal{color:#777}
-  ")),shiny::div(class="development-page",
+  "))),shiny::div(class="development-page",
     shiny::tags$h2("Development Goals"),
     shiny::div(style="display:none",shiny::textOutput(ns("two"))),
     shiny::tabsetPanel(id=ns("goals_tab"),
@@ -104,6 +133,7 @@ development_ui <- function(id,seasons) {
         shiny::div(class="development-toolbar",shiny::uiOutput(ns("export_control")),
           shiny::actionButton(ns("reload_saved"),"Reload Saved Goals")),
         shiny::div(class="development-editors",objective(1),shiny::conditionalPanel("output.two === 'true'",ns=ns,objective(2))),
+        defense,
         shiny::uiOutput(ns("status")),shiny::tags$h3("PDF preview"),
         shiny::div(class="development-preview",shiny::imageOutput(ns("preview"),height="auto"))),
       shiny::tabPanel("Track Goals",value="track",
@@ -120,7 +150,31 @@ development_payload_errors <- function(plan) {
     if(nzchar(o$goal) && !is.null(o$target) && !is.finite(o$target)) errors<-c(errors,paste0("Objective ",i,": enter one numeric goal, or fill Numeric chart goal."))
     if(nchar(o$title)>100 || nchar(o$goal)>100 || any(nchar(o$supports)>180) || any(nchar(o$drills)>120)) errors<-c(errors,"Shorten the objective/goal to 100 characters, actions to 180, and drills to 120 so every box remains legible.")
   }
-  unique(errors)
+  unique(c(errors,development_defense_errors(plan$defense,plan$mode)))
+}
+
+# Written defense plans stay separate from numeric hitting objectives and their
+# automatic hit-rate calculation, while saving/carrying forward with the plan.
+development_defense_errors <- function(defense,mode) {
+  if(is.null(defense)) return(character())
+  if(!identical(mode,"hitting")) return("Defensive Goals are available for hitters only.")
+  errors <- character()
+  if(length(defense$goal)!=1L || length(defense$supports)!=3L || length(defense$drills)>5L ||
+      any(!nzchar(trimws(c(defense$goal,defense$supports))))) {
+    errors <- c(errors,"Complete Defensive Goals and all three supporting actions, or leave the section blank.")
+  }
+  if(any(nchar(defense$goal)>180) || any(nchar(defense$supports)>180) || any(nchar(defense$drills)>120)) {
+    errors <- c(errors,"Keep the defensive goal/actions to 180 characters and drills to 120 so the text remains legible.")
+  }
+  errors
+}
+
+development_goal_columns <- function(plan) {
+  n <- length(plan$objectives)
+  defense <- identical(plan$mode,"hitting") && !is.null(plan$defense)
+  if(defense && n==2L) return(data.frame(x=c(30,385,740),width=330,kind=c("stat","stat","defense"),index=c(1L,2L,NA_integer_)))
+  if(defense) return(data.frame(x=c(30,740),width=c(685,330),kind=c("stat","defense"),index=c(1L,NA_integer_)))
+  data.frame(x=if(n==1L) 170 else c(30,565),width=if(n==1L) 760 else 505,kind="stat",index=seq_len(n))
 }
 source(file.path(development_root,"development_server.R"),local=TRUE)
 
@@ -184,7 +238,7 @@ development_draw <- function(plan) {
     text(paste(lines,collapse="\n"),x+w/2,y+h/2,pt,col,bold)
   }
   rect(0,0,1100,700,maroon,NA)
-  background<-development_image(file.path(development_root,"assets","development-ballpark-maroon.png"),.9)
+  background<-development_image(file.path(development_root,"assets","development-ballpark-template.png"),.9)
   if(!is.null(background)) grid::grid.raster(background,x=550,y=350,width=1100,height=1100*dim(background)[1]/dim(background)[2],default.units="native",interpolate=TRUE)
   rect(15,15,1070,670,NA,gold);rect(0,660,1100,40,maroon,NA);rect(0,0,1100,40,maroon,NA)
   text("T E X A S   S T A T E",230,680,17,gold,TRUE);text("B A S E B A L L",875,680,17,gold,TRUE)
@@ -204,7 +258,9 @@ development_draw <- function(plan) {
     x<-280+(i-1)*(chart_width+12)
     box(x,350,chart_width,245,grDevices::adjustcolor(cream,alpha.f=.92))
     grid::pushViewport(grid::viewport(x=x+chart_width/2,y=472.5,width=chart_width-10,height=241,default.units="native"))
-    grid::grid.draw(ggplot2::ggplotGrob(development_chart(plan$objectives[[i]],i,narrow=count==2)))
+    # Wrap the benchmark caption even for a single chart so long labels cannot
+    # force the plot's title outside its viewport.
+    grid::grid.draw(ggplot2::ggplotGrob(development_chart(plan$objectives[[i]],i,narrow=TRUE)))
     grid::popViewport()
   }
   text("D1 PERCENTILE RANKINGS",820,590,11,"#ffffff",TRUE,just="left")
@@ -224,24 +280,35 @@ development_draw <- function(plan) {
     } else text("N/A",x+130.5,y,7,"#ffffff",TRUE)
     text(development_format(value,rankings$metric[i]),1067,y,9,"#ffffff",TRUE,just="right")
   }
-  n<-length(plan$objectives)
-  for(i in seq_len(n)) {
-    o<-plan$objectives[[i]];x<-if(n==1) 170 else 30+(i-1)*535;w<-if(n==1) 760 else 505
-    box(x,302,w,36,maroon,gold);fit(paste0("OBJECTIVE ",i,"  ",if(nzchar(o$title)) o$title else "Your development objective"),x,302,w,36,16,gold)
-    cw<-(w-75)/2
-    box(x+15,246,cw,54);text(paste(plan$season,o$metric),x+15+cw/2,286,10,maroon,TRUE);fit(o$current,x+15,247,cw,32,25)
-    grid::grid.segments(x+w/2-12,268,x+w/2+12,268,default.units="native",arrow=grid::arrow(length=grid::unit(.10,"inches"),type="closed"),gp=grid::gpar(col=gold,fill=gold,lwd=2))
-    box(x+w-cw-15,246,cw,54);text("GOAL",x+w-cw/2-15,286,10,maroon,TRUE);fit(if(nzchar(o$goal)) o$goal else "Your target",x+w-cw-15,247,cw,32,23)
+  columns <- development_goal_columns(plan)
+  for(k in seq_len(nrow(columns))) {
+    defensive <- columns$kind[k]=="defense"
+    i <- columns$index[k]
+    o <- if(defensive) plan$defense else plan$objectives[[i]]
+    x <- columns$x[k];w <- columns$width[k]
+    title_fill <- if(defensive) gold else maroon
+    title_ink <- if(defensive) maroon else gold
+    border <- if(defensive) "#ffffff" else gold
+    box(x,302,w,36,title_fill,border)
+    fit(if(defensive) "Defensive Goals" else paste0("OBJECTIVE ",i,"  ",if(nzchar(o$title)) o$title else "Your development objective"),x,302,w,36,16,title_ink)
+    if(defensive) {
+      box(x+10,246,w-20,54,gold,border);fit(o$goal,x+10,246,w-20,54,16,maroon)
+    } else {
+      cw<-(w-75)/2
+      box(x+15,246,cw,54);text(paste(plan$season,o$metric),x+15+cw/2,286,10,maroon,TRUE);fit(o$current,x+15,247,cw,32,25)
+      grid::grid.segments(x+w/2-12,268,x+w/2+12,268,default.units="native",arrow=grid::arrow(length=grid::unit(.10,"inches"),type="closed"),gp=grid::gpar(col=gold,fill=gold,lwd=2))
+      box(x+w-cw-15,246,cw,54);text("GOAL",x+w-cw/2-15,286,10,maroon,TRUE);fit(if(nzchar(o$goal)) o$goal else "Your target",x+w-cw-15,247,cw,32,23)
+    }
     sw<-(w-40)/3
-    for(j in 1:3) {sx<-x+10+(j-1)*(sw+10);box(sx,166,sw,68,maroon,gold);fit(if(nzchar(o$supports[j])) o$supports[j] else paste("Supporting action",j),sx,166,sw,68,13,gold)}
+    for(j in 1:3) {sx<-x+10+(j-1)*(sw+10);box(sx,166,sw,68,title_fill,border);fit(if(nzchar(o$supports[j])) o$supports[j] else paste("Supporting action",j),sx,166,sw,68,13,title_ink)}
     drills<-o$drills
     if(length(drills)) {
-      cols<-if(n==1) length(drills) else min(3,length(drills));rows<-ceiling(length(drills)/cols)
+      cols<-if(nrow(columns)==1) length(drills) else min(3,length(drills));rows<-ceiling(length(drills)/cols)
       dw<-(w-20-(cols-1)*8)/cols;dh<-if(rows==1) 73 else 35
       for(j in seq_along(drills)) {
         count<-min(cols,length(drills)-(j-1)%/%cols*cols);offset<-(w-(count*dw+(count-1)*8))/2
         dx<-x+offset+(j-1)%%cols*(dw+8);dy<-if(rows==1) 66 else 104-(j-1)%/%cols*40
-        box(dx,dy,dw,dh);fit(drills[j],dx,dy,dw,dh,12)
+        box(dx,dy,dw,dh,if(defensive) gold else cream,border);fit(drills[j],dx,dy,dw,dh,12,maroon)
       }
     }
   }

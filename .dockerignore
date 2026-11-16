@@ -91,3 +91,7 @@ models/pitcher/location_plus_model.rds
 !WallyApps/PitchingApp/reference/
 !WallyApps/PitchingApp/reference/**
 output/
+
+# Runtime goals and their backups must never be replaced by source deployments.
+**/development-goals*.sqlite*
+**/development-goals-backups/
