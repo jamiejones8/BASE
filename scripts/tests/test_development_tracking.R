@@ -25,6 +25,9 @@ record<-function(player="Brady Boles",mode="hitting",season="S26",two=TRUE) list
   objectives=if(two)list(objective(),objective("BB%",.12,FALSE))else list(objective()))
 r<-development_store_save(path,record())
 stopifnot(r$revision==1L)
+empty <- record(player="Empty Plan")
+empty$objectives[[1]]$supports <- c("", " \n ", "")
+stopifnot(inherits(try(development_store_save(path,empty),silent=TRUE),"try-error"))
 read<-development_store_read(path,"hitting")
 stopifnot(length(read)==1,identical(read[[1]]$objectives[[1]]$supports,record()$objectives[[1]]$supports),
   identical(read[[1]]$objectives[[1]]$drills,record()$objectives[[1]]$drills))
@@ -66,13 +69,18 @@ for(mode in c("hitting","pitching")) {
   shiny::testServer(development_server,args=args,{
     session$setInputs(season="S26",player="Boles, Brady",stat1="K%",stat2="BB%",tracking_season="F26")
     session$setInputs(title1="Improve K rate",goal1=if(mode=="hitting")"18%"else"30%",
-      support1_1="Action one",support1_2="Action two",support1_3="Action three",drill1_1="Drill one")
+      support1_2=" \n ",drill1_1="Drill one")
+    stopifnot(length(errors())>0)
+    session$setInputs(support1_2=" Action one ")
+    stopifnot(!length(errors()),identical(plan()$objectives[[1]]$supports,"Action one"))
     session$setInputs(add=1)
     session$setInputs(title2="Improve BB rate",goal2=if(mode=="hitting")"12%"else"9%",
-      support2_1="Action A",support2_2="Action B",support2_3="Action C",drill2_1="Drill two")
+      support2_1="Action A",support2_3="Action C",drill2_1="Drill two")
     file<-tempfile(fileext=".pdf")
     saved<-save_pdf(file)
     stopifnot(saved$revision==1L,file.exists(file),length(records()$plans)==1,
+      identical(saved$objectives[[1]]$supports,"Action one"),
+      identical(saved$objectives[[2]]$supports,c("Action A","Action C")),
       pdftools::pdf_info(file)$pages==1)
     models<-tracking()
     stopifnot(length(models)==1,length(models[[1]]$objectives)==2,
@@ -88,11 +96,16 @@ for(mode in c("hitting","pitching")) {
     unlink(file)
   })
   # A fresh Shiny session restores the complete plan from disk.
+  messages <- list()
   shiny::testServer(development_server,args=args,{
+    root_session <- session$rootScope()
+    root_session$sendInputMessage <- function(id,message) messages[[id]] <<- message
     session$setInputs(season="S26",player="Boles, Brady",stat1="K%",stat2="BB%",tracking_season="F26")
     p<-loaded_record()
     stopifnot(!is.null(p),length(p$objectives)==2,two(),
-      p$objectives[[1]]$supports[2]=="Action two",p$objectives[[2]]$drills[1]=="Drill two")
+      identical(p$objectives[[1]]$supports,"Action one"),p$objectives[[2]]$drills[1]=="Drill two",
+      messages$support1_1$value=="Action one",messages$support1_2$value=="",messages$support1_3$value=="",
+      messages$support2_2$value=="Action C",messages$support2_3$value=="")
     session$setInputs(season="F26")
     stopifnot(loaded_record()$baseline_season=="S26",two())
   })

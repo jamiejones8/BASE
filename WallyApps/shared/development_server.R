@@ -123,7 +123,7 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
         override <- if (!is.null(o) && !is.null(o$target_input)) o$target_input else NA_real_
         shiny::updateNumericInput(session, paste0("target", i), value = override)
         for (j in 1:3) shiny::updateTextAreaInput(session, paste0("support", i, "_", j),
-          value = if (!is.null(o)) o$supports[j] else "")
+          value = if (!is.null(o) && length(o$supports) >= j) o$supports[j] else "")
         for (j in 1:5) shiny::updateTextAreaInput(session, paste0("drill", i, "_", j),
           value = if (!is.null(o) && length(o$drills) >= j) o$drills[j] else "")
       }
@@ -131,7 +131,7 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
         defense <- saved$defense
         shiny::updateTextAreaInput(session,"defense_goal",value=if(is.null(defense)) "" else defense$goal)
         for(j in 1:3) shiny::updateTextAreaInput(session,paste0("defense_support",j),
-          value=if(is.null(defense)) "" else defense$supports[j])
+          value=if(is.null(defense) || length(defense$supports)<j) "" else defense$supports[j])
         for(j in 1:5) shiny::updateTextAreaInput(session,paste0("defense_drill",j),
           value=if(is.null(defense) || length(defense$drills)<j) "" else defense$drills[j])
       }
@@ -167,13 +167,13 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
           target = development_goal_target(input[[paste0("goal", i)]] %||% "", metric, input[[paste0("target", i)]] %||% NA_real_),
           title = input[[paste0("title", i)]] %||% "", metric = metric, current = development_format(values[[metric]], metric),
           goal = input[[paste0("goal", i)]] %||% "",
-          supports = vapply(1:3, function(j) input[[paste0("support", i, "_", j)]] %||% "", character(1)),
+          supports = development_support_actions(vapply(1:3, function(j) input[[paste0("support", i, "_", j)]] %||% "", character(1))),
           drills = Filter(nzchar, vapply(1:5, function(j) trimws(input[[paste0("drill", i, "_", j)]] %||% ""), character(1))))
       })
       defense <- NULL
       if(identical(mode,"hitting")) {
         goal <- trimws(input$defense_goal %||% "")
-        supports <- vapply(1:3,function(j) trimws(input[[paste0("defense_support",j)]] %||% ""),character(1))
+        supports <- development_support_actions(vapply(1:3,function(j) input[[paste0("defense_support",j)]] %||% "",character(1)))
         drills <- Filter(nzchar,vapply(1:5,function(j) trimws(input[[paste0("defense_drill",j)]] %||% ""),character(1)))
         if(any(nzchar(c(goal,supports,drills)))) defense <- list(title="Defensive Goals",goal=goal,supports=supports,drills=drills)
       }
@@ -290,7 +290,7 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
             defense <- m$plan$defense
             if(is.null(defense)) shiny::tags$td(class="development-no-goal","\u2014") else
               shiny::tags$td(class="development-tracked-defense",shiny::tags$strong("Defensive Goals"),
-                shiny::div(defense$goal),shiny::div(paste(length(defense$supports),"actions ·",length(defense$drills),"drills")))
+                shiny::div(defense$goal),shiny::div(paste(length(defense$supports),if(length(defense$supports)==1L) "action ·" else "actions ·",length(defense$drills),"drills")))
           },
           shiny::tags$td(hit_list))
         defense <- if(identical(mode,"hitting")) m$plan$defense else NULL

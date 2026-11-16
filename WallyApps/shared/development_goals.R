@@ -60,17 +60,17 @@ development_ui <- function(id,seasons,mode="pitching") {
     shiny::uiOutput(ns(paste0("current",i))),
     shiny::textInput(ns(paste0("goal",i)),"Goal",placeholder="Enter your target",width="100%"),
     shiny::numericInput(ns(paste0("target",i)),"Numeric chart goal (optional; percentages as 35 for 35%)",value=NA_real_,step=.1,width="100%"),
-    shiny::tags$h4("Supporting actions"),
-    shiny::div(class="development-supports",lapply(1:3,function(j) shiny::textAreaInput(ns(paste0("support",i,"_",j)),paste("Action",j),rows=2,width="100%"))),
+    shiny::tags$h4("Supporting actions · fill at least one"),
+    shiny::div(class="development-supports",lapply(1:3,function(j) shiny::textAreaInput(ns(paste0("support",i,"_",j)),paste("Action",j,if(j>1) "· optional" else ""),rows=2,width="100%"))),
     shiny::tags$details(shiny::tags$summary("Drills · optional, up to 5"),
       lapply(1:5,function(j) shiny::textAreaInput(ns(paste0("drill",i,"_",j)),paste("Drill",j),rows=2,width="100%"))))
   defense <- if(mode=="hitting") shiny::div(class="development-editor development-defense",
     shiny::tags$h3("Defensive Goals"),
     shiny::textAreaInput(ns("defense_goal"),"Defensive goal · optional",rows=2,width="100%",
       placeholder="Write a defensive development goal"),
-    shiny::tags$h4("Supporting actions"),
+    shiny::tags$h4("Supporting actions · fill at least one"),
     shiny::div(class="development-defense-actions",lapply(1:3,function(j)
-      shiny::textAreaInput(ns(paste0("defense_support",j)),paste("Action",j),rows=2,width="100%"))),
+      shiny::textAreaInput(ns(paste0("defense_support",j)),paste("Action",j,if(j>1) "· optional" else ""),rows=2,width="100%"))),
     shiny::tags$details(shiny::tags$summary("Drills · optional, up to 5"),
       lapply(1:5,function(j) shiny::textAreaInput(ns(paste0("defense_drill",j)),paste("Drill",j),rows=2,width="100%"))))
   shiny::tagList(shiny::tags$style(shiny::HTML(paste0("
@@ -141,12 +141,18 @@ development_ui <- function(id,seasons,mode="pitching") {
         shiny::uiOutput(ns("tracking_note")),
         shiny::uiOutput(ns("tracking_table"))))))
 }
+development_support_actions <- function(supports) {
+  actions <- trimws(as.character(unlist(supports,use.names=FALSE)))
+  actions[!is.na(actions) & nzchar(actions)]
+}
+
 development_payload_errors <- function(plan) {
   errors<-character()
   if(!nzchar(plan$player) || !nrow(plan$rankings)) errors<-c(errors,"Select a player with season data.")
   for(i in seq_along(plan$objectives)) {
     o<-plan$objectives[[i]]
-    if(any(!nzchar(trimws(c(o$title,o$metric,o$goal,o$supports))))) errors<-c(errors,paste0("Complete Objective ",i,", its goal, and all three supporting actions."))
+    actions <- development_support_actions(o$supports)
+    if(any(!nzchar(trimws(c(o$title,o$metric,o$goal)))) || !length(actions) || length(actions)>3L) errors<-c(errors,paste0("Complete Objective ",i,", its goal, and at least one supporting action (up to three)."))
     if(nzchar(o$goal) && !is.null(o$target) && !is.finite(o$target)) errors<-c(errors,paste0("Objective ",i,": enter one numeric goal, or fill Numeric chart goal."))
     if(nchar(o$title)>100 || nchar(o$goal)>100 || any(nchar(o$supports)>180) || any(nchar(o$drills)>120)) errors<-c(errors,"Shorten the objective/goal to 100 characters, actions to 180, and drills to 120 so every box remains legible.")
   }
@@ -159,9 +165,10 @@ development_defense_errors <- function(defense,mode) {
   if(is.null(defense)) return(character())
   if(!identical(mode,"hitting")) return("Defensive Goals are available for hitters only.")
   errors <- character()
-  if(length(defense$goal)!=1L || length(defense$supports)!=3L || length(defense$drills)>5L ||
-      any(!nzchar(trimws(c(defense$goal,defense$supports))))) {
-    errors <- c(errors,"Complete Defensive Goals and all three supporting actions, or leave the section blank.")
+  actions <- development_support_actions(defense$supports)
+  if(length(defense$goal)!=1L || !length(actions) || length(actions)>3L || length(defense$drills)>5L ||
+      any(!nzchar(trimws(defense$goal)))) {
+    errors <- c(errors,"Complete Defensive Goals and at least one supporting action (up to three), or leave the section blank.")
   }
   if(any(nchar(defense$goal)>180) || any(nchar(defense$supports)>180) || any(nchar(defense$drills)>120)) {
     errors <- c(errors,"Keep the defensive goal/actions to 180 characters and drills to 120 so the text remains legible.")
@@ -299,8 +306,11 @@ development_draw <- function(plan) {
       grid::grid.segments(x+w/2-12,268,x+w/2+12,268,default.units="native",arrow=grid::arrow(length=grid::unit(.10,"inches"),type="closed"),gp=grid::gpar(col=gold,fill=gold,lwd=2))
       box(x+w-cw-15,246,cw,54);text("GOAL",x+w-cw/2-15,286,10,maroon,TRUE);fit(if(nzchar(o$goal)) o$goal else "Your target",x+w-cw-15,247,cw,32,23)
     }
-    sw<-(w-40)/3
-    for(j in 1:3) {sx<-x+10+(j-1)*(sw+10);box(sx,166,sw,68,title_fill,border);fit(if(nzchar(o$supports[j])) o$supports[j] else paste("Supporting action",j),sx,166,sw,68,13,title_ink)}
+    actions <- development_support_actions(o$supports)
+    if(length(actions)) {
+      sw<-(w-20-(length(actions)-1)*10)/length(actions)
+      for(j in seq_along(actions)) {sx<-x+10+(j-1)*(sw+10);box(sx,166,sw,68,title_fill,border);fit(actions[j],sx,166,sw,68,13,title_ink)}
+    }
     drills<-o$drills
     if(length(drills)) {
       cols<-if(nrow(columns)==1) length(drills) else min(3,length(drills));rows<-ceiling(length(drills)/cols)

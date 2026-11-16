@@ -60,12 +60,38 @@ testServer(development_server,args=args,{
 })
 invalid <- restored;invalid$mode <- "pitching"
 stopifnot(inherits(try(development_store_save(tempfile(),invalid),silent=TRUE),"try-error"))
-for(i in 1:2) {
+partial <- restored
+partial$defense$supports <- c("", " OnlyDefenseAction ", "")
+stopifnot(!length(development_defense_errors(partial$defense,"hitting")))
+saved_partial <- development_store_save(path,partial,expected_revision=restored$revision)
+stopifnot(identical(saved_partial$defense$supports,"OnlyDefenseAction"),
+  identical(saved_partial$objectives,restored$objectives))
+empty <- partial;empty$defense$supports <- c("", "  ", "")
+stopifnot(length(development_defense_errors(empty$defense,"hitting"))>0)
+messages <- list()
+testServer(development_server,args=args,{
+  root_session <- session$rootScope()
+  root_session$sendInputMessage <- function(id,message) messages[[id]] <<- message
+  session$setInputs(season="S26",player="Boles, Brady")
+  stopifnot(messages$defense_support1$value=="OnlyDefenseAction",
+    messages$defense_support2$value=="",messages$defense_support3$value=="")
+})
+plans[[3]] <- plans[[2]]
+plans[[3]]$objectives[[1]]$supports <- "H1ActionOne"
+plans[[3]]$objectives[[2]]$supports <- c("H2ActionOne","H2ActionTwo")
+plans[[3]]$defense$supports <- "OnlyDefenseAction"
+for(i in seq_along(plans)) {
   p <- plans[[i]]
   columns <- development_goal_columns(p)
   stopifnot(all(head(columns$x+columns$width,-1) < tail(columns$x,-1)),tail(columns$x,1)==740)
   file <- tempfile(fileext=".pdf");development_pdf(file,p)
   stopifnot(pdftools::pdf_info(file)$pages==1L,grepl("Defensive Goals",pdftools::pdf_text(file),fixed=TRUE))
+  if(i==3L) {
+    content <- pdftools::pdf_text(file)
+    stopifnot(grepl("OnlyDefenseAction",content,fixed=TRUE),
+      !grepl("H1ActionTwo",content,fixed=TRUE),!grepl("H2ActionThree",content,fixed=TRUE),
+      !grepl("Supporting action",content,fixed=TRUE))
+  }
   if(i==2L) {
     tokens <- pdftools::pdf_data(file)[[1]]
     # Inspect rendered PDF text positions, including every action/drill marker.

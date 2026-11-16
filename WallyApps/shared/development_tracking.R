@@ -190,11 +190,15 @@ development_store_save <- function(path, plan, expected_revision = 0L, team = de
   if (!plan$mode %in% c("hitting", "pitching") || !nzchar(plan$player_key) ||
       !is.finite(development_season_rank(plan$baseline_season)) ||
       length(plan$objectives) < 1L || length(plan$objectives) > 2L) stop("Invalid goal plan.", call. = FALSE)
-  for (o in plan$objectives) {
+  for (i in seq_along(plan$objectives)) {
+    o <- plan$objectives[[i]]
+    o$supports <- development_support_actions(o$supports)
     if (!is.finite(o$target) || !is.finite(o$baseline_value) ||
-        any(!nzchar(trimws(c(o$title, o$metric, o$goal, o$supports)))) ||
-        length(o$supports) != 3L || length(o$drills) > 5L) stop("Complete the goals and all three actions before saving.", call. = FALSE)
+        any(!nzchar(trimws(c(o$title, o$metric, o$goal)))) ||
+        !length(o$supports) || length(o$supports)>3L || length(o$drills) > 5L) stop("Complete the goals and at least one supporting action (up to three) before saving.", call. = FALSE)
+    plan$objectives[[i]] <- o
   }
+  if(!is.null(plan$defense)) plan$defense$supports <- development_support_actions(plan$defense$supports)
   defense_errors <- development_defense_errors(plan$defense,plan$mode)
   if(length(defense_errors)) stop(paste(defense_errors,collapse=" "),call.=FALSE)
   con <- development_store_connect(path, write = TRUE)

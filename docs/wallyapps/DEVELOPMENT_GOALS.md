@@ -8,7 +8,9 @@ BB/HBP/K treatment as Hitting; its empirical distribution qualifies pitchers at
 50 completed PAs. Lower allowed wOBA, xwOBA, OPS, BB%, and Barrel% rank better.
 
 Each objective contains a title, a selected season stat/current value, a written
-goal, exactly three supporting actions, and zero to five optional drills. Export
+goal, one to three supporting actions, and zero to five optional drills. Empty
+action fields are omitted from the preview and PDF; filled actions share the
+available width within their objective's column. Export
 is available when every required field is complete. Adding/removing Objective 2
 preserves Objective 1. **Save and Generate PDF** validates the plan, generates
 the PDF and commits the goals, actions and drills to persistent storage. Returning
@@ -103,7 +105,7 @@ the outline visible; the live PNG preview and exported PDF use the same renderer
 ### Hitter Defensive Goals
 
 Hitting has an optional **Defensive Goals** editor below the hitting goal/drill
-editors. It contains one written goal, three required supporting actions and up
+editors. It contains one written goal, one to three supporting actions and up
 to five optional drills. All defensive boxes use gold backgrounds, maroon text
 and white outlines in both the editor and graphic. A completely empty defensive
 section is omitted and does not block existing hitting-only plans.
