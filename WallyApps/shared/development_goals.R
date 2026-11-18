@@ -11,7 +11,10 @@ development_name <- function(x) {
 }
 development_name_key <- function(x) gsub("[^a-z0-9]","",tolower(iconv(x,to="ASCII//TRANSLIT")))
 development_portrait <- function(player) {
-  i<-match(development_name_key(development_name(player)),development_name_key(development_portraits$Name))
+  key<-development_name_key(development_name(player))
+  # TrackMan uses Christopher; the official roster lists his photo as Chris.
+  if(identical(key,"christopherlangley")) key<-"chrislangley"
+  i<-match(key,development_name_key(development_portraits$Name))
   if(is.na(i) || is.na(development_portraits$File[i]) || !nzchar(development_portraits$File[i])) return("")
   file.path(development_root,"assets",development_portraits$File[i])
 }

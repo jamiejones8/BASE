@@ -7,6 +7,11 @@ stopifnot(identical(names(development_specs("hitting")),c("wOBA","xwOBA","OPS","
   identical(names(development_specs("pitching")),c("wOBA","xwOBA","OPS","K%","BB%","Barrel%","Whiff%","IZWhiff%","GB%","Strike%","E&A%")),
   file.exists(development_portrait("Boles, Brady")),file.exists(development_portrait("Cade Smith")),
   development_portrait("Unknown, Player")=="")
+for(name in c("Chris Langley","Christopher Langley","Langley, Chris","Langley, Christopher","CHRISTOPHER LANGLEY")) {
+  stopifnot(identical(development_portrait(name),development_portrait("Chris Langley")),
+    inherits(development_image(development_portrait(name)),"nativeRaster"))
+}
+stopifnot(development_portrait("Langley, Unknown")=="")
 for(path in list.files(file.path(development_root,"assets"),pattern="^portrait-.*[.]jpg$",full.names=TRUE)) stopifnot(inherits(development_image(path),"nativeRaster"))
 stopifnot(length(grep("portrait-",ls(.development_image_cache),fixed=TRUE))<=6)
 data<-data.frame(Pitcher="Smith, Cade",SeasonGroup="S26",is_bullpen=FALSE)
@@ -31,6 +36,20 @@ for(i in 1:2) {
   stopifnot(grepl("OBJECTIVE 1",content,fixed=TRUE),grepl("OBJECTIVE 2",content,fixed=TRUE)==(i==2),grepl("30%",content,fixed=TRUE))
   unlink(file)
 }
+# Exercise the actual preview/PDF plan for TrackMan's full-name spelling.
+shiny::testServer(development_server,args=list(rows=reactive(transform(data,Pitcher="Langley, Christopher")),
+  player_column="Pitcher",seasons=c("2026 Season"="S26"),summarize=function(d) as.list(vals),
+  percentile=function(value,metric) 70,mode="pitching",store_path=tempfile(fileext=".sqlite")),{
+  session$setInputs(season="S26",player="Langley, Christopher",stat1="K%",
+    title1="Improve strikeout rate",goal1="30%",support1_1="Attack the zone")
+  p<-plan()
+  stopifnot(identical(p$player,"Christopher Langley"),!length(development_payload_errors(p)),
+    inherits(development_image(p$portrait),"nativeRaster"))
+  file<-tempfile(fileext=".pdf");development_pdf(file,p)
+  content<-pdftools::pdf_text(file)
+  stopifnot(grepl("CHRISTOPHER LANGLEY",content,fixed=TRUE),!grepl("(?m)^\\s*CL\\s*$",content,perl=TRUE))
+  unlink(file)
+})
 # Real-data regression: the compact full-game snapshots must recover Cade's
 # known close leads and seventh-inning-or-later save situations.
 own<-read_csv("WallyApps/PitchingApp/data/2026 Season - cleaned.csv",show_col_types=FALSE)
