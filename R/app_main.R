@@ -34,7 +34,7 @@ base_source("R/performance/lazy_workspace.R", local = FALSE)
 base_source("R/data/data_access.R", local = FALSE)
 base_source("R/data/team_season_imports.R", local = FALSE)
 base_source("R/data/csv_editor.R", local = FALSE)
-base_correct_stored_positioning_names()
+base_correct_stored_trackman_names()
 base_source("R/data/player_health_imports.R", local = FALSE)
 base_source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 base_source("R/integrations/wally_hitting_workspace.R", local = FALSE)
@@ -4894,7 +4894,11 @@ data_processing_server <- function(input, output, session) {
       shiny::showNotification(conditionMessage(result), type = "error", duration = 8)
       return()
     }
-    csv_original(csv_rows())
+    if (base_trackman_changed_cells(csv_rows(), result$rows) > 0L) {
+      csv_rows(result$rows)
+      csv_render_version(shiny::isolate(csv_render_version()) + 1L)
+    }
+    csv_original(result$rows)
     csv_fingerprint(result$fingerprint)
     csv_message(list(
       type = "success",

@@ -105,6 +105,16 @@ shiny::testServer(data_processing_server, {
  # Loop registrations must retain their own target, not the last loop value.
  session$setInputs(dp_ps27_full_file = list(datapath = upload, name = "edited.csv"))
  stopifnot(pending_full_file()$target_id == "PS27")
+ # A manual correction uses the shared name rule and refreshes the editor to
+ # the exact canonical values written to disk, with no phantom dirty cells.
+ load_csv_editor('F26')
+ session$setInputs(dp_csv_editor_cell_edit=list(row=1L,
+   col=match('Batter',names(csv_rows()))-1L,value='Byrd, Cadyn'))
+ stopifnot(csv_rows()$Batter[1]=='Byrd, Cadyn')
+ session$setInputs(dp_csv_confirm_save=1)
+ stopifnot(csv_rows()$Batter[1]=='Byrd, Cayden',csv_original()$Batter[1]=='Byrd, Cayden',
+   base_read_trackman_import(path)$Batter[1]=='Byrd, Cayden',
+   base_trackman_changed_cells(csv_rows(),csv_original())==0)
 })
 unlink(scratch, recursive = TRUE)
 cat("Full CSV replacement passed: backups, multiple games, row changes, validation, stale-source protection, scouting selection, every card, and confirmation.\n")

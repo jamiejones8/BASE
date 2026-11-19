@@ -18,6 +18,7 @@ base_exclude_walk_on_players <- function(data, player_columns = c(
   "Pitcher", "Batter", "Catcher", "Player", "Name", "player_name"
 )) {
   if (is.null(data) || !is.data.frame(data) || !nrow(data)) return(data)
+  data <- base_correct_player_name_columns(data)
   player_columns <- intersect(player_columns, names(data))
   if (!length(player_columns)) return(data)
   for (column in player_columns) data[[column]] <- base_correct_player_names(data[[column]])

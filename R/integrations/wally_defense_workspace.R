@@ -157,6 +157,7 @@ base_read_defense_csv <- function(path, convert_types = TRUE) {
     col_types = readr::cols(.default = readr::col_character()),
     show_col_types = FALSE
   ) %>%
+    base_correct_player_name_columns() %>%
     dplyr::mutate(
       source_file = basename(path), row_in_file = dplyr::row_number(),
       manual_fielded_source = any(tolower(gsub("[^A-Za-z0-9]", "", names(.))) %in%

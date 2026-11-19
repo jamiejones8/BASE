@@ -300,6 +300,7 @@ if (exists("BASE_HITTING_DATA", inherits = FALSE) &&
   }
 }
 
+df <- base_correct_player_name_columns(df)
 if ("Batter" %in% names(df)) {
   df <- df[!(is_walk_on_player_name(df$Batter) %in% TRUE), , drop = FALSE]
 }

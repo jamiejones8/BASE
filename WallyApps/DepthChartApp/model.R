@@ -1,3 +1,7 @@
+if (!exists("base_correct_player_name_columns", mode = "function")) {
+  shared_player_names <- c(file.path("..", "shared", "player_names.R"), file.path("WallyApps", "shared", "player_names.R"))
+  source(shared_player_names[file.exists(shared_player_names)][1], local = TRUE)
+}
 season_year <- function(date = Sys.Date(), rollover_month = 8L) {
   as.integer(format(date, '%Y')) + as.integer(as.integer(format(date, '%m')) >= rollover_month)
 }
@@ -9,6 +13,7 @@ parse_positions <- function(value) {
 }
 read_roster <- function(path) {
   d <- read.csv(path, skip = 2, stringsAsFactors = FALSE, check.names = FALSE)
+  d <- base_correct_player_name_columns(d)
   players <- lapply(seq_len(nrow(d)), function(i) list(id = paste0('roster-', i), first = trimws(d$First[i]), last = trimws(d$Last[i]), positions = parse_positions(d$Position[i]), bats = trimws(strsplit(toupper(d[['B/T']][i]), '/', fixed=TRUE)[[1]][1]), throws = trimws(strsplit(toupper(d[['B/T']][i]), '/', fixed=TRUE)[[1]][2]), entryYear = 2027L, entryClass = match(toupper(d$Class[i]), c('FR','SO','JR','SR','5TH')), status = 'Signed', recruit = FALSE))
   measurements_path <- file.path(dirname(path),'pitcher-measurements.json')
   if (file.exists(measurements_path)) {

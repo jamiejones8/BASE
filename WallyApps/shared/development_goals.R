@@ -1,11 +1,13 @@
 # Shared Shiny editor and vector PDF renderer for Hitting/Pitching Development Goals.
 development_source_paths <- unlist(lapply(sys.frames(),function(frame) if(is.character(frame$ofile)) frame$ofile else NULL),use.names=FALSE)
 development_root <- normalizePath(dirname(tail(development_source_paths[basename(development_source_paths)=="development_goals.R"],1)),mustWork=TRUE)
+source(file.path(development_root,"player_names.R"),local=TRUE)
 source(file.path(development_root,"development_series.R"),local=TRUE)
 source(file.path(development_root,"development_tracking.R"),local=TRUE)
 development_portraits <- read.csv(file.path(development_root,"portraits.csv"),stringsAsFactors=FALSE)
 development_name <- function(x) {
   if(length(x)!=1 || is.na(x)) return("")
+  x<-base_correct_player_names(x)
   if(grepl(",",x,fixed=TRUE)) { p<-strsplit(x,",",fixed=TRUE)[[1]]; x<-paste(trimws(p[2]),trimws(p[1])) }
   trimws(x)
 }

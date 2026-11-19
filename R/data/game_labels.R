@@ -86,8 +86,4 @@ base_game_choices <- function(ids, data = NULL, id_col = "CustomGameID", team = 
   stats::setNames(ids, label)
 }
 
-base_correct_player_names <- function(x) {
-  x <- as.character(x)
-  x <- gsub("\\bJustin\\s+Antcil\\b", "Justin Anctil", x, ignore.case = TRUE, perl = TRUE)
-  gsub("\\bAntcil,\\s*Justin\\b", "Anctil, Justin", x, ignore.case = TRUE, perl = TRUE)
-}
+base_source("WallyApps/shared/player_names.R", local = FALSE)

@@ -1,6 +1,11 @@
 # Shared roster identity and pitch-level import. Raw vendor history stays intact.
+if (!exists("base_correct_player_names", mode = "function")) {
+  shared_player_names <- c(file.path(Sys.getenv("VALD_APP_ROOT", getwd()), "..", "..", "WallyApps", "shared", "player_names.R"),
+    file.path("WallyApps", "shared", "player_names.R"))
+  source(shared_player_names[file.exists(shared_player_names)][1], local = TRUE)
+}
 player_name_key <- function(x) {
-  x <- trimws(as.character(x))
+  x <- trimws(base_correct_player_names(x))
   comma <- !is.na(x) & grepl(",", x, fixed = TRUE)
   x[comma] <- sub("^([^,]+),\\s*(.+)$", "\\2 \\1", x[comma])
   tolower(gsub("[[:space:]]+", " ", x))
@@ -14,6 +19,7 @@ file_signature <- function(paths) {
 read_fall_roster <- function(path = fall_roster_path(), alias_path = roster_alias_path()) {
   tryCatch({
     raw <- readxl::read_excel(path, sheet = "Roster", skip = 1, col_types = "text")
+    raw <- base_correct_player_name_columns(raw)
     stopifnot(all(c("First", "Last", "Position") %in% names(raw)))
     raw <- raw[!is.na(raw$First) & !is.na(raw$Last) & nzchar(trimws(raw$First)) & nzchar(trimws(raw$Last)), ]
     r <- data.frame(name = paste(trimws(raw$First), trimws(raw$Last)), position = raw$Position)

@@ -238,25 +238,19 @@ base_player_positioning_required_columns <- function() {
 }
 
 base_normalize_positioning_names <- function(rows) {
-  columns <- grep("(_Name$|^FieldedBy$|^ManualFieldedBy$)", names(rows), value = TRUE, ignore.case = TRUE)
-  for (column in columns) {
-    names <- as.character(rows[[column]])
-    names <- gsub("\\bCadyn\\s+Byrd\\b", "Cayden Byrd", names, ignore.case = TRUE, perl = TRUE)
-    rows[[column]] <- gsub("\\bByrd,\\s*Cadyn\\b", "Byrd, Cayden", names, ignore.case = TRUE, perl = TRUE)
-  }
-  rows
+  base_correct_player_name_columns(rows)
 }
 
 # Existing volume data must receive the correction as well as new uploads.
-base_correct_stored_positioning_names <- function() {
-  for (target in BASE_PLAYER_POSITIONING_IMPORT_TARGETS) {
+base_correct_stored_trackman_names <- function(targets = base_trackman_import_targets()) {
+  for (target in targets) {
     path <- base_team_season_import_path(target$id)
     if (!file.exists(path)) next
     lock <- file.path(dirname(path), paste0(".", target$id, "-write.lock"))
-    if (!dir.create(lock, showWarnings = FALSE)) stop("Positioning data is being updated; retry the name correction.", call. = FALSE)
+    if (!dir.create(lock, showWarnings = FALSE)) stop("TrackMan data is being updated; retry the name correction.", call. = FALSE)
     tryCatch({
       rows <- base_read_trackman_import(path)
-      corrected <- base_normalize_positioning_names(rows)
+      corrected <- base_correct_player_name_columns(rows)
       if (base_trackman_changed_cells(rows, corrected) > 0L) {
         base_backup_source_csv(path)
         base_atomic_write_trackman_csv(corrected, path)
@@ -324,7 +318,7 @@ base_validate_player_positioning_import <- function(rows, target) {
 
 base_validate_trackman_import <- function(rows, target_id) {
   target <- base_team_season_import_target(target_id)
-  rows <- tibble::as_tibble(rows)
+  rows <- base_correct_player_name_columns(tibble::as_tibble(rows))
   if (identical(target$kind, "positioning")) {
     return(base_validate_player_positioning_import(rows, target))
   }
@@ -443,6 +437,12 @@ base_import_trackman_game <- function(upload_path, target_id, root = NULL) {
   } else {
     tibble::tibble()
   }
+  corrected_names <- FALSE
+  if (nrow(current)) {
+    corrected <- base_correct_player_name_columns(current)
+    corrected_names <- base_trackman_changed_cells(current, corrected) > 0L
+    current <- corrected
+  }
   current_keys <- if (nrow(current)) base_trackman_event_key(current) else character()
   if (any(is.na(current_keys) | !nzchar(current_keys))) {
     stop(
@@ -454,15 +454,8 @@ base_import_trackman_game <- function(upload_path, target_id, root = NULL) {
 
   add <- !incoming_keys %in% current_keys
   inserted <- incoming[add, , drop = FALSE]
-  corrected_names <- FALSE
-  if (identical(target$kind, "positioning") && nrow(current)) {
-    corrected <- base_normalize_positioning_names(current)
-    corrected_names <- base_trackman_changed_cells(current, corrected) > 0L
-    current <- corrected
-  }
   combined <- if (nrow(current)) dplyr::bind_rows(current, inserted) else inserted
   combined[] <- lapply(combined, as.character)
-  if (identical(target$kind, "positioning")) combined <- base_normalize_positioning_names(combined)
 
   if (nrow(inserted) || corrected_names) base_atomic_write_trackman_csv(combined, destination)
 
@@ -541,7 +534,7 @@ base_replace_trackman_csv <- function(upload_path, target_id, fingerprint, root 
     stop("This source changed while the replacement was being reviewed. Select the replacement again.", call. = FALSE)
   }
   rows <- base_read_trackman_import(upload_path)
-  if (identical(target$kind, "positioning")) rows <- base_normalize_positioning_names(rows)
+  rows <- base_correct_player_name_columns(rows)
   if (!nrow(rows)) stop("The replacement CSV has no data rows.", call. = FALSE)
   if (nrow(readr::problems(rows))) stop("The replacement CSV has malformed rows.", call. = FALSE)
   base_validate_trackman_manual_edit(rows, target$id)
@@ -658,6 +651,7 @@ base_save_trackman_manual_edit <- function(rows, target_id, fingerprint, root = 
   if (!identical(dim(current), dim(rows)) || !identical(names(current), names(rows))) {
     stop("Manual editing cannot add, remove, or rename rows or columns. No changes were written.", call. = FALSE)
   }
+  rows <- base_correct_player_name_columns(rows)
   base_validate_trackman_manual_edit(rows, target$id, before = current)
   changed_cells <- base_trackman_changed_cells(current, rows)
   if (changed_cells > 0L) base_atomic_write_trackman_csv(rows, path)
@@ -669,6 +663,7 @@ base_save_trackman_manual_edit <- function(rows, target_id, fingerprint, root = 
     destination = path,
     changed_cells = changed_cells,
     total_rows = nrow(rows),
+    rows = rows,
     fingerprint = base_trackman_csv_fingerprint(path)
   )
 }

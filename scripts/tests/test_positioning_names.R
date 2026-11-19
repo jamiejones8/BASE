@@ -20,13 +20,13 @@ stopifnot(identical(expected$CF_Name,c('Byrd, Cayden','Cayden Byrd','Shaw, Cadyn
 # backup. Repeating it makes no writes or extra backups.
 paths <- c(base_team_season_import_path('PP'),base_team_season_import_path('PP_F26'))
 for(path in paths) base_atomic_write_trackman_csv(rows,path)
-base_correct_stored_positioning_names()
+base_correct_stored_trackman_names(BASE_PLAYER_POSITIONING_IMPORT_TARGETS)
 for(path in paths) stopifnot(identical(base_read_trackman_import(path),expected))
 backups <- list.files(file.path(scratch,'backups'),full.names=TRUE)
 stopifnot(length(backups)==2,all(vapply(backups,function(path)
  identical(base_read_trackman_import(path),rows),logical(1))))
 fingerprints <- lapply(paths,base_trackman_csv_fingerprint)
-base_correct_stored_positioning_names()
+base_correct_stored_trackman_names(BASE_PLAYER_POSITIONING_IMPORT_TARGETS)
 stopifnot(identical(fingerprints,lapply(paths,base_trackman_csv_fingerprint)),
  length(list.files(file.path(scratch,'backups')))==2)
 

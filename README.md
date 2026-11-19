@@ -91,9 +91,13 @@ UUID, and date to recover inning and top/bottom boundaries. These boundaries
 are editor metadata and are not added to the saved CSV. Unmatched rows remain
 available for individual cell edits; import their companion pitch data and
 reload the file to enable fills. Game and inning identifiers remain protected.
-Positioning names use Cayden Byrd consistently. Existing stored positioning
-files are corrected at startup with a backup, and new imports/replacements
-normalize the former Cadyn spelling in fielder names and fielded-by tags.
+The shared player-name rule rewrites only **Cadyn Byrd** to **Cayden Byrd**,
+including TrackMan's **Byrd, Cadyn** order, case differences and extra spaces.
+It applies to hitting and positioning imports, replacements, manual CSV saves,
+fielder names, fielded-by tags, roster readers and development reports.
+Existing managed TrackMan files are corrected at startup with backups.
+Other players named Cadyn or Byrd retain their names. The rule lives in
+`WallyApps/shared/player_names.R` and runs before player matching/deduplication.
 
 ## 2026 data model
 
