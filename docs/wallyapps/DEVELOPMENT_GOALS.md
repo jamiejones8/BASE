@@ -18,6 +18,13 @@ to a player/baseline season restores that saved plan. **Reload Saved Goals** pul
 the most recently saved version; concurrent edits are rejected rather than
 silently overwriting another session.
 
+Player choices are deduplicated after spelling and name-order normalization,
+so Cadyn/Cayden Byrd appears once and all matching season rows contribute to
+his stats. Older saved names use the same player identity while retaining
+their original storage key for revision-checked updates. If alias records
+already exist for the same baseline, the most recently saved plan is shown;
+all original records and goal history remain stored.
+
 Both apps share the same Build Goals and Track Goals implementation. Saves are
 isolated by team, hitting/pitching mode, player and baseline season in SQLite.
 `BASE_DEVELOPMENT_GOALS_FILE` can override the path; the default is

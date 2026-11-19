@@ -17,7 +17,11 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
     records <- shiny::reactive({
       poll()
       local_refresh()
-      tryCatch(list(plans = development_store_read(store_path, mode, team), error = NULL),
+      tryCatch(list(plans = lapply(development_store_read(store_path, mode, team), function(p) {
+        p$player <- development_name(p$player)
+        p$player_key <- development_name_key(p$player)
+        p
+      }), error = NULL),
         error = function(e) list(plans = list(), error = conditionMessage(e)))
     })
     summary_cache <- new.env(parent = emptyenv())
@@ -63,8 +67,12 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
       keys <- vapply(players, function(p) development_name_key(development_name(p)), character(1))
       players <- c(players, saved_names[!vapply(saved_names, development_name_key, character(1)) %in% keys])
       players <- player_choices(players, input$season)
+      keys <- vapply(players, function(p) development_name_key(development_name(p)), character(1))
+      keep <- !duplicated(keys)
+      players <- players[keep]; keys <- keys[keep]
       current <- shiny::isolate(input$player)
-      selected <- if (length(current) == 1 && current %in% players) current else head(players, 1)
+      selected <- if (length(current) == 1) match(development_name_key(development_name(current)), keys) else NA_integer_
+      selected <- if (!is.na(selected)) players[selected] else head(players, 1)
       shiny::updateSelectInput(session, "player",
         choices = stats::setNames(players, vapply(players, development_name, character(1))), selected = selected)
     })
@@ -220,7 +228,10 @@ development_server <- function(id, rows, player_column, seasons, summarize, perc
       record <- list(player = p$player, player_key = p$player_key, mode = mode, baseline_season = p$baseline_season,
         defense = p$defense,
         objectives = lapply(p$objectives, function(o) o[c("title", "metric", "goal", "target", "target_input", "lower_better", "baseline_value", "supports", "drills")]))
-      saved <- development_store_save(store_path, record, expected_revision(), team)
+      previous <- loaded_record()
+      stored_key <- if (!is.null(previous) && identical(previous$baseline_season, p$baseline_season)) previous$stored_player_key else NULL
+      saved <- development_store_save(store_path, record, expected_revision(), team, stored_player_key = stored_key)
+      saved$stored_player_key <- if (is.null(stored_key)) p$player_key else stored_key
       expected_revision(saved$revision)
       loaded_record(saved)
       local_refresh(shiny::isolate(local_refresh()) + 1L)

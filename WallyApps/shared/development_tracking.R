@@ -178,10 +178,11 @@ development_store_read <- function(path, mode, team = development_team_key()) {
   con <- development_store_connect(path)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   rows <- DBI::dbGetQuery(con,
-    "SELECT payload, revision, saved_at FROM development_goals WHERE team_key = ? AND mode = ?",
+    "SELECT player_key, payload, revision, saved_at FROM development_goals WHERE team_key = ? AND mode = ?",
     params = list(team, mode))
   lapply(seq_len(nrow(rows)), function(i) {
     plan <- jsonlite::fromJSON(rows$payload[i], simplifyVector = FALSE)
+    plan$stored_player_key <- rows$player_key[i]
     plan$revision <- as.integer(rows$revision[i])
     plan$saved_at <- rows$saved_at[i]
     for (j in seq_along(plan$objectives)) {
@@ -208,7 +209,7 @@ development_store_stamp <- function(path, mode, team = development_team_key()) {
   }, error = function(e) paste("error", conditionMessage(e)))
 }
 
-development_store_save <- function(path, plan, expected_revision = 0L, team = development_team_key()) {
+development_store_save <- function(path, plan, expected_revision = 0L, team = development_team_key(), stored_player_key = NULL) {
   if (!plan$mode %in% c("hitting", "pitching") || !nzchar(plan$player_key) ||
       !is.finite(development_season_rank(plan$baseline_season)) ||
       length(plan$objectives) < 1L || length(plan$objectives) > 2L) stop("Invalid goal plan.", call. = FALSE)
@@ -228,7 +229,9 @@ development_store_save <- function(path, plan, expected_revision = 0L, team = de
   DBI::dbExecute(con, "BEGIN IMMEDIATE")
   committed <- FALSE
   on.exit(if (!committed) try(DBI::dbRollback(con), silent = TRUE), add = TRUE, after = FALSE)
-  key <- list(team, plan$mode, plan$player_key, plan$baseline_season)
+  # Update the original record when an alias has changed its displayed name.
+  # This preserves its goals and revision history without deleting alias rows.
+  key <- list(team, plan$mode, if (is.null(stored_player_key)) plan$player_key else stored_player_key, plan$baseline_season)
   previous <- DBI::dbGetQuery(con,
     "SELECT revision FROM development_goals WHERE team_key = ? AND mode = ? AND player_key = ? AND baseline_season = ?",
     params = key)
@@ -259,7 +262,8 @@ development_effective_plans <- function(plans, baseline_season) {
   eligible <- Filter(function(p) is.finite(development_season_rank(p$baseline_season)) &&
     development_season_rank(p$baseline_season) <= limit, plans)
   if (!length(eligible)) return(list())
-  eligible <- eligible[order(vapply(eligible, function(p) development_season_rank(p$baseline_season), numeric(1)), decreasing = TRUE)]
+  eligible <- eligible[order(vapply(eligible, function(p) development_season_rank(p$baseline_season), numeric(1)),
+    vapply(eligible, function(p) if(length(p$saved_at)==1L) p$saved_at else "", character(1)), decreasing = TRUE)]
   eligible <- eligible[!duplicated(vapply(eligible, function(p) p$player_key, character(1)))]
   eligible[order(vapply(eligible, function(p) p$player, character(1)))]
 }
