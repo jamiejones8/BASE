@@ -1,17 +1,7 @@
 // Client-side table: edits update cells without a draw, preserving the viewport.
 var root = $(table.table().container()), enabled = false, drag = null;
-var headers = table.columns().header().toArray().map(function(x) { return $(x).text(); });
-var halfCol = headers.findIndex(function(x) { return /^(Top\/Bottom|Top.Bottom|TopBottom)$/i.test(x); });
-var inningCol = headers.indexOf('Inning');
-var gameCols = ['GameID', 'Date', 'HomeTeam', 'AwayTeam'].map(function(x) { return headers.indexOf(x); }).filter(function(x) { return x >= 0; });
-var groups = [], halves = [], previous = null, group = 0;
-table.rows().every(function(i) {
-  var row = this.data(), half = halfCol < 0 ? '' : String(row[halfCol]).trim().toLowerCase();
-  var valid = ['top','bottom','bot'].indexOf(half) >= 0 && inningCol >= 0 && row[inningCol] !== '';
-  var key = JSON.stringify(gameCols.map(function(c) { return row[c]; }).concat([row[inningCol], half]));
-  if (!valid || key !== previous) group++;
-  groups[i] = valid ? group : null; halves[i] = half; previous = key;
-});
+var groups = fillContext.groups, halves = fillContext.halves;
+var protectedCols = fillContext.protected.map(function(c) { return c - 1; });
 function paint() {
   table.rows({page:'current'}).every(function(i) {
     $(this.node()).find('td').css('color', enabled ? (halves[i] === 'top' ? '#c62828' : ['bottom','bot'].indexOf(halves[i]) >= 0 ? '#1565c0' : '') : '');
@@ -49,7 +39,7 @@ $(document).off('mouseup.csvFill').on('mouseup.csvFill', function() {
   for (var c=Math.min(start.col,start.end.column);c<=Math.max(start.col,start.end.column);c++) cols.push(c);
   if (rows.length === 1 && cols.length === 1) return;
   // Keep inning and game identifiers protected in fill mode.
-  if (cols.some(function(c) { return c === halfCol || c === inningCol || gameCols.indexOf(c) >= 0; })) return;
+  if (cols.some(function(c) { return protectedCols.indexOf(c) >= 0; })) return;
   rows.forEach(function(r) { cols.forEach(function(c) {
     var cell = table.cell(r,c); cell.data($('<div>').text(start.text).html());
     $(cell.node()).text(start.text);

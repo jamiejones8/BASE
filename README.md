@@ -86,6 +86,15 @@ cells, and explicitly confirm a save. Saves are atomic, revalidate dates and
 unique TrackMan pitch identity, and refuse to overwrite a file changed by
 another import or editor session after it was opened.
 
+Drag-to-fill in positioning CSVs uses the matching TrackMan pitch UUID, game
+UUID, and date to recover inning and top/bottom boundaries. These boundaries
+are editor metadata and are not added to the saved CSV. Unmatched rows remain
+available for individual cell edits; import their companion pitch data and
+reload the file to enable fills. Game and inning identifiers remain protected.
+Positioning names use Cayden Byrd consistently. Existing stored positioning
+files are corrected at startup with a backup, and new imports/replacements
+normalize the former Cadyn spelling in fielder names and fielded-by tags.
+
 ## 2026 data model
 
 - The visible Opponent Scouting workspace can query the existing mounted

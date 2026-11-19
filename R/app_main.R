@@ -33,6 +33,8 @@ base_source("R/data/source_contract.R", local = FALSE)
 base_source("R/performance/lazy_workspace.R", local = FALSE)
 base_source("R/data/data_access.R", local = FALSE)
 base_source("R/data/team_season_imports.R", local = FALSE)
+base_source("R/data/csv_editor.R", local = FALSE)
+base_correct_stored_positioning_names()
 base_source("R/data/player_health_imports.R", local = FALSE)
 base_source("R/integrations/wally_pitching_workspace.R", local = FALSE)
 base_source("R/integrations/wally_hitting_workspace.R", local = FALSE)
@@ -4663,6 +4665,7 @@ data_processing_server <- function(input, output, session) {
   csv_render_version <- shiny::reactiveVal(0L)
   csv_rows <- shiny::reactiveVal(NULL)
   csv_original <- shiny::reactiveVal(NULL)
+  csv_fill_context <- shiny::reactiveVal(NULL)
   csv_fingerprint <- shiny::reactiveVal(NULL)
   csv_loaded_id <- shiny::reactiveVal(NULL)
   csv_message <- shiny::reactiveVal(NULL)
@@ -4687,6 +4690,7 @@ data_processing_server <- function(input, output, session) {
     if (is.null(target_id) || !nzchar(target_id)) {
       csv_rows(NULL)
       csv_original(NULL)
+      csv_fill_context(NULL)
       csv_fingerprint(NULL)
       csv_loaded_id(NULL)
       csv_message(list(type = "empty", text = "No managed CSV files are currently present on the writable volume."))
@@ -4698,12 +4702,15 @@ data_processing_server <- function(input, output, session) {
     if (inherits(loaded, "error")) {
       csv_rows(NULL)
       csv_original(NULL)
+      csv_fill_context(NULL)
       csv_fingerprint(NULL)
       csv_loaded_id(NULL)
       csv_message(list(type = "error", text = conditionMessage(loaded)))
       return(invisible(FALSE))
     }
     loaded[] <- lapply(loaded, as.character)
+    context <- base_csv_fill_context(loaded, target$id)
+    csv_fill_context(context)
     csv_rows(loaded)
     csv_original(loaded)
     csv_fingerprint(base_trackman_csv_fingerprint(path))
@@ -4712,7 +4719,10 @@ data_processing_server <- function(input, output, session) {
       type = "ready",
       text = paste0(
         format(nrow(loaded), big.mark = ","), " rows and ", ncol(loaded),
-        " columns loaded from ", target$filename, ". Double-click a cell to edit."
+        " columns loaded from ", target$filename, ". Double-click a cell to edit.",
+        if (identical(target$kind, "positioning") && anyNA(context$groups)) paste0(
+          " Drag-to-fill needs matching TrackMan inning data for ", sum(is.na(context$groups)),
+          " rows. Import the companion pitch CSV, then reload this file.") else ""
       )
     ))
     invisible(TRUE)
@@ -4778,7 +4788,9 @@ data_processing_server <- function(input, output, session) {
       rows,
       rownames = FALSE,
       editable = list(target = "cell"),
-      callback = DT::JS(readLines(file.path(base_bootstrap_root, "www", "csv-editor.js"), warn = FALSE)),
+      callback = DT::JS(c(paste0("var fillContext = ", jsonlite::toJSON(
+        shiny::isolate(csv_fill_context()), auto_unbox = FALSE, na = "null"), ";"),
+        readLines(file.path(base_bootstrap_root, "www", "csv-editor.js"), warn = FALSE))),
       filter = "top",
       selection = "none",
       options = list(
@@ -4822,15 +4834,13 @@ data_processing_server <- function(input, output, session) {
     src <- as.integer(edit$source); sc <- as.integer(edit$sourceCol)
     shiny::req(length(src) == 1L, length(sc) == 1L, length(rr), length(cc),
       all(c(rr, src) %in% seq_len(nrow(rows))), all(c(cc, sc) %in% seq_len(ncol(rows))))
-    half <- intersect(c("Top/Bottom", "Top.Bottom", "TopBottom"), names(original))
-    shiny::req(length(half) > 0L, "Inning" %in% names(original))
-    keys <- intersect(c("GameID", "Date", "HomeTeam", "AwayTeam", "Inning", half[1]), names(original))
-    shiny::req(!any(names(rows)[cc] %in% keys))
+    context <- csv_fill_context()
+    shiny::req(!is.null(context), length(context$groups) == nrow(original),
+      !any(cc %in% context$protected))
     # Validate the entire source interval, even when filtering hides rows.
     interval <- seq.int(min(c(rr, src)), max(c(rr, src)))
-    shiny::req(tolower(trimws(original[[half[1]]][src])) %in% c("top", "bottom", "bot"),
-      !is.na(original$Inning[src]), nzchar(original$Inning[src]))
-    for (key in keys) shiny::req(all(!is.na(original[[key]][interval]) & original[[key]][interval] == original[[key]][src]))
+    shiny::req(!is.na(context$groups[src]),
+      all(!is.na(context$groups[interval]) & context$groups[interval] == context$groups[src]))
     rows[rr, cc] <- rows[[sc]][src]
     csv_rows(rows)
     changed <- base_trackman_changed_cells(csv_original(), rows)
